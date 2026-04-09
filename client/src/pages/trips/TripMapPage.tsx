@@ -36,6 +36,20 @@ function makeMarkerContent(kind: MarkerKind, displayNum: number | undefined): HT
 }
 
 /**
+ * Formats a Routes API duration string (e.g. "12600s") into a friendly label
+ * like "3h 30min" or "45 min".
+ */
+function formatDuration(durationStr: string): string {
+  const seconds = parseInt(durationStr.replace('s', ''), 10)
+  if (isNaN(seconds) || seconds <= 0) return ''
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.round((seconds % 3600) / 60)
+  if (hours === 0) return `${minutes} min`
+  if (minutes === 0) return `${hours}h`
+  return `${hours}h ${minutes}min`
+}
+
+/**
  * Extracts ordered highway names from Routes API leg steps.
  * Each step's navigationInstruction.instructions is plain text like "Merge onto I-17 N".
  */
@@ -392,7 +406,7 @@ export default function TripMapPage() {
       headers: {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': apiKey,
-        'X-Goog-FieldMask': 'routes.polyline.encodedPolyline,routes.legs.steps.navigationInstruction',
+        'X-Goog-FieldMask': 'routes.polyline.encodedPolyline,routes.legs.duration,routes.legs.steps.navigationInstruction',
       },
       body: JSON.stringify({
         origin:      { location: { latLng: { latitude: coordStops[0].latitude!,                     longitude: coordStops[0].longitude! } } },
@@ -425,30 +439,35 @@ export default function TripMapPage() {
           const destStop = coordStops[i + 1]
           if (!destStop || !id) return
           const label = `leg[${i}] → ${destStop.locationName}`
-          const highways = parseHighwaysFromRouteSteps(leg.steps ?? [], label)
-          if (!highways) { console.warn('[TripMapPage] No highways extracted for', label); return }
+          const highways    = parseHighwaysFromRouteSteps(leg.steps ?? [], label)
+          const driveDuration = formatDuration(leg.duration ?? '')
+          console.log('[TripMapPage]', label, '| highways:', highways || '(none)', '| duration:', driveDuration || '(none)')
+
           // tripsApi.updateStop → api.put('/trips/:id/stops/:stopId') → authenticated axios (Bearer token)
-          console.log('[TripMapPage] Saving highwayRoute to stop', destStop.id, '| route:', highways)
-          tripsApi.updateStop(id, destStop.id, { highwayRoute: highways } as any)
-            .then(res => {
-              console.log('[TripMapPage] ✓ updateStop saved for', destStop.locationName,
-                '| highwayRoute from server:', res.data?.highwayRoute)
-            })
-            .catch(err => {
-              const status = err?.response?.status
-              const body = err?.response?.data
-              console.error('[TripMapPage] ✗ updateStop FAILED for', destStop.locationName,
-                '| HTTP', status,
-                '| body:', body,
-                '| message:', err?.message)
-              if (status === 401) {
-                console.error('[TripMapPage] 401 cause: token may be expired or server auth middleware failed.',
-                  'Restart the dev server and try again.')
-              }
-            })
+          const stopUpdate: any = {}
+          if (highways)     stopUpdate.highwayRoute  = highways
+          if (driveDuration) stopUpdate.driveDuration = driveDuration
+
+          if (Object.keys(stopUpdate).length > 0) {
+            tripsApi.updateStop(id, destStop.id, stopUpdate)
+              .then(res => {
+                console.log('[TripMapPage] ✓ updateStop saved for', destStop.locationName,
+                  '| highwayRoute:', res.data?.highwayRoute,
+                  '| driveDuration:', res.data?.driveDuration)
+              })
+              .catch(err => {
+                const status = err?.response?.status
+                console.error('[TripMapPage] ✗ updateStop FAILED for', destStop.locationName,
+                  '| HTTP', status, '|', err?.response?.data || err?.message)
+                if (status === 401) console.error('[TripMapPage] 401: restart the dev server to reload auth middleware')
+              })
+          }
+
           setTrip(prev => prev ? {
             ...prev,
-            stops: prev.stops?.map(s => s.id === destStop.id ? { ...s, highwayRoute: highways } : s),
+            stops: prev.stops?.map(s => s.id === destStop.id
+              ? { ...s, ...(highways && { highwayRoute: highways }), ...(driveDuration && { driveDuration }) }
+              : s),
           } : prev)
         })
       })

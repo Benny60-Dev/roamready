@@ -150,6 +150,7 @@ export interface Stop {
   alternates?: any[]
   weatherForecast?: WeatherDay[]
   highwayRoute?: string | null
+  driveDuration?: string | null
   journalEntry?: JournalEntry
 }
 

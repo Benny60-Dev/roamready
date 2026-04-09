@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   Download, Share2, Sparkles, Car, Tent, Star, Moon,
-  MapPin, XCircle, Plus, Check, RefreshCw, ArrowRight,
+  MapPin, XCircle, Plus, Check, RefreshCw, ArrowRight, Clock,
 } from 'lucide-react'
 import { pdf } from '@react-pdf/renderer'
 import { tripsApi } from '../../services/api'
@@ -86,6 +86,7 @@ interface TimelineEntry {
   checkInTime: string    // HH:MM — STAY default 15:00, OVERNIGHT default 18:00
   checkOutTime: string   // HH:MM — STAY default 11:00
   highwayRoute?: string | null
+  driveDuration?: string | null
   routeDescription?: string | null
   terrainSummary?: string | null
   pointsOfInterest?: string[] | null
@@ -113,7 +114,7 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
       const miles = calcDistanceMiles(
         prevStop.latitude, prevStop.longitude, stop.latitude, stop.longitude
       )
-      console.log(`[buildTimeline] DRIVE → ${stop.locationName}: stop.highwayRoute =`, stop.highwayRoute ?? '(null/undefined)')
+      console.log(`[buildTimeline] DRIVE → ${stop.locationName}: highwayRoute=${stop.highwayRoute ?? 'null'} driveDuration=${stop.driveDuration ?? 'null'}`)
       entries.push({
         dayNum,
         date: currentDate ? new Date(currentDate) : undefined,
@@ -125,6 +126,7 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
         checkInTime: '15:00',
         checkOutTime: '11:00',
         highwayRoute: stop.highwayRoute ?? null,
+        driveDuration: stop.driveDuration ?? null,
         activities: [],
       })
       dayNum++
@@ -675,13 +677,21 @@ function TimelineRow({
         {/* Content */}
         <div className="flex-1 min-w-0">
           {/* Row header */}
-          <div className="flex items-center gap-1.5 mb-2">
-            <Icon size={13} className={cfg.text} />
-            <span className={`text-xs font-semibold uppercase tracking-wide ${cfg.text}`}>
-              {entry.type === 'ACTIVITY' && entry.stop
-                ? `Day ${entry.nightNum} at ${entry.stop.locationName}`
-                : cfg.label}
-            </span>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              <Icon size={13} className={cfg.text} />
+              <span className={`text-xs font-semibold uppercase tracking-wide ${cfg.text}`}>
+                {entry.type === 'ACTIVITY' && entry.stop
+                  ? `Day ${entry.nightNum} at ${entry.stop.locationName}`
+                  : cfg.label}
+              </span>
+            </div>
+            {entry.type === 'DRIVE' && entry.driveDuration && (
+              <span className="flex items-center gap-1 text-xs font-semibold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
+                <Clock size={10} />
+                {entry.driveDuration}
+              </span>
+            )}
           </div>
 
           {entry.type === 'DRIVE' && (

@@ -276,31 +276,36 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
       bookingStatus, confirmationNum, siteRate, estimatedFuel, hookupType,
       isPetFriendly, isMilitaryOnly, isCompatible,
       incompatibilityReasons, alternates, weatherForecast,
-      notes, checkInTime, checkOutTime, siteNumber, highwayRoute,
+      notes, checkInTime, checkOutTime, siteNumber, highwayRoute, driveDuration,
     } = req.body
 
-    console.log('[updateStop] stopId=%s highwayRoute=%s (body keys: %s)',
+    console.log('[updateStop] stopId=%s highwayRoute=%s driveDuration=%s (body keys: %s)',
       req.params.stopId,
       highwayRoute ?? '(not provided)',
+      driveDuration ?? '(not provided)',
       Object.keys(req.body).join(', ')
     )
 
-    // Cast to any: highwayRoute was added after initial Prisma client generation
-    // and may not appear in the auto-generated types until next `prisma generate`.
+    // Cast to any: highwayRoute and driveDuration were added after initial Prisma client
+    // generation and may not appear in the auto-generated types until next `prisma generate`.
     const data: any = {
       type, locationName, locationState, latitude, longitude,
       arrivalDate, departureDate, nights, campgroundName, campgroundId,
       bookingStatus, confirmationNum, siteRate, estimatedFuel, hookupType,
       isPetFriendly, isMilitaryOnly, isCompatible,
       incompatibilityReasons, alternates, weatherForecast,
-      notes, checkInTime, checkOutTime, siteNumber, highwayRoute,
+      notes, checkInTime, checkOutTime, siteNumber, highwayRoute, driveDuration,
     }
 
     const updated = await prisma.stop.update({
       where: { id: req.params.stopId },
       data,
     })
-    console.log('[updateStop] saved stopId=%s highwayRoute=%s', req.params.stopId, (updated as any).highwayRoute ?? '(null)')
+    console.log('[updateStop] saved stopId=%s highwayRoute=%s driveDuration=%s',
+      req.params.stopId,
+      (updated as any).highwayRoute ?? '(null)',
+      (updated as any).driveDuration ?? '(null)'
+    )
     res.json(updated)
   } catch (err: any) {
     console.error('[updateStop] FAILED stopId=%s:', req.params.stopId, err?.message)

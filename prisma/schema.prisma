@@ -196,6 +196,7 @@ model Stop {
   alternates             Json?
   weatherForecast        Json?
   highwayRoute           String?
+  driveDuration          String?
   createdAt              DateTime      @default(now())
   updatedAt              DateTime      @updatedAt
   journalEntry           JournalEntry?
