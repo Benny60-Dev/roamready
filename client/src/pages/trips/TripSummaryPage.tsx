@@ -50,6 +50,18 @@ function calcArrival(departureHHMM: string, driveHours: number): ArrivalInfo {
   }
 }
 
+// ─── Parse "3h 30min" / "45 min" → fractional hours ─────────────────────────
+
+function parseDurationToHours(str?: string | null): number | undefined {
+  if (!str) return undefined
+  const hMatch = str.match(/(\d+)h/)
+  const mMatch = str.match(/(\d+)\s*min/)
+  const hours = hMatch ? parseInt(hMatch[1]) : 0
+  const minutes = mMatch ? parseInt(mMatch[1]) : 0
+  if (hours === 0 && minutes === 0) return undefined
+  return hours + minutes / 60
+}
+
 // ─── Haversine distance ───────────────────────────────────────────────────────
 
 function calcDistanceMiles(
@@ -211,10 +223,13 @@ function cascadeChange(entries: TimelineEntry[], idx: number, field: CascadeFiel
   const entry = next[idx]
 
   // DRIVE departure → update the immediately-following STAY/OVERNIGHT checkIn
-  if (field === 'driveDepart' && entry.type === 'DRIVE' && entry.driveHours) {
-    const arr = calcArrival(entry.departureTime, entry.driveHours)
-    if (idx + 1 < next.length && (next[idx + 1].type === 'STAY' || next[idx + 1].type === 'OVERNIGHT')) {
-      next[idx + 1].checkInTime = arr.timeHHMM
+  if (field === 'driveDepart' && entry.type === 'DRIVE') {
+    const driveHours = parseDurationToHours(entry.driveDuration) ?? entry.driveHours
+    if (driveHours) {
+      const arr = calcArrival(entry.departureTime, driveHours)
+      if (idx + 1 < next.length && (next[idx + 1].type === 'STAY' || next[idx + 1].type === 'OVERNIGHT')) {
+        next[idx + 1].checkInTime = arr.timeHHMM
+      }
     }
   }
 
@@ -224,8 +239,9 @@ function cascadeChange(entries: TimelineEntry[], idx: number, field: CascadeFiel
       if (next[j].type === 'DRIVE') {
         next[j].departureTime = entry.checkOutTime
         // Cascade the drive departure change too
-        if (next[j].driveHours) {
-          const arr = calcArrival(next[j].departureTime, next[j].driveHours!)
+        const driveHoursJ = parseDurationToHours(next[j].driveDuration) ?? next[j].driveHours
+        if (driveHoursJ) {
+          const arr = calcArrival(next[j].departureTime, driveHoursJ)
           if (j + 1 < next.length && (next[j + 1].type === 'STAY' || next[j + 1].type === 'OVERNIGHT')) {
             next[j + 1].checkInTime = arr.timeHHMM
           }
@@ -272,7 +288,6 @@ export default function TripSummaryPage() {
   const [entries, setEntries] = useState<TimelineEntry[]>([])
   const [addingActivity, setAddingActivity] = useState<Record<number, string>>({})
   const itinerarySaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const stopSaveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const activityGenAttempted = useRef(false)
 
   useEffect(() => {
@@ -401,34 +416,14 @@ export default function TripSummaryPage() {
   // and saved directly to each stop record. buildTimeline reads stop.highwayRoute,
   // so routes appear automatically once the map page has been visited.
 
-  // Persist checkInTime / checkOutTime to stop record (debounced per stop)
-  const persistStop = useCallback((stop: Stop, data: { checkInTime?: string; checkOutTime?: string }) => {
-    const existing = stopSaveTimers.current.get(stop.id)
-    if (existing) clearTimeout(existing)
-    const t = setTimeout(() => {
-      tripsApi.updateStop(stop.tripId, stop.id, data).catch(() => {})
-      stopSaveTimers.current.delete(stop.id)
-    }, 600)
-    stopSaveTimers.current.set(stop.id, t)
-  }, [])
-
   // ── Time change handlers ────────────────────────────────────────────────────
 
-  const updateOvernightDepart = (idx: number, time: string) => {
+  const updateDriveDepart = (idx: number, time: string) => {
     setEntries(prev => {
       const updated = prev.map((e, i) => i === idx ? { ...e, departureTime: time } : e)
-      const cascaded = cascadeChange(updated, idx, 'overnightDepart')
+      const cascaded = cascadeChange(updated, idx, 'driveDepart')
       persistItinerary(cascaded)
       return cascaded
-    })
-  }
-
-  const updateOvernightCheckIn = (idx: number, time: string) => {
-    setEntries(prev => {
-      const updated = prev.map((e, i) => i === idx ? { ...e, checkInTime: time } : e)
-      persistItinerary(updated)
-      if (updated[idx].stop) persistStop(updated[idx].stop!, { checkInTime: time })
-      return updated
     })
   }
 
@@ -549,8 +544,7 @@ export default function TripSummaryPage() {
               key={idx}
               entry={entry}
               generatingActivities={generatingActivities}
-              onOvernightDepart={time => updateOvernightDepart(idx, time)}
-              onOvernightCheckIn={time => updateOvernightCheckIn(idx, time)}
+              onDriveDepart={time => updateDriveDepart(idx, time)}
               onToggleActivity={actIdx => toggleActivity(idx, actIdx)}
               onDeleteActivity={actIdx => deleteActivity(idx, actIdx)}
               addingText={addingActivity[idx] ?? ''}
@@ -639,8 +633,7 @@ function StatCell({ value, label }: { value: string; label: string }) {
 interface TimelineRowProps {
   entry: TimelineEntry
   generatingActivities: boolean
-  onOvernightDepart: (t: string) => void
-  onOvernightCheckIn: (t: string) => void
+  onDriveDepart: (t: string) => void
   onToggleActivity: (actIdx: number) => void
   onDeleteActivity: (actIdx: number) => void
   addingText: string
@@ -650,7 +643,7 @@ interface TimelineRowProps {
 
 function TimelineRow({
   entry, generatingActivities,
-  onOvernightDepart, onOvernightCheckIn,
+  onDriveDepart,
   onToggleActivity, onDeleteActivity, addingText, onAddingChange, onAddActivity,
 }: TimelineRowProps) {
   const cfg = ROW_CONFIG[entry.type]
@@ -695,7 +688,7 @@ function TimelineRow({
           </div>
 
           {entry.type === 'DRIVE' && (
-            <DriveContent entry={entry} />
+            <DriveContent entry={entry} onDepart={onDriveDepart} />
           )}
           {entry.type === 'STAY' && entry.stop && (
             <StayContent entry={entry} />
@@ -712,11 +705,7 @@ function TimelineRow({
             />
           )}
           {entry.type === 'OVERNIGHT' && entry.stop && (
-            <OvernightContent
-              entry={entry}
-              onCheckIn={onOvernightCheckIn}
-              onDepart={onOvernightDepart}
-            />
+            <OvernightContent entry={entry} />
           )}
         </div>
       </div>
@@ -726,7 +715,7 @@ function TimelineRow({
 
 // ─── DriveContent ─────────────────────────────────────────────────────────────
 
-function DriveContent({ entry }: { entry: TimelineEntry }) {
+function DriveContent({ entry, onDepart }: { entry: TimelineEntry; onDepart: (t: string) => void }) {
   const fromName = entry.prevStop
     ? `${entry.prevStop.locationName}${entry.prevStop.locationState ? ', ' + entry.prevStop.locationState : ''}`
     : '—'
@@ -734,17 +723,47 @@ function DriveContent({ entry }: { entry: TimelineEntry }) {
     ? `${entry.stop.locationName}${entry.stop.locationState ? ', ' + entry.stop.locationState : ''}`
     : '—'
 
+  const driveHours = parseDurationToHours(entry.driveDuration) ?? entry.driveHours
+  const arrival = driveHours ? calcArrival(entry.departureTime, driveHours) : null
+
   return (
     <div>
-      <div className="flex items-center gap-1.5 text-sm font-medium text-gray-700">
+      <div className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1.5">
         <MapPin size={12} className="text-gray-400 flex-shrink-0" />
         <span className="truncate">{fromName}</span>
         <ArrowRight size={12} className="text-gray-400 flex-shrink-0" />
         <span className="truncate">{toName}</span>
       </div>
       {entry.highwayRoute && (
-        <p className="text-xs text-gray-400 mt-0.5 ml-4">{entry.highwayRoute}</p>
+        <p className="text-xs text-gray-400 mb-1.5 ml-4">{entry.highwayRoute}</p>
       )}
+      {/* Depart / arrive row */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-gray-500">Depart</span>
+          <TimePicker value={entry.departureTime} onChange={onDepart} />
+        </div>
+        {arrival && (
+          <>
+            <ArrowRight size={12} className="text-gray-400 flex-shrink-0" />
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-gray-500">Arrive</span>
+              <span className="text-sm font-semibold text-gray-700">{arrival.timeStr}</span>
+              {arrival.nextDay && <span className="text-xs text-gray-400">(+1 day)</span>}
+            </div>
+            {arrival.level === 'amber' && (
+              <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full whitespace-nowrap">
+                Late arrival — confirm after-hours check-in
+              </span>
+            )}
+            {arrival.level === 'red' && (
+              <span className="text-xs font-medium text-red-700 bg-red-100 px-2 py-0.5 rounded-full whitespace-nowrap">
+                Very late arrival — consider an earlier departure
+              </span>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -853,41 +872,18 @@ function ActivityContent({ entry, generatingActivities, onToggleActivity, onDele
 
 // ─── OvernightContent ─────────────────────────────────────────────────────────
 
-function OvernightContent({ entry, onCheckIn, onDepart }: {
-  entry: TimelineEntry
-  onCheckIn: (t: string) => void
-  onDepart: (t: string) => void
-}) {
+function OvernightContent({ entry }: { entry: TimelineEntry }) {
   const stop = entry.stop!
-  const departureDate = entry.date ? addDays(entry.date, 1) : undefined
-
   return (
-    <div className="space-y-2.5">
-      <div className="text-base font-semibold text-gray-800">
+    <div className="space-y-1">
+      <div className="text-sm font-semibold text-gray-800">
         {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
       </div>
       {stop.campgroundName && <div className="text-sm text-gray-500">{stop.campgroundName}</div>}
-
-      {/* Arrive / Depart side by side */}
-      <div className="flex flex-wrap gap-3">
-        <div className="flex items-center gap-2 bg-white border border-purple-100 rounded-lg px-3 py-1.5">
-          <span className="text-xs text-gray-500 font-medium">Arrive</span>
-          <span className="text-sm font-semibold text-gray-700">{fmtDate(entry.date)}</span>
-          <span className="text-gray-300">·</span>
-          <TimePicker value={entry.checkInTime} onChange={onCheckIn} />
-        </div>
-        <div className="flex items-center gap-2 bg-white border border-purple-100 rounded-lg px-3 py-1.5">
-          <span className="text-xs text-gray-500 font-medium">Depart</span>
-          <span className="text-sm font-semibold text-gray-700">{fmtDate(departureDate)}</span>
-          <span className="text-gray-300">·</span>
-          <TimePicker value={entry.departureTime} onChange={onDepart} />
-        </div>
-      </div>
-
-      {entry.transitNote
-        ? <p className="text-sm text-gray-600">{entry.transitNote}</p>
-        : <p className="text-xs text-gray-400">Transit stop — continuing tomorrow morning</p>
-      }
+      {stop.siteRate != null && (
+        <div className="text-xs text-gray-400">${stop.siteRate}/night</div>
+      )}
+      <p className="text-xs text-gray-400 italic">Early departure planned</p>
     </div>
   )
 }
