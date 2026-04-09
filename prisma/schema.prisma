@@ -1,0 +1,330 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../server/node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String               @id @default(cuid())
+  email               String               @unique
+  firstName           String
+  lastName            String
+  passwordHash        String?
+  googleId            String?
+  appleId             String?
+  phone               String?
+  emergencyContact    String?
+  emergencyPhone      String?
+  homeLocation        String?
+  avatarUrl           String?
+  subscriptionTier    SubscriptionTier     @default(FREE)
+  subscriptionId      String?
+  customerId          String?
+  trialEndsAt         DateTime?
+  subscriptionEndsAt  DateTime?
+  isOwner             Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  rigs                Rig[]
+  trips               Trip[]
+  memberships         Membership[]
+  notifications       NotificationSetting[]
+  feedback            Feedback[]
+  travelProfile       TravelProfile?
+}
+
+enum SubscriptionTier {
+  FREE
+  PRO
+  PRO_PLUS
+}
+
+model Rig {
+  id             String      @id @default(cuid())
+  userId         String
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicleType    VehicleType
+  year           Int?
+  make           String?
+  model          String?
+  length         Float?
+  height         Float?
+  fuelType       String?
+  mpg            Float?
+  tankSize       Float?
+  slideouts      String?
+  electricalAmps String?
+  towingSetup    String?
+  isToyHauler    Boolean     @default(false)
+  garageLength   Float?
+  gvwr           Float?
+  towVehicle     String?
+  toys           Json?
+  terrainTypes   Json?
+  isVan          Boolean     @default(false)
+  vanLength      String?
+  powerSetup     Json?
+  waterCapacity  Float?
+  hasStarlink    Boolean     @default(false)
+  isRemoteWorker Boolean     @default(false)
+  isCamper       Boolean     @default(false)
+  sleepSetup     String?
+  isOffRoad      Boolean     @default(false)
+  isDefault      Boolean     @default(false)
+  currentMiles   Int?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  maintenanceItems MaintenanceItem[]
+}
+
+enum VehicleType {
+  RV_CLASS_A
+  RV_CLASS_B
+  RV_CLASS_C
+  FIFTH_WHEEL
+  TRAVEL_TRAILER
+  TOY_HAULER
+  POP_UP
+  VAN
+  CAR_CAMPING
+}
+
+model TravelProfile {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  travelStyle        String?
+  maxDriveHours      Float?
+  maxMilesPerDay     Int?
+  nightlyBudget      Float?
+  hookupPreference   String?
+  campgroundTypes    Json?
+  interests          Json?
+  adults             Int      @default(1)
+  children           Int      @default(0)
+  hasPets            Boolean  @default(false)
+  petDetails         Json?
+  accessibilityNeeds Json?
+  militaryStatus     String?
+  firstResponder     String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Membership {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         String
+  memberNumber String?
+  planTier     String?
+  expiresAt    DateTime?
+  autoApply    Boolean   @default(true)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+}
+
+model Trip {
+  id             String     @id @default(cuid())
+  userId         String
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rigId          String?
+  name           String
+  status         TripStatus @default(PLANNING)
+  startLocation  String
+  endLocation    String
+  startDate      DateTime?
+  endDate        DateTime?
+  totalMiles     Float?
+  totalNights    Int?
+  estimatedFuel  Float?
+  estimatedCamp  Float?
+  actualFuel     Float?
+  actualCamp     Float?
+  fuelPrice      Float?
+  sharedToken    String?    @unique
+  packingList    Json?
+  aiConversation Json?
+  itinerary      Json?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  stops          Stop[]
+}
+
+enum TripStatus {
+  PLANNING
+  ACTIVE
+  COMPLETED
+  DRAFT
+}
+
+model Stop {
+  id                     String        @id @default(cuid())
+  tripId                 String
+  trip                   Trip          @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  order                  Int
+  type                   StopType      @default(DESTINATION)
+  locationName           String
+  locationState          String?
+  latitude               Float?
+  longitude              Float?
+  arrivalDate            DateTime?
+  departureDate          DateTime?
+  nights                 Int           @default(1)
+  campgroundName         String?
+  campgroundId           String?
+  bookingStatus          BookingStatus @default(NOT_BOOKED)
+  confirmationNum        String?
+  siteRate               Float?
+  estimatedFuel          Float?
+  checkInTime            String?
+  checkOutTime           String?
+  siteNumber             String?
+  notes                  String?
+  hookupType             String?
+  isPetFriendly          Boolean?
+  isMilitaryOnly         Boolean       @default(false)
+  isCompatible           Boolean       @default(true)
+  incompatibilityReasons Json?
+  alternates             Json?
+  weatherForecast        Json?
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  journalEntry           JournalEntry?
+}
+
+enum StopType {
+  DESTINATION
+  OVERNIGHT_ONLY
+  HOME
+}
+
+enum BookingStatus {
+  NOT_BOOKED
+  PENDING
+  CONFIRMED
+  CANCELLED
+  WAITLISTED
+}
+
+model JournalEntry {
+  id         String   @id @default(cuid())
+  stopId     String   @unique
+  stop       Stop     @relation(fields: [stopId], references: [id], onDelete: Cascade)
+  title      String?
+  body       String?
+  rating     Int?
+  photos     Json?
+  actualCost Float?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model MaintenanceItem {
+  id               String            @id @default(cuid())
+  rigId            String
+  rig              Rig               @relation(fields: [rigId], references: [id], onDelete: Cascade)
+  name             String
+  intervalMiles    Int?
+  intervalMonths   Int?
+  lastServiceMiles Int?
+  lastServiceDate  DateTime?
+  currentMiles     Int?
+  status           MaintenanceStatus @default(OK)
+  notes            String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  logs             MaintenanceLog[]
+}
+
+model MaintenanceLog {
+  id          String          @id @default(cuid())
+  itemId      String
+  item        MaintenanceItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  serviceDate DateTime
+  mileage     Int?
+  notes       String?
+  cost        Float?
+  createdAt   DateTime        @default(now())
+}
+
+enum MaintenanceStatus {
+  OK
+  DUE_SOON
+  OVERDUE
+}
+
+model RigDatabase {
+  id      String  @id @default(cuid())
+  make    String
+  model   String
+  class   String
+  length  Float?
+  height  Float?
+  fuel    String?
+  mpg     Float?
+  tank    Float?
+  slides  String?
+  amps    String?
+}
+
+model Feedback {
+  id          String         @id @default(cuid())
+  userId      String?
+  user        User?          @relation(fields: [userId], references: [id])
+  type        FeedbackType
+  title       String?
+  body        String
+  screen      String?
+  rating      Int?
+  importance  String?
+  isPublic    Boolean        @default(true)
+  status      FeedbackStatus @default(NEW)
+  votes       Int            @default(0)
+  voterIds    Json?
+  rigType     String?
+  tripContext String?
+  createdAt   DateTime       @default(now())
+}
+
+enum FeedbackType {
+  FEATURE_REQUEST
+  BUG_REPORT
+  GENERAL
+  CAMPGROUND_REVIEW
+}
+
+enum FeedbackStatus {
+  NEW
+  PLANNED
+  IN_PROGRESS
+  SHIPPED
+  DECLINED
+}
+
+model NotificationSetting {
+  id      String  @id @default(cuid())
+  userId  String
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type    String
+  enabled Boolean @default(true)
+  method  Json
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  type      String
+  isRead    Boolean  @default(false)
+  data      Json?
+  createdAt DateTime @default(now())
+}

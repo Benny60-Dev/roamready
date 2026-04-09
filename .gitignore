@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Environment files — single master .env at root, never commit it
+.env
+*.env
+client/.env
+server/.env
+
+# Claude Code memory and settings
+.claude/
+
+# Build output
+dist/
+client/dist/
+server/dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal

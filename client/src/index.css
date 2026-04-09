@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    color: #1a1a1a;
+    background: #f9fafb;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 500;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-lg border border-gray-200/50 p-4;
+    border-width: 0.5px;
+  }
+  .card-lg {
+    @apply bg-white rounded-xl border border-gray-200/50 p-6;
+    border-width: 0.5px;
+  }
+  .btn-primary {
+    @apply bg-[#1D9E75] text-white px-4 py-2 rounded-lg font-medium text-sm hover:bg-[#085041] transition-colors;
+  }
+  .btn-secondary {
+    @apply bg-[#E1F5EE] text-[#1D9E75] px-4 py-2 rounded-lg font-medium text-sm hover:bg-[#1D9E75] hover:text-white transition-colors;
+  }
+  .btn-outline {
+    @apply border border-[#1D9E75] text-[#1D9E75] px-4 py-2 rounded-lg font-medium text-sm hover:bg-[#E1F5EE] transition-colors;
+    border-width: 0.5px;
+  }
+  .btn-ghost {
+    @apply text-gray-600 px-4 py-2 rounded-lg font-medium text-sm hover:bg-gray-100 transition-colors;
+  }
+  .input {
+    @apply w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D9E75]/20 focus:border-[#1D9E75] transition-colors;
+    border-width: 0.5px;
+  }
+  .label {
+    @apply block text-sm font-medium text-gray-700 mb-1;
+  }
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
+  }
+  .badge-green {
+    @apply badge bg-[#E1F5EE] text-[#085041];
+  }
+  .badge-amber {
+    @apply badge bg-amber-50 text-amber-800;
+  }
+  .badge-red {
+    @apply badge bg-red-50 text-[#E24B4A];
+  }
+  .badge-blue {
+    @apply badge bg-blue-50 text-[#378ADD];
+  }
+  .badge-purple {
+    @apply badge bg-purple-50 text-[#7F77DD];
+  }
+}
+
+.typing-dot {
+  animation: typing-bounce 1.4s ease-in-out infinite;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-6px); opacity: 1; }
+}
