@@ -1,48 +1,85 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { GoogleMap, useJsApiLoader, Marker, Polyline, InfoWindow, Circle } from '@react-google-maps/api'
+import { GoogleMap, useJsApiLoader, DirectionsRenderer, InfoWindow, Circle } from '@react-google-maps/api'
 import { Layers, MapPin, X, Plus, Minus, Tent, DollarSign, Calendar, AlertTriangle, Wind, Droplets, Snowflake, Thermometer, ExternalLink } from 'lucide-react'
 import { tripsApi, weatherApi } from '../../services/api'
 import { Trip, Stop, StopWeather, LiveForecast } from '../../types'
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' }
+const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = []
 
-const PIN_COLORS: Record<string, string> = {
-  booked:       '#1D9E75',
-  pending:      '#EF9F27',
-  notBooked:    '#888780',
-  overnight:    '#7F77DD',
-  incompatible: '#E24B4A',
+// ─── Marker colors ──────────────────────────────────────────────────────────────
+const MC = {
+  home:     '#1D9E75', // green  – home / start
+  booked:   '#1D9E75', // green  – confirmed
+  final:    '#D85A30', // coral  – final destination
+  pending:  '#EF9F27', // amber  – pending
+  unbooked: '#888780', // gray   – not booked
+  overnight:'#7F77DD', // purple – overnight only
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+type MarkerKind = 'home' | 'booked' | 'final' | 'pending' | 'unbooked' | 'overnight'
 
-function isoDateStr(d: Date): string {
+const KIND_COLOR: Record<MarkerKind, string> = {
+  home: MC.home, booked: MC.booked, final: MC.final,
+  pending: MC.pending, unbooked: MC.unbooked, overnight: MC.overnight,
+}
+const KIND_Z: Record<MarkerKind, number> = {
+  home: 100, final: 90, booked: 50, pending: 40, unbooked: 30, overnight: 20,
+}
+
+// ─── Marker icon & label (only call after isLoaded) ────────────────────────────
+function makeCircleIcon(kind: MarkerKind): google.maps.Symbol {
+  return {
+    path:         window.google.maps.SymbolPath.CIRCLE,
+    scale:        12,
+    fillColor:    KIND_COLOR[kind],
+    fillOpacity:  1,
+    strokeColor:  'white',
+    strokeWeight: 3,
+  }
+}
+
+function makeLabel(kind: MarkerKind, order: number): google.maps.MarkerLabel {
+  return {
+    text:       kind === 'home' ? 'H' : kind === 'overnight' ? '☽' : String(order),
+    color:      'white',
+    fontSize:   '11px',
+    fontWeight: '700',
+  }
+}
+
+// ─── Stop classification ────────────────────────────────────────────────────────
+function classifyStop(stop: Stop, lastDestOrder: number): MarkerKind {
+  if (stop.type === 'HOME')             return 'home'
+  if (stop.type === 'OVERNIGHT_ONLY')   return 'overnight'
+  if (stop.order === lastDestOrder)     return 'final'
+  if (stop.bookingStatus === 'CONFIRMED') return 'booked'
+  if (stop.bookingStatus === 'PENDING')   return 'pending'
+  return 'unbooked'
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────────
+function isoDateStr(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
-
-function addDays(iso: string, n: number): string {
-  const d = new Date(iso)
-  d.setDate(d.getDate() + n)
-  return isoDateStr(d)
+function addDays(iso: string, n: number) {
+  const d = new Date(iso); d.setDate(d.getDate() + n); return isoDateStr(d)
 }
-
-function stopHasAlerts(weather: StopWeather | null | undefined): boolean {
-  if (!weather || weather.mode !== 'live') return false
-  return (weather as LiveForecast).days.some(d => d.alerts.length > 0)
+function stopHasAlerts(w: StopWeather | null | undefined): boolean {
+  return !!w && w.mode === 'live' && (w as LiveForecast).days.some(d => d.alerts.length > 0)
 }
-
-function stopAlerts(weather: StopWeather | null | undefined) {
-  if (!weather || weather.mode !== 'live') return []
-  const all = (weather as LiveForecast).days.flatMap(d => d.alerts)
+function stopAlerts(w: StopWeather | null | undefined) {
+  if (!w || w.mode !== 'live') return []
+  const all = (w as LiveForecast).days.flatMap(d => d.alerts)
   return all.filter((a, i, arr) => arr.findIndex(x => x.type === a.type) === i)
 }
 
 const ALERT_ICONS: Record<string, JSX.Element> = {
-  wind:   <Wind        size={11} className="flex-shrink-0" />,
-  rain:   <Droplets    size={11} className="flex-shrink-0" />,
+  wind:   <Wind size={11} className="flex-shrink-0" />,
+  rain:   <Droplets size={11} className="flex-shrink-0" />,
   freeze: <Thermometer size={11} className="flex-shrink-0" />,
-  snow:   <Snowflake   size={11} className="flex-shrink-0" />,
+  snow:   <Snowflake size={11} className="flex-shrink-0" />,
 }
 const ALERT_COLORS: Record<string, string> = {
   amber: 'bg-amber-50 border-amber-200 text-amber-800',
@@ -50,217 +87,378 @@ const ALERT_COLORS: Record<string, string> = {
   red:   'bg-red-50 border-red-200 text-red-800',
 }
 
-// ─── Stop popup ───────────────────────────────────────────────────────────────
+// ─── Map legend ──────────────────────────────────────────────────────────────────
+function MapLegend() {
+  const items = [
+    { color: MC.home,     label: 'Home / Start',       circle: true  },
+    { color: MC.booked,   label: 'Booked',             circle: true  },
+    { color: MC.final,    label: 'Final destination',  circle: true  },
+    { color: MC.pending,  label: 'Pending',            circle: true  },
+    { color: MC.unbooked, label: 'Not booked',         circle: true  },
+    { color: MC.overnight,label: 'Overnight only',     circle: true  },
+  ]
+  return (
+    <div className="absolute bottom-6 left-4 bg-white rounded-xl border border-gray-200 px-3 py-2.5 shadow-md z-10" style={{ borderWidth: '0.5px' }}>
+      <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5">Legend</p>
+      <div className="space-y-1.5">
+        {items.map(({ color, label }) => (
+          <div key={label} className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+            <span className="text-[11px] text-gray-600 leading-none">{label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Stop info popup ─────────────────────────────────────────────────────────────
+const BOOKING_BADGE: Record<MarkerKind, { cls: string; label: string }> = {
+  home:     { cls: 'bg-slate-100 text-slate-600',   label: 'Home' },
+  booked:   { cls: 'bg-green-100 text-green-700',   label: 'Confirmed' },
+  final:    { cls: 'bg-orange-100 text-orange-700', label: 'Final stop' },
+  pending:  { cls: 'bg-amber-100 text-amber-700',   label: 'Pending' },
+  unbooked: { cls: 'bg-gray-100 text-gray-500',     label: 'Not booked' },
+  overnight:{ cls: 'bg-purple-100 text-purple-700', label: 'Overnight only' },
+}
 
 function StopPopup({
-  stop,
-  weather,
-  onClose,
-  onUpdateNights,
+  stop, kind, weather, onClose, onUpdateNights,
 }: {
   stop: Stop
+  kind: MarkerKind
   weather: StopWeather | null | undefined
   onClose: () => void
   onUpdateNights: (id: string, nights: number) => void
 }) {
-  const alerts  = stopAlerts(weather)
+  const badge  = BOOKING_BADGE[kind]
+  const alerts = stopAlerts(weather)
   const nwsUrl = stop.latitude && stop.longitude
     ? `https://forecast.weather.gov/MapClick.php?lat=${stop.latitude}&lon=${stop.longitude}`
     : null
 
-  // Summary line for live or historical
   let weatherSummary: React.ReactNode = null
   if (weather?.mode === 'live') {
     const today = (weather as LiveForecast).days[0]
-    if (today) {
-      weatherSummary = (
-        <div className="flex items-center gap-2 text-xs text-gray-600 mb-2 bg-green-50 rounded px-2 py-1.5 border border-green-100">
-          <span className="text-base leading-none">{today.icon}</span>
-          <span>{today.high}° / {today.low}°  ·  {today.conditions}</span>
-          {nwsUrl && (
-            <a href={nwsUrl} target="_blank" rel="noreferrer" className="ml-auto text-[#1D9E75] hover:underline flex-shrink-0">
-              <ExternalLink size={10} />
-            </a>
-          )}
-        </div>
-      )
-    }
+    if (today) weatherSummary = (
+      <div className="flex items-center gap-2 text-xs text-gray-600 mb-2 bg-green-50 rounded px-2 py-1.5 border border-green-100">
+        <span className="text-base leading-none">{today.icon}</span>
+        <span>{today.high}° / {today.low}° · {today.conditions}</span>
+        {nwsUrl && (
+          <a href={nwsUrl} target="_blank" rel="noreferrer" className="ml-auto text-[#1D9E75] hover:underline flex-shrink-0">
+            <ExternalLink size={10} />
+          </a>
+        )}
+      </div>
+    )
   } else if (weather?.mode === 'historical') {
     const h = weather as any
     weatherSummary = (
       <div className="flex items-center gap-2 text-xs text-gray-600 mb-2 bg-blue-50 rounded px-2 py-1.5 border border-blue-100">
         <span className="text-base leading-none">{h.icon}</span>
         <span className="text-[10px] text-blue-500 mr-1">(avg)</span>
-        <span>{h.avgHigh}° / {h.avgLow}°  ·  {h.conditions}</span>
+        <span>{h.avgHigh}° / {h.avgLow}° · {h.conditions}</span>
       </div>
     )
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 w-72" style={{ borderWidth: '0.5px' }}>
-      <div className="flex items-start justify-between mb-2">
-        <div>
-          <p className="font-medium text-sm text-gray-900">
-            {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
-          </p>
-          <span className={`badge text-xs mt-0.5 ${stop.type === 'OVERNIGHT_ONLY' ? 'badge-purple' : 'badge-green'}`}>
-            {stop.type === 'OVERNIGHT_ONLY' ? 'Overnight only' : 'Destination'}
-          </span>
+    <div className="bg-white p-4 w-72">
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Stop {stop.order}</span>
+          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${badge.cls}`}>{badge.label}</span>
         </div>
-        <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded"><X size={14} /></button>
+        <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded ml-2"><X size={14} /></button>
       </div>
 
-      {stop.campgroundName && <p className="text-xs text-gray-500 mb-2">{stop.campgroundName}</p>}
+      <p className="font-semibold text-sm text-gray-900 leading-snug">
+        {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
+      </p>
+
+      {stop.campgroundName && (
+        <p className="text-xs text-gray-500 mt-0.5 mb-1">{stop.campgroundName}</p>
+      )}
 
       {!stop.isCompatible && (
-        <div className="bg-red-50 text-red-700 text-xs rounded px-2 py-1 mb-2 flex items-center gap-1">
-          <AlertTriangle size={12} />
-          {stop.incompatibilityReasons?.join(', ')}
+        <div className="bg-red-50 text-red-700 text-xs rounded px-2 py-1 mt-1 mb-1 flex items-center gap-1">
+          <AlertTriangle size={11} />{stop.incompatibilityReasons?.join(', ')}
         </div>
       )}
 
-      {/* Weather summary + alerts */}
-      {weatherSummary}
-      {alerts.length > 0 && (
-        <div className="space-y-1 mb-2">
-          {alerts.map((a, i) => (
-            <div key={i} className={`flex items-center gap-1.5 border rounded px-2 py-1 text-xs ${ALERT_COLORS[a.level]}`}>
-              {ALERT_ICONS[a.type]}
-              {a.message}
+      {(weatherSummary || alerts.length > 0) && (
+        <div className="mt-2">
+          {weatherSummary}
+          {alerts.length > 0 && (
+            <div className="space-y-1 mb-1">
+              {alerts.map((a, i) => (
+                <div key={i} className={`flex items-center gap-1.5 border rounded px-2 py-1 text-xs ${ALERT_COLORS[a.level]}`}>
+                  {ALERT_ICONS[a.type]}{a.message}
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs text-gray-500">Nights</span>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-100">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-gray-500">Nights</span>
           <button
             onClick={() => onUpdateNights(stop.id, stop.nights - 1)}
             disabled={stop.nights <= 1}
-            className="w-6 h-6 rounded-full border border-gray-200 flex items-center justify-center hover:bg-gray-50 disabled:opacity-30"
-          >
-            <Minus size={12} />
-          </button>
-          <span className="text-sm font-medium w-4 text-center">{stop.nights}</span>
+            className="w-5 h-5 rounded-full border border-gray-200 flex items-center justify-center hover:bg-gray-50 disabled:opacity-30"
+          ><Minus size={10} /></button>
+          <span className="text-sm font-semibold w-4 text-center">{stop.nights}</span>
           <button
             onClick={() => onUpdateNights(stop.id, stop.nights + 1)}
-            className="w-6 h-6 rounded-full border border-gray-200 flex items-center justify-center hover:bg-gray-50"
-          >
-            <Plus size={12} />
-          </button>
+            className="w-5 h-5 rounded-full border border-gray-200 flex items-center justify-center hover:bg-gray-50"
+          ><Plus size={10} /></button>
         </div>
+        {stop.siteRate && (
+          <span className="ml-auto text-xs text-gray-500 flex items-center gap-0.5">
+            <DollarSign size={11} />${stop.siteRate}/night
+          </span>
+        )}
       </div>
 
-      <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
-        {stop.siteRate   && <span className="flex items-center gap-1"><DollarSign size={11} />${stop.siteRate}/night</span>}
-        {stop.arrivalDate && <span className="flex items-center gap-1"><Calendar   size={11} />{new Date(stop.arrivalDate).toLocaleDateString()}</span>}
-        {stop.hookupType  && <span className="badge-green">{stop.hookupType}</span>}
+      <div className="flex flex-wrap gap-2 mt-1.5 text-xs text-gray-400">
+        {stop.arrivalDate && (
+          <span className="flex items-center gap-0.5"><Calendar size={10} />{new Date(stop.arrivalDate).toLocaleDateString()}</span>
+        )}
+        {stop.hookupType && <span className="badge-green text-[10px]">{stop.hookupType}</span>}
         {stop.isPetFriendly && <span className="text-[#1D9E75]">🐾 Pet-friendly</span>}
       </div>
 
-      {stop.bookingStatus !== 'CONFIRMED' && (
+      {stop.bookingStatus !== 'CONFIRMED' && stop.type !== 'HOME' && (
         <a href={`/trips/${stop.tripId}/booking`} className="btn-primary w-full mt-3 text-center text-xs block">
-          Reserve campground
+          Reserve Now
         </a>
       )}
     </div>
   )
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
+// ─── Page ────────────────────────────────────────────────────────────────────────
 export default function TripMapPage() {
   const { id } = useParams<{ id: string }>()
-  const [trip, setTrip]           = useState<Trip | null>(null)
-  const [selectedStop, setSelectedStop] = useState<Stop | null>(null)
-  const [sidebarOpen, setSidebarOpen]   = useState(true)
-  const [layers, setLayers] = useState({ route: true, stops: true, overnight: true, incompatible: true })
-  const [weatherData, setWeatherData] = useState<Record<string, StopWeather | null | undefined>>({})
+  const [trip, setTrip]                   = useState<Trip | null>(null)
+  const [selectedStop, setSelectedStop]   = useState<Stop | null>(null)
+  const [sidebarOpen, setSidebarOpen]     = useState(true)
+  const [layers, setLayers]               = useState({ route: true, stops: true, overnight: true, incompatible: true })
+  const [weatherData, setWeatherData]     = useState<Record<string, StopWeather | null | undefined>>({})
+  const [geocoding, setGeocoding]         = useState(false)
+  const [directionsResult, setDirectionsResult] = useState<google.maps.DirectionsResult | null>(null)
+  const [mapInstance, setMapInstance]     = useState<google.maps.Map | null>(null)
+
+  // Imperative marker refs — we manage these ourselves via google.maps.Marker
+  const markersRef         = useRef<google.maps.Marker[]>([])
+  const directionsCoordsKey = useRef<string | null>(null)
 
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
+    libraries: LIBRARIES,
   })
 
+  const onMapLoad = useCallback((map: google.maps.Map) => {
+    setMapInstance(map)
+  }, [])
+
+  // ── Load trip ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!id) return
-    tripsApi.get(id).then(res => setTrip(res.data))
+    tripsApi.get(id).then(res => {
+      const data = res.data
+      console.log('[TripMapPage] trip loaded:', {
+        tripId: data.id, tripName: data.name, stopCount: data.stops?.length ?? 0,
+        stops: data.stops?.map((s: Stop) => ({
+          id: s.id, order: s.order, type: s.type,
+          locationName: s.locationName, locationState: s.locationState,
+          bookingStatus: s.bookingStatus,
+          lat: s.latitude, lng: s.longitude,
+          hasCoords: !!(s.latitude && s.longitude),
+        })),
+      })
+      setTrip(data)
+    })
   }, [id])
 
-  // Fetch weather for stops once trip loads
+  // ── Weather ───────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!trip?.stops?.length) return
-
-    const today        = new Date()
-    const tripStart    = trip.startDate ? new Date(trip.startDate) : null
-    const daysUntil    = tripStart
-      ? Math.ceil((tripStart.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    const today     = new Date()
+    const tripStart = trip.startDate ? new Date(trip.startDate) : null
+    const daysUntil = tripStart
+      ? Math.ceil((tripStart.getTime() - today.getTime()) / 86_400_000)
       : null
-    const useLive = daysUntil !== null && daysUntil <= 10
+    const useLive   = daysUntil !== null && daysUntil <= 10
+    const coordStops = trip.stops.filter(s => s.latitude && s.longitude)
 
-    const stopsWithCoords = trip.stops.filter(s => s.latitude && s.longitude)
-
-    Promise.all(
-      stopsWithCoords.map(async (stop) => {
-        try {
-          if (useLive && stop.arrivalDate) {
-            const startDate = stop.arrivalDate.split('T')[0]
-            const endDate   = addDays(startDate, stop.nights)
-            const res = await weatherApi.forecast({
-              lat: stop.latitude!, lng: stop.longitude!,
-              start_date: startDate, end_date: endDate,
-            })
-            return { id: stop.id, data: res.data as StopWeather }
-          } else if (!useLive && stop.arrivalDate) {
-            const d = new Date(stop.arrivalDate)
-            const res = await weatherApi.historical({
-              lat: stop.latitude!, lng: stop.longitude!,
-              month: d.getMonth() + 1, day: d.getDate(), days: stop.nights || 1,
-            })
-            return { id: stop.id, data: res.data as StopWeather }
-          }
-          return { id: stop.id, data: null }
-        } catch {
-          return { id: stop.id, data: null }
+    Promise.all(coordStops.map(async stop => {
+      try {
+        if (useLive && stop.arrivalDate) {
+          const start = stop.arrivalDate.split('T')[0]
+          const res   = await weatherApi.forecast({ lat: stop.latitude!, lng: stop.longitude!, start_date: start, end_date: addDays(start, stop.nights) })
+          return { id: stop.id, data: res.data as StopWeather }
+        } else if (!useLive && stop.arrivalDate) {
+          const d   = new Date(stop.arrivalDate)
+          const res = await weatherApi.historical({ lat: stop.latitude!, lng: stop.longitude!, month: d.getMonth() + 1, day: d.getDate(), days: stop.nights || 1 })
+          return { id: stop.id, data: res.data as StopWeather }
         }
-      })
-    ).then(results => {
+        return { id: stop.id, data: null }
+      } catch { return { id: stop.id, data: null } }
+    })).then(results => {
       const map: Record<string, StopWeather | null> = {}
       for (const r of results) map[r.id] = r.data
       setWeatherData(map)
     })
   }, [trip?.id])
 
+  // ── Geocode stops missing lat/lng, save to DB ─────────────────────────────────
+  useEffect(() => {
+    if (!isLoaded || !id || !trip?.stops?.length || geocoding) return
+    const missing = trip.stops.filter(s => !s.latitude || !s.longitude)
+    if (!missing.length) return
+
+    console.log('[TripMapPage] geocoding', missing.length, 'stop(s) missing coordinates')
+    setGeocoding(true)
+    const geocoder = new window.google.maps.Geocoder()
+
+    Promise.all(missing.map(stop =>
+      new Promise<{ stop: Stop; lat: number; lng: number } | null>(resolve => {
+        const q = [stop.locationName, stop.locationState, 'USA'].filter(Boolean).join(', ')
+        geocoder.geocode({ address: q }, (results, status) => {
+          if (status === 'OK' && results?.[0]) {
+            const loc = results[0].geometry.location
+            console.log('[TripMapPage] geocoded', stop.locationName, '→', loc.lat(), loc.lng())
+            resolve({ stop, lat: loc.lat(), lng: loc.lng() })
+          } else {
+            console.warn('[TripMapPage] geocode failed:', stop.locationName, status)
+            resolve(null)
+          }
+        })
+      })
+    )).then(async results => {
+      const valid = results.filter(Boolean) as { stop: Stop; lat: number; lng: number }[]
+      await Promise.allSettled(
+        valid.map(({ stop, lat, lng }) => tripsApi.updateStop(id, stop.id, { latitude: lat, longitude: lng }))
+      )
+      setTrip(prev => prev ? {
+        ...prev,
+        stops: prev.stops?.map(s => {
+          const found = valid.find(r => r.stop.id === s.id)
+          return found ? { ...s, latitude: found.lat, longitude: found.lng } : s
+        }),
+      } : prev)
+      setGeocoding(false)
+    })
+  }, [isLoaded, trip?.id])
+
+  // ── Directions API ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isLoaded || geocoding || !trip?.stops?.length) return
+    const coordStops = trip.stops
+      .filter(s => s.latitude && s.longitude)
+      .sort((a, b) => a.order - b.order)
+    if (coordStops.length < 2) return
+
+    const key = coordStops.map(s => `${s.latitude},${s.longitude}`).join('|')
+    if (directionsCoordsKey.current === key) return
+    directionsCoordsKey.current = key
+
+    new window.google.maps.DirectionsService().route(
+      {
+        origin:      { lat: coordStops[0].latitude!,                          lng: coordStops[0].longitude! },
+        destination: { lat: coordStops[coordStops.length - 1].latitude!,      lng: coordStops[coordStops.length - 1].longitude! },
+        waypoints:   coordStops.slice(1, -1).slice(0, 23).map(s => ({ location: { lat: s.latitude!, lng: s.longitude! }, stopover: true })),
+        travelMode:        window.google.maps.TravelMode.DRIVING,
+        optimizeWaypoints: false,
+      },
+      (result, status) => {
+        if (status === window.google.maps.DirectionsStatus.OK && result) setDirectionsResult(result)
+        else console.warn('[TripMapPage] DirectionsService:', status)
+      }
+    )
+  }, [isLoaded, geocoding, trip?.stops])
+
+  // ── Derived values (declared before the effects that use them) ──────────────────
+  const stopsWithCoords = useMemo(
+    () => trip?.stops?.filter(s => s.latitude && s.longitude).sort((a, b) => a.order - b.order) ?? [],
+    [trip?.stops]
+  )
+
+  const lastDestOrder = useMemo(() => {
+    const dests = trip?.stops?.filter(s => s.type === 'DESTINATION') ?? []
+    return dests.length > 0 ? Math.max(...dests.map(s => s.order)) : -1
+  }, [trip?.stops])
+
+  // ── Imperative markers ─────────────────────────────────────────────────────────
+  // We create google.maps.Marker instances directly and call marker.setMap(map)
+  // so we bypass any React component rendering issues with the Marker class.
+  useEffect(() => {
+    // Remove any previously placed markers first
+    markersRef.current.forEach(m => m.setMap(null))
+    markersRef.current = []
+
+    if (!mapInstance || !stopsWithCoords.length) return
+
+    console.log(`[TripMapPage] placing ${stopsWithCoords.length} marker(s) on map`)
+
+    stopsWithCoords.forEach(stop => {
+      const kind = classifyStop(stop, lastDestOrder)
+
+      // Layer visibility — HOME always shows
+      if (kind !== 'home') {
+        if (!layers.stops     && kind !== 'overnight') return
+        if (!layers.overnight && kind === 'overnight') return
+        if (!layers.incompatible && !stop.isCompatible) return
+      }
+
+      console.log(
+        `[TripMapPage] marker #${stop.order} "${stop.locationName}" kind=${kind}`,
+        `lat=${stop.latitude} lng=${stop.longitude}`,
+      )
+
+      const marker = new window.google.maps.Marker({
+        position:  { lat: stop.latitude!, lng: stop.longitude! },
+        map:       mapInstance,
+        icon:      makeCircleIcon(kind),
+        label:     makeLabel(kind, stop.order),
+        zIndex:    KIND_Z[kind],
+        title:     stop.locationName,
+        clickable: true,
+      })
+
+      marker.addListener('click', () => setSelectedStop(stop))
+      markersRef.current.push(marker)
+    })
+
+    console.log(`[TripMapPage] ${markersRef.current.length} marker(s) successfully added to map`)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapInstance, stopsWithCoords, layers, lastDestOrder])
+
+  // Cleanup markers on unmount
+  useEffect(() => () => { markersRef.current.forEach(m => m.setMap(null)) }, [])
+
+  // ── Handlers ──────────────────────────────────────────────────────────────────
   async function handleUpdateNights(stopId: string, nights: number) {
     if (!id || nights < 1) return
     await tripsApi.updateStop(id, stopId, { nights })
-    setTrip(prev => prev ? {
-      ...prev,
-      stops: prev.stops?.map(s => s.id === stopId ? { ...s, nights } : s),
-    } : prev)
+    setTrip(prev => prev ? { ...prev, stops: prev.stops?.map(s => s.id === stopId ? { ...s, nights } : s) } : prev)
     setSelectedStop(prev => prev?.id === stopId ? { ...prev, nights } : prev)
   }
 
-  const center = trip?.stops?.[0]?.latitude
-    ? { lat: trip.stops[0].latitude!, lng: trip.stops[0].longitude! }
+  const center = stopsWithCoords[0]
+    ? { lat: stopsWithCoords[0].latitude!, lng: stopsWithCoords[0].longitude! }
     : { lat: 39.5, lng: -98.35 }
 
-  const routeCoords = trip?.stops
-    ?.filter(s => s.latitude && s.longitude)
-    .sort((a, b) => a.order - b.order)
-    .map(s => ({ lat: s.latitude!, lng: s.longitude! })) || []
+  const colorForStop = (stop: Stop) => KIND_COLOR[classifyStop(stop, lastDestOrder)]
 
-  const getMarkerColor = (stop: Stop) => {
-    if (!stop.isCompatible)               return PIN_COLORS.incompatible
-    if (stop.type === 'OVERNIGHT_ONLY')   return PIN_COLORS.overnight
-    if (stop.bookingStatus === 'CONFIRMED') return PIN_COLORS.booked
-    if (stop.bookingStatus === 'PENDING')   return PIN_COLORS.pending
-    return PIN_COLORS.notBooked
-  }
-
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div className="-mx-4 -my-6 h-[calc(100vh-3.5rem)] flex">
-      {/* Sidebar */}
+
+      {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
       {sidebarOpen && (
         <div className="w-72 bg-white border-r border-gray-200 flex flex-col overflow-hidden z-10" style={{ borderRightWidth: '0.5px' }}>
           <div className="p-4 border-b border-gray-100" style={{ borderBottomWidth: '0.5px' }}>
@@ -272,9 +470,9 @@ export default function TripMapPage() {
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
               <span className="flex items-center gap-1"><MapPin size={11} />{trip?.totalMiles?.toLocaleString()} mi</span>
-              <span className="flex items-center gap-1"><Tent   size={11} />{trip?.totalNights} nights</span>
+              <span className="flex items-center gap-1"><Tent size={11} />{trip?.totalNights} nights</span>
               {trip?.estimatedFuel && <span className="flex items-center gap-1"><DollarSign size={11} />Fuel ~${trip.estimatedFuel.toLocaleString()}</span>}
-              {trip?.estimatedCamp && <span className="flex items-center gap-1"><Tent       size={11} />Camp ~${trip.estimatedCamp.toLocaleString()}</span>}
+              {trip?.estimatedCamp && <span className="flex items-center gap-1"><Tent size={11} />Camp ~${trip.estimatedCamp.toLocaleString()}</span>}
             </div>
           </div>
 
@@ -296,6 +494,7 @@ export default function TripMapPage() {
           {/* Stop list */}
           <div className="flex-1 overflow-y-auto p-3 space-y-1">
             {trip?.stops?.sort((a, b) => a.order - b.order).map(stop => {
+              const kind     = classifyStop(stop, lastDestOrder)
               const hasAlert = stopHasAlerts(weatherData[stop.id])
               const alerts   = stopAlerts(weatherData[stop.id])
               return (
@@ -305,19 +504,18 @@ export default function TripMapPage() {
                   className="w-full text-left flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   <div
-                    className="w-5 h-5 rounded-full flex items-center justify-center text-white text-xs flex-shrink-0"
-                    style={{ backgroundColor: getMarkerColor(stop) }}
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
+                    style={{ backgroundColor: colorForStop(stop) }}
                   >
-                    {stop.order}
+                    {kind === 'home' ? 'H' : kind === 'overnight' ? '☽' : stop.order}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-gray-900 truncate">{stop.locationName}</p>
                     <p className="text-xs text-gray-400">{stop.nights}n</p>
                   </div>
-                  {/* Weather alert badge */}
                   {hasAlert && (
                     <span className="flex items-center gap-0.5 text-[10px] font-medium text-purple-600 flex-shrink-0">
-                      <span>🟣</span>{alerts.length}
+                      🟣 {alerts.length}
                     </span>
                   )}
                   {!stop.isCompatible && <AlertTriangle size={12} className="text-red-400 flex-shrink-0" />}
@@ -328,7 +526,7 @@ export default function TripMapPage() {
         </div>
       )}
 
-      {/* Map */}
+      {/* ── Map area ──────────────────────────────────────────────────────────── */}
       <div className="flex-1 relative">
         {!sidebarOpen && (
           <button
@@ -339,73 +537,47 @@ export default function TripMapPage() {
           </button>
         )}
 
-        {isLoaded && trip ? (
+        {isLoaded ? (
           <GoogleMap
             mapContainerStyle={MAP_CONTAINER_STYLE}
             zoom={6}
             center={center}
             options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}
+            onLoad={onMapLoad}
           >
-            {/* Route polyline */}
-            {layers.route && routeCoords.length > 1 && (
-              <Polyline
-                path={routeCoords}
-                options={{ strokeColor: '#1D9E75', strokeWeight: 2, strokeOpacity: 0.8 }}
+            {/* Driving route */}
+            {layers.route && directionsResult && (
+              <DirectionsRenderer
+                directions={directionsResult}
+                options={{
+                  suppressMarkers: true,
+                  polylineOptions: { strokeColor: '#1D9E75', strokeWeight: 2.5, strokeOpacity: 0.85 },
+                }}
               />
             )}
 
-            {/* Weather alert circles (purple ellipse) for stops with active alerts */}
-            {trip.stops?.filter(s => s.latitude && s.longitude).map(stop => {
-              if (!stopHasAlerts(weatherData[stop.id])) return null
-              return (
+            {/* Weather alert circles */}
+            {stopsWithCoords.map(stop =>
+              stopHasAlerts(weatherData[stop.id]) ? (
                 <Circle
-                  key={`weather-alert-${stop.id}`}
+                  key={`alert-${stop.id}`}
                   center={{ lat: stop.latitude!, lng: stop.longitude! }}
                   radius={9000}
-                  options={{
-                    fillColor:    '#7F77DD',
-                    fillOpacity:  0.18,
-                    strokeColor:  '#7F77DD',
-                    strokeWeight: 1.5,
-                    strokeOpacity: 0.55,
-                  }}
+                  options={{ fillColor: '#7F77DD', fillOpacity: 0.18, strokeColor: '#7F77DD', strokeWeight: 1.5, strokeOpacity: 0.55 }}
                 />
-              )
-            })}
+              ) : null
+            )}
 
-            {/* Stop markers */}
-            {trip.stops?.filter(s => s.latitude && s.longitude).map(stop => {
-              if (!layers.stops      && stop.type !== 'OVERNIGHT_ONLY') return null
-              if (!layers.overnight  && stop.type === 'OVERNIGHT_ONLY') return null
-              if (!layers.incompatible && !stop.isCompatible)           return null
-
-              return (
-                <Marker
-                  key={stop.id}
-                  position={{ lat: stop.latitude!, lng: stop.longitude! }}
-                  label={{ text: String(stop.order), color: 'white', fontSize: '11px', fontWeight: '500' }}
-                  onClick={() => setSelectedStop(stop)}
-                  icon={{
-                    path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z',
-                    fillColor:   getMarkerColor(stop),
-                    fillOpacity: 1,
-                    strokeColor: 'white',
-                    strokeWeight: 1.5,
-                    scale: 1.5,
-                    anchor: new window.google.maps.Point(12, 24),
-                  }}
-                />
-              )
-            })}
-
-            {/* Stop popup */}
-            {selectedStop && selectedStop.latitude && selectedStop.longitude && (
+            {/* Info window — rendered inside GoogleMap so it gets map context */}
+            {selectedStop?.latitude && selectedStop?.longitude && (
               <InfoWindow
                 position={{ lat: selectedStop.latitude, lng: selectedStop.longitude }}
                 onCloseClick={() => setSelectedStop(null)}
+                options={{ pixelOffset: new window.google.maps.Size(0, -16) }}
               >
                 <StopPopup
                   stop={selectedStop}
+                  kind={classifyStop(selectedStop, lastDestOrder)}
                   weather={weatherData[selectedStop.id]}
                   onClose={() => setSelectedStop(null)}
                   onUpdateNights={handleUpdateNights}
@@ -415,7 +587,18 @@ export default function TripMapPage() {
           </GoogleMap>
         ) : (
           <div className="h-full flex items-center justify-center bg-gray-100 text-sm text-gray-500">
-            {!isLoaded ? 'Loading map...' : 'No trip data'}
+            Loading map…
+          </div>
+        )}
+
+        {/* Legend */}
+        {isLoaded && trip && <MapLegend />}
+
+        {/* Geocoding indicator */}
+        {geocoding && (
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white border border-gray-200 rounded-full px-4 py-2 text-xs text-gray-600 shadow-md flex items-center gap-2 z-10">
+            <span className="w-3 h-3 rounded-full border-2 border-[#1D9E75] border-t-transparent animate-spin" />
+            Finding stop locations…
           </div>
         )}
       </div>
