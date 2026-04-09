@@ -427,10 +427,25 @@ export default function TripMapPage() {
           const label = `leg[${i}] → ${destStop.locationName}`
           const highways = parseHighwaysFromRouteSteps(leg.steps ?? [], label)
           if (!highways) { console.warn('[TripMapPage] No highways extracted for', label); return }
-          console.log('[TripMapPage] Saving to stop', destStop.id, ':', highways)
+          // tripsApi.updateStop → api.put('/trips/:id/stops/:stopId') → authenticated axios (Bearer token)
+          console.log('[TripMapPage] Saving highwayRoute to stop', destStop.id, '| route:', highways)
           tripsApi.updateStop(id, destStop.id, { highwayRoute: highways } as any)
-            .then(res => console.log('[TripMapPage] updateStop response for', destStop.locationName, ':', res.data?.highwayRoute))
-            .catch(err => console.error('[TripMapPage] updateStop FAILED for', destStop.locationName, ':', err?.response?.data || err?.message))
+            .then(res => {
+              console.log('[TripMapPage] ✓ updateStop saved for', destStop.locationName,
+                '| highwayRoute from server:', res.data?.highwayRoute)
+            })
+            .catch(err => {
+              const status = err?.response?.status
+              const body = err?.response?.data
+              console.error('[TripMapPage] ✗ updateStop FAILED for', destStop.locationName,
+                '| HTTP', status,
+                '| body:', body,
+                '| message:', err?.message)
+              if (status === 401) {
+                console.error('[TripMapPage] 401 cause: token may be expired or server auth middleware failed.',
+                  'Restart the dev server and try again.')
+              }
+            })
           setTrip(prev => prev ? {
             ...prev,
             stops: prev.stops?.map(s => s.id === destStop.id ? { ...s, highwayRoute: highways } : s),
