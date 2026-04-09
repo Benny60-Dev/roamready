@@ -149,6 +149,7 @@ export interface Stop {
   incompatibilityReasons?: string[]
   alternates?: any[]
   weatherForecast?: WeatherDay[]
+  highwayRoute?: string | null
   journalEntry?: JournalEntry
 }
 

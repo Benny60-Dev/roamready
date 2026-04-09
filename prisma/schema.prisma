@@ -195,6 +195,7 @@ model Stop {
   incompatibilityReasons Json?
   alternates             Json?
   weatherForecast        Json?
+  highwayRoute           String?
   createdAt              DateTime      @default(now())
   updatedAt              DateTime      @updatedAt
   journalEntry           JournalEntry?

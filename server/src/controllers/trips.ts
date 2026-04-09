@@ -1,9 +1,118 @@
 import { Request, Response, NextFunction } from 'express'
 import { v4 as uuidv4 } from 'uuid'
+import axios from 'axios'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
-import { generatePackingListAI, generateTripItineraryAI, generateRouteStringsAI, generateStopActivitiesAI } from '../services/ai'
+import { generatePackingListAI, generateTripItineraryAI, generateStopActivitiesAI } from '../services/ai'
+
+// ─── Google Maps Directions helpers ──────────────────────────────────────────
+
+const DIR_MAP: Record<string, string> = { N: 'North', S: 'South', E: 'East', W: 'West' }
+
+/** Strip HTML tags from a Google Maps instruction string. */
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * Walk Directions API steps and pull out every unique highway/interstate name
+ * in travel order.  Returns a formatted string like:
+ *   "SR-202 East → I-17 North → US-89 North"
+ */
+function parseHighwaysFromSteps(steps: any[]): string {
+  const highways: string[] = []
+
+  for (const step of steps) {
+    const html: string = step.html_instructions || ''
+
+    // Google Maps wraps road names in <b> tags
+    const boldMatches = [...html.matchAll(/<b>([^<]+)<\/b>/g)]
+
+    for (const m of boldMatches) {
+      const text = m[1].trim()
+
+      // Match highway designations: I-40, US-89, SR-260, AZ-89, CO-128, etc.
+      const hwMatch = text.match(/^(I-\d+|US-\d+|SR-\d+|[A-Z]{2,3}-\d+)\s*([NSEW])?/i)
+      if (!hwMatch) continue
+
+      const hwName = hwMatch[1].toUpperCase()
+      const dirChar = hwMatch[2]?.toUpperCase()
+
+      // Direction: from road name suffix, or fall back to instruction text
+      let direction = dirChar ? DIR_MAP[dirChar] : null
+      if (!direction) {
+        const plain = stripHtml(html).toLowerCase()
+        if (plain.includes('north')) direction = 'North'
+        else if (plain.includes('south')) direction = 'South'
+        else if (plain.includes('east')) direction = 'East'
+        else if (plain.includes('west')) direction = 'West'
+      }
+
+      const formatted = direction ? `${hwName} ${direction}` : hwName
+
+      // Deduplicate: skip if it is the same highway as the last entry
+      if (highways.length === 0 || highways[highways.length - 1] !== formatted) {
+        highways.push(formatted)
+      }
+    }
+  }
+
+  return highways.join(' → ')
+}
+
+/**
+ * Fetch the real highway route for every consecutive stop pair in a trip
+ * using the Google Maps Directions HTTP API.
+ */
+async function fetchAllSegmentRoutes(
+  trip: any,
+): Promise<{ segmentIdx: number; route: string }[]> {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY
+  if (!apiKey) {
+    console.warn('[fetchAllSegmentRoutes] GOOGLE_MAPS_API_KEY not set — skipping real routes')
+    return []
+  }
+
+  const stops: any[] = [...(trip.stops || [])].sort((a: any, b: any) => a.order - b.order)
+  const results: { segmentIdx: number; route: string }[] = []
+
+  for (let i = 1; i < stops.length; i++) {
+    const from = stops[i - 1]
+    const to   = stops[i]
+
+    const origin = from.latitude && from.longitude
+      ? `${from.latitude},${from.longitude}`
+      : `${from.locationName}${from.locationState ? ', ' + from.locationState : ''}`
+    const destination = to.latitude && to.longitude
+      ? `${to.latitude},${to.longitude}`
+      : `${to.locationName}${to.locationState ? ', ' + to.locationState : ''}`
+
+    try {
+      const res = await axios.get('https://maps.googleapis.com/maps/api/directions/json', {
+        params: { origin, destination, key: apiKey },
+        timeout: 10000,
+      })
+
+      const data = res.data
+      if (data.status !== 'OK' || !data.routes?.[0]) {
+        console.warn('[fetchAllSegmentRoutes] Directions API status=%s for segment %d', data.status, i - 1)
+        results.push({ segmentIdx: i - 1, route: '' })
+        continue
+      }
+
+      const steps = (data.routes[0].legs as any[]).flatMap((leg: any) => leg.steps)
+      const route = parseHighwaysFromSteps(steps)
+      console.log('[fetchAllSegmentRoutes] segment %d route: %s', i - 1, route)
+      results.push({ segmentIdx: i - 1, route })
+    } catch (err: any) {
+      console.error('[fetchAllSegmentRoutes] segment %d error:', i - 1, err?.message)
+      results.push({ segmentIdx: i - 1, route: '' })
+    }
+  }
+
+  return results
+}
 
 export async function getTrips(req: AuthRequest, res: Response, next: NextFunction) {
   try {
@@ -167,20 +276,31 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
       bookingStatus, confirmationNum, siteRate, estimatedFuel, hookupType,
       isPetFriendly, isMilitaryOnly, isCompatible,
       incompatibilityReasons, alternates, weatherForecast,
-      notes, checkInTime, checkOutTime, siteNumber,
+      notes, checkInTime, checkOutTime, siteNumber, highwayRoute,
     } = req.body
+
+    console.log('[updateStop] stopId=%s highwayRoute=%s (body keys: %s)',
+      req.params.stopId,
+      highwayRoute ?? '(not provided)',
+      Object.keys(req.body).join(', ')
+    )
+
+    // Cast to any: highwayRoute was added after initial Prisma client generation
+    // and may not appear in the auto-generated types until next `prisma generate`.
+    const data: any = {
+      type, locationName, locationState, latitude, longitude,
+      arrivalDate, departureDate, nights, campgroundName, campgroundId,
+      bookingStatus, confirmationNum, siteRate, estimatedFuel, hookupType,
+      isPetFriendly, isMilitaryOnly, isCompatible,
+      incompatibilityReasons, alternates, weatherForecast,
+      notes, checkInTime, checkOutTime, siteNumber, highwayRoute,
+    }
 
     const updated = await prisma.stop.update({
       where: { id: req.params.stopId },
-      data: {
-        type, locationName, locationState, latitude, longitude,
-        arrivalDate, departureDate, nights, campgroundName, campgroundId,
-        bookingStatus, confirmationNum, siteRate, estimatedFuel, hookupType,
-        isPetFriendly, isMilitaryOnly, isCompatible,
-        incompatibilityReasons, alternates, weatherForecast,
-        notes, checkInTime, checkOutTime, siteNumber,
-      },
+      data,
     })
+    console.log('[updateStop] saved stopId=%s highwayRoute=%s', req.params.stopId, (updated as any).highwayRoute ?? '(null)')
     res.json(updated)
   } catch (err: any) {
     console.error('[updateStop] FAILED stopId=%s:', req.params.stopId, err?.message)
@@ -240,11 +360,24 @@ export async function generateItinerary(req: AuthRequest, res: Response, next: N
       include: { rigs: { where: { isDefault: true } }, travelProfile: true },
     })
 
-    const itinerary = await generateTripItineraryAI(trip, user)
+    // Run itinerary AI and real Google Maps route fetching in parallel
+    const [itinerary, routes] = await Promise.all([
+      generateTripItineraryAI(trip, user),
+      fetchAllSegmentRoutes(trip),
+    ])
 
-    await prisma.trip.update({ where: { id: trip.id }, data: { itinerary } })
+    // Always use the real Directions API route — overwrite anything the AI generated
+    let driveIdx = 0
+    const itineraryWithRoutes = itinerary.map((day: any) => {
+      if (day.type !== 'DRIVE') return day
+      const realRoute = routes.find((r: any) => r.segmentIdx === driveIdx)?.route ?? null
+      driveIdx++
+      return { ...day, highwayRoute: realRoute || day.highwayRoute || null }
+    })
 
-    res.json(itinerary)
+    await prisma.trip.update({ where: { id: trip.id }, data: { itinerary: itineraryWithRoutes } })
+
+    res.json(itineraryWithRoutes)
   } catch (err) { next(err) }
 }
 
@@ -264,7 +397,7 @@ export async function generateRoutes(req: AuthRequest, res: Response, next: Next
       include: { stops: { orderBy: { order: 'asc' } } },
     })
     if (!trip) throw new AppError('Trip not found', 404)
-    const routes = await generateRouteStringsAI(trip)
+    const routes = await fetchAllSegmentRoutes(trip)
     res.json(routes)
   } catch (err) { next(err) }
 }

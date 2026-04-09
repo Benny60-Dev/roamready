@@ -155,7 +155,7 @@ ${JSON.stringify(stopSummaries, null, 2)}
 
 Rules:
 - Return a JSON array of day entries (one per day of the trip)
-- For each DRIVE day between two stops, include: routeDescription (2-3 sentences about the drive, highways, scenery), terrainSummary (1 sentence), pointsOfInterest (array of 2-4 strings like "City, State - quick description")
+- For each DRIVE day between two stops, include: highwayRoute (major highway route string such as "US-60 East → I-17 North → US-89 North" — official highway designations with cardinal directions, 2-5 highways in travel order separated by →, no city names), routeDescription (2-3 sentences about the drive, highways, scenery), terrainSummary (1 sentence), pointsOfInterest (array of 2-4 strings like "City, State - quick description")
 - For DESTINATION/HOME arrival day: routeDescription is optional (short "arriving at X" note)
 - For each ACTIVITY day (nights 2+ at a destination): provide activities array with 3-5 suggested activities as strings tailored to the location and user interests
 - For OVERNIGHT_ONLY stops: provide a brief transitNote (1 sentence about the overnight location)
@@ -168,6 +168,7 @@ Return this exact JSON structure (array of objects):
     "dayNum": 1,
     "type": "DRIVE",
     "stopOrder": 2,
+    "highwayRoute": "US-60 East → I-17 North → US-89 North",
     "routeDescription": "...",
     "terrainSummary": "...",
     "pointsOfInterest": ["Location - description"],
@@ -226,27 +227,27 @@ export async function generateRouteStringsAI(trip: any): Promise<{ segmentIdx: n
 
   if (segments.length === 0) return []
 
-  const prompt = `For each drive segment below, return the major highway route using official US highway numbers. Return ONLY valid JSON — no prose, no markdown.
+  const prompt = `For each drive segment below, list every major highway, interstate, and state route in travel order for an RV trip. Return ONLY valid JSON — no prose, no markdown.
 
 Segments:
 ${segments.join('\n')}
 
-Return this exact JSON array:
+Return this exact JSON array — one entry per segment:
 [
-  { "segmentIdx": 0, "route": "US-60 East → I-17 North → US-89 North" },
-  { "segmentIdx": 1, "route": "US-163 North → US-191 North" }
+  { "segmentIdx": 0, "route": "I-10 East → SR-202 East → I-17 North → US-89 North" },
+  { "segmentIdx": 1, "route": "US-89 North → US-160 East → US-163 North" }
 ]
 
 Rules:
-- Official designations only: I-40, US-89, SR-12, AZ-89, CO-128, etc.
-- Include cardinal direction after each highway (North/South/East/West)
-- List in order of travel, separated by →
-- 2–5 major highways per segment
-- No cities, exits, or narrative — highway numbers only`
+- List every major highway, interstate, and state route in order — include every significant road change, do not skip any major highways
+- Use official designations only: I-40, US-89, SR-202, AZ-89, CO-128, etc.
+- Include cardinal direction after each highway: North, South, East, or West
+- List in travel order, separated by →
+- No city names, exits, mile markers, or narrative — highway numbers and directions only`
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 1024,
+    max_tokens: 2048,
     messages: [{ role: 'user', content: prompt }],
   })
 

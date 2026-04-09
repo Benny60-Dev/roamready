@@ -113,6 +113,7 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
       const miles = calcDistanceMiles(
         prevStop.latitude, prevStop.longitude, stop.latitude, stop.longitude
       )
+      console.log(`[buildTimeline] DRIVE → ${stop.locationName}: stop.highwayRoute =`, stop.highwayRoute ?? '(null/undefined)')
       entries.push({
         dayNum,
         date: currentDate ? new Date(currentDate) : undefined,
@@ -123,6 +124,7 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
         departureTime: '08:00',
         checkInTime: '15:00',
         checkOutTime: '11:00',
+        highwayRoute: stop.highwayRoute ?? null,
         activities: [],
       })
       dayNum++
@@ -188,7 +190,7 @@ function mergeAI(entries: TimelineEntry[], aiDays: ItineraryDay[]): TimelineEntr
       departureTime: ai.departureTime ?? entry.departureTime,
       checkInTime: ai.checkInTime ?? entry.checkInTime,
       checkOutTime: ai.checkOutTime ?? entry.checkOutTime,
-      highwayRoute: ai.highwayRoute ?? entry.highwayRoute,
+      highwayRoute: entry.highwayRoute ?? ai.highwayRoute,
       routeDescription: ai.routeDescription ?? entry.routeDescription,
       terrainSummary: ai.terrainSummary ?? entry.terrainSummary,
       pointsOfInterest: ai.pointsOfInterest ?? entry.pointsOfInterest,
@@ -392,6 +394,10 @@ export default function TripSummaryPage() {
       tripsApi.saveItinerary(id, payload).catch(() => {})
     }, 600)
   }, [id])
+
+  // Highway routes are now extracted by TripMapPage from the Google Maps Routes API
+  // and saved directly to each stop record. buildTimeline reads stop.highwayRoute,
+  // so routes appear automatically once the map page has been visited.
 
   // Persist checkInTime / checkOutTime to stop record (debounced per stop)
   const persistStop = useCallback((stop: Stop, data: { checkInTime?: string; checkOutTime?: string }) => {
@@ -719,11 +725,16 @@ function DriveContent({ entry }: { entry: TimelineEntry }) {
     : '—'
 
   return (
-    <div className="flex items-center gap-1.5 text-sm font-medium text-gray-700">
-      <MapPin size={12} className="text-gray-400 flex-shrink-0" />
-      <span className="truncate">{fromName}</span>
-      <ArrowRight size={12} className="text-gray-400 flex-shrink-0" />
-      <span className="truncate">{toName}</span>
+    <div>
+      <div className="flex items-center gap-1.5 text-sm font-medium text-gray-700">
+        <MapPin size={12} className="text-gray-400 flex-shrink-0" />
+        <span className="truncate">{fromName}</span>
+        <ArrowRight size={12} className="text-gray-400 flex-shrink-0" />
+        <span className="truncate">{toName}</span>
+      </div>
+      {entry.highwayRoute && (
+        <p className="text-xs text-gray-400 mt-0.5 ml-4">{entry.highwayRoute}</p>
+      )}
     </div>
   )
 }

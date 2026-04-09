@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { GoogleMap, useJsApiLoader, DirectionsRenderer, InfoWindow, Circle } from '@react-google-maps/api'
+import { GoogleMap, useJsApiLoader, InfoWindow, Circle, Polyline } from '@react-google-maps/api'
 import { Layers, MapPin, X, Plus, Minus, Tent, DollarSign, Calendar, AlertTriangle, Wind, Droplets, Snowflake, Thermometer, ExternalLink } from 'lucide-react'
 import { tripsApi, weatherApi } from '../../services/api'
 import { Trip, Stop, StopWeather, LiveForecast } from '../../types'
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' }
-const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = []
+const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 'geometry']
 
 // ─── Marker colors ──────────────────────────────────────────────────────────────
 const MC = {
@@ -25,18 +25,45 @@ const KIND_Z: Record<MarkerKind, number> = {
   home: 100, booked: 50, pending: 40, unbooked: 30,
 }
 
-// ─── Marker icons (only call after isLoaded) ────────────────────────────────────
-// Home: larger plain green dot — no label
-// Stops: 36px+ numbered circles with white text
-function makeCircleIcon(kind: MarkerKind): google.maps.Symbol {
-  return {
-    path:         window.google.maps.SymbolPath.CIRCLE,
-    scale:        13,           // 26px diameter for all markers
-    fillColor:    KIND_COLOR[kind],
-    fillOpacity:  1,
-    strokeColor:  'white',
-    strokeWeight: 3,
+// ─── Marker helpers ──────────────────────────────────────────────────────────────
+
+/** Creates the HTML element used as the AdvancedMarkerElement content. */
+function makeMarkerContent(kind: MarkerKind, displayNum: number | undefined): HTMLElement {
+  const div = document.createElement('div')
+  div.style.cssText = `width:26px;height:26px;border-radius:50%;background:${KIND_COLOR[kind]};border:3px solid white;display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.3);cursor:pointer`
+  div.textContent = kind === 'home' ? 'H' : (displayNum != null ? String(displayNum) : '')
+  return div
+}
+
+/**
+ * Extracts ordered highway names from Routes API leg steps.
+ * Each step's navigationInstruction.instructions is plain text like "Merge onto I-17 N".
+ */
+function parseHighwaysFromRouteSteps(steps: any[], segmentLabel: string): string {
+  console.log(`[parseHighways] ${segmentLabel}: ${steps.length} steps`)
+  const highways: string[] = []
+  const DIR_MAP: Record<string, string> = { N: 'North', S: 'South', E: 'East', W: 'West' }
+  for (const step of steps) {
+    const text: string = step.navigationInstruction?.instructions || ''
+    if (text) console.log(`  step instruction: "${text}"`)
+    const hwMatch = text.match(/\b(I-\d+|US-\d+|SR-\d+|[A-Z]{2,3}-\d+)\s*([NSEW])?\b/i)
+    if (!hwMatch) continue
+    const hwName = hwMatch[1].toUpperCase()
+    const dirChar = hwMatch[2]?.toUpperCase()
+    let direction = dirChar ? DIR_MAP[dirChar] : null
+    if (!direction) {
+      const lower = text.toLowerCase()
+      if (lower.includes('north')) direction = 'North'
+      else if (lower.includes('south')) direction = 'South'
+      else if (lower.includes('east')) direction = 'East'
+      else if (lower.includes('west')) direction = 'West'
+    }
+    const formatted = direction ? `${hwName} ${direction}` : hwName
+    if (highways.length === 0 || highways[highways.length - 1] !== formatted) highways.push(formatted)
   }
+  const result = highways.join(' → ')
+  console.log(`[parseHighways] ${segmentLabel} → result: "${result}"`)
+  return result
 }
 
 // ─── Stop classification ────────────────────────────────────────────────────────
@@ -235,11 +262,11 @@ export default function TripMapPage() {
   const [layers, setLayers]               = useState({ route: true, stops: true, overnight: true, incompatible: true })
   const [weatherData, setWeatherData]     = useState<Record<string, StopWeather | null | undefined>>({})
   const [geocoding, setGeocoding]         = useState(false)
-  const [directionsResult, setDirectionsResult] = useState<google.maps.DirectionsResult | null>(null)
+  const [routePath, setRoutePath]         = useState<google.maps.LatLng[] | null>(null)
   const [mapInstance, setMapInstance]     = useState<google.maps.Map | null>(null)
 
-  // Imperative marker refs — we manage these ourselves via google.maps.Marker
-  const markersRef         = useRef<google.maps.Marker[]>([])
+  // Imperative marker refs — we manage these ourselves via AdvancedMarkerElement
+  const markersRef         = useRef<google.maps.marker.AdvancedMarkerElement[]>([])
   const directionsCoordsKey = useRef<string | null>(null)
 
   const { isLoaded } = useJsApiLoader({
@@ -341,7 +368,7 @@ export default function TripMapPage() {
     })
   }, [isLoaded, trip?.id])
 
-  // ── Directions API ─────────────────────────────────────────────────────────────
+  // ── Routes API (replaces deprecated DirectionsService) ────────────────────────
   useEffect(() => {
     if (!isLoaded || geocoding || !trip?.stops?.length) return
     const coordStops = trip.stops
@@ -353,19 +380,64 @@ export default function TripMapPage() {
     if (directionsCoordsKey.current === key) return
     directionsCoordsKey.current = key
 
-    new window.google.maps.DirectionsService().route(
-      {
-        origin:      { lat: coordStops[0].latitude!,                          lng: coordStops[0].longitude! },
-        destination: { lat: coordStops[coordStops.length - 1].latitude!,      lng: coordStops[coordStops.length - 1].longitude! },
-        waypoints:   coordStops.slice(1, -1).slice(0, 23).map(s => ({ location: { lat: s.latitude!, lng: s.longitude! }, stopover: true })),
-        travelMode:        window.google.maps.TravelMode.DRIVING,
-        optimizeWaypoints: false,
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string
+    const intermediates = coordStops.slice(1, -1).slice(0, 25).map(s => ({
+      location: { latLng: { latitude: s.latitude!, longitude: s.longitude! } },
+    }))
+
+    console.log('[TripMapPage] Calling Routes API for', coordStops.length, 'stops, key:', key)
+
+    fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'routes.polyline.encodedPolyline,routes.legs.steps.navigationInstruction',
       },
-      (result, status) => {
-        if (status === window.google.maps.DirectionsStatus.OK && result) setDirectionsResult(result)
-        else console.warn('[TripMapPage] DirectionsService:', status)
-      }
-    )
+      body: JSON.stringify({
+        origin:      { location: { latLng: { latitude: coordStops[0].latitude!,                     longitude: coordStops[0].longitude! } } },
+        destination: { location: { latLng: { latitude: coordStops[coordStops.length-1].latitude!,  longitude: coordStops[coordStops.length-1].longitude! } } },
+        intermediates: intermediates.length ? intermediates : undefined,
+        travelMode: 'DRIVE',
+        routingPreference: 'TRAFFIC_UNAWARE',
+      }),
+    })
+      .then(r => {
+        console.log('[TripMapPage] Routes API HTTP status:', r.status)
+        return r.json()
+      })
+      .then(data => {
+        console.log('[TripMapPage] Routes API raw response:', JSON.stringify(data).slice(0, 500))
+        const route = data.routes?.[0]
+        if (!route) { console.warn('[TripMapPage] Routes API: no route in response', data); return }
+
+        // Decode the overall polyline and draw the route line
+        const encoded: string = route.polyline?.encodedPolyline
+        console.log('[TripMapPage] encoded polyline length:', encoded?.length ?? 0)
+        if (encoded && window.google.maps.geometry?.encoding) {
+          setRoutePath(window.google.maps.geometry.encoding.decodePath(encoded))
+        }
+
+        // Extract real highway names per leg and persist to each destination stop
+        const legs: any[] = route.legs ?? []
+        console.log('[TripMapPage] legs count:', legs.length, '| expected:', coordStops.length - 1)
+        legs.forEach((leg, i) => {
+          const destStop = coordStops[i + 1]
+          if (!destStop || !id) return
+          const label = `leg[${i}] → ${destStop.locationName}`
+          const highways = parseHighwaysFromRouteSteps(leg.steps ?? [], label)
+          if (!highways) { console.warn('[TripMapPage] No highways extracted for', label); return }
+          console.log('[TripMapPage] Saving to stop', destStop.id, ':', highways)
+          tripsApi.updateStop(id, destStop.id, { highwayRoute: highways } as any)
+            .then(res => console.log('[TripMapPage] updateStop response for', destStop.locationName, ':', res.data?.highwayRoute))
+            .catch(err => console.error('[TripMapPage] updateStop FAILED for', destStop.locationName, ':', err?.response?.data || err?.message))
+          setTrip(prev => prev ? {
+            ...prev,
+            stops: prev.stops?.map(s => s.id === destStop.id ? { ...s, highwayRoute: highways } : s),
+          } : prev)
+        })
+      })
+      .catch(err => console.warn('[TripMapPage] Routes API fetch error:', err))
   }, [isLoaded, geocoding, trip?.stops])
 
   // ── Derived values (declared before the effects that use them) ──────────────────
@@ -389,7 +461,7 @@ export default function TripMapPage() {
   // Home  → larger green dot, no label.
   // Stops → 36px numbered circles; number is sequential position after home (1, 2, 3…).
   useEffect(() => {
-    markersRef.current.forEach(m => m.setMap(null))
+    markersRef.current.forEach(m => { m.map = null })
     markersRef.current = []
 
     if (!mapInstance || !stopsWithCoords.length) return
@@ -412,23 +484,13 @@ export default function TripMapPage() {
         `lat=${stop.latitude} lng=${stop.longitude}`,
       )
 
-      const markerOpts: google.maps.MarkerOptions = {
-        position:  { lat: stop.latitude!, lng: stop.longitude! },
-        map:       mapInstance,
-        icon:      makeCircleIcon(kind),
-        zIndex:    KIND_Z[kind],
-        title:     stop.locationName,
-        clickable: true,
-      }
-
-      markerOpts.label = {
-        text:       kind === 'home' ? 'H' : String(displayNum),
-        color:      'white',
-        fontSize:   '11px',
-        fontWeight: '700',
-      }
-
-      const marker = new window.google.maps.Marker(markerOpts)
+      const marker = new window.google.maps.marker.AdvancedMarkerElement({
+        position: { lat: stop.latitude!, lng: stop.longitude! },
+        map:      mapInstance,
+        content:  makeMarkerContent(kind, displayNum),
+        title:    stop.locationName,
+        zIndex:   KIND_Z[kind],
+      })
       marker.addListener('click', () => setSelectedStop(stop))
       markersRef.current.push(marker)
     })
@@ -438,7 +500,7 @@ export default function TripMapPage() {
   }, [mapInstance, stopsWithCoords, stopDisplayNumbers, layers])
 
   // Cleanup markers on unmount
-  useEffect(() => () => { markersRef.current.forEach(m => m.setMap(null)) }, [])
+  useEffect(() => () => { markersRef.current.forEach(m => { m.map = null }) }, [])
 
   // ── Handlers ──────────────────────────────────────────────────────────────────
   async function handleUpdateNights(stopId: string, nights: number) {
@@ -552,17 +614,14 @@ export default function TripMapPage() {
             mapContainerStyle={MAP_CONTAINER_STYLE}
             zoom={6}
             center={center}
-            options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}
+            options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false, mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID' }}
             onLoad={onMapLoad}
           >
             {/* Driving route */}
-            {layers.route && directionsResult && (
-              <DirectionsRenderer
-                directions={directionsResult}
-                options={{
-                  suppressMarkers: true,
-                  polylineOptions: { strokeColor: '#1D9E75', strokeWeight: 2.5, strokeOpacity: 0.85 },
-                }}
+            {layers.route && routePath && (
+              <Polyline
+                path={routePath}
+                options={{ strokeColor: '#1D9E75', strokeWeight: 2.5, strokeOpacity: 0.85 }}
               />
             )}
 
