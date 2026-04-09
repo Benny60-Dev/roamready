@@ -10,29 +10,28 @@ const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = []
 
 // ─── Marker colors ──────────────────────────────────────────────────────────────
 const MC = {
-  home:     '#1D9E75', // green  – home / start
-  booked:   '#1D9E75', // green  – confirmed
-  final:    '#D85A30', // coral  – final destination
-  pending:  '#EF9F27', // amber  – pending
-  unbooked: '#888780', // gray   – not booked
-  overnight:'#7F77DD', // purple – overnight only
+  home:     '#1D9E75', // green – home / start (unnumbered dot)
+  booked:   '#1D9E75', // green – confirmed
+  pending:  '#EF9F27', // amber – pending
+  unbooked: '#888780', // gray  – not booked
 }
 
-type MarkerKind = 'home' | 'booked' | 'final' | 'pending' | 'unbooked' | 'overnight'
+type MarkerKind = 'home' | 'booked' | 'pending' | 'unbooked'
 
 const KIND_COLOR: Record<MarkerKind, string> = {
-  home: MC.home, booked: MC.booked, final: MC.final,
-  pending: MC.pending, unbooked: MC.unbooked, overnight: MC.overnight,
+  home: MC.home, booked: MC.booked, pending: MC.pending, unbooked: MC.unbooked,
 }
 const KIND_Z: Record<MarkerKind, number> = {
-  home: 100, final: 90, booked: 50, pending: 40, unbooked: 30, overnight: 20,
+  home: 100, booked: 50, pending: 40, unbooked: 30,
 }
 
-// ─── Marker icon & label (only call after isLoaded) ────────────────────────────
+// ─── Marker icons (only call after isLoaded) ────────────────────────────────────
+// Home: larger plain green dot — no label
+// Stops: 36px+ numbered circles with white text
 function makeCircleIcon(kind: MarkerKind): google.maps.Symbol {
   return {
     path:         window.google.maps.SymbolPath.CIRCLE,
-    scale:        12,
+    scale:        13,           // 26px diameter for all markers
     fillColor:    KIND_COLOR[kind],
     fillOpacity:  1,
     strokeColor:  'white',
@@ -40,20 +39,9 @@ function makeCircleIcon(kind: MarkerKind): google.maps.Symbol {
   }
 }
 
-function makeLabel(kind: MarkerKind, order: number): google.maps.MarkerLabel {
-  return {
-    text:       kind === 'home' ? 'H' : kind === 'overnight' ? '☽' : String(order),
-    color:      'white',
-    fontSize:   '11px',
-    fontWeight: '700',
-  }
-}
-
 // ─── Stop classification ────────────────────────────────────────────────────────
-function classifyStop(stop: Stop, lastDestOrder: number): MarkerKind {
-  if (stop.type === 'HOME')             return 'home'
-  if (stop.type === 'OVERNIGHT_ONLY')   return 'overnight'
-  if (stop.order === lastDestOrder)     return 'final'
+function classifyStop(stop: Stop): MarkerKind {
+  if (stop.type === 'HOME')               return 'home'
   if (stop.bookingStatus === 'CONFIRMED') return 'booked'
   if (stop.bookingStatus === 'PENDING')   return 'pending'
   return 'unbooked'
@@ -89,19 +77,20 @@ const ALERT_COLORS: Record<string, string> = {
 
 // ─── Map legend ──────────────────────────────────────────────────────────────────
 function MapLegend() {
-  const items = [
-    { color: MC.home,     label: 'Home / Start',       circle: true  },
-    { color: MC.booked,   label: 'Booked',             circle: true  },
-    { color: MC.final,    label: 'Final destination',  circle: true  },
-    { color: MC.pending,  label: 'Pending',            circle: true  },
-    { color: MC.unbooked, label: 'Not booked',         circle: true  },
-    { color: MC.overnight,label: 'Overnight only',     circle: true  },
-  ]
   return (
     <div className="absolute bottom-6 left-4 bg-white rounded-xl border border-gray-200 px-3 py-2.5 shadow-md z-10" style={{ borderWidth: '0.5px' }}>
       <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5">Legend</p>
       <div className="space-y-1.5">
-        {items.map(({ color, label }) => (
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full flex items-center justify-center text-white text-[8px] font-bold flex-shrink-0" style={{ backgroundColor: MC.home }}>H</div>
+          <span className="text-[11px] text-gray-600 leading-none">Home / Start</span>
+        </div>
+        {/* Numbered stops */}
+        {[
+          { color: MC.booked,   label: 'Booked' },
+          { color: MC.pending,  label: 'Pending' },
+          { color: MC.unbooked, label: 'Not booked' },
+        ].map(({ color, label }) => (
           <div key={label} className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
             <span className="text-[11px] text-gray-600 leading-none">{label}</span>
@@ -114,12 +103,10 @@ function MapLegend() {
 
 // ─── Stop info popup ─────────────────────────────────────────────────────────────
 const BOOKING_BADGE: Record<MarkerKind, { cls: string; label: string }> = {
-  home:     { cls: 'bg-slate-100 text-slate-600',   label: 'Home' },
-  booked:   { cls: 'bg-green-100 text-green-700',   label: 'Confirmed' },
-  final:    { cls: 'bg-orange-100 text-orange-700', label: 'Final stop' },
-  pending:  { cls: 'bg-amber-100 text-amber-700',   label: 'Pending' },
-  unbooked: { cls: 'bg-gray-100 text-gray-500',     label: 'Not booked' },
-  overnight:{ cls: 'bg-purple-100 text-purple-700', label: 'Overnight only' },
+  home:     { cls: 'bg-slate-100 text-slate-600', label: 'Home' },
+  booked:   { cls: 'bg-green-100 text-green-700', label: 'Confirmed' },
+  pending:  { cls: 'bg-amber-100 text-amber-700', label: 'Pending' },
+  unbooked: { cls: 'bg-gray-100 text-gray-500',   label: 'Not booked' },
 }
 
 function StopPopup({
@@ -387,16 +374,21 @@ export default function TripMapPage() {
     [trip?.stops]
   )
 
-  const lastDestOrder = useMemo(() => {
-    const dests = trip?.stops?.filter(s => s.type === 'DESTINATION') ?? []
-    return dests.length > 0 ? Math.max(...dests.map(s => s.order)) : -1
+  // Sequential display numbers 1, 2, 3… assigned to non-HOME stops in order.
+  // HOME stops are excluded — they show as an unnumbered dot.
+  const stopDisplayNumbers = useMemo(() => {
+    const sorted = trip?.stops?.slice().sort((a, b) => a.order - b.order) ?? []
+    const map: Record<string, number> = {}
+    let n = 1
+    sorted.forEach(s => { if (s.type !== 'HOME') map[s.id] = n++ })
+    return map
   }, [trip?.stops])
 
   // ── Imperative markers ─────────────────────────────────────────────────────────
-  // We create google.maps.Marker instances directly and call marker.setMap(map)
-  // so we bypass any React component rendering issues with the Marker class.
+  // google.maps.Marker with SymbolPath.CIRCLE — rendered natively, always visible.
+  // Home  → larger green dot, no label.
+  // Stops → 36px numbered circles; number is sequential position after home (1, 2, 3…).
   useEffect(() => {
-    // Remove any previously placed markers first
     markersRef.current.forEach(m => m.setMap(null))
     markersRef.current = []
 
@@ -405,37 +397,45 @@ export default function TripMapPage() {
     console.log(`[TripMapPage] placing ${stopsWithCoords.length} marker(s) on map`)
 
     stopsWithCoords.forEach(stop => {
-      const kind = classifyStop(stop, lastDestOrder)
+      const kind       = classifyStop(stop)
+      const displayNum = stopDisplayNumbers[stop.id]
 
       // Layer visibility — HOME always shows
       if (kind !== 'home') {
-        if (!layers.stops     && kind !== 'overnight') return
-        if (!layers.overnight && kind === 'overnight') return
+        if (!layers.stops && stop.type !== 'OVERNIGHT_ONLY') return
+        if (!layers.overnight && stop.type === 'OVERNIGHT_ONLY') return
         if (!layers.incompatible && !stop.isCompatible) return
       }
 
       console.log(
-        `[TripMapPage] marker #${stop.order} "${stop.locationName}" kind=${kind}`,
+        `[TripMapPage] marker #${displayNum ?? 'home'} "${stop.locationName}" kind=${kind}`,
         `lat=${stop.latitude} lng=${stop.longitude}`,
       )
 
-      const marker = new window.google.maps.Marker({
+      const markerOpts: google.maps.MarkerOptions = {
         position:  { lat: stop.latitude!, lng: stop.longitude! },
         map:       mapInstance,
         icon:      makeCircleIcon(kind),
-        label:     makeLabel(kind, stop.order),
         zIndex:    KIND_Z[kind],
         title:     stop.locationName,
         clickable: true,
-      })
+      }
 
+      markerOpts.label = {
+        text:       kind === 'home' ? 'H' : String(displayNum),
+        color:      'white',
+        fontSize:   '11px',
+        fontWeight: '700',
+      }
+
+      const marker = new window.google.maps.Marker(markerOpts)
       marker.addListener('click', () => setSelectedStop(stop))
       markersRef.current.push(marker)
     })
 
-    console.log(`[TripMapPage] ${markersRef.current.length} marker(s) successfully added to map`)
+    console.log(`[TripMapPage] ${markersRef.current.length} marker(s) added to map`)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapInstance, stopsWithCoords, layers, lastDestOrder])
+  }, [mapInstance, stopsWithCoords, stopDisplayNumbers, layers])
 
   // Cleanup markers on unmount
   useEffect(() => () => { markersRef.current.forEach(m => m.setMap(null)) }, [])
@@ -452,7 +452,7 @@ export default function TripMapPage() {
     ? { lat: stopsWithCoords[0].latitude!, lng: stopsWithCoords[0].longitude! }
     : { lat: 39.5, lng: -98.35 }
 
-  const colorForStop = (stop: Stop) => KIND_COLOR[classifyStop(stop, lastDestOrder)]
+  const colorForStop = (stop: Stop) => KIND_COLOR[classifyStop(stop)]
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
@@ -493,8 +493,9 @@ export default function TripMapPage() {
 
           {/* Stop list */}
           <div className="flex-1 overflow-y-auto p-3 space-y-1">
-            {trip?.stops?.sort((a, b) => a.order - b.order).map(stop => {
-              const kind     = classifyStop(stop, lastDestOrder)
+            {trip?.stops?.slice().sort((a, b) => a.order - b.order).map(stop => {
+              const isHome   = stop.type === 'HOME'
+              const displayN = stopDisplayNumbers[stop.id]
               const hasAlert = stopHasAlerts(weatherData[stop.id])
               const alerts   = stopAlerts(weatherData[stop.id])
               return (
@@ -503,15 +504,24 @@ export default function TripMapPage() {
                   onClick={() => setSelectedStop(stop)}
                   className="w-full text-left flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  <div
-                    className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
-                    style={{ backgroundColor: colorForStop(stop) }}
-                  >
-                    {kind === 'home' ? 'H' : kind === 'overnight' ? '☽' : stop.order}
-                  </div>
+                  {/* Match map marker: home = H circle, stops = numbered circle */}
+                  {isHome ? (
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0" style={{ backgroundColor: MC.home }}>
+                      H
+                    </div>
+                  ) : (
+                    <div
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
+                      style={{ backgroundColor: colorForStop(stop) }}
+                    >
+                      {displayN}
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-gray-900 truncate">{stop.locationName}</p>
-                    <p className="text-xs text-gray-400">{stop.nights}n</p>
+                    <p className="text-xs text-gray-400">
+                      {isHome ? 'Start' : `${stop.nights}n${stop.type === 'OVERNIGHT_ONLY' ? ' · overnight' : ''}`}
+                    </p>
                   </div>
                   {hasAlert && (
                     <span className="flex items-center gap-0.5 text-[10px] font-medium text-purple-600 flex-shrink-0">
@@ -577,7 +587,7 @@ export default function TripMapPage() {
               >
                 <StopPopup
                   stop={selectedStop}
-                  kind={classifyStop(selectedStop, lastDestOrder)}
+                  kind={classifyStop(selectedStop)}
                   weather={weatherData[selectedStop.id]}
                   onClose={() => setSelectedStop(null)}
                   onUpdateNights={handleUpdateNights}
