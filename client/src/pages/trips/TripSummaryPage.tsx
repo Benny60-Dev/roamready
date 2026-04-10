@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import {
   Download, Share2, Sparkles, Car, Tent, Star, Moon,
   MapPin, XCircle, Plus, Check, RefreshCw, ArrowRight, Clock,
@@ -475,6 +476,11 @@ export default function TripSummaryPage() {
 
   return (
     <div className="space-y-6 max-w-3xl">
+      <Breadcrumb items={[
+        { label: 'My Trips', href: '/trips' },
+        { label: trip.name, href: `/trips/${id}` },
+        { label: 'Full Itinerary' },
+      ]} />
 
       {/* Header */}
       <div className="flex items-start justify-between gap-4">

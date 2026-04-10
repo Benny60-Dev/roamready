@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { Wand2, Loader } from 'lucide-react'
 import { adminApi, feedbackApi } from '../../services/api'
 import { Feedback } from '../../types'
@@ -35,6 +36,10 @@ export default function AdminFeedbackPage() {
 
   return (
     <div className="space-y-4 max-w-4xl">
+      <Breadcrumb items={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Feedback' },
+      ]} />
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-medium text-gray-900">Feedback Inbox</h1>
         <button onClick={analyze} disabled={analyzing} className="btn-primary flex items-center gap-1.5 text-sm">

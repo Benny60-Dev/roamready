@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Breadcrumb } from '../components/ui/Breadcrumb'
 import { CheckCircle, AlertTriangle, Clock, Wrench } from 'lucide-react'
 import { usersApi, maintenanceApi } from '../services/api'
 import { Rig, MaintenanceItem } from '../types'
@@ -50,6 +51,10 @@ export default function MaintenancePage() {
 
   return (
     <div className="space-y-4 max-w-2xl">
+      <Breadcrumb items={[
+        { label: 'Profile', href: '/profile' },
+        { label: 'Maintenance' },
+      ]} />
       <h1 className="text-xl font-medium text-gray-900">Maintenance Tracker</h1>
 
       {rigs.length > 1 && (

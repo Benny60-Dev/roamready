@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'react-router-dom'
+import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { Camera, Star, DollarSign, Save } from 'lucide-react'
 import { tripsApi, journalApi } from '../../services/api'
 import { Trip, Stop, JournalEntry } from '../../types'
@@ -109,6 +110,11 @@ export default function TripJournalPage() {
 
   return (
     <div className="space-y-4 max-w-2xl">
+      <Breadcrumb items={[
+        { label: 'My Trips', href: '/trips' },
+        { label: trip.name, href: `/trips/${id}` },
+        { label: 'Journal' },
+      ]} />
       <div>
         <h1 className="text-xl font-medium text-gray-900">Trip Journal</h1>
         <p className="text-sm text-gray-500">{trip.name}</p>

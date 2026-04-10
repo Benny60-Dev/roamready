@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { Users, DollarSign, Map, MessageSquare } from 'lucide-react'
 import { adminApi } from '../../services/api'
 
@@ -20,6 +21,7 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="space-y-6 max-w-4xl">
+      <Breadcrumb items={[{ label: 'Admin Dashboard' }]} />
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-medium text-gray-900">Admin Dashboard</h1>
         <div className="flex gap-2">

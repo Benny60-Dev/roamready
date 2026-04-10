@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { DollarSign, TrendingUp } from 'lucide-react'
 import { adminApi } from '../../services/api'
 
@@ -12,6 +13,10 @@ export default function AdminRevenuePage() {
 
   return (
     <div className="space-y-4 max-w-2xl">
+      <Breadcrumb items={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Revenue' },
+      ]} />
       <h1 className="text-xl font-medium text-gray-900">Revenue</h1>
       {loading ? (
         <div className="space-y-2">{[1, 2].map(i => <div key={i} className="card h-24 animate-pulse bg-gray-50" />)}</div>

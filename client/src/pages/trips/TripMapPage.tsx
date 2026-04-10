@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { GoogleMap, useJsApiLoader, InfoWindow, Circle, Polyline } from '@react-google-maps/api'
 import { Layers, MapPin, X, Plus, Minus, Tent, DollarSign, Calendar, AlertTriangle, Wind, Droplets, Snowflake, Thermometer, ExternalLink } from 'lucide-react'
 import { tripsApi, weatherApi } from '../../services/api'
@@ -552,7 +552,19 @@ export default function TripMapPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
-    <div className="-mx-4 -my-6 h-[calc(100vh-3.5rem)] flex">
+    <div className="-mx-4 -my-6 flex flex-col" style={{ height: 'calc(100vh - 3.5rem)' }}>
+
+      {/* Breadcrumb strip */}
+      <div className="flex-shrink-0 bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-1.5">
+        <Link to="/trips" className="text-xs text-[#1D9E75] hover:text-[#178a65] transition-colors">My Trips</Link>
+        <span className="text-gray-300 text-xs">›</span>
+        <Link to={`/trips/${id}`} className="text-xs text-[#1D9E75] hover:text-[#178a65] transition-colors truncate max-w-[160px]">{trip?.name ?? '…'}</Link>
+        <span className="text-gray-300 text-xs">›</span>
+        <span className="text-xs text-gray-700 font-medium">Map</span>
+      </div>
+
+      {/* ── Map + sidebar row ─────────────────────────────────────────────────── */}
+      <div className="flex flex-1 min-h-0">
 
       {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
       {sidebarOpen && (
@@ -705,6 +717,7 @@ export default function TripMapPage() {
           </div>
         )}
       </div>
+      </div>{/* end flex flex-1 min-h-0 */}
     </div>
   )
 }

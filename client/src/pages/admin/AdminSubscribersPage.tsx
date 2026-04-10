@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { adminApi } from '../../services/api'
 import { format } from 'date-fns'
 
@@ -12,6 +13,10 @@ export default function AdminSubscribersPage() {
 
   return (
     <div className="space-y-4 max-w-3xl">
+      <Breadcrumb items={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Subscribers' },
+      ]} />
       <h1 className="text-xl font-medium text-gray-900">Subscribers ({subscribers.length})</h1>
       {loading ? (
         <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="card h-14 animate-pulse bg-gray-50" />)}</div>

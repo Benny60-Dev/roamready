@@ -3,16 +3,19 @@ import { useParams } from 'react-router-dom'
 import { Wand2, Check, Loader } from 'lucide-react'
 import { tripsApi } from '../services/api'
 import { PackingCategory } from '../types'
+import { Breadcrumb } from '../components/ui/Breadcrumb'
 
 export default function PackingListPage() {
   const { tripId } = useParams<{ tripId: string }>()
   const [categories, setCategories] = useState<PackingCategory[]>([])
+  const [tripName, setTripName] = useState('')
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
 
   useEffect(() => {
     if (!tripId) return
     tripsApi.get(tripId).then(res => {
+      setTripName(res.data.name ?? '')
       if (res.data.packingList) setCategories(res.data.packingList)
       setLoading(false)
     })
@@ -46,6 +49,11 @@ export default function PackingListPage() {
 
   return (
     <div className="space-y-4 max-w-2xl">
+      <Breadcrumb items={[
+        { label: 'My Trips', href: '/trips' },
+        { label: tripName || 'Trip', href: `/trips/${tripId}` },
+        { label: 'Packing List' },
+      ]} />
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-medium text-gray-900">Packing List</h1>
         <div className="flex gap-2">

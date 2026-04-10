@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Breadcrumb } from '../components/ui/Breadcrumb'
 import { MapPin, Phone, Star } from 'lucide-react'
 import { resourcesApi } from '../services/api'
 
@@ -38,6 +39,10 @@ export default function ResourcesPage() {
 
   return (
     <div className="space-y-4">
+      <Breadcrumb items={[
+        { label: 'Profile', href: '/profile' },
+        { label: 'Resources' },
+      ]} />
       <div>
         <h1 className="text-xl font-medium text-gray-900">Resources Along Route</h1>
         {locationError && <p className="text-xs text-amber-600 mt-1">{locationError}</p>}

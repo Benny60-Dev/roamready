@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams, Link } from 'react-router-dom'
 import {
   CheckCircle, AlertTriangle, ExternalLink,
   Phone, MapPin, Globe, ChevronDown, ChevronUp, Loader, Check,
@@ -735,6 +735,15 @@ export default function TripBookingPage() {
   return (
     // Break out of layout padding, fill viewport like the map page
     <div className="-mx-4 -my-6 h-[calc(100vh-3.5rem)] flex flex-col">
+
+      {/* Breadcrumb strip */}
+      <div className="flex-shrink-0 bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-1.5">
+        <Link to="/trips" className="text-xs text-[#1D9E75] hover:text-[#178a65] transition-colors">My Trips</Link>
+        <span className="text-gray-300 text-xs">›</span>
+        <Link to={`/trips/${id}`} className="text-xs text-[#1D9E75] hover:text-[#178a65] transition-colors truncate max-w-[160px]">{trip.name}</Link>
+        <span className="text-gray-300 text-xs">›</span>
+        <span className="text-xs text-gray-700 font-medium">Booking</span>
+      </div>
 
       {/* Reservation confirm modal */}
       {pendingAlt && (
