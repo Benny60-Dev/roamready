@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { GoogleMap, useJsApiLoader, InfoWindow, Circle, Polyline } from '@react-google-maps/api'
 import { Layers, MapPin, X, Plus, Minus, Tent, DollarSign, Calendar, AlertTriangle, Wind, Droplets, Snowflake, Thermometer, ExternalLink } from 'lucide-react'
-import { tripsApi, weatherApi } from '../../services/api'
+import { tripsApi } from '../../services/api'
 import { Trip, Stop, StopWeather, LiveForecast } from '../../types'
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' }
@@ -311,35 +311,12 @@ export default function TripMapPage() {
     })
   }, [id])
 
-  // ── Weather ───────────────────────────────────────────────────────────────────
+  // ── Weather — use DB-cached endpoint ─────────────────────────────────────────
   useEffect(() => {
-    if (!trip?.stops?.length) return
-    const today     = new Date()
-    const tripStart = trip.startDate ? new Date(trip.startDate) : null
-    const daysUntil = tripStart
-      ? Math.ceil((tripStart.getTime() - today.getTime()) / 86_400_000)
-      : null
-    const useLive   = daysUntil !== null && daysUntil <= 10
-    const coordStops = trip.stops.filter(s => s.latitude && s.longitude)
-
-    Promise.all(coordStops.map(async stop => {
-      try {
-        if (useLive && stop.arrivalDate) {
-          const start = stop.arrivalDate.split('T')[0]
-          const res   = await weatherApi.forecast({ lat: stop.latitude!, lng: stop.longitude!, start_date: start, end_date: addDays(start, stop.nights) })
-          return { id: stop.id, data: res.data as StopWeather }
-        } else if (!useLive && stop.arrivalDate) {
-          const d   = new Date(stop.arrivalDate)
-          const res = await weatherApi.historical({ lat: stop.latitude!, lng: stop.longitude!, month: d.getMonth() + 1, day: d.getDate(), days: stop.nights || 1 })
-          return { id: stop.id, data: res.data as StopWeather }
-        }
-        return { id: stop.id, data: null }
-      } catch { return { id: stop.id, data: null } }
-    })).then(results => {
-      const map: Record<string, StopWeather | null> = {}
-      for (const r of results) map[r.id] = r.data
-      setWeatherData(map)
-    })
+    if (!trip?.stops?.length || !id) return
+    tripsApi.getWeather(id)
+      .then(res => setWeatherData(res.data))
+      .catch(() => {})
   }, [trip?.id])
 
   // ── Geocode stops missing lat/lng, save to DB ─────────────────────────────────

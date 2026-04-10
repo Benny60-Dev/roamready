@@ -5,6 +5,7 @@ import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
 import { generatePackingListAI, generateTripItineraryAI, generateStopActivitiesAI, generateRouteHighlightsAI } from '../services/ai'
+import { fetchLiveForecast, fetchHistoricalWeather, isoDate } from '../services/weatherFetch'
 
 // ─── Google Maps Directions helpers ──────────────────────────────────────────
 
@@ -526,5 +527,85 @@ export async function generateRouteHighlights(req: AuthRequest, res: Response, n
     await prisma.$executeRaw`UPDATE "Stop" SET "routeHighlights" = ${highlights} WHERE id = ${stop.id}`
 
     res.json({ routeHighlights: highlights })
+  } catch (err) { next(err) }
+}
+
+// ─── Trip weather — DB-cached, 6-hour TTL ─────────────────────────────────────
+
+const SIX_HOURS_MS = 6 * 60 * 60 * 1000
+
+export async function getTripWeather(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const trip = await prisma.trip.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+      include: { stops: { orderBy: { order: 'asc' } } },
+    })
+    if (!trip) throw new AppError('Trip not found', 404)
+
+    const today      = new Date()
+    const tripStart  = trip.startDate ? new Date(trip.startDate as string) : null
+    const daysUntil  = tripStart
+      ? Math.ceil((tripStart.getTime() - today.getTime()) / 86_400_000)
+      : null
+    const useLive    = daysUntil !== null && daysUntil <= 10
+
+    const results: Record<string, any> = {}
+
+    await Promise.all(
+      (trip.stops as any[])
+        .filter(s => s.latitude && s.longitude)
+        .map(async (stop) => {
+          const cached    = stop.weatherForecast as any
+          const cachedAt  = cached?.cachedAt ? new Date(cached.cachedAt).getTime() : 0
+          const isFresh   = Date.now() - cachedAt < SIX_HOURS_MS
+          const modeMatch = cached?.mode && (
+            (useLive  && cached.mode === 'live') ||
+            (!useLive && cached.mode === 'historical')
+          )
+
+          if (isFresh && modeMatch) {
+            // Strip internal cachedAt before sending to client
+            const { cachedAt: _c, ...clean } = cached
+            results[stop.id] = clean
+            return
+          }
+
+          try {
+            let data: any = null
+
+            if (useLive) {
+              // Live mode: use stop arrivalDate, or fall back to trip startDate, or today
+              const base = stop.arrivalDate
+                ? new Date((stop.arrivalDate as string).split('T')[0])
+                : tripStart ?? today
+              const startDate = isoDate(base)
+              const endDate   = isoDate(new Date(new Date(startDate).setDate(new Date(startDate).getDate() + (stop.nights || 1))))
+              data = await fetchLiveForecast(stop.latitude, stop.longitude, startDate, endDate)
+            } else {
+              // Historical mode: use stop arrivalDate month, trip startDate month, or current month
+              const base = stop.arrivalDate
+                ? new Date(stop.arrivalDate as string)
+                : tripStart ?? today
+              data = await fetchHistoricalWeather(
+                stop.latitude, stop.longitude,
+                base.getMonth() + 1, base.getDate(), stop.nights || 1,
+              )
+            }
+
+            if (data) {
+              const withTs = { ...data, cachedAt: new Date().toISOString() }
+              await prisma.stop.update({ where: { id: stop.id }, data: { weatherForecast: withTs } })
+              results[stop.id] = data
+            } else {
+              results[stop.id] = null
+            }
+          } catch (e) {
+            console.error(`[weather] failed for stop ${stop.id}:`, e)
+            results[stop.id] = null
+          }
+        })
+    )
+
+    res.json(results)
   } catch (err) { next(err) }
 }

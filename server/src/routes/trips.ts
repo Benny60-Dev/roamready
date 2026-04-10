@@ -5,7 +5,7 @@ import {
   getStops, createStop, updateStop, deleteStop,
   getSharedTrip, exportPdf, generatePackingList,
   generateItinerary, saveItinerary, generateRoutes, generateActivities,
-  generateRouteHighlights, getTripMapImage,
+  generateRouteHighlights, getTripMapImage, getTripWeather,
 } from '../controllers/trips'
 
 export const tripsRouter = Router()
@@ -27,6 +27,7 @@ tripsRouter.delete('/:id/stops/:stopId', deleteStop as any)
 
 tripsRouter.post('/:id/export/pdf', exportPdf as any)
 tripsRouter.get('/:id/map-image', getTripMapImage as any)
+tripsRouter.get('/:id/weather', getTripWeather as any)
 tripsRouter.post('/:id/packing-list', generatePackingList as any)
 tripsRouter.post('/:id/itinerary/generate', generateItinerary as any)
 tripsRouter.put('/:id/itinerary', saveItinerary as any)

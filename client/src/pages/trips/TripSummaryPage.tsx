@@ -7,9 +7,10 @@ import {
 } from 'lucide-react'
 import { pdf } from '@react-pdf/renderer'
 import { tripsApi } from '../../services/api'
-import { Trip, Stop, ItineraryDay, ItineraryActivity } from '../../types'
+import { Trip, Stop, ItineraryDay, ItineraryActivity, StopWeather } from '../../types'
 import { format, addDays } from 'date-fns'
 import { TripPDF } from '../../components/pdf/TripPDF'
+import { StopWeatherCard } from '../../components/weather/StopWeatherCard'
 
 // ─── Format helpers ───────────────────────────────────────────────────────────
 
@@ -289,6 +290,7 @@ export default function TripSummaryPage() {
   const [generatingActivities, setGeneratingActivities] = useState(false)
   const [entries, setEntries] = useState<TimelineEntry[]>([])
   const [addingActivity, setAddingActivity] = useState<Record<number, string>>({})
+  const [weatherData, setWeatherData] = useState<Record<string, StopWeather | null | undefined>>({})
   const itinerarySaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const activityGenAttempted = useRef(false)
 
@@ -303,6 +305,25 @@ export default function TripSummaryPage() {
       setLoading(false)
     })
   }, [id])
+
+  // Load weather once trip is ready
+  useEffect(() => {
+    if (!trip?.stops?.length || !id) return
+    const initial: Record<string, StopWeather | null | undefined> = {}
+    for (const s of trip.stops) {
+      if (s.latitude && s.longitude) initial[s.id] = undefined
+    }
+    setWeatherData(initial)
+    tripsApi.getWeather(id)
+      .then(res => setWeatherData(prev => ({ ...prev, ...res.data })))
+      .catch(() => {
+        setWeatherData(prev => {
+          const next = { ...prev }
+          for (const k of Object.keys(next)) if (next[k] === undefined) next[k] = null
+          return next
+        })
+      })
+  }, [trip?.id])
 
   // Auto-generate activities when page loads (once, if any ACTIVITY rows have no activities)
   useEffect(() => {
@@ -576,6 +597,7 @@ export default function TripSummaryPage() {
               key={idx}
               entry={entry}
               generatingActivities={generatingActivities}
+              weather={entry.stop ? weatherData[entry.stop.id] : undefined}
               onDriveDepart={time => updateDriveDepart(idx, time)}
               onToggleActivity={actIdx => toggleActivity(idx, actIdx)}
               onDeleteActivity={actIdx => deleteActivity(idx, actIdx)}
@@ -665,6 +687,7 @@ function StatCell({ value, label }: { value: string; label: string }) {
 interface TimelineRowProps {
   entry: TimelineEntry
   generatingActivities: boolean
+  weather?: StopWeather | null
   onDriveDepart: (t: string) => void
   onToggleActivity: (actIdx: number) => void
   onDeleteActivity: (actIdx: number) => void
@@ -674,7 +697,7 @@ interface TimelineRowProps {
 }
 
 function TimelineRow({
-  entry, generatingActivities,
+  entry, generatingActivities, weather,
   onDriveDepart,
   onToggleActivity, onDeleteActivity, addingText, onAddingChange, onAddActivity,
 }: TimelineRowProps) {
@@ -723,7 +746,7 @@ function TimelineRow({
             <DriveContent entry={entry} onDepart={onDriveDepart} />
           )}
           {entry.type === 'STAY' && entry.stop && (
-            <StayContent entry={entry} />
+            <StayContent entry={entry} weather={weather} />
           )}
           {entry.type === 'ACTIVITY' && entry.stop && (
             <ActivityContent
@@ -737,7 +760,7 @@ function TimelineRow({
             />
           )}
           {entry.type === 'OVERNIGHT' && entry.stop && (
-            <OvernightContent entry={entry} />
+            <OvernightContent entry={entry} weather={weather} />
           )}
         </div>
       </div>
@@ -856,7 +879,7 @@ function DriveContent({ entry, onDepart }: { entry: TimelineEntry; onDepart: (t:
 
 // ─── StayContent ──────────────────────────────────────────────────────────────
 
-function StayContent({ entry }: { entry: TimelineEntry }) {
+function StayContent({ entry, weather }: { entry: TimelineEntry; weather?: StopWeather | null }) {
   const stop = entry.stop!
   const navigate = useNavigate()
 
@@ -948,6 +971,11 @@ function StayContent({ entry }: { entry: TimelineEntry }) {
           </div>
         )}
       </div>
+
+      {/* Weather card */}
+      {stop.latitude && stop.longitude && (
+        <StopWeatherCard stop={stop} weather={weather} compact />
+      )}
     </div>
   )
 }
@@ -1042,7 +1070,7 @@ function ActivityContent({ entry, generatingActivities, onToggleActivity, onDele
 
 // ─── OvernightContent ─────────────────────────────────────────────────────────
 
-function OvernightContent({ entry }: { entry: TimelineEntry }) {
+function OvernightContent({ entry, weather }: { entry: TimelineEntry; weather?: StopWeather | null }) {
   const stop = entry.stop!
   return (
     <div className="space-y-1">
@@ -1054,6 +1082,11 @@ function OvernightContent({ entry }: { entry: TimelineEntry }) {
         <div className="text-xs text-gray-400">${stop.siteRate}/night</div>
       )}
       <p className="text-xs text-gray-400 italic">Early departure planned</p>
+
+      {/* Weather card */}
+      {stop.latitude && stop.longitude && (
+        <StopWeatherCard stop={stop} weather={weather} compact />
+      )}
     </div>
   )
 }

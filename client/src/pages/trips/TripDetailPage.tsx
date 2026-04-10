@@ -4,165 +4,16 @@ import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import {
   Map, Share2, Download, BookOpen, Package, Calendar, DollarSign,
   Tent, ChevronRight, AlertTriangle, CheckCircle, Clock, XCircle,
-  Wind, Droplets, Snowflake, Thermometer, ExternalLink,
+  Wind, CloudRain,
 } from 'lucide-react'
-import { tripsApi, weatherApi } from '../../services/api'
-import { Trip, Stop, StopWeather, LiveForecast, HistoricalWeather } from '../../types'
+import { tripsApi } from '../../services/api'
+import { Trip, Stop, StopWeather, LiveForecast } from '../../types'
 import { format } from 'date-fns'
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function isoDateStr(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function addDays(isoDate: string, n: number): string {
-  const d = new Date(isoDate)
-  d.setDate(d.getDate() + n)
-  return isoDateStr(d)
-}
-
-function shortDay(isoDate: string): string {
-  return new Date(isoDate).toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' })
-}
-
-// ─── Alert banners ────────────────────────────────────────────────────────────
-
-const ALERT_STYLES: Record<string, string> = {
-  amber: 'bg-amber-50 border-amber-300 text-amber-800',
-  blue:  'bg-blue-50 border-blue-300 text-blue-800',
-  red:   'bg-red-50 border-red-300 text-red-800',
-}
-
-const ALERT_ICONS: Record<string, JSX.Element> = {
-  wind:   <Wind    size={12} className="flex-shrink-0" />,
-  rain:   <Droplets size={12} className="flex-shrink-0" />,
-  freeze: <Thermometer size={12} className="flex-shrink-0" />,
-  snow:   <Snowflake size={12} className="flex-shrink-0" />,
-}
-
-// ─── Weather card ─────────────────────────────────────────────────────────────
-
-function StopWeatherCard({ stop, weather }: { stop: Stop; weather: StopWeather | null | undefined }) {
-  if (weather === undefined) {
-    // Still loading
-    return (
-      <div className="mt-2 h-10 rounded-lg bg-gray-100 animate-pulse" />
-    )
-  }
-  if (weather === null) return null
-
-  const nwsUrl = stop.latitude && stop.longitude
-    ? `https://forecast.weather.gov/MapClick.php?lat=${stop.latitude}&lon=${stop.longitude}`
-    : null
-
-  // ── Historical mode ──────────────────────────────────────────────────────────
-  if (weather.mode === 'historical') {
-    const w = weather as HistoricalWeather
-    return (
-      <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50/40 px-3 py-2.5 text-xs">
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="font-semibold text-blue-800 flex items-center gap-1">
-            <span>{w.icon}</span> Historical averages for {w.month}
-          </span>
-          <span className="text-blue-500 italic">Live forecast within 10 days</span>
-        </div>
-        {/* Temp row */}
-        <div className="flex items-center gap-4 text-gray-700 mb-1.5">
-          <span className="text-base font-semibold">{w.avgHigh}°<span className="text-xs font-normal text-gray-500">high</span></span>
-          <span className="text-gray-400">·</span>
-          <span className="text-base font-semibold">{w.avgLow}°<span className="text-xs font-normal text-gray-500">low</span></span>
-          <span className="text-gray-500 ml-1">{w.conditions}</span>
-        </div>
-        {/* Precip row */}
-        <div className="flex gap-4 text-gray-500 mb-2">
-          {w.avgRainfall > 0 && <span><Droplets size={11} className="inline mr-0.5 text-blue-400" />{w.avgRainfall}" avg rain</span>}
-          {w.avgSnowfall > 0 && <span><Snowflake size={11} className="inline mr-0.5 text-blue-300" />{w.avgSnowfall}" avg snow</span>}
-        </div>
-        {/* Best / worst */}
-        <div className="space-y-0.5 text-gray-500">
-          <div><span className="text-green-600 font-medium">Best case:</span> {w.bestCase}</div>
-          <div><span className="text-red-500 font-medium">Worst case:</span> {w.worstCase}</div>
-        </div>
-      </div>
-    )
-  }
-
-  // ── Live forecast mode ───────────────────────────────────────────────────────
-  const w = weather as LiveForecast
-  const allAlerts = w.days.flatMap(d => d.alerts)
-  // Deduplicate by type
-  const uniqueAlerts = allAlerts.filter(
-    (a, i, arr) => arr.findIndex(x => x.type === a.type) === i
-  )
-
-  return (
-    <div className="mt-2 rounded-lg border border-[#1D9E75]/30 bg-green-50/30 px-3 py-2.5 text-xs">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-2">
-        <span className="font-semibold text-[#1D9E75] flex items-center gap-1.5">
-          📡 Live {w.days.length}-day forecast
-        </span>
-        {nwsUrl && (
-          <a
-            href={nwsUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1 text-xs text-[#1D9E75] hover:text-[#178a63] transition-colors"
-          >
-            Full forecast <ExternalLink size={10} />
-          </a>
-        )}
-      </div>
-
-      {/* Alert banners */}
-      {uniqueAlerts.length > 0 && (
-        <div className="space-y-1 mb-2">
-          {uniqueAlerts.map((alert, i) => (
-            <div
-              key={i}
-              className={`flex items-center gap-1.5 border rounded px-2 py-1 ${ALERT_STYLES[alert.level]}`}
-            >
-              {ALERT_ICONS[alert.type]}
-              {alert.message}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Day-by-day forecast — horizontally scrollable */}
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-        {w.days.map((day) => (
-          <div
-            key={day.date}
-            className="flex-shrink-0 flex flex-col items-center gap-0.5 bg-white border border-gray-100 rounded-lg px-2 py-2 min-w-[62px]"
-          >
-            <span className="text-gray-500 text-[10px] whitespace-nowrap">{shortDay(day.date)}</span>
-            <span className="text-lg leading-none">{day.icon}</span>
-            <span className="font-semibold text-gray-800">{day.high}°</span>
-            <span className="text-gray-400">{day.low}°</span>
-            {day.precipProbability > 0 && (
-              <span className="text-blue-500 text-[10px]">{day.precipProbability}%</span>
-            )}
-            {day.windSpeed > 0 && (
-              <span className="text-gray-400 text-[10px]">{day.windSpeed}mph</span>
-            )}
-            {day.alerts.length > 0 && (
-              <span className="text-[10px] mt-0.5">
-                {day.alerts[0].level === 'red' ? '🔴' : day.alerts[0].level === 'amber' ? '🟡' : '🔵'}
-              </span>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
+import { StopWeatherCard, ALERT_STYLES, ALERT_ICONS } from '../../components/weather/StopWeatherCard'
 
 // ─── Stop row ─────────────────────────────────────────────────────────────────
 
 function StopRow({ stop, tripId, weather }: { stop: Stop; tripId: string; weather: StopWeather | null | undefined }) {
-  // Derive alert count for badge
   const alertCount = weather?.mode === 'live'
     ? (weather as LiveForecast).days.flatMap(d => d.alerts).filter(
         (a, i, arr) => arr.findIndex(x => x.type === a.type) === i
@@ -191,7 +42,6 @@ function StopRow({ stop, tripId, weather }: { stop: Stop; tripId: string; weathe
         </span>
       )
     }
-    // NOT_BOOKED — show Reserve button for all stop types
     return (
       <Link
         to={`/trips/${tripId}/booking?stopId=${stop.id}`}
@@ -249,7 +99,6 @@ function StopRow({ stop, tripId, weather }: { stop: Stop; tripId: string; weathe
             {stop.isMilitaryOnly && <span className="text-blue-600">🎖️ Military</span>}
           </div>
 
-          {/* Weather card */}
           {stop.latitude && stop.longitude && (
             <StopWeatherCard stop={stop} weather={weather} />
           )}
@@ -259,14 +108,123 @@ function StopRow({ stop, tripId, weather }: { stop: Stop; tripId: string; weathe
   )
 }
 
+// ─── Weather tab ──────────────────────────────────────────────────────────────
+
+function WeatherTab({ trip, weatherData, loading }: {
+  trip: Trip
+  weatherData: Record<string, StopWeather | null | undefined>
+  loading: boolean
+}) {
+  // All non-HOME stops, with or without coords
+  const nonHomeStops = (trip.stops || [])
+    .filter(s => s.type !== 'HOME')
+    .sort((a, b) => a.order - b.order)
+
+  // Collect all unique alerts across all stops
+  const allAlerts = nonHomeStops.flatMap(stop => {
+    const w = weatherData[stop.id]
+    if (!w || w.mode !== 'live') return []
+    return (w as LiveForecast).days.flatMap(d => d.alerts).map(a => ({ ...a, stopName: stop.locationName }))
+  })
+  const uniqueAlertTypes = allAlerts.filter(
+    (a, i, arr) => arr.findIndex(x => x.type === a.type) === i
+  )
+
+  if (nonHomeStops.length === 0) {
+    return (
+      <p className="text-sm text-gray-500 text-center py-8">
+        No stops added yet.
+      </p>
+    )
+  }
+
+  // Show a global loading spinner only while the very first fetch is in flight
+  // and no data has arrived yet
+  const hasAnyData = Object.keys(weatherData).length > 0
+
+  return (
+    <div className="space-y-4">
+      {loading && !hasAnyData && (
+        <div className="flex items-center gap-2 text-sm text-gray-500 py-4">
+          <div className="w-4 h-4 border-2 border-[#1D9E75] border-t-transparent rounded-full animate-spin" />
+          Loading weather data…
+        </div>
+      )}
+
+      {/* Route weather alerts summary */}
+      {uniqueAlertTypes.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-xs font-semibold text-amber-800 mb-2 flex items-center gap-1.5">
+            <AlertTriangle size={13} /> Weather alerts along this route
+          </p>
+          <div className="space-y-1">
+            {uniqueAlertTypes.map((alert, i) => (
+              <div key={i} className={`flex items-center gap-1.5 border rounded px-2 py-1 text-xs ${ALERT_STYLES[alert.level]}`}>
+                {ALERT_ICONS[alert.type]}
+                <span>{alert.message}</span>
+                <span className="ml-auto text-[10px] opacity-70">at {alert.stopName}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Per-stop weather */}
+      {nonHomeStops.map(stop => {
+        const hasCoords = !!(stop.latitude && stop.longitude)
+        // undefined = still loading, null = fetch returned nothing, StopWeather = data
+        const w = weatherData[stop.id]
+        // If fetch is done but server returned no entry for this stop, it has no coords
+        const fetchDone = hasAnyData && !loading
+        return (
+          <div key={stop.id}>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-5 h-5 rounded-full bg-[#1D9E75] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
+                {stop.order}
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">
+                  {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
+                </p>
+                {stop.campgroundName && (
+                  <p className="text-xs text-gray-500">{stop.campgroundName}</p>
+                )}
+              </div>
+              {stop.arrivalDate && (
+                <span className="ml-auto text-xs text-gray-400">
+                  {format(new Date(stop.arrivalDate), 'MMM d')} · {stop.nights}n
+                </span>
+              )}
+            </div>
+            {!hasCoords ? (
+              <p className="text-xs text-gray-400 italic mt-1 ml-7">
+                No coordinates — visit the map to geocode this stop.
+              </p>
+            ) : fetchDone && w === undefined ? (
+              <p className="text-xs text-gray-400 italic mt-1 ml-7">
+                Weather unavailable for this stop.
+              </p>
+            ) : (
+              <StopWeatherCard stop={stop} weather={w} />
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
+
+type Tab = 'stops' | 'weather'
 
 export default function TripDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const [trip, setTrip] = useState<Trip | null>(null)
-  const [loading, setLoading] = useState(true)
-  // undefined = not yet fetched, null = failed, StopWeather = loaded
+  const [trip, setTrip]               = useState<Trip | null>(null)
+  const [loading, setLoading]         = useState(true)
+  const [tab, setTab]                 = useState<Tab>('stops')
   const [weatherData, setWeatherData] = useState<Record<string, StopWeather | null | undefined>>({})
+  const [weatherLoading, setWeatherLoading] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -275,63 +233,31 @@ export default function TripDetailPage() {
       .catch(() => setLoading(false))
   }, [id])
 
-  // Fetch weather for all stops once trip loads
+  // Fetch weather via DB-cached endpoint once trip loads
   useEffect(() => {
-    if (!trip?.stops?.length) return
+    if (!trip?.stops?.length || !id) return
 
-    const today = new Date()
-    const tripStart = trip.startDate ? new Date(trip.startDate) : null
-    const daysUntilTrip = tripStart
-      ? Math.ceil((tripStart.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-      : null
-    // Use live forecast if trip starts within 10 days (or is already underway)
-    const useLive = daysUntilTrip !== null && daysUntilTrip <= 10
-
-    // Mark all stops with lat/lng as loading (undefined)
+    // Mark all coord-having stops as loading
     const initial: Record<string, StopWeather | null | undefined> = {}
     for (const s of trip.stops) {
       if (s.latitude && s.longitude) initial[s.id] = undefined
     }
     setWeatherData(initial)
+    setWeatherLoading(true)
 
-    Promise.all(
-      trip.stops
-        .filter(s => s.latitude && s.longitude)
-        .map(async (stop) => {
-          try {
-            if (useLive && stop.arrivalDate) {
-              const startDate = stop.arrivalDate.split('T')[0]
-              const endDate   = addDays(startDate, stop.nights)
-              const res = await weatherApi.forecast({
-                lat: stop.latitude!,
-                lng: stop.longitude!,
-                start_date: startDate,
-                end_date:   endDate,
-              })
-              return { id: stop.id, data: res.data as StopWeather }
-            } else if (!useLive && stop.arrivalDate) {
-              const d = new Date(stop.arrivalDate)
-              const res = await weatherApi.historical({
-                lat:   stop.latitude!,
-                lng:   stop.longitude!,
-                month: d.getMonth() + 1,
-                day:   d.getDate(),
-                days:  stop.nights || 1,
-              })
-              return { id: stop.id, data: res.data as StopWeather }
-            }
-            return { id: stop.id, data: null }
-          } catch {
-            return { id: stop.id, data: null }
-          }
-        })
-    ).then(results => {
-      setWeatherData(prev => {
-        const next = { ...prev }
-        for (const r of results) next[r.id] = r.data
-        return next
+    tripsApi.getWeather(id)
+      .then(res => {
+        setWeatherData(prev => ({ ...prev, ...res.data }))
       })
-    })
+      .catch(() => {
+        // On failure, mark all as null so loading skeletons clear
+        setWeatherData(prev => {
+          const next = { ...prev }
+          for (const k of Object.keys(next)) if (next[k] === undefined) next[k] = null
+          return next
+        })
+      })
+      .finally(() => setWeatherLoading(false))
   }, [trip?.id])
 
   if (loading) return (
@@ -345,12 +271,22 @@ export default function TripDetailPage() {
   const bookedStops = trip.stops?.filter(s => s.bookingStatus === 'CONFIRMED').length || 0
   const totalStops  = trip.stops?.length || 0
 
+  // Alert count across all stops — for Weather tab badge
+  const totalAlerts = Object.values(weatherData).reduce<number>((sum, w) => {
+    if (!w || w.mode !== 'live') return sum
+    const unique = (w as LiveForecast).days.flatMap(d => d.alerts).filter(
+      (a, i, arr) => arr.findIndex(x => x.type === a.type) === i
+    )
+    return sum + unique.length
+  }, 0)
+
   return (
     <div className="space-y-4 max-w-3xl">
       <Breadcrumb items={[
         { label: 'My Trips', href: '/trips' },
         { label: trip.name },
       ]} />
+
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -370,10 +306,10 @@ export default function TripDetailPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Miles',   value: trip.totalMiles?.toLocaleString() || '–', icon: Map },
-          { label: 'Nights',  value: trip.totalNights || '–',                  icon: Tent },
+          { label: 'Miles',     value: trip.totalMiles?.toLocaleString() || '–', icon: Map },
+          { label: 'Nights',    value: String(trip.totalNights || '–'),           icon: Tent },
           { label: 'Est. cost', value: totalCost ? `$${totalCost.toLocaleString()}` : '–', icon: DollarSign },
-          { label: 'Booked',  value: `${bookedStops}/${totalStops}`,            icon: CheckCircle },
+          { label: 'Booked',    value: `${bookedStops}/${totalStops}`,            icon: CheckCircle },
         ].map(({ label, value, icon: Icon }) => (
           <div key={label} className="card text-center">
             <Icon size={16} className="text-[#1D9E75] mx-auto mb-1" />
@@ -386,37 +322,70 @@ export default function TripDetailPage() {
       {/* Action links */}
       <div className="flex flex-wrap gap-2">
         <Link to={`/trips/${id}/itinerary`} className="btn-ghost text-sm flex items-center gap-1.5"><Calendar size={14} /> Itinerary</Link>
-        <Link to={`/trips/${id}/journal`}  className="btn-ghost text-sm flex items-center gap-1.5"><BookOpen size={14} /> Journal</Link>
-        <Link to={`/packing/${id}`}         className="btn-ghost text-sm flex items-center gap-1.5"><Package  size={14} /> Packing list</Link>
+        <Link to={`/trips/${id}/journal`}   className="btn-ghost text-sm flex items-center gap-1.5"><BookOpen size={14} /> Journal</Link>
+        <Link to={`/packing/${id}`}          className="btn-ghost text-sm flex items-center gap-1.5"><Package  size={14} /> Packing list</Link>
         <button className="btn-ghost text-sm flex items-center gap-1.5"><Share2   size={14} /> Share</button>
         <button className="btn-ghost text-sm flex items-center gap-1.5"><Download size={14} /> PDF</button>
       </div>
 
-      {/* Stops */}
+      {/* Tabs */}
       <div>
-        <h2 className="text-sm font-medium text-gray-700 mb-2">Stops ({totalStops})</h2>
-        {trip.stops?.length === 0 ? (
-          <div className="card text-center py-8 text-sm text-gray-500">
-            No stops yet — <Link to={`/trips/${id}/map`} className="text-[#1D9E75]">add stops on the map</Link>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {trip.stops?.sort((a, b) => a.order - b.order).map((stop, idx, arr) => {
-              // Safety net: first and last stops are never OVERNIGHT_ONLY regardless of DB value
-              const isEndpoint = idx === 0 || idx === arr.length - 1
-              const displayStop = isEndpoint && stop.type === 'OVERNIGHT_ONLY'
-                ? { ...stop, type: 'DESTINATION' as const }
-                : stop
-              return (
-                <StopRow
-                  key={stop.id}
-                  stop={displayStop}
-                  tripId={id!}
-                  weather={weatherData[stop.id]}
-                />
-              )
-            })}
-          </div>
+        <div className="flex gap-1 border-b border-gray-200 mb-4">
+          <button
+            onClick={() => setTab('stops')}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+              tab === 'stops'
+                ? 'border-[#1D9E75] text-[#1D9E75]'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Stops ({totalStops})
+          </button>
+          <button
+            onClick={() => setTab('weather')}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5 ${
+              tab === 'weather'
+                ? 'border-[#1D9E75] text-[#1D9E75]'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <CloudRain size={13} />
+            Weather
+            {totalAlerts > 0 && (
+              <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                {totalAlerts}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {tab === 'stops' && (
+          trip.stops?.length === 0 ? (
+            <div className="card text-center py-8 text-sm text-gray-500">
+              No stops yet — <Link to={`/trips/${id}/map`} className="text-[#1D9E75]">add stops on the map</Link>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {trip.stops?.sort((a, b) => a.order - b.order).map((stop, idx, arr) => {
+                const isEndpoint = idx === 0 || idx === arr.length - 1
+                const displayStop = isEndpoint && stop.type === 'OVERNIGHT_ONLY'
+                  ? { ...stop, type: 'DESTINATION' as const }
+                  : stop
+                return (
+                  <StopRow
+                    key={stop.id}
+                    stop={displayStop}
+                    tripId={id!}
+                    weather={weatherData[stop.id]}
+                  />
+                )
+              })}
+            </div>
+          )
+        )}
+
+        {tab === 'weather' && (
+          <WeatherTab trip={trip} weatherData={weatherData} loading={weatherLoading} />
         )}
       </div>
     </div>
