@@ -66,8 +66,8 @@ export default function ProfilePage() {
             <input className="input" type="tel" {...register('phone')} />
           </div>
           <div>
-            <label className="label">Home base (city)</label>
-            <input className="input" placeholder="Phoenix, AZ" {...register('homeLocation')} />
+            <label className="label">Home address</label>
+            <input className="input" placeholder="Enter your home address" {...register('homeLocation')} />
           </div>
           <div>
             <label className="label">Emergency contact name</label>

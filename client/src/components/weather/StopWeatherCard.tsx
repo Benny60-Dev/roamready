@@ -55,7 +55,19 @@ export function StopWeatherCard({ stop, weather, compact = false }: Props) {
           <span className="font-semibold text-blue-800 flex items-center gap-1">
             <span>{w.icon}</span> Historical averages for {w.month}
           </span>
-          <span className="text-blue-500 italic text-[10px]">Live forecast within 10 days</span>
+          {nwsUrl
+            ? (
+              <a
+                href={nwsUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-0.5 text-[10px] text-[#1D9E75] hover:text-[#178a63] font-medium transition-colors"
+              >
+                View live forecast on NWS → <ExternalLink size={9} />
+              </a>
+            )
+            : <span className="text-blue-400 italic text-[10px]">Live forecast within 10 days</span>
+          }
         </div>
         <div className="flex items-center gap-4 text-gray-700 mb-1.5">
           <span className="text-base font-semibold">
