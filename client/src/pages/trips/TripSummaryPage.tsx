@@ -4,9 +4,10 @@ import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import {
   Download, Share2, Sparkles, Car, Tent, Star, Moon,
   MapPin, XCircle, Plus, Check, RefreshCw, ArrowRight, Clock,
+  Pencil, Trash2,
 } from 'lucide-react'
 import { pdf } from '@react-pdf/renderer'
-import { tripsApi } from '../../services/api'
+import { tripsApi, aiApi } from '../../services/api'
 import { Trip, Stop, ItineraryDay, ItineraryActivity, StopWeather } from '../../types'
 import { format, addDays } from 'date-fns'
 import { TripPDF } from '../../components/pdf/TripPDF'
@@ -150,6 +151,8 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
 
     // ── Overnight transit stop ────────────────────────────────────────────────
     if (stop.type === 'OVERNIGHT_ONLY') {
+      // Prefer stop.arrivalDate (kept in sync by the cascade save after every edit).
+      // Fall back to currentDate when no DB date exists yet.
       entries.push({
         dayNum,
         date: stop.arrivalDate
@@ -157,18 +160,36 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
           : currentDate ? new Date(currentDate) : undefined,
         type: 'OVERNIGHT',
         stop,
-        departureTime: '06:00',   // early next-morning departure (editable)
-        checkInTime: '18:00',     // evening arrival (editable)
+        departureTime: '06:00',
+        checkInTime: '18:00',
         checkOutTime: '06:00',
         activities: [],
       })
       dayNum++
       if (currentDate) currentDate = addDays(currentDate, 1)
 
-    // ── Destination / home ────────────────────────────────────────────────────
+    // ── HOME stop — always render one STAY entry as the departure point ─────
+    } else if (stop.type === 'HOME') {
+      entries.push({
+        dayNum,
+        date: currentDate ? new Date(currentDate) : undefined,
+        type: 'STAY',
+        stop,
+        nightNum: 1,
+        departureTime: '08:00',
+        checkInTime: '08:00',
+        checkOutTime: '08:00',
+        activities: [],
+      })
+      dayNum++
+      // Do not advance date — the trip hasn't started yet
+
+    // ── Destination ───────────────────────────────────────────────────────────
     } else {
       const nights = stop.nights ?? 0
       for (let n = 0; n < nights; n++) {
+        // Prefer stop.arrivalDate + offset (authoritative after a cascade save).
+        // Fall back to currentDate when no DB date exists yet.
         let entryDate: Date | undefined
         if (stop.arrivalDate) {
           entryDate = addDays(new Date(stop.arrivalDate), n)
@@ -291,19 +312,25 @@ export default function TripSummaryPage() {
   const [entries, setEntries] = useState<TimelineEntry[]>([])
   const [addingActivity, setAddingActivity] = useState<Record<number, string>>({})
   const [weatherData, setWeatherData] = useState<Record<string, StopWeather | null | undefined>>({})
+  const [editingStop, setEditingStop] = useState<Stop | null>(null)
+  const [addAfterOrder, setAddAfterOrder] = useState<number | null>(null)
+  const [mutating, setMutating] = useState(false)
   const itinerarySaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const activityGenAttempted = useRef(false)
 
+  const reloadTrip = useCallback(async () => {
+    if (!id) return
+    const res = await tripsApi.get(id)
+    const t: Trip = res.data
+    setTrip(t)
+    const sorted = [...(t.stops || [])].sort((a, b) => a.order - b.order)
+    const raw = buildTimeline(sorted, t.startDate ?? undefined)
+    setEntries(t.itinerary ? mergeAI(raw, t.itinerary) : raw)
+  }, [id])
+
   useEffect(() => {
     if (!id) return
-    tripsApi.get(id).then(res => {
-      const t: Trip = res.data
-      setTrip(t)
-      const sorted = [...(t.stops || [])].sort((a, b) => a.order - b.order)
-      const raw = buildTimeline(sorted, t.startDate ?? undefined)
-      setEntries(t.itinerary ? mergeAI(raw, t.itinerary) : raw)
-      setLoading(false)
-    })
+    reloadTrip().finally(() => setLoading(false))
   }, [id])
 
   // Load weather once trip is ready
@@ -460,6 +487,114 @@ export default function TripSummaryPage() {
     }, 600)
   }, [id])
 
+  // ── Date cascade ────────────────────────────────────────────────────────────
+  // Walks every stop in order, computes correct arrivalDate / departureDate from
+  // the anchor (trip.startDate if set, otherwise today), saves each one to the DB,
+  // then updates trip.totalNights and trip.endDate.
+  // Always runs — never skipped for missing startDate.
+
+  const cascadeAndSaveDates = useCallback(async (stops: Stop[]) => {
+    if (!id) return
+    const sorted = [...stops].sort((a, b) => a.order - b.order)
+
+    // Use trip.startDate as anchor; fall back to today if trip has no start date.
+    const anchor = trip?.startDate ? new Date(trip.startDate) : new Date()
+    let current = new Date(anchor)
+
+    let totalNights = 0
+
+    console.log('[cascade] Starting date cascade for', sorted.length, 'stops, anchor =', current.toISOString())
+
+    for (const s of sorted) {
+      const nights = s.type === 'OVERNIGHT_ONLY' ? 1 : (s.nights || 0)
+      const arrivalISO   = new Date(current).toISOString()
+      const departureISO = addDays(new Date(current), nights).toISOString()
+
+      await tripsApi.updateStop(id, s.id, { arrivalDate: arrivalISO, departureDate: departureISO })
+      console.log(`[cascade] Updated stop "${s.locationName}" arrivalDate to ${arrivalISO} (${nights} night${nights !== 1 ? 's' : ''})`)
+
+      totalNights += nights
+      current = addDays(current, nights)
+    }
+
+    const endDate = current.toISOString()
+    await tripsApi.update(id, { totalNights, endDate })
+    console.log(`[cascade] Updated trip totalNights=${totalNights} endDate=${endDate}`)
+  }, [id, trip?.startDate])
+
+  // ── Stop mutation handlers ──────────────────────────────────────────────────
+
+  const handleDeleteStop = async (stop: Stop) => {
+    if (!id || !trip) return
+    if (!window.confirm(`Remove this stop from your trip? This cannot be undone.`)) return
+    setMutating(true)
+    try {
+      await tripsApi.deleteStop(id, stop.id)
+      // Renumber remaining stops 1…N in order
+      const remaining = (trip.stops || [])
+        .filter(s => s.id !== stop.id)
+        .sort((a, b) => a.order - b.order)
+        .map((s, i) => ({ ...s, order: i + 1 }))
+      await Promise.all(remaining.map(s => tripsApi.updateStop(id, s.id, { order: s.order })))
+      // Recascade all dates with the updated stop list
+      await cascadeAndSaveDates(remaining as Stop[])
+      await reloadTrip()
+    } finally {
+      setMutating(false)
+    }
+  }
+
+  const handleInsertStop = async (data: { locationName: string; type: string; nights: number; notes?: string }) => {
+    if (!id || !trip || addAfterOrder === null) return
+    setMutating(true)
+    try {
+      // Create stop (server appends at maxOrder+1)
+      const res = await tripsApi.createStop(id, { ...data, bookingStatus: 'NOT_BOOKED' })
+      const newStop: Stop = res.data
+      const sorted = [...(trip.stops || [])].sort((a, b) => a.order - b.order)
+      const insertOrder = addAfterOrder + 1
+
+      // Build final stop list: shift existing stops ≥ insertOrder up by 1, place new stop
+      const finalStops = [
+        ...sorted.map(s => s.order >= insertOrder ? { ...s, order: s.order + 1 } : s),
+        { ...newStop, order: insertOrder, nights: data.nights || 1 },
+      ].sort((a, b) => a.order - b.order)
+
+      await Promise.all(finalStops.map(s => tripsApi.updateStop(id, s.id, { order: s.order })))
+      await cascadeAndSaveDates(finalStops as Stop[])
+      setAddAfterOrder(null)
+      await reloadTrip()
+    } finally {
+      setMutating(false)
+    }
+  }
+
+  const handleSaveEditStop = async (stop: Stop, data: Partial<Stop>) => {
+    if (!id || !trip) return
+    setMutating(true)
+    try {
+      // Step 1: persist the field changes (locationName, campgroundName, nights, etc.)
+      await tripsApi.updateStop(id, stop.id, data)
+      console.log(`[handleSaveEditStop] Saved stop "${stop.locationName}" — nights:`, data.nights ?? '(unchanged)')
+
+      // Step 2: if nights changed, recascade every stop's arrivalDate/departureDate
+      if (data.nights !== undefined) {
+        // Build in-memory list with the new nights value applied
+        const updatedStops = (trip.stops || []).map(s =>
+          s.id === stop.id ? { ...s, nights: data.nights! } : s
+        )
+        await cascadeAndSaveDates(updatedStops)
+      }
+
+      setEditingStop(null)
+
+      // Step 3: reload fresh data from DB — timeline rebuilds from the new arrivalDates
+      await reloadTrip()
+    } finally {
+      setMutating(false)
+    }
+  }
+
   // Highway routes are now extracted by TripMapPage from the Google Maps Routes API
   // and saved directly to each stop record. buildTimeline reads stop.highwayRoute,
   // so routes appear automatically once the map page has been visited.
@@ -600,24 +735,83 @@ export default function TripSummaryPage() {
         </div>
 
         <div className="space-y-3">
-          {entries.map((entry, idx) => (
-            <TimelineRow
-              key={idx}
-              entry={entry}
-              generatingActivities={generatingActivities}
-              weather={entry.stop ? weatherData[entry.stop.id] : undefined}
-              onDriveDepart={time => updateDriveDepart(idx, time)}
-              onToggleActivity={actIdx => toggleActivity(idx, actIdx)}
-              onDeleteActivity={actIdx => deleteActivity(idx, actIdx)}
-              addingText={addingActivity[idx] ?? ''}
-              onAddingChange={text => setAddingActivity(prev => ({ ...prev, [idx]: text }))}
-              onAddActivity={() => addActivity(idx)}
-            />
-          ))}
-          {entries.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-8">No stops added yet.</p>
-          )}
+          {(() => {
+            // Group consecutive entries that share the same stop.id
+            type Group = { stopId: string | null; stopOrder: number; isHome: boolean; entries: TimelineEntry[] }
+            const groups: Group[] = []
+            for (const entry of entries) {
+              const sid = entry.stop?.id ?? null
+              const last = groups[groups.length - 1]
+              if (!last || last.stopId !== sid) {
+                groups.push({
+                  stopId: sid,
+                  stopOrder: entry.stop?.order ?? 0,
+                  isHome: entry.stop?.type === 'HOME',
+                  entries: [entry],
+                })
+              } else {
+                last.entries.push(entry)
+              }
+            }
+
+            const rendered: JSX.Element[] = []
+            // Track flat index for handlers
+            let flatIdx = 0
+            groups.forEach((group, gi) => {
+              group.entries.forEach(entry => {
+                const idx = flatIdx++
+                const isEditable = (entry.type === 'STAY' || entry.type === 'OVERNIGHT') && entry.stop?.type !== 'HOME'
+                const isDeletable = isEditable && (sortedStops.length > 2) // keep at least 2 stops (start + end)
+                rendered.push(
+                  <TimelineRow
+                    key={`entry-${idx}`}
+                    entry={entry}
+                    generatingActivities={generatingActivities}
+                    weather={entry.stop ? weatherData[entry.stop.id] : undefined}
+                    onDriveDepart={time => updateDriveDepart(idx, time)}
+                    onToggleActivity={actIdx => toggleActivity(idx, actIdx)}
+                    onDeleteActivity={actIdx => deleteActivity(idx, actIdx)}
+                    addingText={addingActivity[idx] ?? ''}
+                    onAddingChange={text => setAddingActivity(prev => ({ ...prev, [idx]: text }))}
+                    onAddActivity={() => addActivity(idx)}
+                    onEdit={isEditable ? () => setEditingStop(entry.stop!) : undefined}
+                    onDelete={isDeletable ? () => handleDeleteStop(entry.stop!) : undefined}
+                  />
+                )
+              })
+              // Insert "Add stop" button after each non-last group (and not after HOME groups)
+              if (gi < groups.length - 1 && !group.isHome) {
+                const afterOrder = group.stopOrder
+                rendered.push(
+                  <button
+                    key={`insert-${gi}`}
+                    onClick={() => setAddAfterOrder(afterOrder)}
+                    disabled={mutating}
+                    className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-gray-400 hover:text-[#1D9E75] hover:bg-green-50 rounded-lg border border-dashed border-gray-200 hover:border-green-300 transition-colors disabled:opacity-40"
+                  >
+                    <Plus size={11} /> Add stop here
+                  </button>
+                )
+              }
+            })
+
+            if (entries.length === 0) {
+              rendered.push(
+                <p key="empty" className="text-sm text-gray-400 text-center py-8">No stops added yet.</p>
+              )
+            }
+            return rendered
+          })()}
         </div>
+
+        {/* Add stop at end */}
+        <button
+          onClick={() => setAddAfterOrder(sortedStops.length > 0 ? sortedStops[sortedStops.length - 1].order : 0)}
+          disabled={mutating}
+          className="w-full mt-3 flex items-center justify-center gap-1.5 py-2 text-sm text-[#1D9E75] hover:bg-green-50 rounded-lg border border-dashed border-green-200 hover:border-green-300 transition-colors disabled:opacity-40"
+        >
+          <Plus size={13} /> Add stop
+        </button>
       </div>
 
       {/* Cost Breakdown */}
@@ -642,6 +836,25 @@ export default function TripSummaryPage() {
           </div>
         </div>
       </div>
+
+      {/* Modals */}
+      {editingStop && (
+        <EditStopModal
+          stop={editingStop}
+          onSave={data => handleSaveEditStop(editingStop, data)}
+          onClose={() => setEditingStop(null)}
+          saving={mutating}
+        />
+      )}
+      {addAfterOrder !== null && (
+        <AddStopModal
+          afterOrder={addAfterOrder}
+          surroundingStops={sortedStops}
+          onAdd={handleInsertStop}
+          onClose={() => setAddAfterOrder(null)}
+          saving={mutating}
+        />
+      )}
     </div>
   )
 }
@@ -702,12 +915,15 @@ interface TimelineRowProps {
   addingText: string
   onAddingChange: (text: string) => void
   onAddActivity: () => void
+  onEdit?: () => void
+  onDelete?: () => void
 }
 
 function TimelineRow({
   entry, generatingActivities, weather,
   onDriveDepart,
   onToggleActivity, onDeleteActivity, addingText, onAddingChange, onAddActivity,
+  onEdit, onDelete,
 }: TimelineRowProps) {
   const cfg = ROW_CONFIG[entry.type]
   const Icon = cfg.icon
@@ -737,17 +953,39 @@ function TimelineRow({
             <div className="flex items-center gap-1.5">
               <Icon size={13} className={cfg.text} />
               <span className={`text-xs font-semibold uppercase tracking-wide ${cfg.text}`}>
-                {entry.type === 'ACTIVITY' && entry.stop
-                  ? `Day ${entry.nightNum} at ${entry.stop.locationName}`
-                  : cfg.label}
+                {entry.type === 'STAY' && entry.stop?.type === 'HOME'
+                  ? 'Departure Point'
+                  : entry.type === 'ACTIVITY' && entry.stop
+                    ? `Day ${entry.nightNum} at ${entry.stop.locationName}`
+                    : cfg.label}
               </span>
             </div>
-            {entry.type === 'DRIVE' && entry.driveDuration && (
-              <span className="flex items-center gap-1 text-xs font-semibold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
-                <Clock size={10} />
-                {entry.driveDuration}
-              </span>
-            )}
+            <div className="flex items-center gap-1">
+              {entry.type === 'DRIVE' && entry.driveDuration && (
+                <span className="flex items-center gap-1 text-xs font-semibold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
+                  <Clock size={10} />
+                  {entry.driveDuration}
+                </span>
+              )}
+              {onEdit && (
+                <button
+                  onClick={onEdit}
+                  title="Edit stop"
+                  className="p-1 text-gray-300 hover:text-gray-600 transition-colors rounded"
+                >
+                  <Pencil size={12} />
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  onClick={onDelete}
+                  title="Remove stop"
+                  className="p-1 text-gray-300 hover:text-red-500 transition-colors rounded"
+                >
+                  <Trash2 size={12} />
+                </button>
+              )}
+            </div>
           </div>
 
           {entry.type === 'DRIVE' && (
@@ -922,8 +1160,8 @@ function StayContent({ entry, weather }: { entry: TimelineEntry; weather?: StopW
         )}
       </div>
 
-      {/* Reserve Now / Confirmed */}
-      {stop.confirmationNum ? (
+      {/* Reserve Now / Confirmed — not shown for HOME (departure) stops */}
+      {stop.type !== 'HOME' && (stop.confirmationNum ? (
         <div className="flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-100 px-2.5 py-1 rounded-full w-fit">
           <Check size={11} />
           Confirmed · #{stop.confirmationNum}
@@ -935,7 +1173,7 @@ function StayContent({ entry, weather }: { entry: TimelineEntry; weather?: StopW
         >
           Reserve Now →
         </button>
-      )}
+      ))}
 
       {/* Notes */}
       <div>
@@ -1096,5 +1334,286 @@ function OvernightContent({ entry, weather }: { entry: TimelineEntry; weather?: 
         <StopWeatherCard stop={stop} weather={weather} compact />
       )}
     </div>
+  )
+}
+
+// ─── Modal overlay wrapper ─────────────────────────────────────────────────────
+
+function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// ─── EditStopModal ─────────────────────────────────────────────────────────────
+
+function EditStopModal({ stop, onSave, onClose, saving }: {
+  stop: Stop
+  onSave: (data: Partial<Stop>) => void
+  onClose: () => void
+  saving: boolean
+}) {
+  const [locationName, setLocationName] = useState(stop.locationName)
+  const [campgroundName, setCampgroundName] = useState(stop.campgroundName ?? '')
+  const [nights, setNights] = useState(stop.nights)
+  const [type, setType] = useState<string>(stop.type)
+  const [hookupType, setHookupType] = useState(stop.hookupType ?? '')
+  const [notes, setNotes] = useState(stop.notes ?? '')
+
+  const isHome = stop.type === 'HOME'
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    onSave({
+      locationName: locationName.trim(),
+      campgroundName: campgroundName.trim() || undefined,
+      nights: Number(nights),
+      type: type as Stop['type'],
+      hookupType: hookupType || undefined,
+      notes: notes.trim() || undefined,
+    })
+  }
+
+  return (
+    <ModalOverlay onClose={onClose}>
+      <h2 className="text-base font-semibold text-gray-900 mb-4">Edit Stop</h2>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <label className="label">Location name</label>
+          <input
+            className="input"
+            value={locationName}
+            onChange={e => setLocationName(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <label className="label">Campground name</label>
+          <input
+            className="input"
+            value={campgroundName}
+            onChange={e => setCampgroundName(e.target.value)}
+            placeholder="Optional"
+          />
+        </div>
+        {!isHome && (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Stop type</label>
+                <select className="input" value={type} onChange={e => setType(e.target.value)}>
+                  <option value="DESTINATION">Destination</option>
+                  <option value="OVERNIGHT_ONLY">Overnight only</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Nights</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={30}
+                  className="input"
+                  value={nights}
+                  onChange={e => setNights(Number(e.target.value))}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="label">Hookup preference</label>
+              <select className="input" value={hookupType} onChange={e => setHookupType(e.target.value)}>
+                <option value="">Any / not specified</option>
+                <option value="Full hookup">Full hookup</option>
+                <option value="Water & Electric">Water &amp; Electric</option>
+                <option value="Electric only">Electric only</option>
+                <option value="Dry camping">Dry camping</option>
+              </select>
+            </div>
+          </>
+        )}
+        <div>
+          <label className="label">Notes</label>
+          <textarea
+            className="input resize-none"
+            rows={3}
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            placeholder="Gate codes, instructions, reminders…"
+          />
+        </div>
+        <div className="flex gap-2 pt-1">
+          <button
+            type="submit"
+            disabled={saving || !locationName.trim()}
+            className="btn-primary flex-1 disabled:opacity-60"
+          >
+            {saving ? 'Saving…' : 'Save changes'}
+          </button>
+          <button type="button" onClick={onClose} className="btn-outline flex-1">
+            Cancel
+          </button>
+        </div>
+      </form>
+    </ModalOverlay>
+  )
+}
+
+// ─── AddStopModal ──────────────────────────────────────────────────────────────
+
+function AddStopModal({ afterOrder, surroundingStops, onAdd, onClose, saving }: {
+  afterOrder: number
+  surroundingStops: Stop[]
+  onAdd: (data: { locationName: string; type: string; nights: number; notes?: string }) => void
+  onClose: () => void
+  saving: boolean
+}) {
+  const [locationName, setLocationName] = useState('')
+  const [type, setType] = useState('DESTINATION')
+  const [nights, setNights] = useState(1)
+  const [notes, setNotes] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([])
+
+  const prevStop = surroundingStops.find(s => s.order === afterOrder)
+  const nextStop = surroundingStops.find(s => s.order === afterOrder + 1)
+
+  const handleAISuggest = async () => {
+    setAiLoading(true)
+    setAiSuggestions([])
+    try {
+      const prevName = prevStop?.locationName ?? 'the trip start'
+      const nextName = nextStop?.locationName ?? 'the trip end'
+      const prompt = `I'm planning an RV road trip and need stop suggestions between ${prevName} and ${nextName}. Suggest exactly 3 campground or overnight stops that would work well at this point in the route. Reply with ONLY a numbered list of location names (city, state format), nothing else. Example: 1. Flagstaff, AZ`
+      const res = await aiApi.chat([{ role: 'user', content: prompt }])
+      const text: string = res.data?.content ?? res.data?.message ?? ''
+      const lines = text.split('\n')
+        .map((l: string) => l.replace(/^\d+\.\s*/, '').trim())
+        .filter((l: string) => l.length > 0)
+        .slice(0, 3)
+      setAiSuggestions(lines)
+    } catch {
+      setAiSuggestions(['Could not load suggestions — try typing a location manually.'])
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!locationName.trim()) return
+    onAdd({
+      locationName: locationName.trim(),
+      type,
+      nights: type === 'OVERNIGHT_ONLY' ? 1 : Number(nights),
+      notes: notes.trim() || undefined,
+    })
+  }
+
+  const insertLabel = prevStop && nextStop
+    ? `after ${prevStop.locationName}`
+    : prevStop
+      ? `after ${prevStop.locationName}`
+      : 'at the beginning'
+
+  return (
+    <ModalOverlay onClose={onClose}>
+      <h2 className="text-base font-semibold text-gray-900 mb-1">Add stop</h2>
+      <p className="text-xs text-gray-400 mb-4">Inserting {insertLabel}</p>
+
+      {/* AI Suggestions */}
+      <div className="mb-4">
+        <button
+          type="button"
+          onClick={handleAISuggest}
+          disabled={aiLoading}
+          className="flex items-center gap-1.5 text-xs text-[#1D9E75] hover:text-[#178a65] font-medium disabled:opacity-50 transition-colors"
+        >
+          <Sparkles size={12} />
+          {aiLoading ? 'Asking AI…' : 'Ask AI to suggest a stop here'}
+        </button>
+        {aiSuggestions.length > 0 && (
+          <div className="mt-2 space-y-1">
+            {aiSuggestions.map((s, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setLocationName(s)}
+                className={`w-full text-left text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+                  locationName === s
+                    ? 'border-[#1D9E75] bg-green-50 text-[#1D9E75] font-medium'
+                    : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-[#1D9E75] hover:bg-green-50'
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <label className="label">Location name</label>
+          <input
+            className="input"
+            value={locationName}
+            onChange={e => setLocationName(e.target.value)}
+            placeholder="e.g. Flagstaff, AZ"
+            required
+            autoFocus
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="label">Stop type</label>
+            <select className="input" value={type} onChange={e => setType(e.target.value)}>
+              <option value="DESTINATION">Destination</option>
+              <option value="OVERNIGHT_ONLY">Overnight only</option>
+            </select>
+          </div>
+          {type !== 'OVERNIGHT_ONLY' && (
+            <div>
+              <label className="label">Nights</label>
+              <input
+                type="number"
+                min={1}
+                max={30}
+                className="input"
+                value={nights}
+                onChange={e => setNights(Number(e.target.value))}
+              />
+            </div>
+          )}
+        </div>
+        <div>
+          <label className="label">Notes <span className="text-gray-400 font-normal">(optional)</span></label>
+          <textarea
+            className="input resize-none"
+            rows={2}
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            placeholder="Gate codes, instructions…"
+          />
+        </div>
+        <div className="flex gap-2 pt-1">
+          <button
+            type="submit"
+            disabled={saving || !locationName.trim()}
+            className="btn-primary flex-1 disabled:opacity-60"
+          >
+            {saving ? 'Adding…' : 'Add stop'}
+          </button>
+          <button type="button" onClick={onClose} className="btn-outline flex-1">
+            Cancel
+          </button>
+        </div>
+      </form>
+    </ModalOverlay>
   )
 }

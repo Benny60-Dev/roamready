@@ -36,7 +36,8 @@ Trip planning rules:
 - Maximum 3 questions before building the itinerary
 - When you have enough information, respond with a JSON itinerary block inside <itinerary> tags
 - Stop "type" must be exactly one of: DESTINATION, OVERNIGHT_ONLY, HOME — never use TRAVEL or any other value
-- The FIRST stop (order: 1) must always be DESTINATION or HOME — NEVER OVERNIGHT_ONLY
+- Always include the trip starting location as the first stop in the itinerary with type HOME and order 1. This is the departure point and should always be the first entry in the stops array regardless of whether the user mentioned it explicitly. Use the user's homeLocation from their profile as this stop's locationName. Set nights to 0 for the HOME stop.
+- The FIRST stop (order: 1) must always be HOME type — NEVER DESTINATION or OVERNIGHT_ONLY
 - The LAST stop must always be DESTINATION — NEVER OVERNIGHT_ONLY
 - OVERNIGHT_ONLY is exclusively for mid-route transit stops where the traveler is simply sleeping before continuing the next morning — it is never the trip origin or final destination
 - Always consider rig compatibility — never suggest campgrounds incompatible with their rig
@@ -57,6 +58,19 @@ Itinerary JSON format:
   "stops": [
     {
       "order": 1,
+      "type": "HOME",
+      "locationName": "Austin",
+      "locationState": "TX",
+      "nights": 0,
+      "campgroundName": null,
+      "siteRate": 0,
+      "estimatedFuel": 0,
+      "hookupType": "",
+      "isPetFriendly": true,
+      "isMilitaryOnly": false
+    },
+    {
+      "order": 2,
       "type": "DESTINATION",
       "locationName": "",
       "locationState": "",

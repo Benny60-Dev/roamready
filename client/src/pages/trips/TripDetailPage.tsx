@@ -34,6 +34,13 @@ function StopRow({ stop, tripId, weather }: { stop: Stop; tripId: string; weathe
     : 0
 
   function StopActionBadge() {
+    if (stop.type === 'HOME') {
+      return (
+        <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500 flex-shrink-0">
+          Departure
+        </span>
+      )
+    }
     if (stop.bookingStatus === 'CONFIRMED') {
       return (
         <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 text-green-700 flex-shrink-0">
@@ -71,9 +78,10 @@ function StopRow({ stop, tripId, weather }: { stop: Stop; tripId: string; weathe
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0 mt-0.5">
           <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium ${
+            stop.type === 'HOME' ? 'bg-gray-400' :
             stop.type === 'OVERNIGHT_ONLY' ? 'bg-[#7F77DD]' : 'bg-[#1D9E75]'
           }`}>
-            {stop.order}
+            {stop.type === 'HOME' ? 'H' : stop.order}
           </div>
         </div>
         <div className="flex-1 min-w-0">
@@ -105,7 +113,7 @@ function StopRow({ stop, tripId, weather }: { stop: Stop; tripId: string; weathe
             {stop.arrivalDate && (
               <span><Calendar size={11} className="inline mr-0.5" />{format(new Date(stop.arrivalDate), 'MMM d')}</span>
             )}
-            <span><Tent size={11} className="inline mr-0.5" />{stop.nights} night{stop.nights !== 1 ? 's' : ''}</span>
+            {stop.type !== 'HOME' && <span><Tent size={11} className="inline mr-0.5" />{stop.nights} night{stop.nights !== 1 ? 's' : ''}</span>}
             {stop.siteRate && <span><DollarSign size={11} className="inline mr-0.5" />${stop.siteRate}/night</span>}
             {stop.hookupType && <span className="badge-green">{stop.hookupType}</span>}
             {stop.isPetFriendly === true && <span className="text-[#1D9E75]">🐾 Pet-friendly</span>}

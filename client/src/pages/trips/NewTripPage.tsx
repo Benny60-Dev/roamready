@@ -324,9 +324,15 @@ export default function NewTripPage() {
     setCreating(true)
     setBuildError(null)
     try {
+      // Use user's homeLocation as the trip startLocation so the server-side HOME
+      // stop guard has the correct departure city, even if the AI omits the HOME stop.
+      const homeStopName = itinerary.stops?.[0]?.type === 'HOME'
+        ? itinerary.stops[0].locationName
+        : user?.homeLocation || itinerary.stops?.[0]?.locationName || 'Start'
+
       const trip = await tripsApi.create({
         name: itinerary.name,
-        startLocation: itinerary.stops?.[0]?.locationName || 'Start',
+        startLocation: homeStopName,
         endLocation: itinerary.stops?.[itinerary.stops.length - 1]?.locationName || 'End',
         totalMiles: itinerary.totalMiles,
         totalNights: itinerary.totalNights,

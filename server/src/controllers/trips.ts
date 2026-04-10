@@ -235,6 +235,29 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
       type = 'DESTINATION'
     }
 
+    // If this is the first stop being added and it is NOT a HOME stop,
+    // automatically prepend a HOME stop using the trip's starting location.
+    if (order === 1 && type !== 'HOME' && (trip as any).startLocation) {
+      const raw: string = (trip as any).startLocation
+      const commaIdx = raw.indexOf(',')
+      const homeName  = commaIdx >= 0 ? raw.slice(0, commaIdx).trim() : raw.trim()
+      const homeState = commaIdx >= 0 ? raw.slice(commaIdx + 1).trim() : null
+      console.log('[createStop] First stop is not HOME — auto-creating HOME stop for startLocation=%s', raw)
+      await prisma.stop.create({
+        data: {
+          type: 'HOME',
+          locationName: homeName,
+          locationState: homeState,
+          nights: 0,
+          bookingStatus: 'NOT_BOOKED',
+          isCompatible: true,
+          tripId: req.params.id,
+          order: 1,
+        },
+      })
+      order = 2
+    }
+
     // Last-stop enforcement for OVERNIGHT_ONLY is handled by:
     //   1. The client (NewTripPage) which fixes first/last before calling this endpoint
     //   2. The startup migration in index.ts which corrects any existing bad data
@@ -278,7 +301,7 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
       isPetFriendly, isMilitaryOnly, isCompatible,
       incompatibilityReasons, alternates, weatherForecast,
       notes, checkInTime, checkOutTime, siteNumber, highwayRoute, driveDuration,
-      routeHighlights, driveDistanceMiles,
+      routeHighlights, driveDistanceMiles, order,
     } = req.body
 
     const data: any = {
@@ -288,7 +311,7 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
       isPetFriendly, isMilitaryOnly, isCompatible,
       incompatibilityReasons, alternates, weatherForecast,
       notes, checkInTime, checkOutTime, siteNumber, highwayRoute, driveDuration,
-      driveDistanceMiles,
+      driveDistanceMiles, order,
     }
 
     const updated = await prisma.stop.update({

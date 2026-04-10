@@ -638,9 +638,10 @@ export default function TripBookingPage() {
         {/* ── Destination header ── */}
         <div className="flex items-start gap-3 mb-4">
           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0 shadow-sm ${
+            stop.type === 'HOME' ? 'bg-gray-400' :
             stop.type === 'OVERNIGHT_ONLY' ? 'bg-[#7F77DD]' : 'bg-[#1D9E75]'
           }`}>
-            {stop.order}
+            {stop.type === 'HOME' ? 'H' : stop.order}
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="text-base font-semibold text-gray-900 leading-tight">
@@ -653,17 +654,19 @@ export default function TripBookingPage() {
                   {formatDate(stop.arrivalDate)}{stop.departureDate ? ` → ${formatDate(stop.departureDate)}` : ''}
                 </span>
               )}
-              <span>{stop.nights} night{stop.nights !== 1 ? 's' : ''}</span>
+              {stop.type !== 'HOME' && <span>{stop.nights} night{stop.nights !== 1 ? 's' : ''}</span>}
               {driveDistance && <span>~{driveDistance} mi from previous stop</span>}
             </div>
           </div>
           <span className={`badge text-xs flex-shrink-0 ${
+            stop.type === 'HOME' ? 'bg-gray-100 text-gray-500' :
             confirmed ? 'badge-green' :
             stop.bookingStatus === 'PENDING' || stop.bookingStatus === 'WAITLISTED' ? 'badge-amber' :
             stop.type === 'OVERNIGHT_ONLY' ? 'bg-purple-100 text-purple-700' :
             'bg-gray-100 text-gray-500'
           }`}>
-            {confirmed ? 'Booked' :
+            {stop.type === 'HOME' ? 'Departure' :
+             confirmed ? 'Booked' :
              stop.bookingStatus === 'PENDING' ? 'Pending' :
              stop.type === 'OVERNIGHT_ONLY' ? 'Overnight' : 'Not booked'}
           </span>
@@ -810,19 +813,28 @@ export default function TripBookingPage() {
                   }`}
                 >
                   <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 mt-0.5 ${
+                    stop.type === 'HOME' ? 'bg-gray-400' :
                     stop.type === 'OVERNIGHT_ONLY' ? 'bg-[#7F77DD]' : 'bg-[#1D9E75]'
                   }`}>
-                    {stop.order}
+                    {stop.type === 'HOME' ? 'H' : stop.order}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className={`text-xs font-medium truncate ${isActive ? 'text-[#1D9E75]' : 'text-gray-800'}`}>
                       {stop.locationName}
                     </p>
                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${badge.cls}`}>
-                        {badge.label}
-                      </span>
-                      <span className="text-[10px] text-gray-400">{stop.nights}n</span>
+                      {stop.type === 'HOME' ? (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                          Starting point
+                        </span>
+                      ) : (
+                        <>
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${badge.cls}`}>
+                            {badge.label}
+                          </span>
+                          <span className="text-[10px] text-gray-400">{stop.nights}n</span>
+                        </>
+                      )}
                     </div>
                   </div>
                   {!stop.isCompatible && <AlertTriangle size={12} className="text-red-400 flex-shrink-0 mt-1" />}
