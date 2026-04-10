@@ -1,93 +1,234 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Calendar, CheckCircle, Clock, XCircle, Tent } from 'lucide-react'
-import { bookingsApi } from '../services/api'
+import { Calendar, CheckCircle, Clock, Tent, MapPin, DollarSign, ChevronRight } from 'lucide-react'
+import { tripsApi } from '../services/api'
+import { Trip } from '../types'
 import { format } from 'date-fns'
 
+// ─── Per-trip booking stats ───────────────────────────────────────────────────
+
+function getTripStats(trip: Trip) {
+  const bookableStops = (trip.stops || []).filter(s => s.type !== 'HOME')
+  const confirmed     = bookableStops.filter(s => s.bookingStatus === 'CONFIRMED')
+  const pending       = bookableStops.filter(s => s.bookingStatus === 'PENDING' || s.bookingStatus === 'WAITLISTED')
+  const campCost      = bookableStops.reduce((sum, s) => sum + (s.siteRate || 0) * (s.nights || 0), 0)
+  const nightsBooked  = confirmed.reduce((sum, s) => sum + (s.nights || 0), 0)
+
+  // Derive earliest arrival date from stops if trip.startDate isn't set
+  const dates = bookableStops.map(s => s.arrivalDate).filter(Boolean) as string[]
+  const earliestDate = trip.startDate || (dates.length ? dates.sort()[0] : undefined)
+
+  type BookingLevel = 'all' | 'partial' | 'none'
+  let bookingLevel: BookingLevel = 'none'
+  if (confirmed.length === bookableStops.length && bookableStops.length > 0) bookingLevel = 'all'
+  else if (confirmed.length > 0 || pending.length > 0) bookingLevel = 'partial'
+
+  return { bookableStops, confirmed, pending, campCost, nightsBooked, earliestDate, bookingLevel }
+}
+
+// ─── Trip booking card ────────────────────────────────────────────────────────
+
+function TripBookingCard({ trip }: { trip: Trip }) {
+  const { bookableStops, confirmed, pending, campCost, earliestDate, bookingLevel } = getTripStats(trip)
+
+  const statusConfig = {
+    all:     { label: 'All booked',        cls: 'bg-green-100 text-green-700',  icon: <CheckCircle size={11} /> },
+    partial: { label: 'Partially booked',  cls: 'bg-amber-100 text-amber-700',  icon: <Clock size={11} /> },
+    none:    { label: 'Not started',       cls: 'bg-gray-100 text-gray-500',    icon: null },
+  }
+  const sc = statusConfig[bookingLevel]
+
+  return (
+    <div className="card hover:border-[#1D9E75]/30 transition-all">
+      <div className="flex items-start gap-3">
+        <div className="flex-1 min-w-0">
+          {/* Trip name + booking status badge */}
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <h3 className="font-medium text-gray-900 text-sm">{trip.name}</h3>
+            <span className={`flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${sc.cls}`}>
+              {sc.icon}{sc.label}
+            </span>
+          </div>
+
+          {/* Route */}
+          <p className="text-xs text-gray-500 truncate flex items-center gap-1">
+            <MapPin size={10} className="flex-shrink-0" />
+            {trip.startLocation} → {trip.endLocation}
+          </p>
+
+          {/* Metadata row */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-gray-400">
+            {earliestDate && (
+              <span className="flex items-center gap-1">
+                <Calendar size={11} />
+                {format(new Date(earliestDate), 'MMM d, yyyy')}
+                {trip.endDate && <> → {format(new Date(trip.endDate), 'MMM d, yyyy')}</>}
+              </span>
+            )}
+            <span className="flex items-center gap-1">
+              <Tent size={11} />
+              {confirmed.length}/{bookableStops.length} stop{bookableStops.length !== 1 ? 's' : ''} booked
+            </span>
+            {campCost > 0 && (
+              <span className="flex items-center gap-1">
+                <DollarSign size={11} />
+                ${campCost.toLocaleString()} camping
+              </span>
+            )}
+            {pending.length > 0 && (
+              <span className="flex items-center gap-1 text-amber-500">
+                <Clock size={11} />
+                {pending.length} pending
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* CTA */}
+        <Link
+          to={`/trips/${trip.id}/booking`}
+          className="flex-shrink-0 flex items-center gap-1 text-xs font-semibold px-3 py-2 rounded-lg bg-[#1D9E75] text-white hover:bg-[#178a63] transition-colors whitespace-nowrap"
+        >
+          View bookings <ChevronRight size={13} />
+        </Link>
+      </div>
+
+      {/* Progress bar */}
+      {bookableStops.length > 0 && (
+        <div className="mt-3 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${bookingLevel === 'all' ? 'bg-green-500' : 'bg-amber-400'}`}
+            style={{ width: `${(confirmed.length / bookableStops.length) * 100}%` }}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+type FilterTab = 'ALL' | 'UPCOMING' | 'COMPLETED'
+
 export default function ReservationsPage() {
-  const [bookings, setBookings] = useState<any[]>([])
+  const [trips, setTrips]     = useState<Trip[]>([])
   const [loading, setLoading] = useState(true)
+  const [filter, setFilter]   = useState<FilterTab>('ALL')
 
   useEffect(() => {
-    bookingsApi.getAll().then(res => { setBookings(res.data); setLoading(false) })
+    tripsApi.getAll()
+      .then(res => { setTrips(res.data); setLoading(false) })
+      .catch(() => setLoading(false))
   }, [])
 
-  const upcoming = bookings.filter(b => b.arrivalDate && new Date(b.arrivalDate) >= new Date())
-  const past = bookings.filter(b => !b.arrivalDate || new Date(b.arrivalDate) < new Date())
+  // Only show trips that have at least one bookable (non-HOME) stop
+  const tripsWithStops = trips.filter(t => (t.stops || []).some(s => s.type !== 'HOME'))
 
-  const StatusBadge = ({ status }: { status: string }) => {
-    if (status === 'CONFIRMED') return (
-      <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 text-green-700 flex-shrink-0 whitespace-nowrap">
-        <CheckCircle size={11} /> Booked
-      </span>
-    )
-    if (status === 'PENDING' || status === 'WAITLISTED') return (
-      <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 flex-shrink-0 whitespace-nowrap">
-        <Clock size={11} /> Pending
-      </span>
-    )
-    if (status === 'CANCELLED') return (
-      <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-red-100 text-red-500 flex-shrink-0 whitespace-nowrap">
-        <XCircle size={11} /> Cancelled
-      </span>
-    )
-    return (
-      <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500 flex-shrink-0 whitespace-nowrap">
-        Not booked
-      </span>
-    )
+  const now = new Date()
+
+  function getEarliestDate(trip: Trip): Date | null {
+    const { earliestDate } = getTripStats(trip)
+    return earliestDate ? new Date(earliestDate) : null
   }
 
-  const BookingRow = ({ booking }: { booking: any }) => (
-    <div className="card flex items-center gap-4">
-      <StatusBadge status={booking.bookingStatus} />
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-sm text-gray-900 truncate">{booking.locationName}</p>
-        {booking.campgroundName && <p className="text-xs text-gray-500">{booking.campgroundName}</p>}
-        <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
-          {booking.arrivalDate && <span className="flex items-center gap-1"><Calendar size={11} />{format(new Date(booking.arrivalDate), 'MMM d, yyyy')}</span>}
-          <span className="flex items-center gap-1"><Tent size={11} />{booking.nights} nights</span>
-          {booking.siteRate && <span>${booking.siteRate}/night</span>}
-        </div>
-      </div>
-      <div className="text-right">
-        {booking.confirmationNum && <p className="text-xs text-gray-400">#{booking.confirmationNum}</p>}
-        <Link to={`/trips/${booking.tripId}`} className="text-xs text-[#1D9E75]">View trip</Link>
-      </div>
+  // Filter
+  const filtered = tripsWithStops.filter(t => {
+    if (filter === 'ALL') return true
+    if (filter === 'COMPLETED') return t.status === 'COMPLETED'
+    // UPCOMING: not completed and (no date set, or earliest date is in the future)
+    if (filter === 'UPCOMING') {
+      if (t.status === 'COMPLETED') return false
+      const d = getEarliestDate(t)
+      return !d || d >= now
+    }
+    return true
+  })
+
+  // Sort: soonest first, no-date trips at bottom
+  const sorted = [...filtered].sort((a, b) => {
+    const da = getEarliestDate(a)
+    const db = getEarliestDate(b)
+    if (da && db) return da.getTime() - db.getTime()
+    if (da) return -1
+    if (db) return 1
+    return 0
+  })
+
+  // ── Summary bar stats across ALL trips (not filtered) ────────────────────
+  const allStats = tripsWithStops.map(getTripStats)
+  const totalNightsBooked = allStats.reduce((sum, s) => sum + s.nightsBooked, 0)
+  const totalCampSpend    = allStats.reduce((sum, s) => {
+    return sum + s.confirmed.reduce((cs, stop) => cs + (stop.siteRate || 0) * (stop.nights || 0), 0)
+  }, 0)
+  const tripsWithPending  = allStats.filter(s => s.pending.length > 0).length
+
+  if (loading) return (
+    <div className="flex justify-center py-20">
+      <div className="w-6 h-6 border-2 border-[#1D9E75] border-t-transparent rounded-full animate-spin" />
     </div>
   )
 
-  if (loading) return <div className="flex justify-center py-20"><div className="w-6 h-6 border-2 border-[#1D9E75] border-t-transparent rounded-full animate-spin" /></div>
-
   return (
-    <div className="space-y-6 max-w-2xl">
-      <h1 className="text-xl font-medium text-gray-900">Reservations</h1>
+    <div className="space-y-5 max-w-2xl">
+      <h1 className="text-xl font-medium text-gray-900">Bookings</h1>
 
-      {bookings.length === 0 ? (
+      {/* Summary bar */}
+      {tripsWithStops.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { icon: Tent,        label: 'Nights booked',    value: totalNightsBooked || '—' },
+            { icon: DollarSign,  label: 'Camping spend',    value: totalCampSpend ? `$${totalCampSpend.toLocaleString()}` : '—' },
+            { icon: Clock,       label: 'Trips w/ pending', value: tripsWithPending || '—' },
+          ].map(({ icon: Icon, label, value }) => (
+            <div key={label} className="card text-center py-3">
+              <Icon size={15} className="text-[#1D9E75] mx-auto mb-1" />
+              <div className="text-base font-semibold text-gray-900">{value}</div>
+              <div className="text-[11px] text-gray-500 leading-tight">{label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Filter tabs */}
+      {tripsWithStops.length > 0 && (
+        <div className="flex gap-1">
+          {(['ALL', 'UPCOMING', 'COMPLETED'] as FilterTab[]).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                filter === f
+                  ? 'bg-[#1D9E75] text-white'
+                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+              style={{ borderWidth: '0.5px' }}
+            >
+              {f === 'ALL' ? 'All trips' : f === 'UPCOMING' ? 'Upcoming' : 'Completed'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Trip list */}
+      {tripsWithStops.length === 0 ? (
         <div className="card text-center py-16">
           <div className="text-4xl mb-3">🏕️</div>
-          <p className="font-medium text-gray-700 mb-1">No reservations yet</p>
-          <p className="text-sm text-gray-500">Book campgrounds from your trip's booking page</p>
+          <p className="font-medium text-gray-700 mb-1">No trips to book yet</p>
+          <p className="text-sm text-gray-500 mb-4">Create a trip and add campground stops to start booking</p>
+          <Link to="/trips/new" className="btn-primary inline-flex items-center gap-2 text-sm">
+            Plan a trip
+          </Link>
+        </div>
+      ) : sorted.length === 0 ? (
+        <div className="card text-center py-10">
+          <p className="text-sm text-gray-500">No {filter.toLowerCase()} trips found</p>
         </div>
       ) : (
-        <>
-          {upcoming.length > 0 && (
-            <div>
-              <h2 className="text-sm font-medium text-gray-700 mb-2">Upcoming ({upcoming.length})</h2>
-              <div className="space-y-2">
-                {upcoming.map(b => <BookingRow key={b.id} booking={b} />)}
-              </div>
-            </div>
-          )}
-          {past.length > 0 && (
-            <div>
-              <h2 className="text-sm font-medium text-gray-700 mb-2">Past ({past.length})</h2>
-              <div className="space-y-2">
-                {past.map(b => <BookingRow key={b.id} booking={b} />)}
-              </div>
-            </div>
-          )}
-        </>
+        <div className="space-y-3">
+          {sorted.map(trip => (
+            <TripBookingCard key={trip.id} trip={trip} />
+          ))}
+        </div>
       )}
     </div>
   )
