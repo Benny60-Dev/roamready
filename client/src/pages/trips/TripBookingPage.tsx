@@ -606,6 +606,10 @@ export default function TripBookingPage() {
   if (!trip) return null
 
   const sortedStops   = [...(trip.stops ?? [])].sort((a, b) => a.order - b.order)
+  const stopDisplayNumbers: Record<string, number> = {}
+  let _dn = 1
+  sortedStops.forEach(s => { if (s.type !== 'HOME') stopDisplayNumbers[s.id] = _dn++ })
+  const bookableStops = sortedStops.filter(s => s.type !== 'HOME')
   const bookedCount   = sortedStops.filter(s => s.bookingStatus === 'CONFIRMED').length
   const incompatCount = sortedStops.filter(s => !s.isCompatible).length
   const totalCampCost = sortedStops.reduce((sum, s) => s.siteRate ? sum + s.siteRate * s.nights : sum, 0)
@@ -641,7 +645,7 @@ export default function TripBookingPage() {
             stop.type === 'HOME' ? 'bg-gray-400' :
             stop.type === 'OVERNIGHT_ONLY' ? 'bg-[#7F77DD]' : 'bg-[#1D9E75]'
           }`}>
-            {stop.type === 'HOME' ? 'H' : stop.order}
+            {stop.type === 'HOME' ? 'H' : stopDisplayNumbers[stop.id]}
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="text-base font-semibold text-gray-900 leading-tight">
@@ -776,7 +780,7 @@ export default function TripBookingPage() {
               <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-semibold ${
                 activeStop === stop.id ? 'bg-white/20' : 'bg-gray-100 text-gray-600'
               }`}>
-                {stop.order}
+                {stop.type === 'HOME' ? 'H' : stopDisplayNumbers[stop.id]}
               </span>
               <span className="max-w-[90px] truncate">{stop.locationName}</span>
               {stop.bookingStatus === 'CONFIRMED' && (
@@ -816,7 +820,7 @@ export default function TripBookingPage() {
                     stop.type === 'HOME' ? 'bg-gray-400' :
                     stop.type === 'OVERNIGHT_ONLY' ? 'bg-[#7F77DD]' : 'bg-[#1D9E75]'
                   }`}>
-                    {stop.type === 'HOME' ? 'H' : stop.order}
+                    {stop.type === 'HOME' ? 'H' : stopDisplayNumbers[stop.id]}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className={`text-xs font-medium truncate ${isActive ? 'text-[#1D9E75]' : 'text-gray-800'}`}>
@@ -852,7 +856,7 @@ export default function TripBookingPage() {
             <div>
               <h1 className="text-sm font-semibold text-gray-900">{trip.name}</h1>
               <p className="text-xs text-gray-400 mt-0.5">
-                {bookedCount} of {sortedStops.length} stop{sortedStops.length !== 1 ? 's' : ''} booked
+                {bookedCount} of {bookableStops.length} stop{bookableStops.length !== 1 ? 's' : ''} booked
                 {incompatCount > 0 && <span className="text-red-400 ml-2">· {incompatCount} incompatible</span>}
               </p>
             </div>
@@ -900,7 +904,7 @@ export default function TripBookingPage() {
             <div className="flex items-center gap-4 text-xs text-gray-500">
               <span className="flex items-center gap-1">
                 <CheckCircle size={12} className="text-[#1D9E75]" />
-                <span className="font-medium text-gray-700">{bookedCount}</span>/{sortedStops.length} booked
+                <span className="font-medium text-gray-700">{bookedCount}</span>/{bookableStops.length} booked
               </span>
               {incompatCount > 0 && (
                 <span className="flex items-center gap-1 text-red-400">

@@ -652,6 +652,9 @@ export default function TripSummaryPage() {
   if (!trip) return null
 
   const sortedStops = [...(trip.stops || [])].sort((a, b) => a.order - b.order)
+  const stopDisplayNumbers: Record<string, number> = {}
+  let _dn = 1
+  sortedStops.forEach(s => { if (s.type !== 'HOME') stopDisplayNumbers[s.id] = _dn++ })
   const totalCamp = sortedStops.reduce((sum, s) => sum + (s.siteRate || 0) * s.nights, 0)
   const grandTotal = totalCamp + (trip.estimatedFuel || 0)
 
@@ -821,7 +824,9 @@ export default function TripSummaryPage() {
           {sortedStops.filter(s => s.siteRate || s.estimatedFuel).map(stop => (
             <div key={stop.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
               <div className="flex items-center gap-2">
-                <div className="w-5 h-5 bg-[#E1F5EE] rounded-full flex items-center justify-center text-[#1D9E75] text-xs">{stop.order}</div>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${stop.type === 'HOME' ? 'bg-gray-100 text-gray-500' : 'bg-[#E1F5EE] text-[#1D9E75]'}`}>
+                  {stop.type === 'HOME' ? 'H' : stopDisplayNumbers[stop.id]}
+                </div>
                 <span className="text-sm text-gray-700">{stop.locationName}</span>
               </div>
               <div className="text-right text-sm space-x-2">

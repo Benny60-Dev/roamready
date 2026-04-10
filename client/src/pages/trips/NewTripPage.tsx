@@ -113,78 +113,26 @@ const DEFAULT_BUTTONS: Record<VehicleCategory, string[]> = {
   rv: ['Southwest national parks loop', 'Pacific Coast Highway run', 'Yellowstone & Tetons', 'Surprise me with something amazing'],
 }
 
-function buildInspirationButtons(user: UserType | null): string[] {
-  const category = getVehicleCategory(user)
-  const state = getHomeState(user?.homeLocation)
-  const region = state ? STATE_REGION[state] : null
-  return region
-    ? (INSPIRATION_BUTTONS[region]?.[category] ?? DEFAULT_BUTTONS[category])
-    : DEFAULT_BUTTONS[category]
+function buildInspirationButtons(_user: UserType | null): string[] {
+  return ['Leaving from home', 'Starting from another city', 'Surprise me!']
 }
 
 function buildWelcomeMessage(user: UserType | null): string {
   const name = user?.firstName || 'there'
   const rig = user?.rigs?.[0]
   const profile = user?.travelProfile
-  const memberships = user?.memberships?.map(m => m.type) ?? []
-  const home = user?.homeLocation
 
-  // No profile at all — warm generic welcome
-  if (!rig && !home) {
-    return `Hey ${name}! Welcome to RoamReady — your personal outdoor trip planner. I'm here to build you a complete route with campgrounds, fuel stops, costs, and everything mapped out. Whether you're dreaming of red rock canyons, Pacific coastlines, or somewhere the crowds haven't discovered yet — tell me about your next adventure and I'll take it from there.`
-  }
+  const rigLabel = rig
+    ? [rig.year, rig.make, rig.model].filter(Boolean).join(' ') || 'your rig'
+    : 'your rig'
 
   const hasPets = profile?.hasPets ?? false
   const petName: string | undefined = profile?.petDetails?.name
-  const petsLine = hasPets ? (petName ? ` ${petName}'s packed too.` : ' Pets are packed too.') : ''
-  const homeStr = home ? ` Heading out of ${home} —` : ''
-
-  const hasATB = memberships.includes('ATB')
-  const hasHarvestHosts = memberships.includes('HARVEST_HOSTS')
-  const hasGoodSam = memberships.includes('GOOD_SAM')
-
-  // Toy hauler
-  if (rig && (rig.isToyHauler || rig.vehicleType === 'TOY_HAULER')) {
-    const rigLabel = rig.make && rig.model ? `${rig.make} ${rig.model}` : 'your hauler'
-    const toys = rig.toys && rig.toys.length > 0
-      ? rig.toys.slice(0, 2).join(' and ')
-      : 'the machines'
-    const terrainHint = rig.terrainTypes && rig.terrainTypes.length > 0
-      ? rig.terrainTypes[0].toLowerCase().replace('_', ' ')
-      : 'the trails'
-    const perksLine = hasATB ? ' Your America the Beautiful pass is applied automatically.' : ''
-    return `Hey ${name}!${homeStr} your ${rigLabel} is loaded and ${toys} are ready to hit ${terrainHint}. Let's get those machines dirty. I'll find staging areas sized for your rig, OHV permit requirements, fuel stops for the toys, and the best camps right at the action.${perksLine} Where are you riding next?`
-  }
-
-  // Van life
-  if (rig && (rig.isVan || rig.vehicleType === 'VAN')) {
-    const rigLabel = rig.make && rig.model ? `${rig.make} ${rig.model}` : 'your van'
-    const starlinkLine = rig.hasStarlink ? ' With Starlink you can work from just about anywhere.' : ''
-    const remoteWorkerLine = rig.isRemoteWorker && !rig.hasStarlink ? ' I can factor in coworking spots and cell signal strength along the route.' : ''
-    const hhLine = hasHarvestHosts ? ' Harvest Hosts stops are applied automatically.' : ''
-    const homePrefix = home ? ` Rolling out of ${home} —` : ''
-    return `Hey ${name}!${homePrefix} the open road is calling and your ${rigLabel} is ready to roll.${petsLine}${starlinkLine}${remoteWorkerLine} I specialize in BLM land, dispersed sites, Harvest Hosts, and hidden free camping that never shows up on Google.${hhLine} Tell me where you want to wake up and I'll plot the perfect route.`
-  }
-
-  // Car camper / overlander / pop-up
-  if (rig && (rig.isCamper || rig.vehicleType === 'CAR_CAMPING' || rig.vehicleType === 'POP_UP')) {
-    const rigLabel = rig.make && rig.model ? `${rig.make} ${rig.model}` : 'your rig'
-    const offRoadLine = rig.isOffRoad ? ' Being off-road capable opens up a ton of options most people never see.' : ''
-    const perksLine = hasATB ? ' Your America the Beautiful pass is applied automatically.' : ''
-    return `Hey ${name}!${homeStr} tent packed, ${rigLabel} fueled up${hasPets ? (petName ? `, ${petName} loaded,` : ', pets loaded,') : ','} ready to go.${offRoadLine} You've got access to camping spots bigger rigs can only dream about — walk-in sites, backcountry permits, dispersed gems.${perksLine} Tell me where you want to explore and I'll find you something spectacular.`
-  }
-
-  // Standard RV (Class A/B/C, fifth wheel, travel trailer)
-  const rigLabel = rig
-    ? [rig.year, rig.make, rig.model].filter(Boolean).join(' ') || `your ${rig.length ? rig.length + 'ft ' : ''}rig`
-    : 'your rig'
-  const lengthCheck = rig?.length ? ` campgrounds verified for your ${rig.length}ft clearance` : ''
-  const goodSamLine = hasGoodSam ? ' Good Sam discounts are applied automatically.' : ''
-  const atbLine = hasATB ? ' America the Beautiful pass factored in.' : ''
-  const perksLine = lengthCheck || goodSamLine || atbLine
-    ? ` I'll handle${lengthCheck}${goodSamLine}${atbLine}`
+  const petClause = hasPets
+    ? ` and ${petName ? petName : 'your pet'} is packed`
     : ''
-  return `Welcome back, ${name}!${homeStr} your ${rigLabel} is ready to roll.${petsLine} Tell me where you're dreaming of going — a national park loop, a coastal run, somewhere off the radar — and I'll build you a complete route with campgrounds, fuel costs, and everything mapped out.${perksLine} What's the next adventure?`
+
+  return `Hey ${name}! Your ${rigLabel} is ready to roll${petClause}. Where are you starting from and where are we headed? If you're leaving from home just say "home" and I'll use your home city automatically.`
 }
 
 function TypingIndicator() {
@@ -477,7 +425,7 @@ export default function NewTripPage() {
         {/* Itinerary preview (desktop) */}
         {itinerary && (
           <div className="hidden lg:flex w-80 flex-col">
-            <div className="card-lg flex-1 overflow-y-auto">
+            <div className="card-lg flex flex-col min-h-0 flex-1">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-medium text-gray-900 text-sm">{itinerary.name}</h3>
                 <span className="badge-green text-xs">{itinerary.totalNights}n</span>
@@ -486,7 +434,8 @@ export default function NewTripPage() {
                 <div>~{itinerary.totalMiles?.toLocaleString()} mi</div>
                 <div>~${((itinerary.estimatedFuel || 0) + (itinerary.estimatedCamp || 0)).toLocaleString()}</div>
               </div>
-              <div className="space-y-2">
+              {/* Stop list scrolls independently — button stays pinned below */}
+              <div className="flex-1 overflow-y-auto min-h-0 space-y-2">
                 {itinerary.stops?.map((stop: any, i: number) => (
                   <div key={i} className="flex gap-2">
                     <div className="w-5 h-5 bg-[#1D9E75] rounded-full flex items-center justify-center text-white text-xs flex-shrink-0">
@@ -506,7 +455,7 @@ export default function NewTripPage() {
               <button
                 onClick={buildItinerary}
                 disabled={creating}
-                className="btn-primary w-full mt-4 text-sm flex items-center justify-center gap-2"
+                className="btn-primary w-full mt-4 text-sm flex items-center justify-center gap-2 flex-shrink-0"
               >
                 {creating ? (
                   <><Loader size={15} className="animate-spin" /> Building...</>
@@ -519,19 +468,26 @@ export default function NewTripPage() {
         )}
       </div>
 
-      {/* Mobile itinerary bar */}
+      {/* Itinerary ready — sticky banner + full-width build button (all screen sizes) */}
       {itinerary && (
-        <div className="lg:hidden mt-3">
-          <div className="card flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-900">{itinerary.name}</p>
-              <p className="text-xs text-gray-500">{itinerary.totalNights}n • {itinerary.stops?.length} stops</p>
-            </div>
-            <button onClick={buildItinerary} disabled={creating} className="btn-primary text-sm flex items-center gap-1">
-              {creating ? <Loader size={14} className="animate-spin" /> : null}
-              Build itinerary
-            </button>
+        <div className="mt-3 flex flex-col gap-2">
+          <div className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#E1F5EE] border border-[#1D9E75] rounded-xl">
+            <span className="text-[#085041] text-sm font-medium">Your itinerary is ready! Click below to build your full trip.</span>
           </div>
+          {buildError && (
+            <p className="text-xs text-red-600 text-center">{buildError}</p>
+          )}
+          <button
+            onClick={buildItinerary}
+            disabled={creating}
+            className="w-full py-3.5 bg-[#1D9E75] hover:bg-[#178a64] active:bg-[#136e54] text-white font-semibold text-base rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
+          >
+            {creating ? (
+              <><Loader size={18} className="animate-spin" /> Building your trip...</>
+            ) : (
+              'Build Full Itinerary →'
+            )}
+          </button>
         </div>
       )}
     </div>

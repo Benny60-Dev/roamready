@@ -18,7 +18,7 @@ function StarRating({ value, onChange }: { value: number; onChange: (v: number) 
   )
 }
 
-function StopJournal({ stop }: { stop: Stop }) {
+function StopJournal({ stop, displayNum }: { stop: Stop; displayNum: number }) {
   const [entry, setEntry] = useState<Partial<JournalEntry>>(stop.journalEntry || {})
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -42,7 +42,9 @@ function StopJournal({ stop }: { stop: Stop }) {
   return (
     <div className="card-lg space-y-4">
       <div className="flex items-center gap-3">
-        <div className="w-7 h-7 bg-[#1D9E75] rounded-full flex items-center justify-center text-white text-xs">{stop.order}</div>
+        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs ${stop.type === 'HOME' ? 'bg-gray-400' : 'bg-[#1D9E75]'}`}>
+          {stop.type === 'HOME' ? 'H' : displayNum}
+        </div>
         <div>
           <h3 className="font-medium text-gray-900">{stop.locationName}</h3>
           {stop.campgroundName && <p className="text-xs text-gray-500">{stop.campgroundName}</p>}
@@ -120,9 +122,17 @@ export default function TripJournalPage() {
         <p className="text-sm text-gray-500">{trip.name}</p>
       </div>
       <div className="space-y-4">
-        {trip.stops?.sort((a, b) => a.order - b.order).map(stop => (
-          <StopJournal key={stop.id} stop={stop} />
-        ))}
+        {(() => {
+          const sorted = [...(trip.stops || [])].sort((a, b) => a.order - b.order)
+          const displayNums: Record<string, number> = {}
+          let n = 1
+          sorted.forEach(s => { if (s.type !== 'HOME') displayNums[s.id] = n++ })
+          return sorted
+            .filter(s => s.type !== 'HOME')
+            .map(stop => (
+              <StopJournal key={stop.id} stop={stop} displayNum={displayNums[stop.id]} />
+            ))
+        })()}
       </div>
     </div>
   )

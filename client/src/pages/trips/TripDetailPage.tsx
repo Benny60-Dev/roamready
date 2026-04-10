@@ -26,7 +26,7 @@ function haversineMiles(lat1?: number, lng1?: number, lat2?: number, lng2?: numb
 
 // ─── Stop row ─────────────────────────────────────────────────────────────────
 
-function StopRow({ stop, tripId, weather }: { stop: Stop; tripId: string; weather: StopWeather | null | undefined }) {
+function StopRow({ stop, tripId, weather, displayNum }: { stop: Stop; tripId: string; weather: StopWeather | null | undefined; displayNum: number }) {
   const alertCount = weather?.mode === 'live'
     ? (weather as LiveForecast).days.flatMap(d => d.alerts).filter(
         (a, i, arr) => arr.findIndex(x => x.type === a.type) === i
@@ -81,7 +81,7 @@ function StopRow({ stop, tripId, weather }: { stop: Stop; tripId: string; weathe
             stop.type === 'HOME' ? 'bg-gray-400' :
             stop.type === 'OVERNIGHT_ONLY' ? 'bg-[#7F77DD]' : 'bg-[#1D9E75]'
           }`}>
-            {stop.type === 'HOME' ? 'H' : stop.order}
+            {stop.type === 'HOME' ? 'H' : displayNum}
           </div>
         </div>
         <div className="flex-1 min-w-0">
@@ -191,7 +191,7 @@ function WeatherTab({ trip, weatherData, loading }: {
       )}
 
       {/* Per-stop weather */}
-      {nonHomeStops.map(stop => {
+      {nonHomeStops.map((stop, idx) => {
         const hasCoords = !!(stop.latitude && stop.longitude)
         // undefined = still loading, null = fetch returned nothing, StopWeather = data
         const w = weatherData[stop.id]
@@ -201,7 +201,7 @@ function WeatherTab({ trip, weatherData, loading }: {
           <div key={stop.id}>
             <div className="flex items-center gap-2 mb-1">
               <div className="w-5 h-5 rounded-full bg-[#1D9E75] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
-                {stop.order}
+                {idx + 1}
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-900">
@@ -320,8 +320,16 @@ export default function TripDetailPage() {
   // Full Itinerary page — so both pages always agree.
   const totalCamp   = (trip.stops || []).reduce((sum, s) => sum + (s.siteRate || 0) * s.nights, 0)
   const totalCost   = totalCamp + (trip.estimatedFuel || 0)
-  const bookedStops = trip.stops?.filter(s => s.bookingStatus === 'CONFIRMED').length || 0
-  const totalStops  = trip.stops?.length || 0
+  const nonHomeStops = (trip.stops || []).filter(s => s.type !== 'HOME')
+  const bookedStops  = nonHomeStops.filter(s => s.bookingStatus === 'CONFIRMED').length
+  const totalStops   = nonHomeStops.length
+
+  // Sequential display numbers for non-HOME stops: 1, 2, 3…
+  const stopDisplayNumbers: Record<string, number> = {}
+  let _n = 1
+  for (const s of [...(trip.stops || [])].sort((a, b) => a.order - b.order)) {
+    if (s.type !== 'HOME') stopDisplayNumbers[s.id] = _n++
+  }
 
   // Calculate live total miles from per-stop driveDistanceMiles (Routes API) or Haversine fallback.
   const sortedStops = [...(trip.stops || [])].sort((a, b) => a.order - b.order)
@@ -461,6 +469,7 @@ export default function TripDetailPage() {
                     stop={displayStop}
                     tripId={id!}
                     weather={weatherData[stop.id]}
+                    displayNum={stopDisplayNumbers[stop.id]}
                   />
                 )
               })}

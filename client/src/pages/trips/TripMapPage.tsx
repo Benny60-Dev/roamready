@@ -151,11 +151,12 @@ const BOOKING_BADGE: Record<MarkerKind, { cls: string; label: string }> = {
 }
 
 function StopPopup({
-  stop, kind, weather, onClose, onUpdateNights,
+  stop, kind, weather, displayNum, onClose, onUpdateNights,
 }: {
   stop: Stop
   kind: MarkerKind
   weather: StopWeather | null | undefined
+  displayNum?: number
   onClose: () => void
   onUpdateNights: (id: string, nights: number) => void
 }) {
@@ -194,7 +195,9 @@ function StopPopup({
     <div className="bg-white p-4 w-72">
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Stop {stop.order}</span>
+          <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+            {stop.type === 'HOME' ? 'Departure' : `Stop ${displayNum}`}
+          </span>
           <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${badge.cls}`}>{badge.label}</span>
         </div>
         <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded ml-2"><X size={14} /></button>
@@ -694,6 +697,7 @@ export default function TripMapPage() {
                   stop={selectedStop}
                   kind={classifyStop(selectedStop)}
                   weather={weatherData[selectedStop.id]}
+                  displayNum={stopDisplayNumbers[selectedStop.id]}
                   onClose={() => setSelectedStop(null)}
                   onUpdateNights={handleUpdateNights}
                 />

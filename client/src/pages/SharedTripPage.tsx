@@ -27,7 +27,10 @@ export default function SharedTripPage() {
   )
   if (!trip) return null
 
-  const sortedStops = trip.stops?.sort((a, b) => a.order - b.order) || []
+  const sortedStops = [...(trip.stops || [])].sort((a, b) => a.order - b.order)
+  const stopDisplayNumbers: Record<string, number> = {}
+  let _n = 1
+  sortedStops.forEach(s => { if (s.type !== 'HOME') stopDisplayNumbers[s.id] = _n++ })
   const totalCost = (trip.estimatedFuel || 0) + (trip.estimatedCamp || 0)
 
   return (
@@ -54,7 +57,7 @@ export default function SharedTripPage() {
           {[
             { icon: MapPin, label: 'Miles', value: trip.totalMiles?.toLocaleString() || '–' },
             { icon: Tent, label: 'Nights', value: trip.totalNights || '–' },
-            { icon: MapPin, label: 'Stops', value: sortedStops.length },
+            { icon: MapPin, label: 'Stops', value: sortedStops.filter(s => s.type !== 'HOME').length },
             { icon: DollarSign, label: 'Est. cost', value: totalCost ? `$${totalCost.toLocaleString()}` : '–' },
           ].map(({ icon: Icon, label, value }) => (
             <div key={label} className="card text-center">
@@ -69,18 +72,25 @@ export default function SharedTripPage() {
           {sortedStops.map((stop, i) => (
             <div key={stop.id} className="flex gap-3">
               <div className="flex flex-col items-center">
-                <div className="w-7 h-7 rounded-full bg-[#1D9E75] flex items-center justify-center text-white text-xs font-medium">{stop.order}</div>
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-medium ${stop.type === 'HOME' ? 'bg-gray-400' : 'bg-[#1D9E75]'}`}>
+                  {stop.type === 'HOME' ? 'H' : stopDisplayNumbers[stop.id]}
+                </div>
                 {i < sortedStops.length - 1 && <div className="w-px flex-1 bg-gray-200 mt-1 min-h-6" />}
               </div>
               <div className="flex-1 pb-3">
                 <p className="font-medium text-gray-900">{stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}</p>
-                {stop.campgroundName && <p className="text-sm text-gray-500">{stop.campgroundName}</p>}
-                <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-400">
-                  {stop.arrivalDate && <span><Calendar size={11} className="inline mr-0.5" />{format(new Date(stop.arrivalDate), 'EEE, MMM d')}</span>}
-                  <span><Tent size={11} className="inline mr-0.5" />{stop.nights} night{stop.nights !== 1 ? 's' : ''}</span>
-                  {stop.siteRate && <span><DollarSign size={11} className="inline mr-0.5" />${stop.siteRate}/night</span>}
-                  {stop.hookupType && <span className="badge-green">{stop.hookupType}</span>}
-                </div>
+                {stop.type === 'HOME'
+                  ? <p className="text-xs text-gray-400">Departure point</p>
+                  : stop.campgroundName && <p className="text-sm text-gray-500">{stop.campgroundName}</p>
+                }
+                {stop.type !== 'HOME' && (
+                  <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-400">
+                    {stop.arrivalDate && <span><Calendar size={11} className="inline mr-0.5" />{format(new Date(stop.arrivalDate), 'EEE, MMM d')}</span>}
+                    <span><Tent size={11} className="inline mr-0.5" />{stop.nights} night{stop.nights !== 1 ? 's' : ''}</span>
+                    {stop.siteRate && <span><DollarSign size={11} className="inline mr-0.5" />${stop.siteRate}/night</span>}
+                    {stop.hookupType && <span className="badge-green">{stop.hookupType}</span>}
+                  </div>
+                )}
               </div>
             </div>
           ))}
