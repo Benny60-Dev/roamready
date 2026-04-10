@@ -233,6 +233,16 @@ export default function TripDetailPage() {
       .catch(() => setLoading(false))
   }, [id])
 
+  // Sync estimatedCamp back to DB whenever the live calculation differs from the stored value.
+  // This keeps the trip record accurate without requiring a manual save.
+  useEffect(() => {
+    if (!trip?.stops?.length || !id) return
+    const liveCamp = trip.stops.reduce((sum, s) => sum + (s.siteRate || 0) * s.nights, 0)
+    if (liveCamp !== (trip.estimatedCamp ?? 0)) {
+      tripsApi.update(id, { estimatedCamp: liveCamp }).catch(() => {})
+    }
+  }, [trip?.id, trip?.stops])
+
   // Fetch weather via DB-cached endpoint once trip loads
   useEffect(() => {
     if (!trip?.stops?.length || !id) return
@@ -267,7 +277,10 @@ export default function TripDetailPage() {
   )
   if (!trip) return <div className="text-center py-20 text-gray-500">Trip not found</div>
 
-  const totalCost   = (trip.estimatedFuel || 0) + (trip.estimatedCamp || 0)
+  // Always calculate camping cost live from stops (siteRate × nights) — same logic as
+  // Full Itinerary page — so both pages always agree.
+  const totalCamp   = (trip.stops || []).reduce((sum, s) => sum + (s.siteRate || 0) * s.nights, 0)
+  const totalCost   = totalCamp + (trip.estimatedFuel || 0)
   const bookedStops = trip.stops?.filter(s => s.bookingStatus === 'CONFIRMED').length || 0
   const totalStops  = trip.stops?.length || 0
 

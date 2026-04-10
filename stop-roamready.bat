@@ -25,4 +25,16 @@ if errorlevel 1 (
 echo ============================================
 echo  RoamReady has been shut down.
 echo ============================================
-timeout /t 3 /nobreak >nul
+echo.
+echo ============================================
+echo  REMINDER: Before closing, save your work!
+echo ============================================
+echo  git add .
+echo  git commit -m "your message here"
+echo  git push
+echo.
+echo  This saves your work to both your
+echo  computer and GitHub.
+echo ============================================
+echo.
+timeout /t 5 /nobreak >nul

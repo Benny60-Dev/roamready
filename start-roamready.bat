@@ -67,3 +67,14 @@ echo   Frontend : http://localhost:3000
 echo   Database : PostgreSQL on port 5432
 echo   Cache    : Redis on port 6379
 echo ============================================
+echo.
+echo ============================================
+echo  REMINDER: Before closing, save your work!
+echo ============================================
+echo  git add .
+echo  git commit -m "your message here"
+echo  git push
+echo.
+echo  This saves your work to both your
+echo  computer and GitHub.
+echo ============================================
