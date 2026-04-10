@@ -525,7 +525,7 @@ export default function TripSummaryPage() {
         {/* Legend */}
         <div className="flex items-center gap-4 flex-wrap mb-4 px-1">
           {[
-            { color: 'bg-blue-500',   icon: Car,  label: 'Drive segment' },
+            { color: 'bg-blue-500',   icon: Car,  label: 'Drive day' },
             { color: 'bg-green-500',  icon: Tent, label: 'Campground stay' },
             { color: 'bg-amber-500',  icon: Star, label: 'Activity day' },
             { color: 'bg-purple-500', icon: Moon, label: 'Overnight stop' },
