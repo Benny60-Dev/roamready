@@ -322,3 +322,20 @@ Format your response in clear sections with headers.`
 
   return response.content[0].type === 'text' ? response.content[0].text : ''
 }
+
+export async function generateRouteHighlightsAI(
+  origin: string,
+  destination: string,
+  highwayRoute: string | null | undefined,
+): Promise<string> {
+  const viaText = highwayRoute ? ` traveling via ${highwayRoute}` : ''
+  const prompt = `List 5 to 8 interesting points of interest, scenic stops, or notable landmarks along the drive from ${origin} to ${destination}${viaText}. Include things like national monuments, scenic overlooks, quirky roadside attractions, historic sites, state border crossings, or anything worth slowing down for. For each one give the name and a one sentence description of why it is worth noting. Format as a simple list with one item per line. Start each line with the place name followed by a dash and the description. Do not include numbered prefixes or bullet characters.`
+
+  const response = await client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 800,
+    messages: [{ role: 'user', content: prompt }],
+  })
+
+  return response.content[0].type === 'text' ? response.content[0].text.trim() : ''
+}

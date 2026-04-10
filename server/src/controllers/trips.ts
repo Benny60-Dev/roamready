@@ -4,7 +4,7 @@ import axios from 'axios'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
-import { generatePackingListAI, generateTripItineraryAI, generateStopActivitiesAI } from '../services/ai'
+import { generatePackingListAI, generateTripItineraryAI, generateStopActivitiesAI, generateRouteHighlightsAI } from '../services/ai'
 
 // ─── Google Maps Directions helpers ──────────────────────────────────────────
 
@@ -277,17 +277,9 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
       isPetFriendly, isMilitaryOnly, isCompatible,
       incompatibilityReasons, alternates, weatherForecast,
       notes, checkInTime, checkOutTime, siteNumber, highwayRoute, driveDuration,
+      routeHighlights,
     } = req.body
 
-    console.log('[updateStop] stopId=%s highwayRoute=%s driveDuration=%s (body keys: %s)',
-      req.params.stopId,
-      highwayRoute ?? '(not provided)',
-      driveDuration ?? '(not provided)',
-      Object.keys(req.body).join(', ')
-    )
-
-    // Cast to any: highwayRoute and driveDuration were added after initial Prisma client
-    // generation and may not appear in the auto-generated types until next `prisma generate`.
     const data: any = {
       type, locationName, locationState, latitude, longitude,
       arrivalDate, departureDate, nights, campgroundName, campgroundId,
@@ -301,16 +293,14 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
       where: { id: req.params.stopId },
       data,
     })
-    console.log('[updateStop] saved stopId=%s highwayRoute=%s driveDuration=%s',
-      req.params.stopId,
-      (updated as any).highwayRoute ?? '(null)',
-      (updated as any).driveDuration ?? '(null)'
-    )
+
+    // routeHighlights requires raw SQL until prisma generate is run after db push
+    if (routeHighlights !== undefined) {
+      await prisma.$executeRaw`UPDATE "Stop" SET "routeHighlights" = ${routeHighlights} WHERE id = ${req.params.stopId}`
+    }
+
     res.json(updated)
-  } catch (err: any) {
-    console.error('[updateStop] FAILED stopId=%s:', req.params.stopId, err?.message)
-    next(err)
-  }
+  } catch (err) { next(err) }
 }
 
 export async function deleteStop(req: AuthRequest, res: Response, next: NextFunction) {
@@ -458,5 +448,41 @@ export async function generatePackingList(req: AuthRequest, res: Response, next:
     await prisma.trip.update({ where: { id: trip.id }, data: { packingList } })
 
     res.json(packingList)
+  } catch (err) { next(err) }
+}
+
+export async function generateRouteHighlights(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const trip = await prisma.trip.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+      include: { stops: { orderBy: { order: 'asc' } } },
+    })
+    if (!trip) throw new AppError('Trip not found', 404)
+
+    const stop = trip.stops.find((s: any) => s.id === req.params.stopId)
+    if (!stop) throw new AppError('Stop not found', 404)
+
+    // Return cached highlights if already generated
+    if ((stop as any).routeHighlights) {
+      return res.json({ routeHighlights: (stop as any).routeHighlights })
+    }
+
+    // Find the preceding stop to determine the origin
+    const stopIdx = trip.stops.findIndex((s: any) => s.id === req.params.stopId)
+    const prevStop: any = stopIdx > 0 ? trip.stops[stopIdx - 1] : null
+
+    const origin = prevStop
+      ? `${prevStop.locationName}${prevStop.locationState ? ', ' + prevStop.locationState : ''}`
+      : trip.startLocation
+    const destination = `${stop.locationName}${(stop as any).locationState ? ', ' + (stop as any).locationState : ''}`
+
+    const highlights = await generateRouteHighlightsAI(origin, destination, (stop as any).highwayRoute)
+
+    // Persist so it only generates once.
+    // Use raw SQL because the Prisma client may not yet know about routeHighlights
+    // if prisma generate hasn't been run since the column was added via db push.
+    await prisma.$executeRaw`UPDATE "Stop" SET "routeHighlights" = ${highlights} WHERE id = ${stop.id}`
+
+    res.json({ routeHighlights: highlights })
   } catch (err) { next(err) }
 }

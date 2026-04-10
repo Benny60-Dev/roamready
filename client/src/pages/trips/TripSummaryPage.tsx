@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import {
   Download, Share2, Sparkles, Car, Tent, Star, Moon,
   MapPin, XCircle, Plus, Check, RefreshCw, ArrowRight, Clock,
@@ -99,6 +99,7 @@ interface TimelineEntry {
   checkOutTime: string   // HH:MM — STAY default 11:00
   highwayRoute?: string | null
   driveDuration?: string | null
+  routeHighlights?: string | null
   routeDescription?: string | null
   terrainSummary?: string | null
   pointsOfInterest?: string[] | null
@@ -126,7 +127,6 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
       const miles = calcDistanceMiles(
         prevStop.latitude, prevStop.longitude, stop.latitude, stop.longitude
       )
-      console.log(`[buildTimeline] DRIVE → ${stop.locationName}: highwayRoute=${stop.highwayRoute ?? 'null'} driveDuration=${stop.driveDuration ?? 'null'}`)
       entries.push({
         dayNum,
         date: currentDate ? new Date(currentDate) : undefined,
@@ -139,6 +139,7 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
         checkOutTime: '11:00',
         highwayRoute: stop.highwayRoute ?? null,
         driveDuration: stop.driveDuration ?? null,
+        routeHighlights: stop.routeHighlights ?? null,
         activities: [],
       })
       dayNum++
@@ -716,6 +717,10 @@ function TimelineRow({
 // ─── DriveContent ─────────────────────────────────────────────────────────────
 
 function DriveContent({ entry, onDepart }: { entry: TimelineEntry; onDepart: (t: string) => void }) {
+  const [expanded, setExpanded] = useState(false)
+  const [highlights, setHighlights] = useState<string | null>(entry.routeHighlights ?? null)
+  const [loadingHighlights, setLoadingHighlights] = useState(false)
+
   const fromName = entry.prevStop
     ? `${entry.prevStop.locationName}${entry.prevStop.locationState ? ', ' + entry.prevStop.locationState : ''}`
     : '—'
@@ -725,6 +730,27 @@ function DriveContent({ entry, onDepart }: { entry: TimelineEntry; onDepart: (t:
 
   const driveHours = parseDurationToHours(entry.driveDuration) ?? entry.driveHours
   const arrival = driveHours ? calcArrival(entry.departureTime, driveHours) : null
+
+  const handleToggle = async () => {
+    const opening = !expanded
+    setExpanded(opening)
+    if (opening && !highlights && entry.stop) {
+      setLoadingHighlights(true)
+      try {
+        const res = await tripsApi.generateRouteHighlights(entry.stop.tripId, entry.stop.id)
+        setHighlights(res.data.routeHighlights ?? null)
+      } catch {
+        setHighlights('Could not load points of interest.')
+      } finally {
+        setLoadingHighlights(false)
+      }
+    }
+  }
+
+  // Parse response into individual bullet lines, strip leading punctuation
+  const bullets = highlights
+    ? highlights.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+    : []
 
   return (
     <div>
@@ -764,6 +790,35 @@ function DriveContent({ entry, onDepart }: { entry: TimelineEntry; onDepart: (t:
           </>
         )}
       </div>
+
+      {/* Tell me more */}
+      <button
+        onClick={handleToggle}
+        className="mt-2 text-xs text-[#1D9E75] hover:text-[#178a65] transition-colors font-medium"
+      >
+        {expanded ? 'Show less ↑' : 'Tell me more about this route ↓'}
+      </button>
+
+      {expanded && (
+        <div className="mt-2 pl-3 border-l-2 border-green-200">
+          {loadingHighlights ? (
+            <div className="space-y-1.5 py-1">
+              {[60, 80, 70].map((w, i) => (
+                <div key={i} className={`h-3 bg-blue-100 rounded animate-pulse`} style={{ width: `${w}%` }} />
+              ))}
+            </div>
+          ) : (
+            <ul className="space-y-1.5 py-0.5">
+              {bullets.map((line, i) => (
+                <li key={i} className="flex gap-2 text-xs text-gray-600 leading-snug">
+                  <span className="text-[#1D9E75] flex-shrink-0 mt-0.5">•</span>
+                  <span>{line.replace(/^[-•*\d.]+\s*/, '')}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -772,14 +827,96 @@ function DriveContent({ entry, onDepart }: { entry: TimelineEntry; onDepart: (t:
 
 function StayContent({ entry }: { entry: TimelineEntry }) {
   const stop = entry.stop!
+  const navigate = useNavigate()
+
+  const [notesOpen, setNotesOpen] = useState(false)
+  const [notesText, setNotesText] = useState(stop.notes ?? '')
+  const [savedNotes, setSavedNotes] = useState(stop.notes ?? '')
+  const [savingNotes, setSavingNotes] = useState(false)
+  const [saveConfirm, setSaveConfirm] = useState(false)
+
+  const handleSaveNotes = async () => {
+    setSavingNotes(true)
+    try {
+      await tripsApi.updateStop(stop.tripId, stop.id, { notes: notesText })
+      setSavedNotes(notesText)
+      setNotesOpen(false)
+      setSaveConfirm(true)
+      setTimeout(() => setSaveConfirm(false), 2500)
+    } finally {
+      setSavingNotes(false)
+    }
+  }
+
   return (
-    <div className="space-y-0.5">
-      <div className="text-sm font-semibold text-gray-800">
-        {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
+    <div className="space-y-2.5">
+      {/* Location + campground name */}
+      <div className="space-y-0.5">
+        <div className="text-sm font-semibold text-gray-800">
+          {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
+        </div>
+        {stop.campgroundName && (
+          <div className="text-sm text-gray-500">{stop.campgroundName}</div>
+        )}
       </div>
-      {stop.campgroundName && (
-        <div className="text-sm text-gray-500">{stop.campgroundName}</div>
+
+      {/* Reserve Now / Confirmed */}
+      {stop.confirmationNum ? (
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-100 px-2.5 py-1 rounded-full w-fit">
+          <Check size={11} />
+          Confirmed · #{stop.confirmationNum}
+        </div>
+      ) : (
+        <button
+          onClick={() => navigate(`/trips/${stop.tripId}/booking?stopId=${stop.id}`)}
+          className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#1D9E75] hover:bg-[#178a65] px-3 py-1.5 rounded-lg transition-colors"
+        >
+          Reserve Now →
+        </button>
       )}
+
+      {/* Notes */}
+      <div>
+        {notesOpen ? (
+          <div className="space-y-1.5">
+            <textarea
+              value={notesText}
+              onChange={e => setNotesText(e.target.value)}
+              placeholder="Gate codes, special instructions, reminders…"
+              rows={3}
+              autoFocus
+              className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none focus:border-[#1D9E75] resize-none bg-white"
+            />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSaveNotes}
+                disabled={savingNotes}
+                className="text-xs font-semibold text-white bg-[#1D9E75] hover:bg-[#178a65] px-3 py-1 rounded-lg disabled:opacity-60 transition-colors"
+              >
+                {savingNotes ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                onClick={() => { setNotesText(savedNotes); setNotesOpen(false) }}
+                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => { setNotesText(savedNotes); setNotesOpen(true) }}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              {savedNotes ? 'Edit notes' : '+ Add notes (gate codes, instructions…)'}
+            </button>
+            {saveConfirm && (
+              <span className="text-xs text-green-600 font-medium">Saved ✓</span>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -800,13 +937,15 @@ function ActivityContent({ entry, generatingActivities, onToggleActivity, onDele
     <div className="space-y-2">
       {/* Date + staying-at */}
       <div className="flex items-baseline gap-2 flex-wrap">
-        <span className="text-base font-semibold text-gray-800">{fmtDate(entry.date)}</span>
+        {entry.date && (
+          <span className="text-base font-semibold text-gray-800">{fmtDate(entry.date)}</span>
+        )}
         {stop.campgroundName && (
-          <span className="text-sm text-gray-500">· Staying at {stop.campgroundName}</span>
+          <span className="text-sm text-gray-500">Staying at {stop.campgroundName}</span>
         )}
         {!stop.campgroundName && (
           <span className="text-sm text-gray-500">
-            · {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
+            {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
           </span>
         )}
       </div>

@@ -5,6 +5,7 @@ import {
   getStops, createStop, updateStop, deleteStop,
   getSharedTrip, exportPdf, generatePackingList,
   generateItinerary, saveItinerary, generateRoutes, generateActivities,
+  generateRouteHighlights,
 } from '../controllers/trips'
 
 export const tripsRouter = Router()
@@ -30,3 +31,4 @@ tripsRouter.post('/:id/itinerary/generate', generateItinerary as any)
 tripsRouter.put('/:id/itinerary', saveItinerary as any)
 tripsRouter.post('/:id/routes', generateRoutes as any)
 tripsRouter.post('/:id/activities/generate', generateActivities as any)
+tripsRouter.post('/:id/stops/:stopId/highlights', generateRouteHighlights as any)

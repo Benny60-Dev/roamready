@@ -78,6 +78,7 @@ export const tripsApi = {
   saveItinerary: (id: string, itinerary: any[]) => api.put(`/trips/${id}/itinerary`, itinerary),
   generateRoutes: (id: string) => api.post(`/trips/${id}/routes`),
   generateActivities: (id: string) => api.post(`/trips/${id}/activities/generate`),
+  generateRouteHighlights: (id: string, stopId: string) => api.post(`/trips/${id}/stops/${stopId}/highlights`),
 }
 
 // AI
