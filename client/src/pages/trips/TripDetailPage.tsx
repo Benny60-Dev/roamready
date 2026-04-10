@@ -11,6 +11,19 @@ import { Trip, Stop, StopWeather, LiveForecast } from '../../types'
 import { format } from 'date-fns'
 import { StopWeatherCard, ALERT_STYLES, ALERT_ICONS } from '../../components/weather/StopWeatherCard'
 
+// ─── Haversine distance ───────────────────────────────────────────────────────
+
+function haversineMiles(lat1?: number, lng1?: number, lat2?: number, lng2?: number): number {
+  if (!lat1 || !lng1 || !lat2 || !lng2) return 0
+  const R = 3958.8
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return Math.round(2 * R * Math.asin(Math.sqrt(a)))
+}
+
 // ─── Stop row ─────────────────────────────────────────────────────────────────
 
 function StopRow({ stop, tripId, weather }: { stop: Stop; tripId: string; weather: StopWeather | null | undefined }) {
@@ -243,6 +256,24 @@ export default function TripDetailPage() {
     }
   }, [trip?.id, trip?.stops])
 
+  // Sync totalMiles from per-stop driveDistanceMiles (set by TripMapPage via Routes API).
+  // Falls back to Haversine when Routes API data is not yet available.
+  useEffect(() => {
+    if (!trip?.stops?.length || !id) return
+    const sorted = [...trip.stops].sort((a, b) => a.order - b.order)
+    const liveMiles = sorted.reduce((sum, stop, i) => {
+      if (i === 0) return sum
+      const prev = sorted[i - 1]
+      // Prefer Routes API actual distance; fall back to straight-line Haversine
+      const segMiles = stop.driveDistanceMiles
+        ?? haversineMiles(prev.latitude, prev.longitude, stop.latitude, stop.longitude)
+      return sum + segMiles
+    }, 0)
+    if (liveMiles > 0 && liveMiles !== (trip.totalMiles ?? 0)) {
+      tripsApi.update(id, { totalMiles: liveMiles }).catch(() => {})
+    }
+  }, [trip?.id, trip?.stops])
+
   // Fetch weather via DB-cached endpoint once trip loads
   useEffect(() => {
     if (!trip?.stops?.length || !id) return
@@ -284,6 +315,16 @@ export default function TripDetailPage() {
   const bookedStops = trip.stops?.filter(s => s.bookingStatus === 'CONFIRMED').length || 0
   const totalStops  = trip.stops?.length || 0
 
+  // Calculate live total miles from per-stop driveDistanceMiles (Routes API) or Haversine fallback.
+  const sortedStops = [...(trip.stops || [])].sort((a, b) => a.order - b.order)
+  const driveSegments = sortedStops.slice(1).map((stop, i) => {
+    const prev = sortedStops[i]
+    const miles = stop.driveDistanceMiles
+      ?? haversineMiles(prev.latitude, prev.longitude, stop.latitude, stop.longitude)
+    return { stop, miles }
+  })
+  const liveTotalMiles = driveSegments.reduce((sum, s) => sum + s.miles, 0)
+
   // Alert count across all stops — for Weather tab badge
   const totalAlerts = Object.values(weatherData).reduce<number>((sum, w) => {
     if (!w || w.mode !== 'live') return sum
@@ -319,7 +360,7 @@ export default function TripDetailPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Miles',     value: trip.totalMiles?.toLocaleString() || '–', icon: Map },
+          { label: 'Miles',     value: liveTotalMiles > 0 ? liveTotalMiles.toLocaleString() : (trip.totalMiles?.toLocaleString() || '–'), icon: Map },
           { label: 'Nights',    value: String(trip.totalNights || '–'),           icon: Tent },
           { label: 'Est. cost', value: totalCost ? `$${totalCost.toLocaleString()}` : '–', icon: DollarSign },
           { label: 'Booked',    value: `${bookedStops}/${totalStops}`,            icon: CheckCircle },
@@ -331,6 +372,28 @@ export default function TripDetailPage() {
           </div>
         ))}
       </div>
+
+      {/* Drive segment miles breakdown */}
+      {driveSegments.length > 0 && (
+        <div className="card">
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Miles by segment</div>
+          <div className="space-y-1">
+            {driveSegments.map(({ stop, miles }) => (
+              <div key={stop.id} className="flex justify-between text-sm">
+                <span className="text-gray-600 truncate mr-2">{stop.locationName}</span>
+                <span className={`font-medium flex-shrink-0 ${stop.driveDistanceMiles ? 'text-gray-900' : 'text-gray-400'}`}>
+                  {miles > 0 ? `${miles.toLocaleString()} mi` : '–'}
+                  {!stop.driveDistanceMiles && miles > 0 && <span className="text-[10px] ml-1 text-gray-400">est.</span>}
+                </span>
+              </div>
+            ))}
+            <div className="flex justify-between text-sm font-semibold border-t border-gray-100 pt-1 mt-1">
+              <span>Total</span>
+              <span>{liveTotalMiles > 0 ? `${liveTotalMiles.toLocaleString()} mi` : '–'}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Action links */}
       <div className="flex flex-wrap gap-2">

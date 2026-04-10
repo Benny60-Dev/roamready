@@ -151,6 +151,7 @@ export interface Stop {
   weatherForecast?: WeatherDay[]
   highwayRoute?: string | null
   driveDuration?: string | null
+  driveDistanceMiles?: number | null
   routeHighlights?: string | null
   journalEntry?: JournalEntry
 }

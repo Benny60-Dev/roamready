@@ -278,7 +278,7 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
       isPetFriendly, isMilitaryOnly, isCompatible,
       incompatibilityReasons, alternates, weatherForecast,
       notes, checkInTime, checkOutTime, siteNumber, highwayRoute, driveDuration,
-      routeHighlights,
+      routeHighlights, driveDistanceMiles,
     } = req.body
 
     const data: any = {
@@ -288,6 +288,7 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
       isPetFriendly, isMilitaryOnly, isCompatible,
       incompatibilityReasons, alternates, weatherForecast,
       notes, checkInTime, checkOutTime, siteNumber, highwayRoute, driveDuration,
+      driveDistanceMiles,
     }
 
     const updated = await prisma.stop.update({

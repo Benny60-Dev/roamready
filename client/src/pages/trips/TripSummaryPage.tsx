@@ -126,9 +126,9 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
 
     // ── Drive segment (every stop except the first) ──────────────────────────
     if (prevStop) {
-      const miles = calcDistanceMiles(
-        prevStop.latitude, prevStop.longitude, stop.latitude, stop.longitude
-      )
+      // Prefer Routes API actual distance; fall back to Haversine straight-line
+      const miles = stop.driveDistanceMiles
+        ?? calcDistanceMiles(prevStop.latitude, prevStop.longitude, stop.latitude, stop.longitude)
       entries.push({
         dayNum,
         date: currentDate ? new Date(currentDate) : undefined,
@@ -520,6 +520,14 @@ export default function TripSummaryPage() {
   const totalCamp = sortedStops.reduce((sum, s) => sum + (s.siteRate || 0) * s.nights, 0)
   const grandTotal = totalCamp + (trip.estimatedFuel || 0)
 
+  // Live total miles: prefer Routes API driveDistanceMiles per stop, fall back to Haversine.
+  const liveTotalMiles = sortedStops.slice(1).reduce((sum, stop, i) => {
+    const prev = sortedStops[i]
+    const segMiles = stop.driveDistanceMiles
+      ?? calcDistanceMiles(prev.latitude, prev.longitude, stop.latitude, stop.longitude)
+    return sum + segMiles
+  }, 0)
+
   return (
     <div className="space-y-6 max-w-3xl">
       <Breadcrumb items={[
@@ -553,7 +561,7 @@ export default function TripSummaryPage() {
       <div className="card-lg">
         <h2 className="font-medium text-gray-900 mb-4">Trip at a Glance</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <StatCell value={trip.totalMiles?.toLocaleString() || '–'} label="Total miles" />
+          <StatCell value={liveTotalMiles > 0 ? liveTotalMiles.toLocaleString() : (trip.totalMiles?.toLocaleString() || '–')} label="Total miles" />
           <StatCell value={String(trip.totalNights || sortedStops.reduce((s, st) => s + st.nights, 0))} label="Nights" />
           <StatCell value={String(sortedStops.length)} label="Stops" />
           <StatCell value={`$${grandTotal.toLocaleString()}`} label="Est. total" />

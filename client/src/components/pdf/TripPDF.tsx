@@ -170,7 +170,8 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
     const prevStop = i > 0 ? stops[i - 1] : undefined
 
     if (prevStop) {
-      const miles = calcMiles(prevStop.latitude, prevStop.longitude, stop.latitude, stop.longitude)
+      const miles = stop.driveDistanceMiles
+        ?? calcMiles(prevStop.latitude, prevStop.longitude, stop.latitude, stop.longitude)
       entries.push({
         dayNum,
         date: currentDate ? new Date(currentDate) : undefined,
@@ -460,8 +461,15 @@ export function TripPDF({ trip, mapImageBase64 }: Props) {
   const entries = trip.itinerary ? mergeAI(rawEntries, trip.itinerary) : rawEntries
 
   const totalNights = trip.totalNights ?? sortedStops.reduce((s, st) => s + st.nights, 0)
-  const totalCamp   = trip.estimatedCamp ?? sortedStops.reduce((s, st) => s + (st.siteRate || 0) * st.nights, 0)
+  const totalCamp   = sortedStops.reduce((s, st) => s + (st.siteRate || 0) * st.nights, 0)
   const grandTotal  = totalCamp + (trip.estimatedFuel || 0)
+
+  // Live total miles: prefer Routes API driveDistanceMiles per stop, fall back to Haversine.
+  const liveTotalMiles = sortedStops.slice(1).reduce((sum, stop, i) => {
+    const prev = sortedStops[i]
+    const seg = stop.driveDistanceMiles ?? calcMiles(prev.latitude, prev.longitude, stop.latitude, stop.longitude)
+    return sum + seg
+  }, 0)
 
   const dateRange = [trip.startDate, trip.endDate]
     .filter(Boolean)
@@ -499,7 +507,7 @@ export function TripPDF({ trip, mapImageBase64 }: Props) {
           <Text style={s.statsTitle}>Trip at a Glance</Text>
           <View style={s.statsGrid}>
             <View style={s.statCell}>
-              <Text style={s.statVal}>{trip.totalMiles?.toLocaleString() || '—'}</Text>
+              <Text style={s.statVal}>{liveTotalMiles > 0 ? liveTotalMiles.toLocaleString() : (trip.totalMiles?.toLocaleString() || '—')}</Text>
               <Text style={s.statLabel}>Total Miles</Text>
             </View>
             <View style={s.statDivider} />

@@ -197,6 +197,7 @@ model Stop {
   weatherForecast        Json?
   highwayRoute           String?
   driveDuration          String?
+  driveDistanceMiles     Float?
   routeHighlights        String?
   createdAt              DateTime      @default(now())
   updatedAt              DateTime      @updatedAt

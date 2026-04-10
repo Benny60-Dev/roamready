@@ -383,7 +383,7 @@ export default function TripMapPage() {
       headers: {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': apiKey,
-        'X-Goog-FieldMask': 'routes.polyline.encodedPolyline,routes.legs.duration,routes.legs.steps.navigationInstruction',
+        'X-Goog-FieldMask': 'routes.polyline.encodedPolyline,routes.legs.duration,routes.legs.distanceMeters,routes.legs.steps.navigationInstruction',
       },
       body: JSON.stringify({
         origin:      { location: { latLng: { latitude: coordStops[0].latitude!,                     longitude: coordStops[0].longitude! } } },
@@ -409,28 +409,34 @@ export default function TripMapPage() {
           setRoutePath(window.google.maps.geometry.encoding.decodePath(encoded))
         }
 
-        // Extract real highway names per leg and persist to each destination stop
+        // Extract real highway names, durations, and distances per leg; persist to each destination stop
         const legs: any[] = route.legs ?? []
         console.log('[TripMapPage] legs count:', legs.length, '| expected:', coordStops.length - 1)
+        let totalDistanceMeters = 0
         legs.forEach((leg, i) => {
           const destStop = coordStops[i + 1]
           if (!destStop || !id) return
           const label = `leg[${i}] → ${destStop.locationName}`
           const highways    = parseHighwaysFromRouteSteps(leg.steps ?? [], label)
           const driveDuration = formatDuration(leg.duration ?? '')
-          console.log('[TripMapPage]', label, '| highways:', highways || '(none)', '| duration:', driveDuration || '(none)')
+          const distMeters: number = leg.distanceMeters ?? 0
+          const driveDistanceMiles = distMeters > 0 ? Math.round(distMeters / 1609.34) : undefined
+          totalDistanceMeters += distMeters
+          console.log('[TripMapPage]', label, '| highways:', highways || '(none)', '| duration:', driveDuration || '(none)', '| miles:', driveDistanceMiles ?? '(none)')
 
           // tripsApi.updateStop → api.put('/trips/:id/stops/:stopId') → authenticated axios (Bearer token)
           const stopUpdate: any = {}
-          if (highways)     stopUpdate.highwayRoute  = highways
-          if (driveDuration) stopUpdate.driveDuration = driveDuration
+          if (highways)          stopUpdate.highwayRoute      = highways
+          if (driveDuration)     stopUpdate.driveDuration     = driveDuration
+          if (driveDistanceMiles) stopUpdate.driveDistanceMiles = driveDistanceMiles
 
           if (Object.keys(stopUpdate).length > 0) {
             tripsApi.updateStop(id, destStop.id, stopUpdate)
               .then(res => {
                 console.log('[TripMapPage] ✓ updateStop saved for', destStop.locationName,
                   '| highwayRoute:', res.data?.highwayRoute,
-                  '| driveDuration:', res.data?.driveDuration)
+                  '| driveDuration:', res.data?.driveDuration,
+                  '| driveDistanceMiles:', res.data?.driveDistanceMiles)
               })
               .catch(err => {
                 const status = err?.response?.status
@@ -443,10 +449,27 @@ export default function TripMapPage() {
           setTrip(prev => prev ? {
             ...prev,
             stops: prev.stops?.map(s => s.id === destStop.id
-              ? { ...s, ...(highways && { highwayRoute: highways }), ...(driveDuration && { driveDuration }) }
+              ? {
+                  ...s,
+                  ...(highways && { highwayRoute: highways }),
+                  ...(driveDuration && { driveDuration }),
+                  ...(driveDistanceMiles && { driveDistanceMiles }),
+                }
               : s),
           } : prev)
         })
+
+        // Sum all leg distances → update trip.totalMiles in DB
+        if (totalDistanceMeters > 0 && id) {
+          const totalMiles = Math.round(totalDistanceMeters / 1609.34)
+          console.log('[TripMapPage] Calculated total miles from Routes API:', totalMiles)
+          tripsApi.update(id, { totalMiles })
+            .then(() => {
+              console.log('[TripMapPage] ✓ trip.totalMiles updated to', totalMiles)
+              setTrip(prev => prev ? { ...prev, totalMiles } : prev)
+            })
+            .catch(err => console.error('[TripMapPage] ✗ Failed to update trip.totalMiles:', err))
+        }
       })
       .catch(err => console.warn('[TripMapPage] Routes API fetch error:', err))
   }, [isLoaded, geocoding, trip?.stops])
