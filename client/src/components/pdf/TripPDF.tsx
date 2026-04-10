@@ -1,5 +1,5 @@
 import {
-  Document, Page, View, Text, StyleSheet,
+  Document, Page, View, Text, StyleSheet, Image,
 } from '@react-pdf/renderer'
 import { Trip, Stop, ItineraryDay, ItineraryActivity } from '../../types/index'
 import { format, addDays } from 'date-fns'
@@ -136,6 +136,9 @@ const s = StyleSheet.create({
   // Highway badge
   hwyBadge: { backgroundColor: GRAY_9, borderRadius: 3, paddingHorizontal: 5, paddingVertical: 2, marginRight: 4 },
   hwyText: { fontSize: 7, color: WHITE, fontFamily: 'Helvetica-Bold' },
+
+  // Map image
+  mapImage: { width: '100%', height: 180, borderRadius: 6, marginBottom: 16, objectFit: 'cover' },
 })
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -356,51 +359,88 @@ function StopEntry({ entry }: { entry: TimelineEntry }) {
         <Text style={s.locationName}>{stop.locationName}</Text>
         {stop.campgroundName ? <Text style={s.campName}>{stop.campgroundName}</Text> : null}
 
-        {/* Confirmation badge */}
-        {stop.confirmationNum && stop.bookingStatus === 'CONFIRMED' ? (
-          <View style={s.confirmBox}>
-            <Text style={s.confirmLabel}>CONFIRMED</Text>
-            <Text style={s.confirmVal}>#{stop.confirmationNum}</Text>
-            {stop.siteNumber ? <Text style={s.confirmVal}>· Site {stop.siteNumber}</Text> : null}
-          </View>
-        ) : null}
-
-        {/* Info grid */}
-        <View style={s.infoGrid}>
-          <InfoCell label="Nights" value={stop.nights ? String(stop.nights) : null} />
-          <InfoCell label="Check-in" value={fmtTime(stop.checkInTime || entry.checkInTime)} />
-          <InfoCell label="Check-out" value={fmtTime(stop.checkOutTime || entry.checkOutTime)} />
-          <InfoCell label="Site rate" value={stop.siteRate ? `$${stop.siteRate}/night` : null} />
-          <InfoCell label="Hookups" value={stop.hookupType || null} />
-          <InfoCell label="Pet friendly" value={stop.isPetFriendly === true ? 'Yes' : stop.isPetFriendly === false ? 'No' : null} />
-        </View>
-
-        {/* Notes */}
-        {stop.notes ? (
-          <View style={s.notesBox}>
-            <Text style={s.notesText}>{stop.notes}</Text>
-          </View>
-        ) : null}
-
-        {/* Activities */}
-        {entry.activities?.length ? (
+        {entry.type === 'OVERNIGHT' ? (
+          /* ── Overnight stop: no check-in/out times ── */
           <>
-            <Text style={s.actTitle}>Activities</Text>
-            {entry.activities.map((act, i) => (
-              <View key={i} style={s.actItem}>
-                <View style={s.actDot} />
-                <Text style={s.actText}>{act.name}</Text>
+            <View style={s.infoGrid}>
+              <InfoCell label="Site rate" value={stop.siteRate ? `$${stop.siteRate}/night` : null} />
+              <InfoCell label="Hookups" value={stop.hookupType || null} />
+              <InfoCell label="Pet friendly" value={stop.isPetFriendly === true ? 'Yes' : stop.isPetFriendly === false ? 'No' : null} />
+            </View>
+            <View style={s.notesBox}>
+              <Text style={s.notesText}>Overnight stop — early departure planned</Text>
+            </View>
+            {stop.notes ? (
+              <View style={[s.notesBox, { marginTop: 4 }]}>
+                <Text style={s.notesText}>{stop.notes}</Text>
               </View>
-            ))}
+            ) : null}
           </>
-        ) : null}
+        ) : entry.type === 'ACTIVITY' ? (
+          /* ── Explore day: no nights/check-in/out ── */
+          <>
+            {entry.activities?.length ? (
+              <>
+                <Text style={s.actTitle}>Activities</Text>
+                {entry.activities.map((act, i) => (
+                  <View key={i} style={s.actItem}>
+                    <View style={s.actDot} />
+                    <Text style={s.actText}>{act.name}</Text>
+                  </View>
+                ))}
+              </>
+            ) : null}
+            {entry.transitNote ? (
+              <View style={[s.notesBox, { marginTop: 4 }]}>
+                <Text style={s.notesText}>{entry.transitNote}</Text>
+              </View>
+            ) : null}
+          </>
+        ) : (
+          /* ── Normal stay (CHECK-IN) ── */
+          <>
+            {stop.confirmationNum && stop.bookingStatus === 'CONFIRMED' ? (
+              <View style={s.confirmBox}>
+                <Text style={s.confirmLabel}>CONFIRMED</Text>
+                <Text style={s.confirmVal}>#{stop.confirmationNum}</Text>
+                {stop.siteNumber ? <Text style={s.confirmVal}>· Site {stop.siteNumber}</Text> : null}
+              </View>
+            ) : null}
 
-        {/* Transit note */}
-        {entry.transitNote ? (
-          <View style={[s.notesBox, { marginTop: 4 }]}>
-            <Text style={s.notesText}>{entry.transitNote}</Text>
-          </View>
-        ) : null}
+            <View style={s.infoGrid}>
+              <InfoCell label="Nights" value={stop.nights ? String(stop.nights) : null} />
+              <InfoCell label="Check-in" value={fmtTime(stop.checkInTime || entry.checkInTime)} />
+              <InfoCell label="Check-out" value={fmtTime(stop.checkOutTime || entry.checkOutTime)} />
+              <InfoCell label="Site rate" value={stop.siteRate ? `$${stop.siteRate}/night` : null} />
+              <InfoCell label="Hookups" value={stop.hookupType || null} />
+              <InfoCell label="Pet friendly" value={stop.isPetFriendly === true ? 'Yes' : stop.isPetFriendly === false ? 'No' : null} />
+            </View>
+
+            {stop.notes ? (
+              <View style={s.notesBox}>
+                <Text style={s.notesText}>{stop.notes}</Text>
+              </View>
+            ) : null}
+
+            {entry.activities?.length ? (
+              <>
+                <Text style={s.actTitle}>Activities</Text>
+                {entry.activities.map((act, i) => (
+                  <View key={i} style={s.actItem}>
+                    <View style={s.actDot} />
+                    <Text style={s.actText}>{act.name}</Text>
+                  </View>
+                ))}
+              </>
+            ) : null}
+
+            {entry.transitNote ? (
+              <View style={[s.notesBox, { marginTop: 4 }]}>
+                <Text style={s.notesText}>{entry.transitNote}</Text>
+              </View>
+            ) : null}
+          </>
+        )}
       </View>
     </View>
   )
@@ -410,9 +450,10 @@ function StopEntry({ entry }: { entry: TimelineEntry }) {
 
 interface Props {
   trip: Trip
+  mapImageBase64?: string | null
 }
 
-export function TripPDF({ trip }: Props) {
+export function TripPDF({ trip, mapImageBase64 }: Props) {
   const sortedStops = [...(trip.stops || [])].sort((a, b) => a.order - b.order)
 
   const rawEntries = buildTimeline(sortedStops, trip.startDate ?? undefined)
@@ -488,6 +529,11 @@ export function TripPDF({ trip }: Props) {
             </View>
           </View>
         </View>
+
+        {/* ── Route Map ── */}
+        {mapImageBase64 ? (
+          <Image src={mapImageBase64} style={s.mapImage} />
+        ) : null}
 
         {/* ── Itinerary ── */}
         <Text style={s.sectionTitle}>Day-by-Day Itinerary</Text>

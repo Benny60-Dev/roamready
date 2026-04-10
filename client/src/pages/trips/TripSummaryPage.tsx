@@ -356,6 +356,7 @@ export default function TripSummaryPage() {
   )
 
   const handleDownloadPDF = async () => {
+    console.log('Starting PDF download')
     if (!trip) return
     setDownloadingPdf(true)
     try {
@@ -377,7 +378,28 @@ export default function TripSummaryPage() {
           transitNote: e.transitNote,
         })),
       }
-      const blob = await pdf(<TripPDF trip={tripWithEntries} />).toBlob()
+
+      // Fetch static map image from server and convert to blob URL
+      // (react-pdf v4 uses Buffer to decode data: URLs in the browser — passing a blob URL avoids that)
+      console.log('Fetching map image...')
+      let mapBlobUrl: string | null = null
+      try {
+        const mapRes = await tripsApi.getMapImage(trip.id)
+        const dataUrl: string | null = mapRes.data?.base64 ?? null
+        console.log('Map image fetched:', dataUrl ? `${dataUrl.length} chars` : 'null')
+        if (dataUrl) {
+          const fetchRes = await fetch(dataUrl)
+          const imgBlob = await fetchRes.blob()
+          mapBlobUrl = URL.createObjectURL(imgBlob)
+          console.log('Map blob URL created:', mapBlobUrl)
+        }
+      } catch (mapErr) {
+        console.error('[PDF] map image fetch failed:', mapErr)
+        // Map image is optional — proceed without it
+      }
+
+      const blob = await pdf(<TripPDF trip={tripWithEntries} mapImageBase64={mapBlobUrl} />).toBlob()
+      if (mapBlobUrl) URL.revokeObjectURL(mapBlobUrl)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -386,6 +408,9 @@ export default function TripSummaryPage() {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('[PDF] generation failed:', err)
+      alert('PDF generation failed. Please try again.')
     } finally {
       setDownloadingPdf(false)
     }

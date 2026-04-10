@@ -79,6 +79,7 @@ export const tripsApi = {
   generateRoutes: (id: string) => api.post(`/trips/${id}/routes`),
   generateActivities: (id: string) => api.post(`/trips/${id}/activities/generate`),
   generateRouteHighlights: (id: string, stopId: string) => api.post(`/trips/${id}/stops/${stopId}/highlights`),
+  getMapImage: (id: string) => api.get(`/trips/${id}/map-image`),
 }
 
 // AI

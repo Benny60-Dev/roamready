@@ -342,6 +342,48 @@ export async function exportPdf(req: AuthRequest, res: Response, next: NextFunct
   } catch (err) { next(err) }
 }
 
+export async function getTripMapImage(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const trip = await prisma.trip.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+      include: { stops: { orderBy: { order: 'asc' } } },
+    })
+    if (!trip) throw new AppError('Trip not found', 404)
+
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY
+    if (!apiKey) throw new AppError('Google Maps API key not configured', 500)
+
+    const stops = trip.stops as any[]
+    if (!stops.length) return res.json({ base64: null })
+
+    const params = new URLSearchParams()
+    params.set('size', '800x400')
+    params.set('maptype', 'roadmap')
+    params.set('key', apiKey)
+
+    // Build markers and path
+    const pathPoints: string[] = []
+    let stopNum = 1
+
+    for (const stop of stops) {
+      if (!stop.latitude || !stop.longitude) continue
+      const coord = `${stop.latitude},${stop.longitude}`
+      pathPoints.push(coord)
+      const label = stop.type === 'HOME' ? 'H' : String(stopNum++)
+      params.append('markers', `color:green|label:${label}|${coord}`)
+    }
+
+    if (pathPoints.length > 1) {
+      params.append('path', `color:0x1D9E75ff|weight:3|${pathPoints.join('|')}`)
+    }
+
+    const url = `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`
+    const imgResponse = await axios.get(url, { responseType: 'arraybuffer' })
+    const base64 = `data:image/png;base64,${Buffer.from(imgResponse.data).toString('base64')}`
+    res.json({ base64 })
+  } catch (err) { next(err) }
+}
+
 export async function generateItinerary(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const trip = await prisma.trip.findFirst({
