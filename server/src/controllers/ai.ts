@@ -38,11 +38,12 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
 
     const response = await chatWithAI(messages, userProfile)
 
-    // Save conversation to trip if tripId provided
+    // Save conversation to trip if tripId provided (strip any system-role entries before persisting)
     if (tripId) {
+      const persistableMessages = messages.filter((m: any) => m.role !== 'system')
       await prisma.trip.update({
         where: { id: tripId },
-        data: { aiConversation: messages.concat([{ role: 'assistant', content: response }]) },
+        data: { aiConversation: persistableMessages.concat([{ role: 'assistant', content: response }]) },
       })
     }
 

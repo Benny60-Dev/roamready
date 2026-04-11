@@ -23,7 +23,7 @@ if (!resolvedKey) {
 
 const client = new Anthropic({ apiKey: resolvedKey })
 
-export async function chatWithAI(messages: Array<{ role: 'user' | 'assistant'; content: string }>, userProfile: any) {
+export async function chatWithAI(messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>, userProfile: any) {
   const systemPrompt = `You are RoamReady's AI trip planner. You ONLY help users plan outdoor trips — RV routes, van life journeys, car camping adventures, campground recommendations, OHV destinations, weather along routes, fuel costs, packing lists, and travel logistics.
 
 If a user asks about ANYTHING unrelated to outdoor travel and trip planning — politics, relationships, medical advice, legal advice, other products, general knowledge questions, or any other off-topic subject — respond with exactly this: "I'm RoamReady's trip planning assistant and I can only help with outdoor travel planning. Is there a trip I can help you plan today?" Do not engage with off-topic questions under any circumstances. Do not be rude but be firm and redirect immediately back to trip planning. Stay focused on helping users plan amazing outdoor adventures.
@@ -89,11 +89,18 @@ Itinerary JSON format:
   ]
 }`
 
+  // Filter out any role:'system' messages before sending to Anthropic.
+  // The Messages API only accepts 'user' and 'assistant' roles in the messages array;
+  // system context must be passed as the top-level system parameter.
+  const systemMessages = messages.filter(m => m.role === 'system').map(m => typeof m.content === 'string' ? m.content : '').join('\n')
+  const cleanMessages = messages.filter(m => m.role !== 'system') as Array<{ role: 'user' | 'assistant'; content: string }>
+  const combinedSystem = systemPrompt + (systemMessages ? '\n\n' + systemMessages : '')
+
   const response = await client.messages.create({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 4096,
-    system: systemPrompt,
-    messages,
+    system: combinedSystem,
+    messages: cleanMessages,
   })
 
   return response.content[0].type === 'text' ? response.content[0].text : ''
