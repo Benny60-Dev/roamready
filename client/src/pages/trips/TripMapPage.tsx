@@ -5,6 +5,7 @@ import {
   Layers, X, Plus, Minus, DollarSign, Calendar, AlertTriangle,
   Wind, Droplets, Snowflake, Thermometer, ExternalLink,
   Pencil, Check, BookOpen, Package, Share2, Download, CheckCircle, Clock, XCircle, CloudRain, ChevronRight, Wand2,
+  Maximize2, Minimize2,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { tripsApi } from '../../services/api'
@@ -387,6 +388,9 @@ export default function TripMapPage() {
   const [renaming, setRenaming]             = useState(false)
   const [tripNameInput, setTripNameInput]   = useState('')
   const [modifyPanelOpen, setModifyPanelOpen] = useState(false)
+  const [mapExpanded, setMapExpanded]       = useState(false)
+
+  const mapRowRef = useRef<HTMLDivElement>(null)
 
   // Imperative marker refs — we manage these ourselves via AdvancedMarkerElement
   const markersRef          = useRef<google.maps.marker.AdvancedMarkerElement[]>([])
@@ -400,6 +404,57 @@ export default function TripMapPage() {
   const onMapLoad = useCallback((map: google.maps.Map) => {
     setMapInstance(map)
   }, [])
+
+  // ── Map expand / collapse ─────────────────────────────────────────────────────
+  const expandMap = useCallback(() => {
+    const row = mapRowRef.current
+    if (!row) return
+    const availH = row.parentElement?.clientHeight ?? 0
+    row.style.height = `${availH}px`
+    setMapExpanded(true)
+    setSidebarOpen(false)
+  }, [])
+
+  const collapseMap = useCallback(() => {
+    const row = mapRowRef.current
+    if (!row) return
+    row.style.height = '350px'
+    setMapExpanded(false)
+    setSidebarOpen(true)
+  }, [])
+
+  // Escape key collapses an expanded map
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && mapExpanded) collapseMap() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [mapExpanded, collapseMap])
+
+  // Notify Google Maps of container resize after the CSS transition ends
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (mapInstance) window.google.maps.event.trigger(mapInstance, 'resize')
+    }, 360) // slightly after the 350ms transition
+    return () => clearTimeout(t)
+  }, [mapExpanded, mapInstance])
+
+  // Mobile: expand to full screen on first mount (no animation)
+  useEffect(() => {
+    if (window.innerWidth < 768) {
+      const row = mapRowRef.current
+      if (!row) return
+      const availH = row.parentElement?.clientHeight ?? 0
+      if (availH > 350) {
+        row.style.transition = 'none'
+        row.style.height = `${availH}px`
+        requestAnimationFrame(() => {
+          if (row) row.style.transition = 'height 0.35s cubic-bezier(0.4, 0, 0.2, 1)'
+        })
+        setMapExpanded(true)
+        setSidebarOpen(false)
+      }
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load trip ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -716,7 +771,7 @@ export default function TripMapPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
-    <div className="-mx-4 -my-6 flex flex-col" style={{ height: 'calc(100vh - 3.5rem)' }}>
+    <div className="-mx-4 -my-6 flex flex-col overflow-hidden" style={{ height: 'calc(100vh - 3.5rem)' }}>
 
       {/* Breadcrumb strip */}
       <div className="flex-shrink-0 bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-1.5">
@@ -760,14 +815,28 @@ export default function TripMapPage() {
       </div>
 
       {/* ── Map + sidebar row ─────────────────────────────────────────────────── */}
-      <div className="flex flex-1 min-h-0 relative">
+      {/* Wrapper provides the reference height that expandMap() reads */}
+      <div className="flex-1 min-h-0 overflow-hidden">
+      <div
+        ref={mapRowRef}
+        className="flex relative overflow-hidden"
+        style={{
+          height: '350px',
+          flexShrink: 0,
+          transition: 'height 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
+      >
 
         {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
-        {sidebarOpen && (
-          <div
-            className="absolute md:relative inset-y-0 left-0 w-72 bg-white border-r border-gray-200 flex flex-col overflow-hidden z-20 shadow-lg md:shadow-none"
-            style={{ borderRightWidth: '0.5px' }}
-          >
+        <div
+          className="absolute md:relative inset-y-0 left-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden z-20 shadow-lg md:shadow-none"
+          style={{
+            borderRightWidth: '0.5px',
+            width: (sidebarOpen && !mapExpanded) ? '18rem' : '0',
+            transition: 'width 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+            flexShrink: 0,
+          }}
+        >
             {/* Header: trip name + rename + close */}
             <div className="p-4 border-b border-gray-100 flex-shrink-0" style={{ borderBottomWidth: '0.5px' }}>
               <div className="flex items-start gap-2 mb-3">
@@ -980,19 +1049,28 @@ export default function TripMapPage() {
               )}
             </div>
           </div>
-        )}
 
         {/* ── Map area ──────────────────────────────────────────────────────────── */}
         <div className="flex-1 relative min-w-0">
-          {!sidebarOpen && (
+          {/* Sidebar toggle — shows when sidebar is hidden */}
+          {(!sidebarOpen || mapExpanded) && (
             <button
-              onClick={() => setSidebarOpen(true)}
-              className="absolute top-3 left-3 z-10 bg-white rounded-lg p-2 border border-gray-200 hover:bg-gray-50 shadow-sm"
+              onClick={() => { setSidebarOpen(true); if (mapExpanded) collapseMap() }}
+              className="absolute top-3 left-3 z-10 bg-white rounded-lg p-2 border border-gray-200 hover:bg-gray-50 shadow-sm transition-colors"
               title="Open sidebar"
             >
               <Layers size={16} />
             </button>
           )}
+
+          {/* Expand / collapse map button */}
+          <button
+            onClick={mapExpanded ? collapseMap : expandMap}
+            className="absolute top-3 right-3 z-10 bg-white rounded-lg p-2 border border-gray-200 hover:bg-gray-50 shadow-sm transition-colors"
+            title={mapExpanded ? 'Collapse map' : 'Expand map'}
+          >
+            {mapExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          </button>
 
           {isLoaded ? (
             <GoogleMap
@@ -1057,7 +1135,8 @@ export default function TripMapPage() {
             </div>
           )}
         </div>
-      </div>{/* end flex flex-1 min-h-0 relative */}
+      </div>{/* end map row */}
+      </div>{/* end flex-1 wrapper */}
 
       {/* Modify Trip AI panel */}
       {trip && (

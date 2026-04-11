@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import { useUIStore } from './store/uiStore'
@@ -23,9 +24,7 @@ import OnboardingPage from './pages/onboarding/OnboardingPage'
 import DashboardPage from './pages/DashboardPage'
 import TripsPage from './pages/trips/TripsPage'
 import NewTripPage from './pages/trips/NewTripPage'
-import TripMapPage from './pages/trips/TripMapPage'
 import TripBookingPage from './pages/trips/TripBookingPage'
-import TripSummaryPage from './pages/trips/TripSummaryPage'
 import TripJournalPage from './pages/trips/TripJournalPage'
 import PackingListPage from './pages/PackingListPage'
 import ReservationsPage from './pages/ReservationsPage'
@@ -59,6 +58,11 @@ import AdminSubscribersPage from './pages/admin/AdminSubscribersPage'
 import FeedbackModal from './components/feedback/FeedbackModal'
 import PaywallModal from './components/feedback/PaywallModal'
 
+// Heavy pages — lazy-loaded so their modules don't block the initial app bundle.
+// A runtime error or bad HMR state in these pages cannot crash the login/dashboard.
+const TripMapPage     = lazy(() => import('./pages/trips/TripMapPage'))
+const TripSummaryPage = lazy(() => import('./pages/trips/TripSummaryPage'))
+
 function TripDetailRedirect() {
   const { id } = useParams<{ id: string }>()
   return <Navigate to={`/trips/${id}/map`} replace />
@@ -81,6 +85,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <Suspense fallback={null}>
       <Routes>
         {/* Public */}
         <Route path="/" element={<LandingPage />} />
@@ -128,6 +133,7 @@ export default function App() {
           <Route path="/admin/subscribers" element={<OwnerRoute><AdminSubscribersPage /></OwnerRoute>} />
         </Route>
       </Routes>
+      </Suspense>
 
       {feedbackModalOpen && <FeedbackModal onClose={closeFeedbackModal} />}
       {paywallModal.open && <PaywallModal feature={paywallModal.feature} onClose={closePaywall} />}
