@@ -114,7 +114,7 @@ export default function TripJournalPage() {
     <div className="space-y-4 max-w-2xl">
       <Breadcrumb items={[
         { label: 'My Trips', href: '/trips' },
-        { label: trip.name, href: `/trips/${id}` },
+        { label: trip.name, href: `/trips/${id}/map` },
         { label: 'Journal' },
       ]} />
       <div>

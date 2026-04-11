@@ -15,7 +15,7 @@ function TripCard({ trip }: { trip: Trip }) {
   }[trip.status]
 
   return (
-    <Link to={`/trips/${trip.id}`} className="card hover:border-[#1D9E75]/30 transition-all block">
+    <Link to={`/trips/${trip.id}/map`} className="card hover:border-[#1D9E75]/30 transition-all block">
       <div className="flex items-start justify-between mb-3">
         <div>
           <h3 className="font-medium text-gray-900 text-sm">{trip.name}</h3>
@@ -105,7 +105,7 @@ export default function DashboardPage() {
                 <h3 className="font-medium text-[#085041]">{activeTrip.name}</h3>
                 <p className="text-sm text-[#1D9E75] mt-0.5">{activeTrip.startLocation} → {activeTrip.endLocation}</p>
               </div>
-              <Link to={`/trips/${activeTrip.id}`} className="btn-primary text-sm flex items-center gap-1">
+              <Link to={`/trips/${activeTrip.id}/map`} className="btn-primary text-sm flex items-center gap-1">
                 View <ChevronRight size={14} />
               </Link>
             </div>

@@ -51,7 +51,7 @@ export default function PackingListPage() {
     <div className="space-y-4 max-w-2xl">
       <Breadcrumb items={[
         { label: 'My Trips', href: '/trips' },
-        { label: tripName || 'Trip', href: `/trips/${tripId}` },
+        { label: tripName || 'Trip', href: `/trips/${tripId}/map` },
         { label: 'Packing List' },
       ]} />
       <div className="flex items-center justify-between">

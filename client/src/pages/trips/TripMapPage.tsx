@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { GoogleMap, useJsApiLoader, InfoWindow, Circle, Polyline } from '@react-google-maps/api'
-import { Layers, MapPin, X, Plus, Minus, Tent, DollarSign, Calendar, AlertTriangle, Wind, Droplets, Snowflake, Thermometer, ExternalLink } from 'lucide-react'
+import {
+  Layers, X, Plus, Minus, DollarSign, Calendar, AlertTriangle,
+  Wind, Droplets, Snowflake, Thermometer, ExternalLink,
+  Pencil, Check, BookOpen, Package, Share2, Download, CheckCircle, Clock, XCircle, CloudRain, ChevronRight,
+} from 'lucide-react'
+import { format } from 'date-fns'
 import { tripsApi } from '../../services/api'
 import { Trip, Stop, StopWeather, LiveForecast } from '../../types'
+import { StopWeatherCard, ALERT_STYLES } from '../../components/weather/StopWeatherCard'
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' }
 const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 'geometry']
@@ -23,6 +29,18 @@ const KIND_COLOR: Record<MarkerKind, string> = {
 }
 const KIND_Z: Record<MarkerKind, number> = {
   home: 100, booked: 50, pending: 40, unbooked: 30,
+}
+
+// ─── Haversine distance ──────────────────────────────────────────────────────────
+function haversineMiles(lat1?: number, lng1?: number, lat2?: number, lng2?: number): number {
+  if (!lat1 || !lng1 || !lat2 || !lng2) return 0
+  const R = 3958.8
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return Math.round(2 * R * Math.asin(Math.sqrt(a)))
 }
 
 // ─── Marker helpers ──────────────────────────────────────────────────────────────
@@ -89,12 +107,6 @@ function classifyStop(stop: Stop): MarkerKind {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
-function isoDateStr(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-function addDays(iso: string, n: number) {
-  const d = new Date(iso); d.setDate(d.getDate() + n); return isoDateStr(d)
-}
 function stopHasAlerts(w: StopWeather | null | undefined): boolean {
   return !!w && w.mode === 'live' && (w as LiveForecast).days.some(d => d.alerts.length > 0)
 }
@@ -270,20 +282,112 @@ function StopPopup({
   )
 }
 
+// ─── Sidebar weather tab ─────────────────────────────────────────────────────────
+function SidebarWeatherTab({ trip, weatherData, loading }: {
+  trip: Trip
+  weatherData: Record<string, StopWeather | null | undefined>
+  loading: boolean
+}) {
+  const nonHomeStops = (trip.stops || [])
+    .filter(s => s.type !== 'HOME')
+    .sort((a, b) => a.order - b.order)
+
+  const allAlerts = nonHomeStops.flatMap(stop => {
+    const w = weatherData[stop.id]
+    if (!w || w.mode !== 'live') return []
+    return (w as LiveForecast).days.flatMap(d => d.alerts).map(a => ({ ...a, stopName: stop.locationName }))
+  })
+  const uniqueAlertTypes = allAlerts.filter(
+    (a, i, arr) => arr.findIndex(x => x.type === a.type) === i
+  )
+
+  if (nonHomeStops.length === 0) {
+    return <p className="text-xs text-gray-500 text-center py-6">No stops added yet.</p>
+  }
+
+  const hasAnyData = Object.keys(weatherData).length > 0
+
+  return (
+    <div className="space-y-3">
+      {loading && !hasAnyData && (
+        <div className="flex items-center gap-2 text-xs text-gray-500 py-3">
+          <div className="w-3 h-3 border-2 border-[#1D9E75] border-t-transparent rounded-full animate-spin" />
+          Loading weather…
+        </div>
+      )}
+
+      {/* Route weather alerts summary */}
+      {uniqueAlertTypes.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+          <p className="text-[10px] font-semibold text-amber-800 mb-1.5 flex items-center gap-1">
+            <AlertTriangle size={11} /> Weather alerts along this route
+          </p>
+          <div className="space-y-1">
+            {uniqueAlertTypes.map((alert, i) => (
+              <div key={i} className={`flex items-center gap-1.5 border rounded px-2 py-1 text-[10px] ${ALERT_STYLES[alert.level]}`}>
+                {ALERT_ICONS[alert.type]}
+                <span>{alert.message}</span>
+                <span className="ml-auto opacity-70 flex-shrink-0">at {alert.stopName}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Per-stop weather */}
+      {nonHomeStops.map((stop, idx) => {
+        const hasCoords = !!(stop.latitude && stop.longitude)
+        const w = weatherData[stop.id]
+        const fetchDone = hasAnyData && !loading
+        return (
+          <div key={stop.id}>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-4 h-4 rounded-full bg-[#1D9E75] flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0">
+                {idx + 1}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-gray-900 truncate">
+                  {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
+                </p>
+              </div>
+              {stop.arrivalDate && (
+                <span className="text-[10px] text-gray-400 flex-shrink-0">
+                  {format(new Date(stop.arrivalDate), 'MMM d')}
+                </span>
+              )}
+            </div>
+            {!hasCoords ? (
+              <p className="text-[10px] text-gray-400 italic ml-6">No coordinates — geocode via map.</p>
+            ) : fetchDone && w === undefined ? (
+              <p className="text-[10px] text-gray-400 italic ml-6">Weather unavailable.</p>
+            ) : (
+              <StopWeatherCard stop={stop} weather={w} />
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────────
 export default function TripMapPage() {
   const { id } = useParams<{ id: string }>()
-  const [trip, setTrip]                   = useState<Trip | null>(null)
-  const [selectedStop, setSelectedStop]   = useState<Stop | null>(null)
-  const [sidebarOpen, setSidebarOpen]     = useState(true)
-  const [layers, setLayers]               = useState({ route: true, stops: true, overnight: true, incompatible: true })
-  const [weatherData, setWeatherData]     = useState<Record<string, StopWeather | null | undefined>>({})
-  const [geocoding, setGeocoding]         = useState(false)
-  const [routePath, setRoutePath]         = useState<google.maps.LatLng[] | null>(null)
-  const [mapInstance, setMapInstance]     = useState<google.maps.Map | null>(null)
+  const [trip, setTrip]                     = useState<Trip | null>(null)
+  const [selectedStop, setSelectedStop]     = useState<Stop | null>(null)
+  const [sidebarOpen, setSidebarOpen]       = useState(true)
+  const [sidebarTab, setSidebarTab]         = useState<'stops' | 'weather'>('stops')
+  const [layers, setLayers]                 = useState({ route: true, stops: true, overnight: true, incompatible: true })
+  const [weatherData, setWeatherData]       = useState<Record<string, StopWeather | null | undefined>>({})
+  const [weatherLoading, setWeatherLoading] = useState(false)
+  const [geocoding, setGeocoding]           = useState(false)
+  const [routePath, setRoutePath]           = useState<google.maps.LatLng[] | null>(null)
+  const [mapInstance, setMapInstance]       = useState<google.maps.Map | null>(null)
+  const [renaming, setRenaming]             = useState(false)
+  const [tripNameInput, setTripNameInput]   = useState('')
 
   // Imperative marker refs — we manage these ourselves via AdvancedMarkerElement
-  const markersRef         = useRef<google.maps.marker.AdvancedMarkerElement[]>([])
+  const markersRef          = useRef<google.maps.marker.AdvancedMarkerElement[]>([])
   const directionsCoordsKey = useRef<string | null>(null)
 
   const { isLoaded } = useJsApiLoader({
@@ -311,15 +415,29 @@ export default function TripMapPage() {
         })),
       })
       setTrip(data)
+      setTripNameInput(data.name)
     })
   }, [id])
 
   // ── Weather — use DB-cached endpoint ─────────────────────────────────────────
   useEffect(() => {
     if (!trip?.stops?.length || !id) return
+    const initial: Record<string, StopWeather | null | undefined> = {}
+    for (const s of trip.stops) {
+      if (s.latitude && s.longitude) initial[s.id] = undefined
+    }
+    setWeatherData(initial)
+    setWeatherLoading(true)
     tripsApi.getWeather(id)
-      .then(res => setWeatherData(res.data))
-      .catch(() => {})
+      .then(res => setWeatherData(prev => ({ ...prev, ...res.data })))
+      .catch(() => {
+        setWeatherData(prev => {
+          const next = { ...prev }
+          for (const k of Object.keys(next)) if (next[k] === undefined) next[k] = null
+          return next
+        })
+      })
+      .finally(() => setWeatherLoading(false))
   }, [trip?.id])
 
   // ── Geocode stops missing lat/lng, save to DB ─────────────────────────────────
@@ -389,8 +507,8 @@ export default function TripMapPage() {
         'X-Goog-FieldMask': 'routes.polyline.encodedPolyline,routes.legs.duration,routes.legs.distanceMeters,routes.legs.steps.navigationInstruction',
       },
       body: JSON.stringify({
-        origin:      { location: { latLng: { latitude: coordStops[0].latitude!,                     longitude: coordStops[0].longitude! } } },
-        destination: { location: { latLng: { latitude: coordStops[coordStops.length-1].latitude!,  longitude: coordStops[coordStops.length-1].longitude! } } },
+        origin:      { location: { latLng: { latitude: coordStops[0].latitude!,                    longitude: coordStops[0].longitude! } } },
+        destination: { location: { latLng: { latitude: coordStops[coordStops.length-1].latitude!, longitude: coordStops[coordStops.length-1].longitude! } } },
         intermediates: intermediates.length ? intermediates : undefined,
         travelMode: 'DRIVE',
         routingPreference: 'TRAFFIC_UNAWARE',
@@ -420,7 +538,7 @@ export default function TripMapPage() {
           const destStop = coordStops[i + 1]
           if (!destStop || !id) return
           const label = `leg[${i}] → ${destStop.locationName}`
-          const highways    = parseHighwaysFromRouteSteps(leg.steps ?? [], label)
+          const highways      = parseHighwaysFromRouteSteps(leg.steps ?? [], label)
           const driveDuration = formatDuration(leg.duration ?? '')
           const distMeters: number = leg.distanceMeters ?? 0
           const driveDistanceMiles = distMeters > 0 ? Math.round(distMeters / 1609.34) : undefined
@@ -429,8 +547,8 @@ export default function TripMapPage() {
 
           // tripsApi.updateStop → api.put('/trips/:id/stops/:stopId') → authenticated axios (Bearer token)
           const stopUpdate: any = {}
-          if (highways)          stopUpdate.highwayRoute      = highways
-          if (driveDuration)     stopUpdate.driveDuration     = driveDuration
+          if (highways)           stopUpdate.highwayRoute      = highways
+          if (driveDuration)      stopUpdate.driveDuration     = driveDuration
           if (driveDistanceMiles) stopUpdate.driveDistanceMiles = driveDistanceMiles
 
           if (Object.keys(stopUpdate).length > 0) {
@@ -477,14 +595,13 @@ export default function TripMapPage() {
       .catch(err => console.warn('[TripMapPage] Routes API fetch error:', err))
   }, [isLoaded, geocoding, trip?.stops])
 
-  // ── Derived values (declared before the effects that use them) ──────────────────
+  // ── Derived values ─────────────────────────────────────────────────────────────
   const stopsWithCoords = useMemo(
     () => trip?.stops?.filter(s => s.latitude && s.longitude).sort((a, b) => a.order - b.order) ?? [],
     [trip?.stops]
   )
 
   // Sequential display numbers 1, 2, 3… assigned to non-HOME stops in order.
-  // HOME stops are excluded — they show as an unnumbered dot.
   const stopDisplayNumbers = useMemo(() => {
     const sorted = trip?.stops?.slice().sort((a, b) => a.order - b.order) ?? []
     const map: Record<string, number> = {}
@@ -493,10 +610,44 @@ export default function TripMapPage() {
     return map
   }, [trip?.stops])
 
+  // Drive segments with per-segment miles (Routes API actual or Haversine fallback)
+  const { driveSegments, liveTotalMiles } = useMemo(() => {
+    const sorted = [...(trip?.stops || [])].sort((a, b) => a.order - b.order)
+    const segments = sorted.slice(1).map((stop, i) => {
+      const prev = sorted[i]
+      const miles = stop.driveDistanceMiles
+        ?? haversineMiles(prev.latitude, prev.longitude, stop.latitude, stop.longitude)
+      return { stop, miles }
+    })
+    const total = segments.reduce((sum, s) => sum + s.miles, 0)
+    return { driveSegments: segments, liveTotalMiles: total }
+  }, [trip?.stops])
+
+  // Cost and booking stats
+  const { totalCost, nonHomeStops, bookedStops } = useMemo(() => {
+    const stops = trip?.stops || []
+    const camp = stops.reduce((sum, s) => sum + ((s as any).siteRate || 0) * s.nights, 0)
+    const nonHome = stops.filter(s => s.type !== 'HOME')
+    const booked = nonHome.filter(s => s.bookingStatus === 'CONFIRMED').length
+    return {
+      totalCost: camp + (trip?.estimatedFuel || 0),
+      nonHomeStops: nonHome,
+      bookedStops: booked,
+    }
+  }, [trip?.stops, trip?.estimatedFuel])
+
+  // Total unique weather alerts across all stops — for the Weather tab badge
+  const totalAlerts = useMemo(() => {
+    return Object.values(weatherData).reduce<number>((sum, w) => {
+      if (!w || w.mode !== 'live') return sum
+      const unique = (w as LiveForecast).days.flatMap(d => d.alerts).filter(
+        (a, i, arr) => arr.findIndex(x => x.type === a.type) === i
+      )
+      return sum + unique.length
+    }, 0)
+  }, [weatherData])
+
   // ── Imperative markers ─────────────────────────────────────────────────────────
-  // google.maps.Marker with SymbolPath.CIRCLE — rendered natively, always visible.
-  // Home  → larger green dot, no label.
-  // Stops → 36px numbered circles; number is sequential position after home (1, 2, 3…).
   useEffect(() => {
     markersRef.current.forEach(m => { m.map = null })
     markersRef.current = []
@@ -547,6 +698,14 @@ export default function TripMapPage() {
     setSelectedStop(prev => prev?.id === stopId ? { ...prev, nights } : prev)
   }
 
+  async function handleRename() {
+    const trimmed = tripNameInput.trim()
+    if (!id || !trimmed || trimmed === trip?.name) { setRenaming(false); return }
+    await tripsApi.update(id, { name: trimmed }).catch(() => {})
+    setTrip(prev => prev ? { ...prev, name: trimmed } : prev)
+    setRenaming(false)
+  }
+
   const center = stopsWithCoords[0]
     ? { lat: stopsWithCoords[0].latitude!, lng: stopsWithCoords[0].longitude! }
     : { lat: 39.5, lng: -98.35 }
@@ -561,167 +720,334 @@ export default function TripMapPage() {
       <div className="flex-shrink-0 bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-1.5">
         <Link to="/trips" className="text-xs text-[#1D9E75] hover:text-[#178a65] transition-colors">My Trips</Link>
         <span className="text-gray-300 text-xs">›</span>
-        <Link to={`/trips/${id}`} className="text-xs text-[#1D9E75] hover:text-[#178a65] transition-colors truncate max-w-[160px]">{trip?.name ?? '…'}</Link>
-        <span className="text-gray-300 text-xs">›</span>
-        <span className="text-xs text-gray-700 font-medium">Map</span>
+        <span className="text-xs text-gray-700 font-medium truncate max-w-[200px]">{trip?.name ?? '…'}</span>
+      </div>
+
+      {/* Action tab bar — Itinerary, Journal, Packing list, Share, PDF + Reserve */}
+      <div className="flex-shrink-0 bg-white border-b border-gray-100 px-2 flex items-center gap-0.5 overflow-x-auto">
+        <Link
+          to={`/trips/${id}/itinerary`}
+          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1D9E75] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
+        >
+          <Calendar size={13} /> Itinerary
+        </Link>
+        <Link
+          to={`/trips/${id}/journal`}
+          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1D9E75] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
+        >
+          <BookOpen size={13} /> Journal
+        </Link>
+        <Link
+          to={`/packing/${id}`}
+          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1D9E75] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
+        >
+          <Package size={13} /> Packing list
+        </Link>
+        <button className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1D9E75] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0">
+          <Share2 size={13} /> Share
+        </button>
+        <button className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1D9E75] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0">
+          <Download size={13} /> PDF
+        </button>
+        <Link
+          to={`/trips/${id}/booking`}
+          className="ml-auto flex items-center gap-1 px-3 py-1.5 text-xs bg-[#1D9E75] text-white rounded-lg hover:bg-[#178a63] transition-colors whitespace-nowrap flex-shrink-0 mr-1"
+        >
+          Reserve <ChevronRight size={12} />
+        </Link>
       </div>
 
       {/* ── Map + sidebar row ─────────────────────────────────────────────────── */}
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0 relative">
 
-      {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
-      {sidebarOpen && (
-        <div className="w-72 bg-white border-r border-gray-200 flex flex-col overflow-hidden z-10" style={{ borderRightWidth: '0.5px' }}>
-          <div className="p-4 border-b border-gray-100" style={{ borderBottomWidth: '0.5px' }}>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-medium text-gray-900 text-sm">{trip?.name}</h2>
-              <button onClick={() => setSidebarOpen(false)} className="p-1 hover:bg-gray-100 rounded">
-                <X size={16} />
+        {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
+        {sidebarOpen && (
+          <div
+            className="absolute md:relative inset-y-0 left-0 w-72 bg-white border-r border-gray-200 flex flex-col overflow-hidden z-20 shadow-lg md:shadow-none"
+            style={{ borderRightWidth: '0.5px' }}
+          >
+            {/* Header: trip name + rename + close */}
+            <div className="p-4 border-b border-gray-100 flex-shrink-0" style={{ borderBottomWidth: '0.5px' }}>
+              <div className="flex items-start gap-2 mb-3">
+                {renaming ? (
+                  <div className="flex-1 flex items-center gap-1 min-w-0">
+                    <input
+                      className="flex-1 min-w-0 text-sm font-medium text-gray-900 border border-[#1D9E75] rounded px-2 py-1 focus:outline-none"
+                      value={tripNameInput}
+                      onChange={e => setTripNameInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleRename()
+                        if (e.key === 'Escape') setRenaming(false)
+                      }}
+                      autoFocus
+                    />
+                    <button onClick={handleRename} className="p-1 text-[#1D9E75] hover:bg-green-50 rounded flex-shrink-0">
+                      <Check size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex items-center gap-1 min-w-0">
+                    <h2 className="font-medium text-gray-900 text-sm truncate">{trip?.name}</h2>
+                    <button
+                      onClick={() => { setTripNameInput(trip?.name || ''); setRenaming(true) }}
+                      className="p-1 hover:bg-gray-100 rounded flex-shrink-0"
+                      title="Rename trip"
+                    >
+                      <Pencil size={12} className="text-gray-400" />
+                    </button>
+                  </div>
+                )}
+                <button onClick={() => setSidebarOpen(false)} className="p-1 hover:bg-gray-100 rounded flex-shrink-0" title="Close sidebar">
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Stats 2×2 */}
+              <div className="grid grid-cols-2 gap-1.5">
+                <div className="bg-gray-50 rounded-lg px-2.5 py-2">
+                  <p className="text-[10px] text-gray-400 mb-0.5">Miles</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {liveTotalMiles > 0 ? liveTotalMiles.toLocaleString() : (trip?.totalMiles?.toLocaleString() || '–')}
+                  </p>
+                </div>
+                <div className="bg-gray-50 rounded-lg px-2.5 py-2">
+                  <p className="text-[10px] text-gray-400 mb-0.5">Nights</p>
+                  <p className="text-sm font-semibold text-gray-900">{trip?.totalNights || '–'}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg px-2.5 py-2">
+                  <p className="text-[10px] text-gray-400 mb-0.5">Est. cost</p>
+                  <p className="text-sm font-semibold text-gray-900">{totalCost ? `$${totalCost.toLocaleString()}` : '–'}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg px-2.5 py-2">
+                  <p className="text-[10px] text-gray-400 mb-0.5">Booked</p>
+                  <p className="text-sm font-semibold text-gray-900">{bookedStops}/{nonHomeStops.length}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Miles by segment */}
+            {driveSegments.length > 0 && (
+              <div className="px-3 py-2.5 border-b border-gray-100 flex-shrink-0" style={{ borderBottomWidth: '0.5px' }}>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Miles by segment</p>
+                <div className="space-y-0.5">
+                  {driveSegments.map(({ stop, miles }) => (
+                    <div key={stop.id} className="flex justify-between text-xs">
+                      <span className="text-gray-600 truncate mr-2">{stop.locationName}</span>
+                      <span className={`font-medium flex-shrink-0 ${stop.driveDistanceMiles ? 'text-gray-900' : 'text-gray-400'}`}>
+                        {miles > 0 ? `${miles.toLocaleString()} mi` : '–'}
+                        {!stop.driveDistanceMiles && miles > 0 && (
+                          <span className="text-[9px] ml-0.5 opacity-60">est.</span>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between text-xs font-semibold border-t border-gray-100 pt-1 mt-0.5">
+                    <span className="text-gray-700">Total</span>
+                    <span className="text-gray-900">{liveTotalMiles > 0 ? `${liveTotalMiles.toLocaleString()} mi` : '–'}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Layer toggles */}
+            <div className="px-3 py-2.5 border-b border-gray-100 flex-shrink-0" style={{ borderBottomWidth: '0.5px' }}>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                <Layers size={11} /> Layers
+              </p>
+              <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                {Object.entries(layers).map(([key, val]) => (
+                  <label key={key} className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={val}
+                      onChange={() => setLayers(l => ({ ...l, [key]: !val }))}
+                      className="rounded"
+                    />
+                    <span className="text-xs text-gray-600 capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Stops / Weather tab bar */}
+            <div className="flex border-b border-gray-100 flex-shrink-0" style={{ borderBottomWidth: '0.5px' }}>
+              <button
+                onClick={() => setSidebarTab('stops')}
+                className={`flex-1 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
+                  sidebarTab === 'stops'
+                    ? 'border-[#1D9E75] text-[#1D9E75]'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Stops ({nonHomeStops.length})
+              </button>
+              <button
+                onClick={() => setSidebarTab('weather')}
+                className={`flex-1 py-2 text-xs font-medium transition-colors border-b-2 -mb-px flex items-center justify-center gap-1 ${
+                  sidebarTab === 'weather'
+                    ? 'border-[#1D9E75] text-[#1D9E75]'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <CloudRain size={11} /> Weather
+                {totalAlerts > 0 && (
+                  <span className="bg-amber-500 text-white text-[9px] font-bold px-1 py-0.5 rounded-full leading-none">
+                    {totalAlerts}
+                  </span>
+                )}
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
-              <span className="flex items-center gap-1"><MapPin size={11} />{trip?.totalMiles?.toLocaleString()} mi</span>
-              <span className="flex items-center gap-1"><Tent size={11} />{trip?.totalNights} nights</span>
-              {trip?.estimatedFuel && <span className="flex items-center gap-1"><DollarSign size={11} />Fuel ~${trip.estimatedFuel.toLocaleString()}</span>}
-              {trip?.estimatedCamp && <span className="flex items-center gap-1"><Tent size={11} />Camp ~${trip.estimatedCamp.toLocaleString()}</span>}
+
+            {/* Tab content — scrollable */}
+            <div className="flex-1 overflow-y-auto p-3">
+              {sidebarTab === 'stops' && (
+                <div className="space-y-0.5">
+                  {trip?.stops?.slice().sort((a, b) => a.order - b.order).map(stop => {
+                    const isHome   = stop.type === 'HOME'
+                    const displayN = stopDisplayNumbers[stop.id]
+                    const hasAlert = stopHasAlerts(weatherData[stop.id])
+                    const alerts   = stopAlerts(weatherData[stop.id])
+
+                    const bookingEl = isHome ? (
+                      <span className="text-[9px] text-gray-400">Start</span>
+                    ) : stop.bookingStatus === 'CONFIRMED' ? (
+                      <span className="flex items-center gap-0.5 text-[9px] text-green-600 font-medium">
+                        <CheckCircle size={9} /> Booked
+                      </span>
+                    ) : stop.bookingStatus === 'PENDING' || stop.bookingStatus === 'WAITLISTED' ? (
+                      <span className="flex items-center gap-0.5 text-[9px] text-amber-600 font-medium">
+                        <Clock size={9} /> Pending
+                      </span>
+                    ) : stop.bookingStatus === 'CANCELLED' ? (
+                      <span className="flex items-center gap-0.5 text-[9px] text-red-500 font-medium">
+                        <XCircle size={9} /> Cancelled
+                      </span>
+                    ) : (
+                      <span className="text-[9px] text-gray-400">Not booked</span>
+                    )
+
+                    return (
+                      <button
+                        key={stop.id}
+                        onClick={() => setSelectedStop(stop)}
+                        className="w-full text-left flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        {isHome ? (
+                          <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0" style={{ backgroundColor: MC.home }}>
+                            H
+                          </div>
+                        ) : (
+                          <div
+                            className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
+                            style={{ backgroundColor: colorForStop(stop) }}
+                          >
+                            {displayN}
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-gray-900 truncate">{stop.locationName}</p>
+                          <p className="text-[10px] text-gray-400">
+                            {isHome ? 'Start' : `${stop.nights}n${stop.type === 'OVERNIGHT_ONLY' ? ' · overnight' : ''}`}
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                          {bookingEl}
+                          {hasAlert && (
+                            <span className="flex items-center gap-0.5 text-[9px] font-medium text-purple-600">
+                              🟣 {alerts.length}
+                            </span>
+                          )}
+                          {!stop.isCompatible && <AlertTriangle size={11} className="text-red-400" />}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+
+              {sidebarTab === 'weather' && trip && (
+                <SidebarWeatherTab trip={trip} weatherData={weatherData} loading={weatherLoading} />
+              )}
             </div>
           </div>
+        )}
 
-          {/* Layer toggles */}
-          <div className="p-3 border-b border-gray-100" style={{ borderBottomWidth: '0.5px' }}>
-            <p className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-1">
-              <Layers size={12} /> Layers
-            </p>
-            <div className="space-y-1">
-              {Object.entries(layers).map(([key, val]) => (
-                <label key={key} className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={val} onChange={() => setLayers(l => ({ ...l, [key]: !val }))} className="rounded" />
-                  <span className="text-xs text-gray-600 capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
-                </label>
-              ))}
-            </div>
-          </div>
+        {/* ── Map area ──────────────────────────────────────────────────────────── */}
+        <div className="flex-1 relative min-w-0">
+          {!sidebarOpen && (
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="absolute top-3 left-3 z-10 bg-white rounded-lg p-2 border border-gray-200 hover:bg-gray-50 shadow-sm"
+              title="Open sidebar"
+            >
+              <Layers size={16} />
+            </button>
+          )}
 
-          {/* Stop list */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-1">
-            {trip?.stops?.slice().sort((a, b) => a.order - b.order).map(stop => {
-              const isHome   = stop.type === 'HOME'
-              const displayN = stopDisplayNumbers[stop.id]
-              const hasAlert = stopHasAlerts(weatherData[stop.id])
-              const alerts   = stopAlerts(weatherData[stop.id])
-              return (
-                <button
-                  key={stop.id}
-                  onClick={() => setSelectedStop(stop)}
-                  className="w-full text-left flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+          {isLoaded ? (
+            <GoogleMap
+              mapContainerStyle={MAP_CONTAINER_STYLE}
+              zoom={6}
+              center={center}
+              options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false, mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID' }}
+              onLoad={onMapLoad}
+            >
+              {/* Driving route */}
+              {layers.route && routePath && (
+                <Polyline
+                  path={routePath}
+                  options={{ strokeColor: '#1D9E75', strokeWeight: 2.5, strokeOpacity: 0.85 }}
+                />
+              )}
+
+              {/* Weather alert circles */}
+              {stopsWithCoords.map(stop =>
+                stopHasAlerts(weatherData[stop.id]) ? (
+                  <Circle
+                    key={`alert-${stop.id}`}
+                    center={{ lat: stop.latitude!, lng: stop.longitude! }}
+                    radius={9000}
+                    options={{ fillColor: '#7F77DD', fillOpacity: 0.18, strokeColor: '#7F77DD', strokeWeight: 1.5, strokeOpacity: 0.55 }}
+                  />
+                ) : null
+              )}
+
+              {/* Info window — rendered inside GoogleMap so it gets map context */}
+              {selectedStop?.latitude && selectedStop?.longitude && (
+                <InfoWindow
+                  position={{ lat: selectedStop.latitude, lng: selectedStop.longitude }}
+                  onCloseClick={() => setSelectedStop(null)}
+                  options={{ pixelOffset: new window.google.maps.Size(0, -16) }}
                 >
-                  {/* Match map marker: home = H circle, stops = numbered circle */}
-                  {isHome ? (
-                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0" style={{ backgroundColor: MC.home }}>
-                      H
-                    </div>
-                  ) : (
-                    <div
-                      className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
-                      style={{ backgroundColor: colorForStop(stop) }}
-                    >
-                      {displayN}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-gray-900 truncate">{stop.locationName}</p>
-                    <p className="text-xs text-gray-400">
-                      {isHome ? 'Start' : `${stop.nights}n${stop.type === 'OVERNIGHT_ONLY' ? ' · overnight' : ''}`}
-                    </p>
-                  </div>
-                  {hasAlert && (
-                    <span className="flex items-center gap-0.5 text-[10px] font-medium text-purple-600 flex-shrink-0">
-                      🟣 {alerts.length}
-                    </span>
-                  )}
-                  {!stop.isCompatible && <AlertTriangle size={12} className="text-red-400 flex-shrink-0" />}
-                </button>
-              )
-            })}
-          </div>
+                  <StopPopup
+                    stop={selectedStop}
+                    kind={classifyStop(selectedStop)}
+                    weather={weatherData[selectedStop.id]}
+                    displayNum={stopDisplayNumbers[selectedStop.id]}
+                    onClose={() => setSelectedStop(null)}
+                    onUpdateNights={handleUpdateNights}
+                  />
+                </InfoWindow>
+              )}
+            </GoogleMap>
+          ) : (
+            <div className="h-full flex items-center justify-center bg-gray-100 text-sm text-gray-500">
+              Loading map…
+            </div>
+          )}
+
+          {/* Legend */}
+          {isLoaded && trip && <MapLegend />}
+
+          {/* Geocoding indicator */}
+          {geocoding && (
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white border border-gray-200 rounded-full px-4 py-2 text-xs text-gray-600 shadow-md flex items-center gap-2 z-10">
+              <span className="w-3 h-3 rounded-full border-2 border-[#1D9E75] border-t-transparent animate-spin" />
+              Finding stop locations…
+            </div>
+          )}
         </div>
-      )}
-
-      {/* ── Map area ──────────────────────────────────────────────────────────── */}
-      <div className="flex-1 relative">
-        {!sidebarOpen && (
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="absolute top-3 left-3 z-10 bg-white rounded-lg p-2 border border-gray-200 hover:bg-gray-50"
-          >
-            <Layers size={16} />
-          </button>
-        )}
-
-        {isLoaded ? (
-          <GoogleMap
-            mapContainerStyle={MAP_CONTAINER_STYLE}
-            zoom={6}
-            center={center}
-            options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false, mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID' }}
-            onLoad={onMapLoad}
-          >
-            {/* Driving route */}
-            {layers.route && routePath && (
-              <Polyline
-                path={routePath}
-                options={{ strokeColor: '#1D9E75', strokeWeight: 2.5, strokeOpacity: 0.85 }}
-              />
-            )}
-
-            {/* Weather alert circles */}
-            {stopsWithCoords.map(stop =>
-              stopHasAlerts(weatherData[stop.id]) ? (
-                <Circle
-                  key={`alert-${stop.id}`}
-                  center={{ lat: stop.latitude!, lng: stop.longitude! }}
-                  radius={9000}
-                  options={{ fillColor: '#7F77DD', fillOpacity: 0.18, strokeColor: '#7F77DD', strokeWeight: 1.5, strokeOpacity: 0.55 }}
-                />
-              ) : null
-            )}
-
-            {/* Info window — rendered inside GoogleMap so it gets map context */}
-            {selectedStop?.latitude && selectedStop?.longitude && (
-              <InfoWindow
-                position={{ lat: selectedStop.latitude, lng: selectedStop.longitude }}
-                onCloseClick={() => setSelectedStop(null)}
-                options={{ pixelOffset: new window.google.maps.Size(0, -16) }}
-              >
-                <StopPopup
-                  stop={selectedStop}
-                  kind={classifyStop(selectedStop)}
-                  weather={weatherData[selectedStop.id]}
-                  displayNum={stopDisplayNumbers[selectedStop.id]}
-                  onClose={() => setSelectedStop(null)}
-                  onUpdateNights={handleUpdateNights}
-                />
-              </InfoWindow>
-            )}
-          </GoogleMap>
-        ) : (
-          <div className="h-full flex items-center justify-center bg-gray-100 text-sm text-gray-500">
-            Loading map…
-          </div>
-        )}
-
-        {/* Legend */}
-        {isLoaded && trip && <MapLegend />}
-
-        {/* Geocoding indicator */}
-        {geocoding && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white border border-gray-200 rounded-full px-4 py-2 text-xs text-gray-600 shadow-md flex items-center gap-2 z-10">
-            <span className="w-3 h-3 rounded-full border-2 border-[#1D9E75] border-t-transparent animate-spin" />
-            Finding stop locations…
-          </div>
-        )}
-      </div>
-      </div>{/* end flex flex-1 min-h-0 */}
+      </div>{/* end flex flex-1 min-h-0 relative */}
     </div>
   )
 }

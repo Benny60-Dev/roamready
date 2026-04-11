@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import { useUIStore } from './store/uiStore'
 
@@ -23,7 +23,6 @@ import OnboardingPage from './pages/onboarding/OnboardingPage'
 import DashboardPage from './pages/DashboardPage'
 import TripsPage from './pages/trips/TripsPage'
 import NewTripPage from './pages/trips/NewTripPage'
-import TripDetailPage from './pages/trips/TripDetailPage'
 import TripMapPage from './pages/trips/TripMapPage'
 import TripBookingPage from './pages/trips/TripBookingPage'
 import TripSummaryPage from './pages/trips/TripSummaryPage'
@@ -59,6 +58,11 @@ import AdminSubscribersPage from './pages/admin/AdminSubscribersPage'
 // Global modals
 import FeedbackModal from './components/feedback/FeedbackModal'
 import PaywallModal from './components/feedback/PaywallModal'
+
+function TripDetailRedirect() {
+  const { id } = useParams<{ id: string }>()
+  return <Navigate to={`/trips/${id}/map`} replace />
+}
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated())
@@ -97,7 +101,7 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/trips" element={<TripsPage />} />
           <Route path="/trips/new" element={<NewTripPage />} />
-          <Route path="/trips/:id" element={<TripDetailPage />} />
+          <Route path="/trips/:id" element={<TripDetailRedirect />} />
           <Route path="/trips/:id/map" element={<TripMapPage />} />
           <Route path="/trips/:id/booking" element={<TripBookingPage />} />
           <Route path="/trips/:id/itinerary" element={<TripSummaryPage />} />

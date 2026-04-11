@@ -95,7 +95,7 @@ export default function TripsPage() {
             return (
               <Link
                 key={trip.id}
-                to={`/trips/${trip.id}`}
+                to={`/trips/${trip.id}/map`}
                 className="card flex items-center justify-between hover:border-[#1D9E75]/30 transition-all"
               >
                 <div className="flex-1 min-w-0">

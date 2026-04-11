@@ -302,7 +302,7 @@ export default function NewTripPage() {
         await tripsApi.createStop(trip.data.id, fixedStop)
       }
 
-      navigate(`/trips/${trip.data.id}`)
+      navigate(`/trips/${trip.data.id}/map`)
     } catch (e: any) {
       console.error('[buildItinerary] failed:', e)
       const msg = e?.response?.data?.message || e?.message || 'Something went wrong. Please try again.'
