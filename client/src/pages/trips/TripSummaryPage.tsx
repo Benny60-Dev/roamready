@@ -4,8 +4,9 @@ import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import {
   Download, Share2, Sparkles, Car, Tent, Star, Moon,
   MapPin, XCircle, Plus, Check, RefreshCw, ArrowRight, Clock,
-  Pencil, Trash2,
+  Pencil, Trash2, Wand2,
 } from 'lucide-react'
+import ModifyTripPanel from '../../components/trip/ModifyTripPanel'
 import { pdf } from '@react-pdf/renderer'
 import { tripsApi, aiApi } from '../../services/api'
 import { Trip, Stop, ItineraryDay, ItineraryActivity, StopWeather } from '../../types'
@@ -315,6 +316,7 @@ export default function TripSummaryPage() {
   const [editingStop, setEditingStop] = useState<Stop | null>(null)
   const [addAfterOrder, setAddAfterOrder] = useState<number | null>(null)
   const [mutating, setMutating] = useState(false)
+  const [modifyPanelOpen, setModifyPanelOpen] = useState(false)
   const itinerarySaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const activityGenAttempted = useRef(false)
 
@@ -680,7 +682,13 @@ export default function TripSummaryPage() {
           <h1 className="text-xl font-medium text-gray-900">{trip.name}</h1>
           <p className="text-sm text-gray-500 mt-0.5">{trip.startLocation} → {trip.endLocation}</p>
         </div>
-        <div className="flex gap-2 flex-shrink-0">
+        <div className="flex gap-2 flex-shrink-0 flex-wrap justify-end">
+          <button
+            onClick={() => setModifyPanelOpen(true)}
+            className="btn-outline text-sm flex items-center gap-1.5 border-[#1D9E75] text-[#1D9E75] hover:bg-[#E1F5EE]"
+          >
+            <Wand2 size={14} /> Modify with AI
+          </button>
           <button className="btn-outline text-sm flex items-center gap-1.5"><Share2 size={14} /> Share</button>
           <button
             onClick={handleDownloadPDF}
@@ -860,6 +868,16 @@ export default function TripSummaryPage() {
           saving={mutating}
         />
       )}
+
+      {/* Modify Trip AI panel */}
+      <ModifyTripPanel
+        trip={trip}
+        isOpen={modifyPanelOpen}
+        onClose={() => setModifyPanelOpen(false)}
+        onTripUpdated={async (_updated) => {
+          await reloadTrip()
+        }}
+      />
     </div>
   )
 }

@@ -4,12 +4,13 @@ import { GoogleMap, useJsApiLoader, InfoWindow, Circle, Polyline } from '@react-
 import {
   Layers, X, Plus, Minus, DollarSign, Calendar, AlertTriangle,
   Wind, Droplets, Snowflake, Thermometer, ExternalLink,
-  Pencil, Check, BookOpen, Package, Share2, Download, CheckCircle, Clock, XCircle, CloudRain, ChevronRight,
+  Pencil, Check, BookOpen, Package, Share2, Download, CheckCircle, Clock, XCircle, CloudRain, ChevronRight, Wand2,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { tripsApi } from '../../services/api'
 import { Trip, Stop, StopWeather, LiveForecast } from '../../types'
 import { StopWeatherCard, ALERT_STYLES } from '../../components/weather/StopWeatherCard'
+import ModifyTripPanel from '../../components/trip/ModifyTripPanel'
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' }
 const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 'geometry']
@@ -385,6 +386,7 @@ export default function TripMapPage() {
   const [mapInstance, setMapInstance]       = useState<google.maps.Map | null>(null)
   const [renaming, setRenaming]             = useState(false)
   const [tripNameInput, setTripNameInput]   = useState('')
+  const [modifyPanelOpen, setModifyPanelOpen] = useState(false)
 
   // Imperative marker refs — we manage these ourselves via AdvancedMarkerElement
   const markersRef          = useRef<google.maps.marker.AdvancedMarkerElement[]>([])
@@ -802,6 +804,14 @@ export default function TripMapPage() {
                 </button>
               </div>
 
+              {/* Modify with AI button */}
+              <button
+                onClick={() => setModifyPanelOpen(true)}
+                className="w-full flex items-center justify-center gap-1.5 py-2 mb-3 rounded-lg bg-[#1D9E75] text-white text-xs font-medium hover:bg-[#178a63] transition-colors"
+              >
+                <Wand2 size={13} /> Modify trip with AI
+              </button>
+
               {/* Stats 2×2 */}
               <div className="grid grid-cols-2 gap-1.5">
                 <div className="bg-gray-50 rounded-lg px-2.5 py-2">
@@ -1048,6 +1058,19 @@ export default function TripMapPage() {
           )}
         </div>
       </div>{/* end flex flex-1 min-h-0 relative */}
+
+      {/* Modify Trip AI panel */}
+      {trip && (
+        <ModifyTripPanel
+          trip={trip}
+          isOpen={modifyPanelOpen}
+          onClose={() => setModifyPanelOpen(false)}
+          onTripUpdated={updatedTrip => {
+            setTrip(updatedTrip)
+            setTripNameInput(updatedTrip.name)
+          }}
+        />
+      )}
     </div>
   )
 }

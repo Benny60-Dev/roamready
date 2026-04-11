@@ -1,5 +1,6 @@
 @echo off
 title RoamReady - Startup
+color 07
 
 echo ============================================
 echo  RoamReady - Starting all services...
@@ -42,17 +43,17 @@ if errorlevel 1 (
 )
 echo Database containers started.
 
-REM ── 4. Open Backend terminal ──
+REM ── 4. Open Backend terminal (Dark Blue background, white text) ──
 echo Opening Backend terminal...
-start "RoamReady - Backend" cmd /k "title RoamReady — Backend && cd /d C:\Users\aylie\roamready\server && npm run dev"
+start "RoamReady — BACKEND (Port 3001)" cmd /k "title RoamReady — BACKEND (Port 3001) && color 1F && echo. && echo  ============================================ && echo    === RoamReady BACKEND SERVER === && echo  ============================================ && echo    Start command : npm run dev && echo    Port          : 3001 && echo    Status        : Starting... && echo  ============================================ && echo. && cd /d C:\Users\aylie\roamready\server && npm run dev"
 
-REM ── 5. Open Frontend terminal ──
+REM ── 5. Open Frontend terminal (Dark Green background, white text) ──
 echo Opening Frontend terminal...
-start "RoamReady - Frontend" cmd /k "title RoamReady — Frontend && cd /d C:\Users\aylie\roamready\client && npm run dev"
+start "RoamReady — FRONTEND (Port 3000)" cmd /k "title RoamReady — FRONTEND (Port 3000) && color 2F && echo. && echo  ============================================ && echo    === RoamReady FRONTEND (Vite) === && echo  ============================================ && echo    Start command : npm run dev && echo    Port          : 3000 && echo    Status        : Starting... && echo  ============================================ && echo. && cd /d C:\Users\aylie\roamready\client && npm run dev"
 
-REM ── 6. Open Claude Code terminal ──
+REM ── 6. Open Claude Code terminal (Dark Magenta/Purple background, white text) ──
 echo Opening Claude Code terminal...
-start "RoamReady - Claude Code" cmd /k "title RoamReady — Claude Code && cd /d C:\Users\aylie\roamready && claude"
+start "RoamReady — CLAUDE CODE" cmd /k "title RoamReady — CLAUDE CODE && color 5F && echo. && echo  ============================================ && echo    === RoamReady CLAUDE CODE === && echo  ============================================ && echo    Command       : claude && echo    Directory     : C:\Users\aylie\roamready && echo    Status        : Starting... && echo  ============================================ && echo. && cd /d C:\Users\aylie\roamready && claude"
 
 REM ── 7. Wait 8 seconds then open browser ──
 echo Waiting 8 seconds for services to start...
@@ -62,10 +63,16 @@ start http://localhost:3000
 
 echo ============================================
 echo  RoamReady is running!
-echo   Backend  : http://localhost:3001  (or check backend terminal)
+echo   Backend  : http://localhost:3001
 echo   Frontend : http://localhost:3000
 echo   Database : PostgreSQL on port 5432
 echo   Cache    : Redis on port 6379
+echo ============================================
+echo.
+echo  Window colours:
+echo   BLUE   = Backend  (port 3001)
+echo   GREEN  = Frontend (port 3000)
+echo   PURPLE = Claude Code
 echo ============================================
 echo.
 echo ============================================
