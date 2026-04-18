@@ -407,18 +407,11 @@ export default function TripMapPage() {
 
   // ── Map expand / collapse ─────────────────────────────────────────────────────
   const expandMap = useCallback(() => {
-    const row = mapRowRef.current
-    if (!row) return
-    const availH = row.parentElement?.clientHeight ?? 0
-    row.style.height = `${availH}px`
     setMapExpanded(true)
     setSidebarOpen(false)
   }, [])
 
   const collapseMap = useCallback(() => {
-    const row = mapRowRef.current
-    if (!row) return
-    row.style.height = '350px'
     setMapExpanded(false)
     setSidebarOpen(true)
   }, [])
@@ -438,21 +431,11 @@ export default function TripMapPage() {
     return () => clearTimeout(t)
   }, [mapExpanded, mapInstance])
 
-  // Mobile: expand to full screen on first mount (no animation)
+  // Mobile: expand to full screen on first mount
   useEffect(() => {
     if (window.innerWidth < 768) {
-      const row = mapRowRef.current
-      if (!row) return
-      const availH = row.parentElement?.clientHeight ?? 0
-      if (availH > 350) {
-        row.style.transition = 'none'
-        row.style.height = `${availH}px`
-        requestAnimationFrame(() => {
-          if (row) row.style.transition = 'height 0.35s cubic-bezier(0.4, 0, 0.2, 1)'
-        })
-        setMapExpanded(true)
-        setSidebarOpen(false)
-      }
+      setMapExpanded(true)
+      setSidebarOpen(false)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -771,7 +754,7 @@ export default function TripMapPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
-    <div className="-mx-4 -my-6 flex flex-col overflow-hidden" style={{ height: 'calc(100vh - 3.5rem)' }}>
+    <div className="-mx-4 -my-6">
 
       {/* Breadcrumb strip */}
       <div className="flex-shrink-0 bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-1.5">
@@ -816,23 +799,22 @@ export default function TripMapPage() {
 
       {/* ── Map + sidebar row ─────────────────────────────────────────────────── */}
       {/* Wrapper provides the reference height that expandMap() reads */}
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div>
       <div
         ref={mapRowRef}
-        className="flex relative overflow-hidden"
+        className={`flex items-start${mapExpanded ? ' justify-center' : ''}`}
         style={{
-          height: '350px',
-          flexShrink: 0,
           transition: 'height 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
 
         {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
         <div
-          className="absolute md:relative inset-y-0 left-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden z-20 shadow-lg md:shadow-none"
+          className="bg-white border-r border-gray-200 z-20"
           style={{
             borderRightWidth: '0.5px',
-            width: (sidebarOpen && !mapExpanded) ? '18rem' : '0',
+            width: (sidebarOpen && !mapExpanded) ? '24rem' : '0',
+            overflow: 'hidden',
             transition: 'width 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
             flexShrink: 0,
           }}
@@ -978,7 +960,7 @@ export default function TripMapPage() {
             </div>
 
             {/* Tab content — scrollable */}
-            <div className="flex-1 overflow-y-auto p-3">
+            <div className="p-3">
               {sidebarTab === 'stops' && (
                 <div className="space-y-0.5">
                   {trip?.stops?.slice().sort((a, b) => a.order - b.order).map(stop => {
@@ -1051,7 +1033,12 @@ export default function TripMapPage() {
           </div>
 
         {/* ── Map area ──────────────────────────────────────────────────────────── */}
-        <div className="flex-1 relative min-w-0">
+        <div className="relative" style={{
+          width:  mapExpanded ? '95vw'  : '650px',
+          height: mapExpanded ? '90vh'  : '550px',
+          flexShrink: 0,
+          transition: 'width 0.35s cubic-bezier(0.4, 0, 0.2, 1), height 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+        }}>
           {/* Sidebar toggle — shows when sidebar is hidden */}
           {(!sidebarOpen || mapExpanded) && (
             <button
