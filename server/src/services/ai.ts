@@ -97,7 +97,7 @@ Itinerary JSON format:
   const combinedSystem = systemPrompt + (systemMessages ? '\n\n' + systemMessages : '')
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-5',
     max_tokens: 4096,
     system: combinedSystem,
     messages: cleanMessages,
