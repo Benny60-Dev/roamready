@@ -1,10 +1,13 @@
 import { Request, Response, NextFunction } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import { Resend } from 'resend'
 import { prisma } from '../utils/prisma'
 import { AppError } from '../middleware/errorHandler'
 import { AuthRequest } from '../middleware/auth'
 import { createStripeCustomer } from '../services/stripe'
+
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 function generateTokens(userId: string) {
   const accessToken = jwt.sign({ userId }, process.env.JWT_SECRET!, { expiresIn: '15m' })
@@ -135,9 +138,28 @@ export async function forgotPassword(req: Request, res: Response, next: NextFunc
     if (!user) return res.json({ message: 'If that email exists, a reset link was sent.' })
 
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1h' })
+    const resetUrl = `${process.env.CLIENT_URL}/reset-password?token=${token}`
 
-    // TODO: send email via Resend
     console.log('Password reset token for', email, ':', token)
+
+    try {
+      await resend.emails.send({
+        from: process.env.FROM_EMAIL!,
+        to: email,
+        subject: 'Reset your RoamReady password',
+        html: `
+          <p>Hi ${user.firstName},</p>
+          <p>We received a request to reset your RoamReady password. Click the link below to choose a new one:</p>
+          <p><a href="${resetUrl}">${resetUrl}</a></p>
+          <p>This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email.</p>
+          <p>— The RoamReady Team</p>
+        `,
+        text: `Hi ${user.firstName},\n\nWe received a request to reset your RoamReady password.\n\nReset your password: ${resetUrl}\n\nThis link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email.\n\n— The RoamReady Team`,
+      })
+      console.log('[email] password reset email sent to', email)
+    } catch (emailErr: any) {
+      console.error('[email] password reset email FAILED:', emailErr?.message)
+    }
 
     res.json({ message: 'If that email exists, a reset link was sent.' })
   } catch (err) {
