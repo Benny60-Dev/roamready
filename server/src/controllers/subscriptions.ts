@@ -41,15 +41,19 @@ export async function getStatus(req: AuthRequest, res: Response, next: NextFunct
 
 export async function handleWebhook(req: Request, res: Response, next: NextFunction) {
   try {
+    console.log('[StripeWebhook] handler called, body type:', typeof req.body)
     const sig = req.headers['stripe-signature'] as string
+    console.log('[StripeWebhook] signature header present:', sig ? 'yes' : 'no')
     const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET!
 
     let event
     try {
       event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret)
-    } catch (err) {
+    } catch (err: any) {
+      console.error('[StripeWebhook] constructEvent failed:', err?.message)
       return res.status(400).send('Webhook signature verification failed')
     }
+    console.log('[StripeWebhook] verified event:', event.type)
 
     switch (event.type) {
       case 'checkout.session.completed': {

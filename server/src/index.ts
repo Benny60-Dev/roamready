@@ -1,6 +1,4 @@
-import path from 'path'
-import dotenv from 'dotenv'
-dotenv.config({ path: path.resolve(__dirname, '../../.env'), quiet: true })
+import './config/env'
 
 // ─── Required environment variable check ──────────────────────────────────────
 // Runs immediately at startup before any routes or DB connections are opened.
@@ -45,6 +43,7 @@ import { maintenanceRouter } from './routes/maintenance'
 import { journalRouter } from './routes/journal'
 import { feedbackRouter } from './routes/feedback'
 import { subscriptionsRouter } from './routes/subscriptions'
+import { handleWebhook } from './controllers/subscriptions'
 import { notificationsRouter } from './routes/notifications'
 import { adminRouter } from './routes/admin'
 import { bookingsRouter } from './routes/bookings'
@@ -58,6 +57,11 @@ app.use(cors({
 }))
 app.use(compression())
 app.use(cookieParser())
+
+// Webhook route must be registered before express.json() so the body arrives as a raw Buffer.
+// express.json() would parse it into an object first, breaking Stripe signature verification.
+app.post('/api/v1/subscriptions/webhook', express.raw({ type: 'application/json' }), handleWebhook)
+
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 
@@ -66,9 +70,6 @@ const limiter = rateLimit({
   max: 200,
 })
 app.use('/api/', limiter)
-
-// Stripe webhook needs raw body
-app.use('/api/v1/subscriptions/webhook', express.raw({ type: 'application/json' }))
 
 app.use('/api/v1/auth', authRouter)
 app.use('/api/v1/users', usersRouter)

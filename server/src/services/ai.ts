@@ -1,27 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk'
-import fs from 'fs'
-import path from 'path'
 
 const apiKey = process.env.ANTHROPIC_API_KEY
-console.log('[AI] ANTHROPIC_API_KEY at init (first 10):', apiKey ? apiKey.slice(0, 10) : 'UNDEFINED')
 
-// dotenv imports are hoisted before dotenv.config() runs, so the key may be
-// undefined here. Fall back to reading the root .env directly.
-const resolvedKey = apiKey ||
-  (() => {
-    try {
-      const envFile = fs.readFileSync(path.resolve(__dirname, '../../.env'), 'utf8')
-      return envFile.match(/ANTHROPIC_API_KEY=(.+)/)?.[1]?.trim()
-    } catch {
-      return undefined
-    }
-  })()
-
-if (!resolvedKey) {
+if (!apiKey) {
   console.error('[AI] ANTHROPIC_API_KEY is not set — AI features will fail')
 }
 
-const client = new Anthropic({ apiKey: resolvedKey })
+const client = new Anthropic({ apiKey })
 
 export async function chatWithAI(messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>, userProfile: any) {
   const systemPrompt = `You are RoamReady's AI trip planner. You ONLY help users plan outdoor trips — RV routes, van life journeys, car camping adventures, campground recommendations, OHV destinations, weather along routes, fuel costs, packing lists, and travel logistics.
