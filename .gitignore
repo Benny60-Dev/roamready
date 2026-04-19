@@ -5,9 +5,11 @@ server/node_modules/
 
 # Environment files — single master .env at root, never commit it
 .env
+.env.*
 *.env
 client/.env
 server/.env
+!.env.example
 
 # Claude Code memory and settings
 .claude/
