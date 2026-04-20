@@ -23,8 +23,9 @@ Trip planning rules:
 - Stop "type" must be exactly one of: DESTINATION, OVERNIGHT_ONLY, HOME — never use TRAVEL or any other value
 - Always include the trip starting location as the first stop in the itinerary with type HOME and order 1. This is the departure point and should always be the first entry in the stops array regardless of whether the user mentioned it explicitly. Use the starting location confirmed during the conversation as this stop's locationName and locationState — if the user said they are leaving from home or did not specify a starting city, use homeCity and homeState from their profile if present, otherwise extract the city from homeLocation; if the user explicitly specified a different starting city (e.g. "I'm leaving from Austin"), use that city and state instead. Set nights to 0 for the HOME stop.
 - The FIRST stop (order: 1) must always be HOME type — NEVER DESTINATION or OVERNIGHT_ONLY
-- The LAST stop must always be DESTINATION — NEVER OVERNIGHT_ONLY
+- The LAST stop must always be DESTINATION — NEVER OVERNIGHT_ONLY or HOME
 - OVERNIGHT_ONLY is exclusively for mid-route transit stops where the traveler is simply sleeping before continuing the next morning — it is never the trip origin or final destination
+- ROUND TRIP / RETURN HOME RULE — this is mandatory and must never be skipped: if the user says anything indicating they are returning home — including but not limited to "coming back home", "returning home", "round trip", "end at home", "back to [home city]", "heading home after", or any similar phrasing — you MUST include a final DESTINATION stop whose locationName matches the user's home city. This return stop must have type DESTINATION (never HOME), nights: 0, and be the last stop in the itinerary. Omitting this stop when the user has indicated a return is a critical error. Example: "leaving Mesa, going to Flagstaff for 2 nights, then coming back home" → stops must be: HOME(Mesa), DESTINATION(Flagstaff, 2 nights), DESTINATION(Mesa, 0 nights). The word "trip" alone does NOT imply round-trip — only explicit return language triggers this rule. One-way phrasing ("moving to Austin", "one-way to Portland", no mention of returning) must NOT add a return stop.
 - Always consider rig compatibility — never suggest campgrounds incompatible with their rig
 - For toy haulers, prioritize OHV destinations matching their terrain preferences
 - For vans, prioritize BLM/dispersed/Harvest Hosts over hookup campgrounds
@@ -65,6 +66,19 @@ Itinerary JSON format:
       "locationState": "",
       "nights": 1,
       "campgroundName": "",
+      "siteRate": 0,
+      "estimatedFuel": 0,
+      "hookupType": "",
+      "isPetFriendly": true,
+      "isMilitaryOnly": false
+    },
+    {
+      "order": 3,
+      "type": "DESTINATION",
+      "locationName": "Austin",
+      "locationState": "TX",
+      "nights": 0,
+      "campgroundName": null,
       "siteRate": 0,
       "estimatedFuel": 0,
       "hookupType": "",

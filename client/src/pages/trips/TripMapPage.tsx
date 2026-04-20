@@ -49,11 +49,20 @@ function haversineMiles(lat1?: number, lng1?: number, lat2?: number, lng2?: numb
 
 // ─── Marker helpers ──────────────────────────────────────────────────────────────
 
+const COORD_TOLERANCE = 0.0001 // ~10 m — tolerates minor float rounding from DB round-trips
+
+function coordsMatch(lat1?: number | null, lng1?: number | null, lat2?: number | null, lng2?: number | null): boolean {
+  if (lat1 == null || lng1 == null || lat2 == null || lng2 == null) return false
+  return Math.abs(lat1 - lat2) < COORD_TOLERANCE && Math.abs(lng1 - lng2) < COORD_TOLERANCE
+}
+
 /** Creates the HTML element used as the AdvancedMarkerElement content. */
 function makeMarkerContent(kind: MarkerKind, badge: string | number | undefined): HTMLElement {
   const div = document.createElement('div')
-  div.style.cssText = `width:26px;height:26px;border-radius:50%;background:${KIND_COLOR[kind]};border:3px solid white;display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.3);cursor:pointer`
-  div.textContent = badge != null ? String(badge) : ''
+  const text = badge != null ? String(badge) : ''
+  const fontSize = text.length > 2 ? '8px' : '11px'
+  div.style.cssText = `width:26px;height:26px;border-radius:50%;background:${KIND_COLOR[kind]};border:3px solid white;display:flex;align-items:center;justify-content:center;color:white;font-size:${fontSize};font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.3);cursor:pointer;letter-spacing:-0.5px`
+  div.textContent = text
   return div
 }
 
@@ -138,10 +147,16 @@ function MapLegend() {
     <div className="absolute bottom-6 left-4 bg-white rounded-xl border border-gray-200 px-3 py-2.5 shadow-md z-10" style={{ borderWidth: '0.5px' }}>
       <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5">Legend</p>
       <div className="space-y-1.5">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full flex items-center justify-center text-white text-[8px] font-bold flex-shrink-0" style={{ backgroundColor: MC.home }}>S</div>
-          <span className="text-[11px] text-gray-600 leading-none">Start</span>
-        </div>
+        {[
+          { letter: 'S', color: MC.home,     label: 'Start' },
+          { letter: 'H', color: MC.home,     label: 'Home / Finish' },
+          { letter: 'F', color: MC.unbooked, label: 'Finish' },
+        ].map(({ letter, color, label }) => (
+          <div key={letter} className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full flex items-center justify-center text-white text-[8px] font-bold flex-shrink-0" style={{ backgroundColor: color }}>{letter}</div>
+            <span className="text-[11px] text-gray-600 leading-none">{label}</span>
+          </div>
+        ))}
         {/* Numbered stops */}
         {[
           { color: MC.booked,   label: 'Booked' },
@@ -172,7 +187,7 @@ function StopPopup({
   stop: Stop
   kind: MarkerKind
   weather: StopWeather | null | undefined
-  displayNum?: 'S' | 'H' | 'F' | number
+  displayNum?: 'S' | 'H' | 'F' | 'S/H' | number
   onClose: () => void
   onUpdateNights: (id: string, nights: number) => void
 }) {
@@ -212,7 +227,7 @@ function StopPopup({
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-            {displayNum === 'S' ? 'Start' : displayNum === 'H' ? 'Home · Finish' : displayNum === 'F' ? 'Finish' : `Stop ${displayNum}`}
+            {displayNum === 'S/H' ? 'Start · Home' : displayNum === 'S' ? 'Start' : displayNum === 'H' ? 'Home · Finish' : displayNum === 'F' ? 'Finish' : `Stop ${displayNum}`}
           </span>
           <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${badge.cls}`}>{badge.label}</span>
         </div>
@@ -729,6 +744,18 @@ export default function TripMapPage() {
     return buildStopBadges(sorted, user)
   }, [trip?.stops, user])
 
+  // True when the first and last stops are at the same coordinates AND the last stop
+  // is badged 'H' — triggers the combined S/H single marker to avoid invisible stacking.
+  const combinedSH = useMemo(() => {
+    if (stopsWithCoords.length < 2) return false
+    const first = stopsWithCoords[0]
+    const last  = stopsWithCoords[stopsWithCoords.length - 1]
+    return (
+      stopBadges[last.id] === 'H' &&
+      coordsMatch(first.latitude, first.longitude, last.latitude, last.longitude)
+    )
+  }, [stopsWithCoords, stopBadges])
+
   // Drive segments with per-segment miles (Routes API actual or Haversine fallback)
   const { driveSegments, liveTotalMiles } = useMemo(() => {
     const sorted = [...(trip?.stops || [])].sort((a, b) => a.order - b.order)
@@ -775,9 +802,19 @@ export default function TripMapPage() {
 
     console.log(`[TripMapPage] placing ${stopsWithCoords.length} marker(s) on map`)
 
+    const firstStop = stopsWithCoords[0]
+    const lastStop  = stopsWithCoords[stopsWithCoords.length - 1]
+
     stopsWithCoords.forEach(stop => {
+      const isFirst = stop.id === firstStop?.id
+      const isLast  = stop.id === lastStop?.id
+
+      // When start and home-return share the same pin, skip the last stop entirely
+      // and give the first stop the combined 'S/H' badge instead.
+      if (combinedSH && isLast && !isFirst) return
+
       const kind  = classifyStop(stop)
-      const badge = stopBadges[stop.id]
+      const badge = combinedSH && isFirst ? 'S/H' : stopBadges[stop.id]
 
       // Layer visibility — HOME (start) always shows
       if (kind !== 'home') {
@@ -1048,8 +1085,12 @@ export default function TripMapPage() {
                     const hasAlert = stopHasAlerts(weatherData[stop.id])
                     const alerts   = stopAlerts(weatherData[stop.id])
 
-                    const bookingEl = isHome ? (
+                    const bookingEl = badge === 'S' ? (
                       <span className="text-[9px] text-gray-400">Start</span>
+                    ) : badge === 'H' ? (
+                      <span className="text-[9px] text-gray-400">Home</span>
+                    ) : badge === 'F' && isHome ? (
+                      <span className="text-[9px] text-gray-400">Finish</span>
                     ) : stop.bookingStatus === 'CONFIRMED' ? (
                       <span className="flex items-center gap-0.5 text-[9px] text-green-600 font-medium">
                         <CheckCircle size={9} /> Booked
@@ -1081,7 +1122,7 @@ export default function TripMapPage() {
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium text-gray-900 truncate">{stop.locationName}</p>
                           <p className="text-[10px] text-gray-400">
-                            {isHome ? 'Start' : `${stop.nights}n${stop.type === 'OVERNIGHT_ONLY' ? ' · overnight' : ''}`}
+                            {badge === 'S' ? 'Start' : badge === 'H' ? 'Home · Finish' : badge === 'F' && isHome ? 'Finish' : `${stop.nights}n${stop.type === 'OVERNIGHT_ONLY' ? ' · overnight' : ''}`}
                           </p>
                         </div>
                         <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
@@ -1171,7 +1212,11 @@ export default function TripMapPage() {
                     stop={selectedStop}
                     kind={classifyStop(selectedStop)}
                     weather={weatherData[selectedStop.id]}
-                    displayNum={stopBadges[selectedStop.id]}
+                    displayNum={
+                      combinedSH && selectedStop.id === stopsWithCoords[0]?.id
+                        ? 'S/H'
+                        : stopBadges[selectedStop.id]
+                    }
                     onClose={() => setSelectedStop(null)}
                     onUpdateNights={handleUpdateNights}
                   />
