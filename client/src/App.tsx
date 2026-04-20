@@ -16,6 +16,8 @@ import PricingPage from './pages/PricingPage'
 import SharedTripPage from './pages/SharedTripPage'
 import RoadmapPage from './pages/RoadmapPage'
 import AuthCallbackPage from './pages/auth/AuthCallbackPage'
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
+import TermsOfServicePage from './pages/TermsOfServicePage'
 
 // Onboarding
 import OnboardingPage from './pages/onboarding/OnboardingPage'
@@ -97,6 +99,8 @@ export default function App() {
         <Route path="/roadmap" element={<RoadmapPage />} />
         <Route path="/trips/share/:token" element={<SharedTripPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route path="/privacy" element={<PrivacyPolicyPage />} />
+        <Route path="/terms" element={<TermsOfServicePage />} />
 
         {/* Onboarding */}
         <Route path="/onboarding/*" element={<PrivateRoute><OnboardingPage /></PrivateRoute>} />

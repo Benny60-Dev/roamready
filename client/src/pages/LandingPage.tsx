@@ -143,10 +143,12 @@ export default function LandingPage() {
 
       <footer className="border-t border-gray-100 py-8" style={{ borderTopWidth: '0.5px' }}>
         <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <span className="text-sm text-gray-400">© 2025 RoamReady</span>
+          <span className="text-sm text-gray-400">© 2026 Martini AI Media LLC. All rights reserved.</span>
           <div className="flex items-center gap-4">
             <Link to="/pricing" className="text-sm text-gray-400 hover:text-gray-600">Pricing</Link>
             <Link to="/roadmap" className="text-sm text-gray-400 hover:text-gray-600">Roadmap</Link>
+            <Link to="/privacy" className="text-sm text-gray-400 hover:text-gray-600">Privacy Policy</Link>
+            <Link to="/terms" className="text-sm text-gray-400 hover:text-gray-600">Terms of Service</Link>
             <Link to="/login" className="text-sm text-gray-400 hover:text-gray-600">Sign in</Link>
           </div>
         </div>

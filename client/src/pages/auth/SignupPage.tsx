@@ -99,7 +99,10 @@ export default function SignupPage() {
             </button>
           </form>
           <p className="text-xs text-center text-gray-400 mt-3">
-            By signing up, you agree to our Terms and Privacy Policy
+            By creating an account, you agree to our{' '}
+            <Link to="/terms" className="text-[#1D9E75] hover:underline">Terms of Service</Link>{' '}
+            and{' '}
+            <Link to="/privacy" className="text-[#1D9E75] hover:underline">Privacy Policy</Link>
           </p>
         </div>
 
