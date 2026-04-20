@@ -102,19 +102,6 @@ export const campgroundsApi = {
   getCarCamping: () => api.get('/campgrounds/car-camping'),
 }
 
-// Weather
-export const weatherApi = {
-  getRoute: (stops: any[], dates: any[]) =>
-    api.get('/weather/route', { params: { stops: JSON.stringify(stops), dates: JSON.stringify(dates) } }),
-  getStop: (lat: number, lng: number, date?: string) =>
-    api.get('/weather/stop', { params: { lat, lng, date } }),
-  // Open-Meteo endpoints (free, no API key)
-  forecast: (params: { lat: number; lng: number; start_date: string; end_date: string }) =>
-    api.get('/weather/forecast', { params }),
-  historical: (params: { lat: number; lng: number; month: number; day: number; days: number }) =>
-    api.get('/weather/historical', { params }),
-}
-
 // Resources
 export const resourcesApi = {
   get: (lat: number, lng: number, type: string, radius?: number) =>
