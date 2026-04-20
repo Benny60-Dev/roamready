@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { useState } from 'react'
 import { authApi } from '../../services/api'
+import logoIcon from '../../assets/logo-icon.png'
 
 export default function ForgotPasswordPage() {
   const [sent, setSent] = useState(false)
@@ -19,10 +20,8 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <Link to="/" className="inline-flex items-center gap-2 mb-6">
-            <div className="w-8 h-8 bg-[#1D9E75] rounded-lg flex items-center justify-center">
-              <span className="text-white text-sm font-medium">RR</span>
-            </div>
+          <Link to="/" className="inline-block mb-6">
+            <img src={logoIcon} alt="RoamReady" className="h-16 w-auto object-contain mx-auto" />
           </Link>
           <h1 className="text-xl font-medium text-gray-900">Reset password</h1>
         </div>
@@ -48,7 +47,7 @@ export default function ForgotPasswordPage() {
           )}
         </div>
         <p className="text-center text-sm text-gray-500 mt-4">
-          <Link to="/login" className="text-[#1D9E75]">Back to sign in</Link>
+          <Link to="/login" className="text-[#1E3A8A]">Back to sign in</Link>
         </p>
       </div>
     </div>

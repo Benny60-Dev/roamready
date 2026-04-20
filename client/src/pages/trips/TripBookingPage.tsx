@@ -119,7 +119,7 @@ function ReservationSection({
       )}
 
       {justSaved && !open && (
-        <p className="mt-1.5 text-xs text-[#1D9E75] flex items-center gap-1">
+        <p className="mt-1.5 text-xs text-[#0F766E] flex items-center gap-1">
           <Check size={11} /> Saved
         </p>
       )}
@@ -270,13 +270,13 @@ function ReservationConfirmModal({
 
           {/* Cost */}
           {cg.siteRate && (
-            <div className="bg-green-50 border border-green-100 rounded-lg px-3 py-2.5 text-xs">
+            <div className="bg-[#CCFBF1]/30 border border-[#0F766E]/20 rounded-lg px-3 py-2.5 text-xs">
               <div className="flex justify-between text-gray-600">
                 <span>${cg.siteRate}/night × {stop.nights} nights</span>
                 <span className="font-semibold text-gray-900">${totalCost}</span>
               </div>
               {activeMemberships.length > 0 && (
-                <div className="mt-1.5 flex items-center gap-1 text-green-700">
+                <div className="mt-1.5 flex items-center gap-1 text-[#0F766E]">
                   <Tag size={10} />
                   <span>Membership discounts may apply: {activeMemberships.map(m => m.type).join(', ')}</span>
                 </div>
@@ -293,7 +293,7 @@ function ReservationConfirmModal({
                 {profile.children > 0 ? `, ${profile.children} child${profile.children !== 1 ? 'ren' : ''}` : ''}
               </span>
               {profile.hasPets && (
-                <span className="flex items-center gap-1 text-[#1D9E75]">
+                <span className="flex items-center gap-1 text-[#0F766E]">
                   <PawPrint size={12} />
                   Pets
                 </span>
@@ -348,11 +348,11 @@ function RecommendedCampgroundCard({
 
   return (
     <div className={`card mb-3 transition-colors ${
-      isConfirmed ? 'border-green-400 bg-green-50/20' : 'border-[#1D9E75]/40 bg-[#E1F5EE]/10'
+      isConfirmed ? 'border-[#0F766E]/40 bg-[#CCFBF1]/20' : 'border-[#1E3A8A]/20 bg-[#EFF6FF]/10'
     }`}>
       {/* Booked banner */}
       {isConfirmed && (
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-100 border border-green-200 rounded-lg px-3 py-2 mb-3">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-[#0D5F58] bg-[#CCFBF1] border border-[#0F766E]/30 rounded-lg px-3 py-2 mb-3">
           <CheckCircle size={13} /> Selected campground — booked
         </div>
       )}
@@ -410,21 +410,21 @@ function RecommendedCampgroundCard({
       {/* Links */}
       <div className="flex items-center gap-4 mt-3 pt-2.5 border-t border-gray-100" style={{ borderTopWidth: '0.5px' }}>
         {cg.phone && (
-          <a href={`tel:${cg.phone}`} className="flex items-center gap-1 text-xs text-[#1D9E75] hover:text-[#178a63] transition-colors">
+          <a href={`tel:${cg.phone}`} className="flex items-center gap-1 text-xs text-[#1E3A8A] hover:text-[#1E40AF] transition-colors">
             <Phone size={11} />{cg.phone}
           </a>
         )}
         {cg.website && (
-          <a href={cg.website} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-[#1D9E75] hover:text-[#178a63] transition-colors">
+          <a href={cg.website} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-[#1E3A8A] hover:text-[#1E40AF] transition-colors">
             <Globe size={11} /> Website
           </a>
         )}
         {cg.reservationUrl && (
-          <a href={cg.reservationUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-[#1D9E75] hover:text-[#178a63] transition-colors">
+          <a href={cg.reservationUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-[#1E3A8A] hover:text-[#1E40AF] transition-colors">
             <ExternalLink size={11} /> Recreation.gov
           </a>
         )}
-        <a href={mapUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#1D9E75] transition-colors ml-auto">
+        <a href={mapUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#1E3A8A] transition-colors ml-auto">
           <MapPin size={11} /> Map
         </a>
       </div>
@@ -452,7 +452,7 @@ function CompactAltCard({
 
   return (
     <div className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 bg-white transition-colors ${
-      isConfirmed ? 'border-green-300 bg-green-50/30' : 'border-gray-200'
+      isConfirmed ? 'border-[#0F766E]/30 bg-[#CCFBF1]/20' : 'border-gray-200'
     }`} style={{ borderWidth: '0.5px' }}>
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium text-gray-800 truncate">{cg.name}</p>
@@ -463,7 +463,7 @@ function CompactAltCard({
           {cg.isPetFriendly && <span className="text-[11px] text-gray-400">🐾</span>}
           {cg.rating != null && <span className="text-[11px] text-amber-500">★ {cg.rating.toFixed(1)}</span>}
           {isConfirmed && (
-            <span className="text-[11px] font-semibold text-green-600 flex items-center gap-0.5">
+            <span className="text-[11px] font-semibold text-[#0D5F58] flex items-center gap-0.5">
               <CheckCircle size={10} /> Booked
             </span>
           )}
@@ -484,7 +484,7 @@ function CompactAltCard({
 // ─── Sidebar stop item status config ─────────────────────────────────────────
 
 function statusBadge(status: string) {
-  if (status === 'CONFIRMED')  return { label: 'Booked',      cls: 'bg-green-100 text-green-700' }
+  if (status === 'CONFIRMED')  return { label: 'Booked',      cls: 'bg-[#CCFBF1] text-[#0D5F58]' }
   if (status === 'PENDING')    return { label: 'Pending',     cls: 'bg-amber-100 text-amber-700' }
   if (status === 'CANCELLED')  return { label: 'Cancelled',   cls: 'bg-red-100 text-red-500' }
   if (status === 'WAITLISTED') return { label: 'Pending',     cls: 'bg-amber-100 text-amber-700' }
@@ -601,7 +601,7 @@ export default function TripBookingPage() {
 
   if (loading) return (
     <div className="flex justify-center py-20">
-      <div className="w-6 h-6 border-2 border-[#1D9E75] border-t-transparent rounded-full animate-spin" />
+      <div className="w-6 h-6 border-2 border-[#1E3A8A] border-t-transparent rounded-full animate-spin" />
     </div>
   )
   if (!trip) return null
@@ -642,7 +642,7 @@ export default function TripBookingPage() {
         <div className="flex items-start gap-3 mb-4">
           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0 shadow-sm ${
             stop.type === 'HOME' ? 'bg-gray-400' :
-            stop.type === 'OVERNIGHT_ONLY' ? 'bg-[#7F77DD]' : 'bg-[#1D9E75]'
+            stop.type === 'OVERNIGHT_ONLY' ? 'bg-[#7F77DD]' : 'bg-[#1E3A8A]'
           }`}>
             {String(stopDisplayNumbers[stop.id] ?? '')}
           </div>
@@ -706,7 +706,7 @@ export default function TripBookingPage() {
           <div>
             <button
               onClick={() => setExpandedAlts(prev => ({ ...prev, [stop.id]: !(prev[stop.id] ?? false) }))}
-              className="text-xs text-[#1D9E75] underline underline-offset-2 hover:text-[#178a63] transition-colors"
+              className="text-xs text-[#1E3A8A] underline underline-offset-2 hover:text-[#1E40AF] transition-colors"
             >
               {showAlts
                 ? 'Hide other options'
@@ -744,7 +744,7 @@ export default function TripBookingPage() {
 
       {/* Breadcrumb strip */}
       <div className="flex-shrink-0 bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-1.5">
-        <Link to="/reservations" className="text-xs text-[#1D9E75] hover:text-[#178a65] transition-colors">Bookings</Link>
+        <Link to="/reservations" className="text-xs text-[#1E3A8A] hover:text-[#1E40AF] transition-colors">Bookings</Link>
         <span className="text-gray-300 text-xs">›</span>
         <span className="text-xs text-gray-700 font-medium truncate max-w-[200px]">{trip.name}</span>
       </div>
@@ -769,7 +769,7 @@ export default function TripBookingPage() {
               onClick={() => setActiveStop(stop.id)}
               className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs border transition-colors ${
                 activeStop === stop.id
-                  ? 'bg-[#1D9E75] text-white border-[#1D9E75]'
+                  ? 'bg-[#1E3A8A] text-white border-[#1E3A8A]'
                   : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
               }`}
               style={{ borderWidth: '0.5px' }}
@@ -781,7 +781,7 @@ export default function TripBookingPage() {
               </span>
               <span className="max-w-[90px] truncate">{stop.locationName}</span>
               {stop.bookingStatus === 'CONFIRMED' && (
-                <CheckCircle size={10} className={activeStop === stop.id ? 'text-white' : 'text-[#1D9E75]'} />
+                <CheckCircle size={10} className={activeStop === stop.id ? 'text-white' : 'text-[#0F766E]'} />
               )}
             </button>
           ))}
@@ -809,18 +809,18 @@ export default function TripBookingPage() {
                   onClick={() => scrollToStop(stop.id)}
                   className={`w-full text-left flex items-start gap-2.5 px-2.5 py-2.5 rounded-lg transition-colors group ${
                     isActive
-                      ? 'bg-[#1D9E75]/10 border-l-[3px] border-[#1D9E75] pl-[7px]'
+                      ? 'bg-[#1E3A8A]/10 border-l-[3px] border-[#1E3A8A] pl-[7px]'
                       : 'hover:bg-gray-50 border-l-[3px] border-transparent'
                   }`}
                 >
                   <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 mt-0.5 ${
                     stop.type === 'HOME' ? 'bg-gray-400' :
-                    stop.type === 'OVERNIGHT_ONLY' ? 'bg-[#7F77DD]' : 'bg-[#1D9E75]'
+                    stop.type === 'OVERNIGHT_ONLY' ? 'bg-[#7F77DD]' : 'bg-[#1E3A8A]'
                   }`}>
                     {String(stopDisplayNumbers[stop.id] ?? '')}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className={`text-xs font-medium truncate ${isActive ? 'text-[#1D9E75]' : 'text-gray-800'}`}>
+                    <p className={`text-xs font-medium truncate ${isActive ? 'text-[#1E3A8A]' : 'text-gray-800'}`}>
                       {stop.locationName}
                     </p>
                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
@@ -900,7 +900,7 @@ export default function TripBookingPage() {
           <footer className="flex-shrink-0 border-t border-gray-100 bg-white px-4 md:px-6 py-2.5 flex items-center justify-between">
             <div className="flex items-center gap-4 text-xs text-gray-500">
               <span className="flex items-center gap-1">
-                <CheckCircle size={12} className="text-[#1D9E75]" />
+                <CheckCircle size={12} className="text-[#0F766E]" />
                 <span className="font-medium text-gray-700">{bookedCount}</span>/{bookableStops.length} booked
               </span>
               {incompatCount > 0 && (

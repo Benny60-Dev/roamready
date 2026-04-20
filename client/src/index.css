@@ -28,20 +28,20 @@
     border-width: 0.5px;
   }
   .btn-primary {
-    @apply bg-[#1D9E75] text-white px-4 py-2 rounded-lg font-medium text-sm hover:bg-[#085041] transition-colors;
+    @apply bg-[#EA6A0A] text-white px-4 py-2 rounded-lg font-medium text-sm hover:bg-[#C2580A] transition-colors;
   }
   .btn-secondary {
-    @apply bg-[#E1F5EE] text-[#1D9E75] px-4 py-2 rounded-lg font-medium text-sm hover:bg-[#1D9E75] hover:text-white transition-colors;
+    @apply bg-[#EFF6FF] text-[#1E3A8A] px-4 py-2 rounded-lg font-medium text-sm hover:bg-[#1E3A8A] hover:text-white transition-colors;
   }
   .btn-outline {
-    @apply border border-[#1D9E75] text-[#1D9E75] px-4 py-2 rounded-lg font-medium text-sm hover:bg-[#E1F5EE] transition-colors;
+    @apply border border-[#1E3A8A] text-[#1E3A8A] px-4 py-2 rounded-lg font-medium text-sm hover:bg-[#EFF6FF] transition-colors;
     border-width: 0.5px;
   }
   .btn-ghost {
     @apply text-gray-600 px-4 py-2 rounded-lg font-medium text-sm hover:bg-gray-100 transition-colors;
   }
   .input {
-    @apply w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D9E75]/20 focus:border-[#1D9E75] transition-colors;
+    @apply w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/20 focus:border-[#1E3A8A] transition-colors;
     border-width: 0.5px;
   }
   .label {
@@ -51,7 +51,7 @@
     @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
   }
   .badge-green {
-    @apply badge bg-[#E1F5EE] text-[#085041];
+    @apply badge bg-[#CCFBF1] text-[#0D5F58];
   }
   .badge-amber {
     @apply badge bg-amber-50 text-amber-800;

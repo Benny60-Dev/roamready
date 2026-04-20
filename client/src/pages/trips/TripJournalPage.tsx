@@ -44,7 +44,7 @@ function StopJournal({ stop, badge }: { stop: Stop; badge: 'S' | 'H' | 'F' | num
   return (
     <div className="card-lg space-y-4">
       <div className="flex items-center gap-3">
-        <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs bg-[#1D9E75]">
+        <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs bg-[#1E3A8A]">
           {String(badge)}
         </div>
         <div>
@@ -110,7 +110,7 @@ export default function TripJournalPage() {
     tripsApi.get(id).then(res => { setTrip(res.data); setLoading(false) })
   }, [id])
 
-  if (loading) return <div className="flex justify-center py-20"><div className="w-6 h-6 border-2 border-[#1D9E75] border-t-transparent rounded-full animate-spin" /></div>
+  if (loading) return <div className="flex justify-center py-20"><div className="w-6 h-6 border-2 border-[#1E3A8A] border-t-transparent rounded-full animate-spin" /></div>
   if (!trip) return null
 
   return (

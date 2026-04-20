@@ -319,7 +319,7 @@ export default function NewTripPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
       {/* Profile context bar */}
-      <div className="flex items-center gap-3 px-4 py-2 bg-[#E1F5EE] rounded-xl mb-4 text-xs text-[#085041]">
+      <div className="flex items-center gap-3 px-4 py-2 bg-[#EFF6FF] rounded-xl mb-4 text-xs text-[#1E3A8A]">
         {rig && (
           <span className="flex items-center gap-1">
             <MapPin size={12} />
@@ -351,7 +351,7 @@ export default function NewTripPage() {
                 <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[80%] rounded-xl px-4 py-3 text-sm ${
                     msg.role === 'user'
-                      ? 'bg-[#1D9E75] text-white'
+                      ? 'bg-[#1E3A8A] text-white'
                       : 'bg-white border border-gray-200 text-gray-800'
                   }`} style={{ borderWidth: '0.5px' }}>
                     <p className="whitespace-pre-wrap">{cleanText(msg.content)}</p>
@@ -365,7 +365,7 @@ export default function NewTripPage() {
                         key={idx}
                         onClick={() => sendMessage(label)}
                         disabled={typing}
-                        className="text-xs px-3 py-1.5 rounded-full border border-[#1D9E75] text-[#1D9E75] bg-white hover:bg-[#E1F5EE] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="text-xs px-3 py-1.5 rounded-full border border-[#1E3A8A] text-[#1E3A8A] bg-white hover:bg-[#EFF6FF] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {label}
                       </button>
@@ -438,7 +438,7 @@ export default function NewTripPage() {
               <div className="flex-1 overflow-y-auto min-h-0 space-y-2">
                 {itinerary.stops?.map((stop: any, i: number) => (
                   <div key={i} className="flex gap-2">
-                    <div className="w-5 h-5 bg-[#1D9E75] rounded-full flex items-center justify-center text-white text-xs flex-shrink-0">
+                    <div className="w-5 h-5 bg-[#1E3A8A] rounded-full flex items-center justify-center text-white text-xs flex-shrink-0">
                       {i + 1}
                     </div>
                     <div className="flex-1">
@@ -471,8 +471,8 @@ export default function NewTripPage() {
       {/* Itinerary ready — sticky banner + full-width build button (all screen sizes) */}
       {itinerary && (
         <div className="mt-3 flex flex-col gap-2">
-          <div className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#E1F5EE] border border-[#1D9E75] rounded-xl">
-            <span className="text-[#085041] text-sm font-medium">Your itinerary is ready! Click below to build your full trip.</span>
+          <div className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#EFF6FF] border border-[#1E3A8A] rounded-xl">
+            <span className="text-[#1E3A8A] text-sm font-medium">Your itinerary is ready! Click below to build your full trip.</span>
           </div>
           {buildError && (
             <p className="text-xs text-red-600 text-center">{buildError}</p>
@@ -480,7 +480,7 @@ export default function NewTripPage() {
           <button
             onClick={buildItinerary}
             disabled={creating}
-            className="w-full py-3.5 bg-[#1D9E75] hover:bg-[#178a64] active:bg-[#136e54] text-white font-semibold text-base rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
+            className="w-full py-3.5 bg-[#EA6A0A] hover:bg-[#C2580A] active:bg-[#A84D09] text-white font-semibold text-base rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
           >
             {creating ? (
               <><Loader size={18} className="animate-spin" /> Building your trip...</>

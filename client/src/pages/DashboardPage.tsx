@@ -15,7 +15,7 @@ function TripCard({ trip }: { trip: Trip }) {
   }[trip.status]
 
   return (
-    <Link to={`/trips/${trip.id}/map`} className="card hover:border-[#1D9E75]/30 transition-all block">
+    <Link to={`/trips/${trip.id}/map`} className="card hover:border-[#1E3A8A]/30 transition-all block">
       <div className="flex items-start justify-between mb-3">
         <div>
           <h3 className="font-medium text-gray-900 text-sm">{trip.name}</h3>
@@ -75,10 +75,10 @@ export default function DashboardPage() {
     <div className="space-y-6">
       {/* Trial banner */}
       {isTrial && user?.subscriptionTier === 'FREE' && (
-        <div className="bg-[#E1F5EE] border border-[#1D9E75]/20 rounded-xl p-4 flex items-center justify-between">
+        <div className="bg-[#EFF6FF] border border-[#1E3A8A]/20 rounded-xl p-4 flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-[#085041]">🎉 Pro trial active — {trialDaysLeft} days left</p>
-            <p className="text-xs text-[#1D9E75] mt-0.5">All Pro features unlocked. Upgrade to keep them.</p>
+            <p className="text-sm font-medium text-[#1E40AF]">🎉 Pro trial active — {trialDaysLeft} days left</p>
+            <p className="text-xs text-[#1E3A8A] mt-0.5">All Pro features unlocked. Upgrade to keep them.</p>
           </div>
           <Link to="/profile/billing/upgrade" className="btn-primary text-sm">Upgrade</Link>
         </div>
@@ -99,11 +99,11 @@ export default function DashboardPage() {
       {activeTrip && (
         <div>
           <h2 className="text-sm font-medium text-gray-700 mb-2">Active trip</h2>
-          <div className="bg-[#E1F5EE] border border-[#1D9E75]/20 rounded-xl p-4">
+          <div className="bg-[#EFF6FF] border border-[#1E3A8A]/20 rounded-xl p-4">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-medium text-[#085041]">{activeTrip.name}</h3>
-                <p className="text-sm text-[#1D9E75] mt-0.5">{activeTrip.startLocation} → {activeTrip.endLocation}</p>
+                <h3 className="font-medium text-[#1E40AF]">{activeTrip.name}</h3>
+                <p className="text-sm text-[#1E3A8A] mt-0.5">{activeTrip.startLocation} → {activeTrip.endLocation}</p>
               </div>
               <Link to={`/trips/${activeTrip.id}/map`} className="btn-primary text-sm flex items-center gap-1">
                 View <ChevronRight size={14} />
@@ -117,7 +117,7 @@ export default function DashboardPage() {
       <div>
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-sm font-medium text-gray-700">Planning</h2>
-          <Link to="/trips" className="text-xs text-[#1D9E75]">View all</Link>
+          <Link to="/trips" className="text-xs text-[#1E3A8A]">View all</Link>
         </div>
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -149,8 +149,8 @@ export default function DashboardPage() {
             { to: '/resources', icon: Map, label: 'Resources' },
             { to: '/roadmap', icon: Package, label: 'Roadmap' },
           ].map(({ to, icon: Icon, label }) => (
-            <Link key={to} to={to} className="card flex flex-col items-center gap-2 py-4 hover:border-[#1D9E75]/30 transition-all">
-              <Icon size={18} className="text-[#1D9E75]" />
+            <Link key={to} to={to} className="card flex flex-col items-center gap-2 py-4 hover:border-[#1E3A8A]/30 transition-all">
+              <Icon size={18} className="text-[#1E3A8A]" />
               <span className="text-xs text-gray-600">{label}</span>
             </Link>
           ))}

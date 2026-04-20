@@ -56,7 +56,7 @@ export default function NotificationSettingsPage() {
                   type="checkbox"
                   checked={settings[type]?.enabled}
                   onChange={() => toggle(type)}
-                  className="w-4 h-4 rounded text-[#1D9E75]"
+                  className="w-4 h-4 rounded text-[#1E3A8A]"
                 />
               </div>
               <div>
@@ -70,7 +70,7 @@ export default function NotificationSettingsPage() {
                         onClick={() => toggleMethod(type, method)}
                         className={`text-xs px-2 py-0.5 rounded border transition-colors ${
                           settings[type].method.includes(method)
-                            ? 'border-[#1D9E75] text-[#1D9E75] bg-[#E1F5EE]'
+                            ? 'border-[#1E3A8A] text-[#1E3A8A] bg-[#EFF6FF]'
                             : 'border-gray-200 text-gray-400'
                         }`}
                         style={{ borderWidth: '0.5px' }}

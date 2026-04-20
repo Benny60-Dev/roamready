@@ -26,7 +26,7 @@ function FeedbackCard({ item, onVote }: { item: Feedback; onVote: (id: string) =
         </div>
         <button
           onClick={() => isAuthenticated() && onVote(item.id)}
-          className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg border border-gray-200 hover:border-[#1D9E75] hover:text-[#1D9E75] transition-colors text-gray-400"
+          className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg border border-gray-200 hover:border-[#1E3A8A] hover:text-[#1E3A8A] transition-colors text-gray-400"
           style={{ borderWidth: '0.5px' }}
         >
           <ThumbsUp size={13} />
@@ -87,7 +87,7 @@ export default function RoadmapPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Column title="Planned" items={data.planned} color="bg-blue-50 text-blue-700" />
             <Column title="In Progress" items={data.inProgress} color="bg-amber-50 text-amber-700" />
-            <Column title="Shipped" items={data.shipped} color="bg-[#E1F5EE] text-[#085041]" />
+            <Column title="Shipped" items={data.shipped} color="bg-[#CCFBF1] text-[#0D5F58]" />
           </div>
         )}
       </div>

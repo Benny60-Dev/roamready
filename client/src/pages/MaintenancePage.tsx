@@ -64,7 +64,7 @@ export default function MaintenancePage() {
               key={rig.id}
               onClick={() => setActiveRig(rig.id)}
               className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
-                activeRig === rig.id ? 'bg-[#1D9E75] text-white border-[#1D9E75]' : 'border-gray-200 text-gray-600'
+                activeRig === rig.id ? 'bg-[#1E3A8A] text-white border-[#1E3A8A]' : 'border-gray-200 text-gray-600'
               }`}
               style={{ borderWidth: '0.5px' }}
             >
@@ -89,7 +89,7 @@ export default function MaintenancePage() {
               <div className="text-xs text-gray-500">Due soon</div>
             </div>
             <div className="card text-center">
-              <div className="text-2xl font-medium text-[#1D9E75]">{ok.length}</div>
+              <div className="text-2xl font-medium text-[#1E3A8A]">{ok.length}</div>
               <div className="text-xs text-gray-500">Up to date</div>
             </div>
           </div>

@@ -23,12 +23,12 @@ export default function AdminRevenuePage() {
       ) : (
         <div className="grid grid-cols-2 gap-3">
           <div className="card">
-            <DollarSign size={16} className="text-[#1D9E75] mb-2" />
+            <DollarSign size={16} className="text-[#1E3A8A] mb-2" />
             <div className="text-2xl font-medium text-gray-900">${revenue?.mrr?.toFixed(2)}</div>
             <div className="text-xs text-gray-500">Monthly Recurring Revenue</div>
           </div>
           <div className="card">
-            <TrendingUp size={16} className="text-[#1D9E75] mb-2" />
+            <TrendingUp size={16} className="text-[#1E3A8A] mb-2" />
             <div className="text-2xl font-medium text-gray-900">${revenue?.arr?.toFixed(2)}</div>
             <div className="text-xs text-gray-500">Annual Run Rate</div>
           </div>

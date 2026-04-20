@@ -18,7 +18,7 @@ const VEHICLE_LABELS: Record<VehicleType, string> = {
 
 function RigCard({ rig, onDelete, onSetDefault }: { rig: Rig; onDelete: (id: string) => void; onSetDefault: (id: string) => void }) {
   return (
-    <div className={`card ${rig.isDefault ? 'border-[#1D9E75]/40 bg-[#E1F5EE]/30' : ''}`}>
+    <div className={`card ${rig.isDefault ? 'border-[#1E3A8A]/40 bg-[#EFF6FF]/30' : ''}`}>
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2 mb-0.5">
@@ -37,7 +37,7 @@ function RigCard({ rig, onDelete, onSetDefault }: { rig: Rig; onDelete: (id: str
             {rig.fuelType && <span>{rig.fuelType}</span>}
           </div>
           {rig.isToyHauler && rig.toys && (
-            <div className="mt-1 text-xs text-[#1D9E75]">🏍️ {(rig.toys as string[]).join(', ')}</div>
+            <div className="mt-1 text-xs text-[#1E3A8A]">🏍️ {(rig.toys as string[]).join(', ')}</div>
           )}
         </div>
         <div className="flex items-center gap-1 ml-2">

@@ -61,7 +61,7 @@ export function StopWeatherCard({ stop, weather, compact = false }: Props) {
                 href={nwsUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-0.5 text-[10px] text-[#1D9E75] hover:text-[#178a63] font-medium transition-colors"
+                className="flex items-center gap-0.5 text-[10px] text-[#1E3A8A] hover:text-[#1E40AF] font-medium transition-colors"
               >
                 View live forecast on NWS → <ExternalLink size={9} />
               </a>
@@ -89,7 +89,7 @@ export function StopWeatherCard({ stop, weather, compact = false }: Props) {
         </div>
         {!compact && (
           <div className="space-y-0.5 text-gray-500">
-            <div><span className="text-green-600 font-medium">Best case:</span> {w.bestCase}</div>
+            <div><span className="text-[#0F766E] font-medium">Best case:</span> {w.bestCase}</div>
             <div><span className="text-red-500 font-medium">Worst case:</span> {w.worstCase}</div>
           </div>
         )}
@@ -105,10 +105,10 @@ export function StopWeatherCard({ stop, weather, compact = false }: Props) {
   )
 
   return (
-    <div className="mt-2 rounded-lg border border-[#1D9E75]/30 bg-green-50/30 px-3 py-2.5 text-xs">
+    <div className="mt-2 rounded-lg border border-[#1E3A8A]/20 bg-[#EFF6FF]/30 px-3 py-2.5 text-xs">
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
-        <span className="font-semibold text-[#1D9E75] flex items-center gap-1.5">
+        <span className="font-semibold text-[#1E3A8A] flex items-center gap-1.5">
           📡 Live {w.days.length}-day forecast
         </span>
         {nwsUrl && (
@@ -116,7 +116,7 @@ export function StopWeatherCard({ stop, weather, compact = false }: Props) {
             href={nwsUrl}
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-1 text-xs text-[#1D9E75] hover:text-[#178a63] transition-colors"
+            className="flex items-center gap-1 text-xs text-[#1E3A8A] hover:text-[#1E40AF] transition-colors"
           >
             Full forecast <ExternalLink size={10} />
           </a>

@@ -102,7 +102,7 @@ export default function PricingPage() {
               onClick={() => setAnnual(true)}
               className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${annual ? 'bg-white text-gray-900' : 'text-gray-500'}`}
             >
-              Annual <span className="text-[#1D9E75] ml-1">Save 35%</span>
+              Annual <span className="text-[#0F766E] ml-1">Save 35%</span>
             </button>
           </div>
         </div>
@@ -111,7 +111,7 @@ export default function PricingPage() {
           {PLANS.map(plan => (
             <div
               key={plan.id}
-              className={`rounded-xl border p-6 ${plan.highlight ? 'border-[#1D9E75] bg-[#E1F5EE]/20' : 'border-gray-200 bg-white'}`}
+              className={`rounded-xl border p-6 ${plan.highlight ? 'border-[#EA6A0A] bg-[#FFF7ED]/20' : 'border-gray-200 bg-white'}`}
               style={{ borderWidth: '0.5px' }}
             >
               {plan.highlight && <div className="badge-green text-xs mb-3">Most popular</div>}
@@ -141,7 +141,7 @@ export default function PricingPage() {
                   onClick={() => handleUpgrade(plan.id)}
                   disabled={loading === plan.id || user?.subscriptionTier === plan.id.replace('plus', '_PLUS').toUpperCase()}
                   className={`w-full py-2.5 rounded-lg text-sm font-medium mb-6 transition-colors ${
-                    plan.highlight ? 'bg-[#1D9E75] text-white hover:bg-[#085041]' : 'border border-[#1D9E75] text-[#1D9E75] hover:bg-[#E1F5EE]'
+                    plan.highlight ? 'bg-[#EA6A0A] text-white hover:bg-[#C2580A]' : 'border border-[#1E3A8A] text-[#1E3A8A] hover:bg-[#EFF6FF]'
                   } disabled:opacity-40`}
                   style={{ borderWidth: '0.5px' }}
                 >
@@ -152,7 +152,7 @@ export default function PricingPage() {
               <ul className="space-y-2">
                 {plan.features.map(feature => (
                   <li key={feature} className="flex items-start gap-2 text-sm text-gray-600">
-                    <Check size={14} className="text-[#1D9E75] flex-shrink-0 mt-0.5" />
+                    <Check size={14} className="text-[#1E3A8A] flex-shrink-0 mt-0.5" />
                     {feature}
                   </li>
                 ))}

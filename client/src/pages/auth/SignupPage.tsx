@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { useState } from 'react'
 import { authApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
+import logoIcon from '../../assets/logo-icon.png'
 
 interface FormData {
   firstName: string
@@ -37,11 +38,8 @@ export default function SignupPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <Link to="/" className="inline-flex items-center gap-2 mb-6">
-            <div className="w-8 h-8 bg-[#1D9E75] rounded-lg flex items-center justify-center">
-              <span className="text-white text-sm font-medium">RR</span>
-            </div>
-            <span className="font-medium text-gray-900">RoamReady</span>
+          <Link to="/" className="inline-block mb-6">
+            <img src={logoIcon} alt="RoamReady" className="h-16 w-auto object-contain mx-auto" />
           </Link>
           <h1 className="text-xl font-medium text-gray-900">Create your account</h1>
           <p className="text-sm text-gray-500 mt-1">Start your 7-day free trial</p>
@@ -100,15 +98,15 @@ export default function SignupPage() {
           </form>
           <p className="text-xs text-center text-gray-400 mt-3">
             By creating an account, you agree to our{' '}
-            <Link to="/terms" className="text-[#1D9E75] hover:underline">Terms of Service</Link>{' '}
+            <Link to="/terms" className="text-[#1E3A8A] hover:underline">Terms of Service</Link>{' '}
             and{' '}
-            <Link to="/privacy" className="text-[#1D9E75] hover:underline">Privacy Policy</Link>
+            <Link to="/privacy" className="text-[#1E3A8A] hover:underline">Privacy Policy</Link>
           </p>
         </div>
 
         <p className="text-center text-sm text-gray-500 mt-4">
           Already have an account?{' '}
-          <Link to="/login" className="text-[#1D9E75] font-medium">Sign in</Link>
+          <Link to="/login" className="text-[#1E3A8A] font-medium">Sign in</Link>
         </p>
       </div>
     </div>

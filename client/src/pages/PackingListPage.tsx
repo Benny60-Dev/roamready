@@ -45,7 +45,7 @@ export default function PackingListPage() {
   const checkedItems = categories.reduce((sum, cat) => sum + cat.items.filter(i => i.checked).length, 0)
   const progress = totalItems > 0 ? Math.round((checkedItems / totalItems) * 100) : 0
 
-  if (loading) return <div className="flex justify-center py-20"><div className="w-6 h-6 border-2 border-[#1D9E75] border-t-transparent rounded-full animate-spin" /></div>
+  if (loading) return <div className="flex justify-center py-20"><div className="w-6 h-6 border-2 border-[#1E3A8A] border-t-transparent rounded-full animate-spin" /></div>
 
   return (
     <div className="space-y-4 max-w-2xl">
@@ -68,10 +68,10 @@ export default function PackingListPage() {
         <div className="card">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm text-gray-600">{checkedItems} of {totalItems} packed</span>
-            <span className="text-sm font-medium text-[#1D9E75]">{progress}%</span>
+            <span className="text-sm font-medium text-[#1E3A8A]">{progress}%</span>
           </div>
           <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-            <div className="h-full bg-[#1D9E75] rounded-full transition-all" style={{ width: `${progress}%` }} />
+            <div className="h-full bg-[#1E3A8A] rounded-full transition-all" style={{ width: `${progress}%` }} />
           </div>
         </div>
       )}
@@ -95,7 +95,7 @@ export default function PackingListPage() {
                 {cat.items.map((item, ii) => (
                   <label key={ii} className="flex items-center gap-3 cursor-pointer group">
                     <div className={`w-5 h-5 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${
-                      item.checked ? 'bg-[#1D9E75] border-[#1D9E75]' : 'border-gray-300 group-hover:border-[#1D9E75]'
+                      item.checked ? 'bg-[#1E3A8A] border-[#1E3A8A]' : 'border-gray-300 group-hover:border-[#1E3A8A]'
                     }`} style={{ borderWidth: '0.5px' }}
                       onClick={() => toggleItem(ci, ii)}
                     >

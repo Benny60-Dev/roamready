@@ -54,7 +54,7 @@ export default function TripsPage() {
               key={s}
               onClick={() => setFilter(s)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                filter === s ? 'bg-[#1D9E75] text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                filter === s ? 'bg-[#1E3A8A] text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
               }`}
               style={{ borderWidth: '0.5px' }}
             >
@@ -88,7 +88,7 @@ export default function TripsPage() {
           {filtered.map(trip => {
             const statusColors = {
               PLANNING: 'text-amber-600 bg-amber-50',
-              ACTIVE: 'text-[#1D9E75] bg-[#E1F5EE]',
+              ACTIVE: 'text-[#0F766E] bg-[#CCFBF1]',
               COMPLETED: 'text-gray-500 bg-gray-100',
               DRAFT: 'text-gray-400 bg-gray-50',
             }
@@ -96,7 +96,7 @@ export default function TripsPage() {
               <Link
                 key={trip.id}
                 to={`/trips/${trip.id}/map`}
-                className="card flex items-center justify-between hover:border-[#1D9E75]/30 transition-all"
+                className="card flex items-center justify-between hover:border-[#1E3A8A]/30 transition-all"
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">

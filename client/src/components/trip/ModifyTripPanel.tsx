@@ -308,7 +308,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
           style={{ borderBottomWidth: '0.5px' }}
         >
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-[#1D9E75] flex items-center justify-center flex-shrink-0">
+            <div className="w-6 h-6 rounded-full bg-[#1E3A8A] flex items-center justify-center flex-shrink-0">
               <Wand2 size={12} className="text-white" />
             </div>
             <div className="min-w-0">
@@ -332,7 +332,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
                 key={chip}
                 onClick={() => sendMessage(chip)}
                 disabled={typing || applying}
-                className="flex-shrink-0 text-[11px] px-2.5 py-1 rounded-full border border-[#1D9E75] text-[#1D9E75] bg-white hover:bg-[#E1F5EE] transition-colors disabled:opacity-40 whitespace-nowrap"
+                className="flex-shrink-0 text-[11px] px-2.5 py-1 rounded-full border border-[#1E3A8A] text-[#1E3A8A] bg-white hover:bg-[#EFF6FF] transition-colors disabled:opacity-40 whitespace-nowrap"
               >
                 {chip}
               </button>
@@ -349,7 +349,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
                 <div
                   className={`max-w-[88%] rounded-xl px-3 py-2.5 text-[13px] leading-relaxed ${
                     msg.role === 'user'
-                      ? 'bg-[#1D9E75] text-white'
+                      ? 'bg-[#1E3A8A] text-white'
                       : 'bg-gray-50 border border-gray-200 text-gray-800'
                   }`}
                   style={{ borderWidth: '0.5px' }}
@@ -363,7 +363,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
                 msg.modifyAction &&
                 !msg.modifyApplied &&
                 !msg.modifyCancelled && (
-                  <div className="mt-2 mr-4 bg-white border border-[#1D9E75]/25 rounded-xl p-3 shadow-sm">
+                  <div className="mt-2 mr-4 bg-white border border-[#1E3A8A]/25 rounded-xl p-3 shadow-sm">
                     <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Proposed change</p>
                     <p className="text-sm font-medium text-gray-900 mb-2.5">
                       {getConfirmationText(msg.modifyAction)}
@@ -372,7 +372,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
                       <button
                         onClick={() => applyModification(i, msg.modifyAction!)}
                         disabled={applying}
-                        className="flex-1 py-1.5 text-xs font-medium rounded-lg bg-[#1D9E75] text-white hover:bg-[#178a63] transition-colors disabled:opacity-50"
+                        className="flex-1 py-1.5 text-xs font-medium rounded-lg bg-[#EA6A0A] text-white hover:bg-[#C2580A] transition-colors disabled:opacity-50"
                       >
                         {applying ? 'Applying…' : '✓ Apply'}
                       </button>
@@ -390,7 +390,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
 
               {/* Applied / cancelled status */}
               {msg.role === 'assistant' && msg.modifyAction && msg.modifyApplied && (
-                <div className="mt-1 ml-0.5 text-[11px] text-green-600 font-medium">
+                <div className="mt-1 ml-0.5 text-[11px] text-[#0F766E] font-medium">
                   ✅ Applied to trip
                 </div>
               )}

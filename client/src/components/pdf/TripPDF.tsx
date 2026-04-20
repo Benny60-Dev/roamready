@@ -2,6 +2,7 @@ import {
   Document, Page, View, Text, StyleSheet, Image,
 } from '@react-pdf/renderer'
 import { Trip, Stop, ItineraryDay, ItineraryActivity } from '../../types/index'
+import logoIconUrl from '../../assets/logo-icon.png'
 import { format, addDays } from 'date-fns'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -28,8 +29,8 @@ export interface TimelineEntry {
 
 // ─── Colors / constants ───────────────────────────────────────────────────────
 
-const GREEN  = '#1D9E75'
-const GREEN_L = '#E1F5EE'
+const GREEN  = '#1E3A8A'
+const GREEN_L = '#EFF6FF'
 const BLUE_L  = '#EFF6FF'
 const AMBER_L = '#FFFBEB'
 const PURP_L  = '#F5F3FF'
@@ -55,8 +56,7 @@ const s = StyleSheet.create({
   // Header
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
   logoBox: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  logoDot: { width: 22, height: 22, borderRadius: 6, backgroundColor: GREEN, justifyContent: 'center', alignItems: 'center' },
-  logoText: { fontSize: 7, fontFamily: 'Helvetica-Bold', color: WHITE, letterSpacing: 0.3 },
+  logoImg: { width: 40, height: 40, objectFit: 'contain' },
   brandName: { fontSize: 14, fontFamily: 'Helvetica-Bold', color: GRAY_9 },
   brandTag: { fontSize: 8, color: GRAY_5, marginTop: 1 },
   headerRight: { textAlign: 'right' },
@@ -94,7 +94,7 @@ const s = StyleSheet.create({
   routeDesc: { fontSize: 8, color: GRAY_7, lineHeight: 1.4 },
 
   // Stay/Activity/Overnight row
-  stayCard: { backgroundColor: GREEN_L, borderWidth: 1, borderColor: '#A7F3D0', borderRadius: 6 },
+  stayCard: { backgroundColor: GREEN_L, borderWidth: 1, borderColor: '#BFDBFE', borderRadius: 6 },
   actCard: { backgroundColor: AMBER_L, borderWidth: 1, borderColor: '#FDE68A', borderRadius: 6 },
   ovCard: { backgroundColor: PURP_L, borderWidth: 1, borderColor: '#DDD6FE', borderRadius: 6 },
 
@@ -328,7 +328,7 @@ function StopEntry({ entry }: { entry: TimelineEntry }) {
     : entry.type === 'OVERNIGHT' ? s.ovCard
     : s.actCard
 
-  const badgeBg = entry.type === 'STAY' ? '#A7F3D0'
+  const badgeBg = entry.type === 'STAY' ? '#BFDBFE'
     : entry.type === 'OVERNIGHT' ? '#DDD6FE'
     : '#FDE68A'
 
@@ -485,9 +485,7 @@ export function TripPDF({ trip, mapImageBase64 }: Props) {
         {/* ── Header ── */}
         <View style={s.headerRow}>
           <View style={s.logoBox}>
-            <View style={s.logoDot}>
-              <Text style={s.logoText}>RR</Text>
-            </View>
+            <Image src={logoIconUrl} style={s.logoImg} />
             <View>
               <Text style={s.brandName}>RoamReady</Text>
               <Text style={s.brandTag}>Trip Itinerary</Text>

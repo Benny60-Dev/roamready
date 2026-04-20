@@ -298,7 +298,7 @@ function cascadeChange(entries: TimelineEntry[], idx: number, field: CascadeFiel
 
 const ROW_CONFIG = {
   DRIVE:     { bg: 'bg-blue-50',   border: 'border-blue-200',   text: 'text-blue-700',   icon: Car,  label: 'Drive Day' },
-  STAY:      { bg: 'bg-green-50',  border: 'border-green-200',  text: 'text-green-700',  icon: Tent, label: 'Arrival & Check-in' },
+  STAY:      { bg: 'bg-[#CCFBF1]/40', border: 'border-[#0F766E]/30', text: 'text-[#0D5F58]', icon: Tent, label: 'Arrival & Check-in' },
   ACTIVITY:  { bg: 'bg-amber-50',  border: 'border-amber-200',  text: 'text-amber-700',  icon: Star, label: 'Explore Day' },
   OVERNIGHT: { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700', icon: Moon, label: 'Overnight Stop' },
 }
@@ -651,7 +651,7 @@ export default function TripSummaryPage() {
 
   if (loading) return (
     <div className="flex justify-center py-20">
-      <div className="w-6 h-6 border-2 border-[#1D9E75] border-t-transparent rounded-full animate-spin" />
+      <div className="w-6 h-6 border-2 border-[#1E3A8A] border-t-transparent rounded-full animate-spin" />
     </div>
   )
   if (!trip) return null
@@ -686,7 +686,7 @@ export default function TripSummaryPage() {
         <div className="flex gap-2 flex-shrink-0 flex-wrap">
           <button
             onClick={() => setModifyPanelOpen(true)}
-            className="btn-outline text-sm flex items-center gap-1.5 border-[#1D9E75] text-[#1D9E75] hover:bg-[#E1F5EE]"
+            className="btn-outline text-sm flex items-center gap-1.5"
           >
             <Wand2 size={14} /> Modify with AI
           </button>
@@ -722,7 +722,7 @@ export default function TripSummaryPage() {
           <button
             onClick={handleGenerate}
             disabled={generating}
-            className="flex items-center gap-1.5 text-sm text-[#1D9E75] hover:text-[#178a65] disabled:opacity-50 transition-colors"
+            className="flex items-center gap-1.5 text-sm text-[#1E3A8A] hover:text-[#1E40AF] disabled:opacity-50 transition-colors"
           >
             {generating ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
             {generating ? 'Generating…' : hasAI ? 'Regenerate' : 'Generate AI Itinerary'}
@@ -733,7 +733,7 @@ export default function TripSummaryPage() {
         <div className="flex items-center gap-4 flex-wrap mb-4 px-1">
           {[
             { color: 'bg-blue-500',   icon: Car,  label: 'Drive day' },
-            { color: 'bg-green-500',  icon: Tent, label: 'Campground stay' },
+            { color: 'bg-[#0F766E]',  icon: Tent, label: 'Campground stay' },
             { color: 'bg-amber-500',  icon: Star, label: 'Activity day' },
             { color: 'bg-purple-500', icon: Moon, label: 'Overnight stop' },
           ].map(({ color, icon: Icon, label }) => (
@@ -799,7 +799,7 @@ export default function TripSummaryPage() {
                     key={`insert-${gi}`}
                     onClick={() => setAddAfterOrder(afterOrder)}
                     disabled={mutating}
-                    className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-gray-400 hover:text-[#1D9E75] hover:bg-green-50 rounded-lg border border-dashed border-gray-200 hover:border-green-300 transition-colors disabled:opacity-40"
+                    className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-gray-400 hover:text-[#1E3A8A] hover:bg-[#EFF6FF] rounded-lg border border-dashed border-gray-200 hover:border-[#1E3A8A]/30 transition-colors disabled:opacity-40"
                   >
                     <Plus size={11} /> Add stop here
                   </button>
@@ -820,7 +820,7 @@ export default function TripSummaryPage() {
         <button
           onClick={() => setAddAfterOrder(sortedStops.length > 0 ? sortedStops[sortedStops.length - 1].order : 0)}
           disabled={mutating}
-          className="w-full mt-3 flex items-center justify-center gap-1.5 py-2 text-sm text-[#1D9E75] hover:bg-green-50 rounded-lg border border-dashed border-green-200 hover:border-green-300 transition-colors disabled:opacity-40"
+          className="w-full mt-3 flex items-center justify-center gap-1.5 py-2 text-sm text-[#1E3A8A] hover:bg-[#EFF6FF] rounded-lg border border-dashed border-[#1E3A8A]/20 hover:border-[#1E3A8A]/40 transition-colors disabled:opacity-40"
         >
           <Plus size={13} /> Add stop
         </button>
@@ -833,7 +833,7 @@ export default function TripSummaryPage() {
           {sortedStops.filter(s => s.siteRate || s.estimatedFuel).map(stop => (
             <div key={stop.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
               <div className="flex items-center gap-2">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${stop.type === 'HOME' ? 'bg-gray-100 text-gray-500' : 'bg-[#E1F5EE] text-[#1D9E75]'}`}>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${stop.type === 'HOME' ? 'bg-gray-100 text-gray-500' : 'bg-[#EFF6FF] text-[#1E3A8A]'}`}>
                   {String(stopDisplayNumbers[stop.id] ?? '')}
                 </div>
                 <span className="text-sm text-gray-700">{stop.locationName}</span>
@@ -846,7 +846,7 @@ export default function TripSummaryPage() {
           ))}
           <div className="flex items-center justify-between pt-2 font-medium">
             <span className="text-gray-900">Total</span>
-            <span className="text-[#1D9E75]">${grandTotal.toLocaleString()}</span>
+            <span className="text-[#1E3A8A]">${grandTotal.toLocaleString()}</span>
           </div>
         </div>
       </div>
@@ -909,7 +909,7 @@ function TimePicker({ value, onChange, className }: {
     <select
       value={value}
       onChange={e => onChange(e.target.value)}
-      className={`text-sm font-semibold border border-gray-200 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:border-[#1D9E75] cursor-pointer ${className ?? ''}`}
+      className={`text-sm font-semibold border border-gray-200 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:border-[#1E3A8A] cursor-pointer ${className ?? ''}`}
     >
       {options.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
     </select>
@@ -921,7 +921,7 @@ function TimePicker({ value, onChange, className }: {
 function StatCell({ value, label }: { value: string; label: string }) {
   return (
     <div className="text-center">
-      <div className="text-2xl font-medium text-[#1D9E75]">{value}</div>
+      <div className="text-2xl font-medium text-[#1E3A8A]">{value}</div>
       <div className="text-xs text-gray-500 mt-0.5">{label}</div>
     </div>
   )
@@ -1118,13 +1118,13 @@ function DriveContent({ entry, onDepart }: { entry: TimelineEntry; onDepart: (t:
       {/* Tell me more */}
       <button
         onClick={handleToggle}
-        className="mt-2 text-xs text-[#1D9E75] hover:text-[#178a65] transition-colors font-medium"
+        className="mt-2 text-xs text-[#1E3A8A] hover:text-[#1E40AF] transition-colors font-medium"
       >
         {expanded ? 'Show less ↑' : 'Tell me more about this route ↓'}
       </button>
 
       {expanded && (
-        <div className="mt-2 pl-3 border-l-2 border-green-200">
+        <div className="mt-2 pl-3 border-l-2 border-[#1E3A8A]/20">
           {loadingHighlights ? (
             <div className="space-y-1.5 py-1">
               {[60, 80, 70].map((w, i) => (
@@ -1135,7 +1135,7 @@ function DriveContent({ entry, onDepart }: { entry: TimelineEntry; onDepart: (t:
             <ul className="space-y-1.5 py-0.5">
               {bullets.map((line, i) => (
                 <li key={i} className="flex gap-2 text-xs text-gray-600 leading-snug">
-                  <span className="text-[#1D9E75] flex-shrink-0 mt-0.5">•</span>
+                  <span className="text-[#1E3A8A] flex-shrink-0 mt-0.5">•</span>
                   <span>{line.replace(/^[-•*\d.]+\s*/, '')}</span>
                 </li>
               ))}
@@ -1186,14 +1186,14 @@ function StayContent({ entry, weather }: { entry: TimelineEntry; weather?: StopW
 
       {/* Reserve Now / Confirmed — not shown for HOME (departure) stops */}
       {stop.type !== 'HOME' && (stop.confirmationNum ? (
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-100 px-2.5 py-1 rounded-full w-fit">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-[#0D5F58] bg-[#CCFBF1] px-2.5 py-1 rounded-full w-fit">
           <Check size={11} />
           Confirmed · #{stop.confirmationNum}
         </div>
       ) : (
         <button
           onClick={() => navigate(`/trips/${stop.tripId}/booking?stopId=${stop.id}`)}
-          className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#1D9E75] hover:bg-[#178a65] px-3 py-1.5 rounded-lg transition-colors"
+          className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#EA6A0A] hover:bg-[#C2580A] px-3 py-1.5 rounded-lg transition-colors"
         >
           Reserve Now →
         </button>
@@ -1209,13 +1209,13 @@ function StayContent({ entry, weather }: { entry: TimelineEntry; weather?: StopW
               placeholder="Gate codes, special instructions, reminders…"
               rows={3}
               autoFocus
-              className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none focus:border-[#1D9E75] resize-none bg-white"
+              className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none focus:border-[#1E3A8A] resize-none bg-white"
             />
             <div className="flex items-center gap-2">
               <button
                 onClick={handleSaveNotes}
                 disabled={savingNotes}
-                className="text-xs font-semibold text-white bg-[#1D9E75] hover:bg-[#178a65] px-3 py-1 rounded-lg disabled:opacity-60 transition-colors"
+                className="text-xs font-semibold text-white bg-[#EA6A0A] hover:bg-[#C2580A] px-3 py-1 rounded-lg disabled:opacity-60 transition-colors"
               >
                 {savingNotes ? 'Saving…' : 'Save'}
               </button>
@@ -1236,7 +1236,7 @@ function StayContent({ entry, weather }: { entry: TimelineEntry; weather?: StopW
               {savedNotes ? 'Edit notes' : '+ Add notes (gate codes, instructions…)'}
             </button>
             {saveConfirm && (
-              <span className="text-xs text-green-600 font-medium">Saved ✓</span>
+              <span className="text-xs text-[#0F766E] font-medium">Saved ✓</span>
             )}
           </div>
         )}
@@ -1556,7 +1556,7 @@ function AddStopModal({ afterOrder, surroundingStops, onAdd, onClose, saving }: 
           type="button"
           onClick={handleAISuggest}
           disabled={aiLoading}
-          className="flex items-center gap-1.5 text-xs text-[#1D9E75] hover:text-[#178a65] font-medium disabled:opacity-50 transition-colors"
+          className="flex items-center gap-1.5 text-xs text-[#1E3A8A] hover:text-[#1E40AF] font-medium disabled:opacity-50 transition-colors"
         >
           <Sparkles size={12} />
           {aiLoading ? 'Asking AI…' : 'Ask AI to suggest a stop here'}
@@ -1570,8 +1570,8 @@ function AddStopModal({ afterOrder, surroundingStops, onAdd, onClose, saving }: 
                 onClick={() => setLocationName(s)}
                 className={`w-full text-left text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
                   locationName === s
-                    ? 'border-[#1D9E75] bg-green-50 text-[#1D9E75] font-medium'
-                    : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-[#1D9E75] hover:bg-green-50'
+                    ? 'border-[#1E3A8A] bg-[#EFF6FF] text-[#1E3A8A] font-medium'
+                    : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-[#1E3A8A] hover:bg-[#EFF6FF]'
                 }`}
               >
                 {s}

@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { useState } from 'react'
 import { authApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
+import logoIcon from '../../assets/logo-icon.png'
 
 interface FormData {
   email: string
@@ -35,11 +36,8 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <Link to="/" className="inline-flex items-center gap-2 mb-6">
-            <div className="w-8 h-8 bg-[#1D9E75] rounded-lg flex items-center justify-center">
-              <span className="text-white text-sm font-medium">RR</span>
-            </div>
-            <span className="font-medium text-gray-900">RoamReady</span>
+          <Link to="/" className="inline-block mb-6">
+            <img src={logoIcon} alt="RoamReady" className="h-16 w-auto object-contain mx-auto" />
           </Link>
           <h1 className="text-xl font-medium text-gray-900">Welcome back</h1>
           <p className="text-sm text-gray-500 mt-1">Sign in to your account</p>
@@ -84,7 +82,7 @@ export default function LoginPage() {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="label mb-0">Password</label>
-                <Link to="/forgot-password" className="text-xs text-[#1D9E75]">Forgot password?</Link>
+                <Link to="/forgot-password" className="text-xs text-[#1E3A8A]">Forgot password?</Link>
               </div>
               <input
                 type="password"
@@ -100,7 +98,7 @@ export default function LoginPage() {
 
         <p className="text-center text-sm text-gray-500 mt-4">
           New to RoamReady?{' '}
-          <Link to="/signup" className="text-[#1D9E75] font-medium">Create account</Link>
+          <Link to="/signup" className="text-[#1E3A8A] font-medium">Create account</Link>
         </p>
       </div>
     </div>

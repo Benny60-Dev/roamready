@@ -20,8 +20,8 @@ const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 
 
 // ─── Marker colors ──────────────────────────────────────────────────────────────
 const MC = {
-  home:     '#1D9E75', // green – home / start (unnumbered dot)
-  booked:   '#1D9E75', // green – confirmed
+  home:     '#F97316', // orange – home / start (unnumbered dot)
+  booked:   '#0F766E', // teal – confirmed
   pending:  '#EF9F27', // amber – pending
   unbooked: '#888780', // gray  – not booked
 }
@@ -176,7 +176,7 @@ function MapLegend() {
 // ─── Stop info popup ─────────────────────────────────────────────────────────────
 const BOOKING_BADGE: Record<MarkerKind, { cls: string; label: string }> = {
   home:     { cls: 'bg-slate-100 text-slate-600', label: 'Home' },
-  booked:   { cls: 'bg-green-100 text-green-700', label: 'Confirmed' },
+  booked:   { cls: 'bg-[#CCFBF1] text-[#0D5F58]', label: 'Confirmed' },
   pending:  { cls: 'bg-amber-100 text-amber-700', label: 'Pending' },
   unbooked: { cls: 'bg-gray-100 text-gray-500',   label: 'Not booked' },
 }
@@ -201,11 +201,11 @@ function StopPopup({
   if (weather?.mode === 'live') {
     const today = (weather as LiveForecast).days[0]
     if (today) weatherSummary = (
-      <div className="flex items-center gap-2 text-xs text-gray-600 mb-2 bg-green-50 rounded px-2 py-1.5 border border-green-100">
+      <div className="flex items-center gap-2 text-xs text-gray-600 mb-2 bg-[#CCFBF1]/40 rounded px-2 py-1.5 border border-[#0F766E]/20">
         <span className="text-base leading-none">{today.icon}</span>
         <span>{today.high}° / {today.low}° · {today.conditions}</span>
         {nwsUrl && (
-          <a href={nwsUrl} target="_blank" rel="noreferrer" className="ml-auto text-[#1D9E75] hover:underline flex-shrink-0">
+          <a href={nwsUrl} target="_blank" rel="noreferrer" className="ml-auto text-[#1E3A8A] hover:underline flex-shrink-0">
             <ExternalLink size={10} />
           </a>
         )}
@@ -289,7 +289,7 @@ function StopPopup({
           <span className="flex items-center gap-0.5"><Calendar size={10} />{new Date(stop.arrivalDate).toLocaleDateString()}</span>
         )}
         {stop.hookupType && <span className="badge-green text-[10px]">{stop.hookupType}</span>}
-        {stop.isPetFriendly && <span className="text-[#1D9E75]">🐾 Pet-friendly</span>}
+        {stop.isPetFriendly && <span className="text-[#0F766E]">🐾 Pet-friendly</span>}
       </div>
 
       {stop.bookingStatus !== 'CONFIRMED' && stop.type !== 'HOME' && (
@@ -330,7 +330,7 @@ function SidebarWeatherTab({ trip, weatherData, loading }: {
     <div className="space-y-3">
       {loading && !hasAnyData && (
         <div className="flex items-center gap-2 text-xs text-gray-500 py-3">
-          <div className="w-3 h-3 border-2 border-[#1D9E75] border-t-transparent rounded-full animate-spin" />
+          <div className="w-3 h-3 border-2 border-[#1E3A8A] border-t-transparent rounded-full animate-spin" />
           Loading weather…
         </div>
       )}
@@ -361,7 +361,7 @@ function SidebarWeatherTab({ trip, weatherData, loading }: {
         return (
           <div key={stop.id}>
             <div className="flex items-center gap-2 mb-1">
-              <div className="w-4 h-4 rounded-full bg-[#1D9E75] flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0">
+              <div className="w-4 h-4 rounded-full bg-[#1E3A8A] flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0">
                 {idx + 1}
               </div>
               <div className="flex-1 min-w-0">
@@ -891,7 +891,7 @@ export default function TripMapPage() {
 
       {/* Breadcrumb strip */}
       <div className="flex-shrink-0 bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-1.5">
-        <Link to="/trips" className="text-xs text-[#1D9E75] hover:text-[#178a65] transition-colors">My Trips</Link>
+        <Link to="/trips" className="text-xs text-[#1E3A8A] hover:text-[#1E40AF] transition-colors">My Trips</Link>
         <span className="text-gray-300 text-xs">›</span>
         <span className="text-xs text-gray-700 font-medium truncate max-w-[200px]">{trip?.name ?? '…'}</span>
       </div>
@@ -900,31 +900,31 @@ export default function TripMapPage() {
       <div className="flex-shrink-0 bg-white border-b border-gray-100 px-2 flex flex-wrap lg:flex-nowrap items-center gap-0.5">
         <Link
           to={`/trips/${id}/itinerary`}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1D9E75] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
+          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1E3A8A] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
         >
           <Calendar size={13} /> Itinerary
         </Link>
         <Link
           to={`/trips/${id}/journal`}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1D9E75] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
+          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1E3A8A] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
         >
           <BookOpen size={13} /> Journal
         </Link>
         <Link
           to={`/packing/${id}`}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1D9E75] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
+          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1E3A8A] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
         >
           <Package size={13} /> Packing list
         </Link>
-        <button className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1D9E75] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0">
+        <button className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1E3A8A] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0">
           <Share2 size={13} /> Share
         </button>
-        <button className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1D9E75] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0">
+        <button className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1E3A8A] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0">
           <Download size={13} /> PDF
         </button>
         <Link
           to={`/trips/${id}/booking`}
-          className="lg:ml-auto flex items-center gap-1 px-3 py-1.5 text-xs bg-[#1D9E75] text-white rounded-lg hover:bg-[#178a63] transition-colors whitespace-nowrap flex-shrink-0 mr-1"
+          className="lg:ml-auto flex items-center gap-1 px-3 py-1.5 text-xs bg-[#EA6A0A] text-white rounded-lg hover:bg-[#C2580A] transition-colors whitespace-nowrap flex-shrink-0 mr-1"
         >
           Reserve <ChevronRight size={12} />
         </Link>
@@ -966,7 +966,7 @@ export default function TripMapPage() {
                 {renaming ? (
                   <div className="flex-1 flex items-center gap-1 min-w-0">
                     <input
-                      className="flex-1 min-w-0 text-sm font-medium text-gray-900 border border-[#1D9E75] rounded px-2 py-1 focus:outline-none"
+                      className="flex-1 min-w-0 text-sm font-medium text-gray-900 border border-[#1E3A8A] rounded px-2 py-1 focus:outline-none"
                       value={tripNameInput}
                       onChange={e => setTripNameInput(e.target.value)}
                       onKeyDown={e => {
@@ -975,7 +975,7 @@ export default function TripMapPage() {
                       }}
                       autoFocus
                     />
-                    <button onClick={handleRename} className="p-1 text-[#1D9E75] hover:bg-green-50 rounded flex-shrink-0">
+                    <button onClick={handleRename} className="p-1 text-[#1E3A8A] hover:bg-[#EFF6FF] rounded flex-shrink-0">
                       <Check size={14} />
                     </button>
                   </div>
@@ -1001,7 +1001,7 @@ export default function TripMapPage() {
               {/* Modify with AI button */}
               <button
                 onClick={() => setModifyPanelOpen(true)}
-                className="w-full flex items-center justify-center gap-1.5 py-2 mb-3 rounded-lg bg-[#1D9E75] text-white text-xs font-medium hover:bg-[#178a63] transition-colors"
+                className="w-full flex items-center justify-center gap-1.5 py-2 mb-3 rounded-lg bg-[#EA6A0A] text-white text-xs font-medium hover:bg-[#C2580A] transition-colors"
               >
                 <Wand2 size={13} /> Modify trip with AI
               </button>
@@ -1079,7 +1079,7 @@ export default function TripMapPage() {
                 onClick={() => setSidebarTab('stops')}
                 className={`flex-1 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
                   sidebarTab === 'stops'
-                    ? 'border-[#1D9E75] text-[#1D9E75]'
+                    ? 'border-[#1E3A8A] text-[#1E3A8A]'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -1089,7 +1089,7 @@ export default function TripMapPage() {
                 onClick={() => setSidebarTab('weather')}
                 className={`flex-1 py-2 text-xs font-medium transition-colors border-b-2 -mb-px flex items-center justify-center gap-1 ${
                   sidebarTab === 'weather'
-                    ? 'border-[#1D9E75] text-[#1D9E75]'
+                    ? 'border-[#1E3A8A] text-[#1E3A8A]'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -1119,7 +1119,7 @@ export default function TripMapPage() {
                     ) : badge === 'F' && isHome ? (
                       <span className="text-[9px] text-gray-400">Finish</span>
                     ) : stop.bookingStatus === 'CONFIRMED' ? (
-                      <span className="flex items-center gap-0.5 text-[9px] text-green-600 font-medium">
+                      <span className="flex items-center gap-0.5 text-[9px] text-[#0D5F58] font-medium">
                         <CheckCircle size={9} /> Booked
                       </span>
                     ) : stop.bookingStatus === 'PENDING' || stop.bookingStatus === 'WAITLISTED' ? (
@@ -1235,7 +1235,7 @@ export default function TripMapPage() {
               {layers.route && routePath && (
                 <Polyline
                   path={routePath}
-                  options={{ strokeColor: '#1D9E75', strokeWeight: 2.5, strokeOpacity: 0.85 }}
+                  options={{ strokeColor: '#1E3A8A', strokeWeight: 2.5, strokeOpacity: 0.85 }}
                 />
               )}
 
@@ -1285,7 +1285,7 @@ export default function TripMapPage() {
           {/* Geocoding indicator */}
           {geocoding && (
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white border border-gray-200 rounded-full px-4 py-2 text-xs text-gray-600 shadow-md flex items-center gap-2 z-10">
-              <span className="w-3 h-3 rounded-full border-2 border-[#1D9E75] border-t-transparent animate-spin" />
+              <span className="w-3 h-3 rounded-full border-2 border-[#1E3A8A] border-t-transparent animate-spin" />
               Finding stop locations…
             </div>
           )}

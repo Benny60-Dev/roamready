@@ -45,7 +45,7 @@ function StopRow({ stop, tripId, weather, badge }: { stop: Stop; tripId: string;
     }
     if (stop.bookingStatus === 'CONFIRMED') {
       return (
-        <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 text-green-700 flex-shrink-0">
+        <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-[#CCFBF1] text-[#0D5F58] flex-shrink-0">
           <CheckCircle size={11} /> Booked
         </span>
       )
@@ -67,7 +67,7 @@ function StopRow({ stop, tripId, weather, badge }: { stop: Stop; tripId: string;
     return (
       <Link
         to={`/trips/${tripId}/booking?stopId=${stop.id}`}
-        className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-full bg-[#1D9E75] text-white hover:bg-[#178a63] transition-colors flex-shrink-0 whitespace-nowrap"
+        className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-full bg-[#EA6A0A] text-white hover:bg-[#C2580A] transition-colors flex-shrink-0 whitespace-nowrap"
         onClick={e => e.stopPropagation()}
       >
         Reserve
@@ -81,7 +81,7 @@ function StopRow({ stop, tripId, weather, badge }: { stop: Stop; tripId: string;
         <div className="flex-shrink-0 mt-0.5">
           <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium ${
             stop.type === 'HOME' ? 'bg-gray-400' :
-            stop.type === 'OVERNIGHT_ONLY' ? 'bg-[#7F77DD]' : 'bg-[#1D9E75]'
+            stop.type === 'OVERNIGHT_ONLY' ? 'bg-[#7F77DD]' : 'bg-[#1E3A8A]'
           }`}>
             {String(badge)}
           </div>
@@ -118,7 +118,7 @@ function StopRow({ stop, tripId, weather, badge }: { stop: Stop; tripId: string;
             {stop.type !== 'HOME' && <span><Tent size={11} className="inline mr-0.5" />{stop.nights} night{stop.nights !== 1 ? 's' : ''}</span>}
             {stop.siteRate && <span><DollarSign size={11} className="inline mr-0.5" />${stop.siteRate}/night</span>}
             {stop.hookupType && <span className="badge-green">{stop.hookupType}</span>}
-            {stop.isPetFriendly === true && <span className="text-[#1D9E75]">🐾 Pet-friendly</span>}
+            {stop.isPetFriendly === true && <span className="text-[#0F766E]">🐾 Pet-friendly</span>}
             {stop.isMilitaryOnly && <span className="text-blue-600">🎖️ Military</span>}
           </div>
 
@@ -169,7 +169,7 @@ function WeatherTab({ trip, weatherData, loading }: {
     <div className="space-y-4">
       {loading && !hasAnyData && (
         <div className="flex items-center gap-2 text-sm text-gray-500 py-4">
-          <div className="w-4 h-4 border-2 border-[#1D9E75] border-t-transparent rounded-full animate-spin" />
+          <div className="w-4 h-4 border-2 border-[#1E3A8A] border-t-transparent rounded-full animate-spin" />
           Loading weather data…
         </div>
       )}
@@ -202,7 +202,7 @@ function WeatherTab({ trip, weatherData, loading }: {
         return (
           <div key={stop.id}>
             <div className="flex items-center gap-2 mb-1">
-              <div className="w-5 h-5 rounded-full bg-[#1D9E75] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
+              <div className="w-5 h-5 rounded-full bg-[#1E3A8A] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
                 {idx + 1}
               </div>
               <div>
@@ -314,7 +314,7 @@ export default function TripDetailPage() {
 
   if (loading) return (
     <div className="flex justify-center py-20">
-      <div className="w-6 h-6 border-2 border-[#1D9E75] border-t-transparent rounded-full animate-spin" />
+      <div className="w-6 h-6 border-2 border-[#1E3A8A] border-t-transparent rounded-full animate-spin" />
     </div>
   )
   if (!trip) return <div className="text-center py-20 text-gray-500">Trip not found</div>
@@ -379,7 +379,7 @@ export default function TripDetailPage() {
           { label: 'Booked',    value: `${bookedStops}/${totalStops}`,            icon: CheckCircle },
         ].map(({ label, value, icon: Icon }) => (
           <div key={label} className="card text-center">
-            <Icon size={16} className="text-[#1D9E75] mx-auto mb-1" />
+            <Icon size={16} className="text-[#1E3A8A] mx-auto mb-1" />
             <div className="text-lg font-medium text-gray-900">{value}</div>
             <div className="text-xs text-gray-500">{label}</div>
           </div>
@@ -424,7 +424,7 @@ export default function TripDetailPage() {
             onClick={() => setTab('stops')}
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
               tab === 'stops'
-                ? 'border-[#1D9E75] text-[#1D9E75]'
+                ? 'border-[#1E3A8A] text-[#1E3A8A]'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -434,7 +434,7 @@ export default function TripDetailPage() {
             onClick={() => setTab('weather')}
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5 ${
               tab === 'weather'
-                ? 'border-[#1D9E75] text-[#1D9E75]'
+                ? 'border-[#1E3A8A] text-[#1E3A8A]'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -451,7 +451,7 @@ export default function TripDetailPage() {
         {tab === 'stops' && (
           trip.stops?.length === 0 ? (
             <div className="card text-center py-8 text-sm text-gray-500">
-              No stops yet — <Link to={`/trips/${id}/map`} className="text-[#1D9E75]">add stops on the map</Link>
+              No stops yet — <Link to={`/trips/${id}/map`} className="text-[#1E3A8A]">add stops on the map</Link>
             </div>
           ) : (
             <div className="space-y-2">

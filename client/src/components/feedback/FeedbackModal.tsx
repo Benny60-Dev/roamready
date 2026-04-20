@@ -39,7 +39,7 @@ export default function FeedbackModal({ onClose }: Props) {
 
         {submitted ? (
           <div className="text-center py-8">
-            <div className="w-12 h-12 bg-[#E1F5EE] rounded-full flex items-center justify-center mx-auto mb-3">
+            <div className="w-12 h-12 bg-[#CCFBF1] rounded-full flex items-center justify-center mx-auto mb-3">
               <span className="text-2xl">🎉</span>
             </div>
             <p className="font-medium text-gray-900 mb-1">Thanks for your feedback!</p>

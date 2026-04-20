@@ -34,7 +34,7 @@ export default function BillingPage() {
       <h1 className="text-xl font-medium text-gray-900">Billing</h1>
 
       {/* Current plan */}
-      <div className={`card-lg ${isTrialing ? 'border-[#1D9E75]/30 bg-[#E1F5EE]/30' : ''}`}>
+      <div className={`card-lg ${isTrialing ? 'border-[#1E3A8A]/30 bg-[#EFF6FF]/30' : ''}`}>
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -78,7 +78,7 @@ export default function BillingPage() {
                     ${(inv.amount / 100).toFixed(2)} {inv.currency.toUpperCase()}
                   </span>
                   {inv.pdf && (
-                    <a href={inv.pdf} target="_blank" rel="noreferrer" className="text-[#1D9E75] text-xs flex items-center gap-1">
+                    <a href={inv.pdf} target="_blank" rel="noreferrer" className="text-[#1E3A8A] text-xs flex items-center gap-1">
                       <ExternalLink size={12} /> PDF
                     </a>
                   )}

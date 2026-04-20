@@ -1,6 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { Home, Map, MessageSquare, Tent, User, Bell, Menu, X, LogOut, ChevronDown } from 'lucide-react'
 import { useState } from 'react'
+import logoIcon from '../../assets/logo-icon.png'
 import { useAuthStore } from '../../store/authStore'
 import { useUIStore } from '../../store/uiStore'
 import { authApi } from '../../services/api'
@@ -40,10 +41,10 @@ export default function AppLayout() {
               {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
             <NavLink to="/dashboard" className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-[#1D9E75] rounded-lg flex items-center justify-center">
-                <span className="text-white text-xs font-medium">RR</span>
-              </div>
-              <span className="font-medium text-gray-900 hidden sm:block">RoamReady</span>
+              <img src={logoIcon} alt="RoamReady" className="h-8 w-auto object-contain" />
+              <span className="font-medium hidden sm:block">
+                <span style={{ color: '#1E3A8A' }}>Roam</span><span style={{ color: '#EA6A0A' }}>ready</span><span style={{ color: '#1E3A8A' }}>.ai</span>
+              </span>
             </NavLink>
           </div>
 
@@ -55,7 +56,7 @@ export default function AppLayout() {
                 to={to}
                 className={({ isActive }) =>
                   `px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                    isActive ? 'bg-[#E1F5EE] text-[#1D9E75] font-medium' : 'text-gray-600 hover:bg-gray-100'
+                    isActive ? 'bg-[#EFF6FF] text-[#1E3A8A] font-medium' : 'text-gray-600 hover:bg-gray-100'
                   }`
                 }
               >
@@ -64,7 +65,7 @@ export default function AppLayout() {
             ))}
             {user?.isOwner && (
               <NavLink to="/admin" className={({ isActive }) =>
-                `px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-[#E1F5EE] text-[#1D9E75] font-medium' : 'text-gray-600 hover:bg-gray-100'}`
+                `px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-[#EFF6FF] text-[#1E3A8A] font-medium' : 'text-gray-600 hover:bg-gray-100'}`
               }>Admin</NavLink>
             )}
           </nav>
@@ -78,7 +79,7 @@ export default function AppLayout() {
                 onClick={() => setProfileOpen(!profileOpen)}
                 className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-lg hover:bg-gray-100"
               >
-                <div className="w-7 h-7 bg-[#1D9E75] rounded-full flex items-center justify-center">
+                <div className="w-7 h-7 bg-[#1E3A8A] rounded-full flex items-center justify-center">
                   <span className="text-white text-xs font-medium">
                     {user?.firstName?.[0]}{user?.lastName?.[0]}
                   </span>
@@ -120,7 +121,7 @@ export default function AppLayout() {
                   onClick={() => setSidebarOpen(false)}
                   className={({ isActive }) =>
                     `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm ${
-                      isActive ? 'bg-[#E1F5EE] text-[#1D9E75] font-medium' : 'text-gray-600 hover:bg-gray-100'
+                      isActive ? 'bg-[#EFF6FF] text-[#1E3A8A] font-medium' : 'text-gray-600 hover:bg-gray-100'
                     }`
                   }
                 >
@@ -147,7 +148,7 @@ export default function AppLayout() {
               to={to}
               className={({ isActive }) =>
                 `flex-1 flex flex-col items-center py-2 gap-0.5 text-xs ${
-                  isActive ? 'text-[#1D9E75]' : 'text-gray-500'
+                  isActive ? 'text-[#1E3A8A]' : 'text-gray-500'
                 }`
               }
             >

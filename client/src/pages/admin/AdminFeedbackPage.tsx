@@ -49,7 +49,7 @@ export default function AdminFeedbackPage() {
       </div>
 
       {analysis && (
-        <div className="card-lg bg-[#E1F5EE]/30 border-[#1D9E75]/30">
+        <div className="card-lg bg-[#EFF6FF]/30 border-[#1E3A8A]/30">
           <h3 className="font-medium text-gray-900 mb-3">AI Analysis</h3>
           <pre className="text-xs text-gray-700 whitespace-pre-wrap font-sans">{analysis}</pre>
         </div>
@@ -58,7 +58,7 @@ export default function AdminFeedbackPage() {
       <div className="flex gap-1 flex-wrap">
         {['ALL', 'NEW', 'PLANNED', 'IN_PROGRESS', 'SHIPPED', 'FEATURE_REQUEST', 'BUG_REPORT'].map(f => (
           <button key={f} onClick={() => setFilter(f)}
-            className={`px-3 py-1 rounded-lg text-xs border transition-colors ${filter === f ? 'bg-[#1D9E75] text-white border-[#1D9E75]' : 'border-gray-200 text-gray-600'}`}
+            className={`px-3 py-1 rounded-lg text-xs border transition-colors ${filter === f ? 'bg-[#1E3A8A] text-white border-[#1E3A8A]' : 'border-gray-200 text-gray-600'}`}
             style={{ borderWidth: '0.5px' }}>
             {f.replace('_', ' ')}
           </button>
@@ -75,7 +75,7 @@ export default function AdminFeedbackPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className="badge bg-gray-100 text-gray-600 text-xs">{item.type.replace('_', ' ')}</span>
-                    {item.votes > 0 && <span className="text-xs text-[#1D9E75]">👍 {item.votes}</span>}
+                    {item.votes > 0 && <span className="text-xs text-[#1E3A8A]">👍 {item.votes}</span>}
                   </div>
                   <p className="text-sm font-medium text-gray-900">{item.title || item.body.slice(0, 60)}</p>
                   {item.title && <p className="text-xs text-gray-500 mt-0.5">{item.body}</p>}

@@ -32,14 +32,14 @@ function TripBookingCard({ trip }: { trip: Trip }) {
   const { bookableStops, confirmed, pending, campCost, earliestDate, bookingLevel } = getTripStats(trip)
 
   const statusConfig = {
-    all:     { label: 'All booked',        cls: 'bg-green-100 text-green-700',  icon: <CheckCircle size={11} /> },
+    all:     { label: 'All booked',        cls: 'bg-[#CCFBF1] text-[#0D5F58]',  icon: <CheckCircle size={11} /> },
     partial: { label: 'Partially booked',  cls: 'bg-amber-100 text-amber-700',  icon: <Clock size={11} /> },
     none:    { label: 'Not started',       cls: 'bg-gray-100 text-gray-500',    icon: null },
   }
   const sc = statusConfig[bookingLevel]
 
   return (
-    <div className="card hover:border-[#1D9E75]/30 transition-all">
+    <div className="card hover:border-[#1E3A8A]/30 transition-all">
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
           {/* Trip name + booking status badge */}
@@ -87,7 +87,7 @@ function TripBookingCard({ trip }: { trip: Trip }) {
         {/* CTA */}
         <Link
           to={`/trips/${trip.id}/booking`}
-          className="flex-shrink-0 flex items-center gap-1 text-xs font-semibold px-3 py-2 rounded-lg bg-[#1D9E75] text-white hover:bg-[#178a63] transition-colors whitespace-nowrap"
+          className="flex-shrink-0 flex items-center gap-1 text-xs font-semibold px-3 py-2 rounded-lg bg-[#EA6A0A] text-white hover:bg-[#C2580A] transition-colors whitespace-nowrap"
         >
           View bookings <ChevronRight size={13} />
         </Link>
@@ -97,7 +97,7 @@ function TripBookingCard({ trip }: { trip: Trip }) {
       {bookableStops.length > 0 && (
         <div className="mt-3 h-1.5 bg-gray-100 rounded-full overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all ${bookingLevel === 'all' ? 'bg-green-500' : 'bg-amber-400'}`}
+            className={`h-full rounded-full transition-all ${bookingLevel === 'all' ? 'bg-[#0F766E]' : 'bg-amber-400'}`}
             style={{ width: `${(confirmed.length / bookableStops.length) * 100}%` }}
           />
         </div>
@@ -164,7 +164,7 @@ export default function ReservationsPage() {
 
   if (loading) return (
     <div className="flex justify-center py-20">
-      <div className="w-6 h-6 border-2 border-[#1D9E75] border-t-transparent rounded-full animate-spin" />
+      <div className="w-6 h-6 border-2 border-[#1E3A8A] border-t-transparent rounded-full animate-spin" />
     </div>
   )
 
@@ -181,7 +181,7 @@ export default function ReservationsPage() {
             { icon: Clock,       label: 'Trips w/ pending', value: tripsWithPending || '—' },
           ].map(({ icon: Icon, label, value }) => (
             <div key={label} className="card text-center py-3">
-              <Icon size={15} className="text-[#1D9E75] mx-auto mb-1" />
+              <Icon size={15} className="text-[#1E3A8A] mx-auto mb-1" />
               <div className="text-base font-semibold text-gray-900">{value}</div>
               <div className="text-[11px] text-gray-500 leading-tight">{label}</div>
             </div>
@@ -198,7 +198,7 @@ export default function ReservationsPage() {
               onClick={() => setFilter(f)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 filter === f
-                  ? 'bg-[#1D9E75] text-white'
+                  ? 'bg-[#1E3A8A] text-white'
                   : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
               }`}
               style={{ borderWidth: '0.5px' }}

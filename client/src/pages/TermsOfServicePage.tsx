@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import logoIcon from '../assets/logo-icon.png'
 
 export default function TermsOfServicePage() {
   return (
@@ -6,10 +7,10 @@ export default function TermsOfServicePage() {
       <div className="max-w-4xl mx-auto py-12 px-6">
         <div className="mb-8">
           <Link to="/" className="inline-flex items-center gap-2 mb-6">
-            <div className="w-8 h-8 bg-[#1D9E75] rounded-lg flex items-center justify-center">
-              <span className="text-white text-sm font-medium">RR</span>
-            </div>
-            <span className="font-medium text-gray-900">RoamReady</span>
+            <img src={logoIcon} alt="RoamReady" className="h-8 w-auto object-contain" />
+            <span className="font-medium">
+              <span style={{ color: '#1E3A8A' }}>Roam</span><span style={{ color: '#EA6A0A' }}>ready</span><span style={{ color: '#1E3A8A' }}>.ai</span>
+            </span>
           </Link>
           <h1 className="text-3xl font-semibold text-gray-900">Terms of Service</h1>
           <p className="text-sm text-gray-500 mt-2">Last updated: April 19, 2026</p>
@@ -102,7 +103,7 @@ export default function TermsOfServicePage() {
             <p>
               New subscribers are eligible for a <strong>7-day money-back guarantee</strong> on their first subscription
               payment. To request a refund, email{' '}
-              <a href="mailto:dev@roamready.ai" className="text-[#1D9E75] hover:underline">dev@roamready.ai</a>{' '}
+              <a href="mailto:dev@roamready.ai" className="text-[#1E3A8A] hover:underline">dev@roamready.ai</a>{' '}
               within 7 days of your initial payment. This guarantee applies to first-time subscribers only and may
               not be applied to subsequent renewals or to accounts that have previously received a refund.
             </p>
@@ -192,7 +193,7 @@ export default function TermsOfServicePage() {
             <p>
               RoamReady respects intellectual property rights. If you believe that content on our platform infringes
               your copyright, please send a notice to{' '}
-              <a href="mailto:dev@roamready.ai" className="text-[#1D9E75] hover:underline">dev@roamready.ai</a>{' '}
+              <a href="mailto:dev@roamready.ai" className="text-[#1E3A8A] hover:underline">dev@roamready.ai</a>{' '}
               with the following: a description of the copyrighted work, a description of the infringing material and
               its location on our platform, your contact information, a statement of good faith belief, and your
               signature (electronic or physical). We will respond to valid DMCA notices promptly.
@@ -281,15 +282,15 @@ export default function TermsOfServicePage() {
             <div className="mt-3 space-y-1">
               <p><strong>Martini AI Media LLC (RoamReady)</strong></p>
               <p>Arizona</p>
-              <p>Email: <a href="mailto:dev@roamready.ai" className="text-[#1D9E75] hover:underline">dev@roamready.ai</a></p>
-              <p>Website: <a href="https://roamready.ai" className="text-[#1D9E75] hover:underline">roamready.ai</a></p>
+              <p>Email: <a href="mailto:dev@roamready.ai" className="text-[#1E3A8A] hover:underline">dev@roamready.ai</a></p>
+              <p>Website: <a href="https://roamready.ai" className="text-[#1E3A8A] hover:underline">roamready.ai</a></p>
             </div>
           </section>
 
         </div>
 
         <div className="mt-12 pt-8 border-t border-gray-100 text-center">
-          <Link to="/" className="text-sm text-[#1D9E75] hover:underline">← Back to RoamReady</Link>
+          <Link to="/" className="text-sm text-[#1E3A8A] hover:underline">← Back to RoamReady</Link>
           <p className="text-xs text-gray-400 mt-4">© 2026 Martini AI Media LLC. All rights reserved.</p>
         </div>
       </div>

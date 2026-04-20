@@ -4,39 +4,37 @@ export default {
   theme: {
     extend: {
       colors: {
-        green: {
-          DEFAULT: '#1D9E75',
-          light: '#E1F5EE',
-          dark: '#085041',
+        brand: {
+          DEFAULT: '#1E3A8A',
+          light: '#EFF6FF',
+          dark: '#1E40AF',
+        },
+        accent: {
+          DEFAULT: '#EA6A0A',
+          light: '#FFF7ED',
+          dark: '#C2580A',
+          decorative: '#F97316',
+        },
+        success: {
+          DEFAULT: '#0F766E',
+          light: '#CCFBF1',
+          dark: '#0D5F58',
+        },
+        premium: {
+          DEFAULT: '#7E22CE',
+          light: '#F5F3FF',
         },
         amber: {
           DEFAULT: '#EF9F27',
         },
-        coral: {
-          DEFAULT: '#D85A30',
-        },
         purple: {
           DEFAULT: '#7F77DD',
-        },
-        blue: {
-          DEFAULT: '#378ADD',
         },
         red: {
           DEFAULT: '#E24B4A',
         },
         gray: {
           DEFAULT: '#888780',
-        },
-        brand: {
-          green: '#1D9E75',
-          'green-light': '#E1F5EE',
-          'green-dark': '#085041',
-          amber: '#EF9F27',
-          coral: '#D85A30',
-          purple: '#7F77DD',
-          blue: '#378ADD',
-          red: '#E24B4A',
-          gray: '#888780',
         },
       },
       fontFamily: {

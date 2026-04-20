@@ -2,6 +2,7 @@ import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { useState } from 'react'
 import { authApi } from '../../services/api'
+import logoIcon from '../../assets/logo-icon.png'
 
 export default function ResetPasswordPage() {
   const [error, setError] = useState('')
@@ -30,10 +31,8 @@ export default function ResetPasswordPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <Link to="/" className="inline-flex items-center gap-2 mb-6">
-            <div className="w-8 h-8 bg-[#1D9E75] rounded-lg flex items-center justify-center">
-              <span className="text-white text-sm font-medium">RR</span>
-            </div>
+          <Link to="/" className="inline-block mb-6">
+            <img src={logoIcon} alt="RoamReady" className="h-16 w-auto object-contain mx-auto" />
           </Link>
           <h1 className="text-xl font-medium text-gray-900">Set new password</h1>
         </div>
