@@ -280,7 +280,7 @@ export default function TermsOfServicePage() {
             <p>If you have questions about these Terms or the Service, please contact us:</p>
             <div className="mt-3 space-y-1">
               <p><strong>Martini AI Media LLC (RoamReady)</strong></p>
-              <p>Tempe, Arizona</p>
+              <p>Arizona</p>
               <p>Email: <a href="mailto:dev@roamready.ai" className="text-[#1D9E75] hover:underline">dev@roamready.ai</a></p>
               <p>Website: <a href="https://roamready.ai" className="text-[#1D9E75] hover:underline">roamready.ai</a></p>
             </div>
