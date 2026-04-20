@@ -407,6 +407,7 @@ export default function TripMapPage() {
   const [tripNameInput, setTripNameInput]   = useState('')
   const [modifyPanelOpen, setModifyPanelOpen] = useState(false)
   const [mapExpanded, setMapExpanded]       = useState(false)
+  const [isMobile, setIsMobile]             = useState(() => window.innerWidth < 1024)
 
   const mapRowRef = useRef<HTMLDivElement>(null)
 
@@ -440,6 +441,12 @@ export default function TripMapPage() {
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
   }, [mapExpanded, collapseMap])
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 1024)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   // Notify Google Maps of container resize after the CSS transition ends
   useEffect(() => {
@@ -880,7 +887,7 @@ export default function TripMapPage() {
       </div>
 
       {/* Action tab bar — Itinerary, Journal, Packing list, Share, PDF + Reserve */}
-      <div className="flex-shrink-0 bg-white border-b border-gray-100 px-2 flex items-center gap-0.5 overflow-x-auto">
+      <div className="flex-shrink-0 bg-white border-b border-gray-100 px-2 flex flex-wrap lg:flex-nowrap items-center gap-0.5">
         <Link
           to={`/trips/${id}/itinerary`}
           className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1D9E75] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
@@ -907,7 +914,7 @@ export default function TripMapPage() {
         </button>
         <Link
           to={`/trips/${id}/booking`}
-          className="ml-auto flex items-center gap-1 px-3 py-1.5 text-xs bg-[#1D9E75] text-white rounded-lg hover:bg-[#178a63] transition-colors whitespace-nowrap flex-shrink-0 mr-1"
+          className="lg:ml-auto flex items-center gap-1 px-3 py-1.5 text-xs bg-[#1D9E75] text-white rounded-lg hover:bg-[#178a63] transition-colors whitespace-nowrap flex-shrink-0 mr-1"
         >
           Reserve <ChevronRight size={12} />
         </Link>
@@ -918,7 +925,7 @@ export default function TripMapPage() {
       <div>
       <div
         ref={mapRowRef}
-        className={`flex items-start${mapExpanded ? ' justify-center' : ''}`}
+        className={isMobile ? 'flex flex-col' : `flex items-start${mapExpanded ? ' justify-center' : ''}`}
         style={{
           transition: 'height 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
@@ -927,7 +934,11 @@ export default function TripMapPage() {
         {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
         <div
           className="bg-white border-r border-gray-200 z-20"
-          style={{
+          style={isMobile ? {
+            borderRightWidth: '0.5px',
+            width: '100%',
+            order: 2,
+          } : {
             borderRightWidth: '0.5px',
             width: (sidebarOpen && !mapExpanded) ? '24rem' : '0',
             overflow: 'hidden',
@@ -966,9 +977,11 @@ export default function TripMapPage() {
                     </button>
                   </div>
                 )}
-                <button onClick={() => setSidebarOpen(false)} className="p-1 hover:bg-gray-100 rounded flex-shrink-0" title="Close sidebar">
-                  <X size={16} />
-                </button>
+                {!isMobile && (
+                  <button onClick={() => setSidebarOpen(false)} className="p-1 hover:bg-gray-100 rounded flex-shrink-0" title="Close sidebar">
+                    <X size={16} />
+                  </button>
+                )}
               </div>
 
               {/* Modify with AI button */}
@@ -1076,7 +1089,7 @@ export default function TripMapPage() {
             </div>
 
             {/* Tab content — scrollable */}
-            <div className="p-3">
+            <div className="p-3 pb-20 lg:pb-3">
               {sidebarTab === 'stops' && (
                 <div className="space-y-0.5">
                   {trip?.stops?.slice().sort((a, b) => a.order - b.order).map(stop => {
@@ -1147,7 +1160,12 @@ export default function TripMapPage() {
           </div>
 
         {/* ── Map area ──────────────────────────────────────────────────────────── */}
-        <div className="relative" style={{
+        <div className="relative" style={isMobile ? {
+          width: '100%',
+          height: '55vh',
+          flexShrink: 0,
+          order: 1,
+        } : {
           width:  mapExpanded ? '95vw'  : '650px',
           height: mapExpanded ? '90vh'  : '550px',
           flexShrink: 0,
@@ -1164,14 +1182,16 @@ export default function TripMapPage() {
             </button>
           )}
 
-          {/* Expand / collapse map button */}
-          <button
-            onClick={mapExpanded ? collapseMap : expandMap}
-            className="absolute top-3 right-3 z-10 bg-white rounded-lg p-2 border border-gray-200 hover:bg-gray-50 shadow-sm transition-colors"
-            title={mapExpanded ? 'Collapse map' : 'Expand map'}
-          >
-            {mapExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-          </button>
+          {/* Expand / collapse map button — desktop only */}
+          {!isMobile && (
+            <button
+              onClick={mapExpanded ? collapseMap : expandMap}
+              className="absolute top-3 right-3 z-10 bg-white rounded-lg p-2 border border-gray-200 hover:bg-gray-50 shadow-sm transition-colors"
+              title={mapExpanded ? 'Collapse map' : 'Expand map'}
+            >
+              {mapExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            </button>
+          )}
 
           {isLoaded ? (
             <GoogleMap

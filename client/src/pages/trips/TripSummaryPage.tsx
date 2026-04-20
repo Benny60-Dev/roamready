@@ -678,12 +678,12 @@ export default function TripSummaryPage() {
       ]} />
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           <h1 className="text-xl font-medium text-gray-900">{trip.name}</h1>
           <p className="text-sm text-gray-500 mt-0.5">{trip.startLocation} → {trip.endLocation}</p>
         </div>
-        <div className="flex gap-2 flex-shrink-0 flex-wrap justify-end">
+        <div className="flex gap-2 flex-shrink-0 flex-wrap">
           <button
             onClick={() => setModifyPanelOpen(true)}
             className="btn-outline text-sm flex items-center gap-1.5 border-[#1D9E75] text-[#1D9E75] hover:bg-[#E1F5EE]"
