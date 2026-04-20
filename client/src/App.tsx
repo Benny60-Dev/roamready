@@ -99,7 +99,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/roadmap" element={<RoadmapPage />} />
         <Route path="/trips/share/:token" element={<SharedTripPage />} />

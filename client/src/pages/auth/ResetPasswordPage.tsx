@@ -1,4 +1,4 @@
-import { Link, useParams, useNavigate } from 'react-router-dom'
+import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { useState } from 'react'
 import { authApi } from '../../services/api'
@@ -6,7 +6,8 @@ import { authApi } from '../../services/api'
 export default function ResetPasswordPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { token } = useParams<{ token: string }>()
+  const [searchParams] = useSearchParams()
+  const token = searchParams.get('token') ?? ''
   const navigate = useNavigate()
   const { register, handleSubmit, watch } = useForm<{ password: string; confirm: string }>()
 

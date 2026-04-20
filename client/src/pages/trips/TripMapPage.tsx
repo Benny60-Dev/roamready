@@ -407,7 +407,8 @@ export default function TripMapPage() {
   const [tripNameInput, setTripNameInput]   = useState('')
   const [modifyPanelOpen, setModifyPanelOpen] = useState(false)
   const [mapExpanded, setMapExpanded]       = useState(false)
-  const [isMobile, setIsMobile]             = useState(() => window.innerWidth < 1024)
+  const [isMobile, setIsMobile]             = useState(() => window.innerWidth < 768)
+  const [isDesktop, setIsDesktop]           = useState(() => window.innerWidth >= 1024)
 
   const mapRowRef = useRef<HTMLDivElement>(null)
 
@@ -428,22 +429,31 @@ export default function TripMapPage() {
   const expandMap = useCallback(() => {
     setMapExpanded(true)
     setSidebarOpen(false)
+    document.body.style.overflow = 'hidden'
   }, [])
 
   const collapseMap = useCallback(() => {
     setMapExpanded(false)
     setSidebarOpen(true)
+    document.body.style.overflow = ''
   }, [])
 
-  // Escape key collapses an expanded map
+  // Escape key collapses an expanded map; cleanup overflow lock on unmount
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && mapExpanded) collapseMap() }
     document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    return () => {
+      document.removeEventListener('keydown', handler)
+      if (mapExpanded) document.body.style.overflow = ''
+    }
   }, [mapExpanded, collapseMap])
 
   useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth < 1024)
+    const onResize = () => {
+      const w = window.innerWidth
+      setIsMobile(w < 768)
+      setIsDesktop(w >= 1024)
+    }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
@@ -925,7 +935,7 @@ export default function TripMapPage() {
       <div>
       <div
         ref={mapRowRef}
-        className={isMobile ? 'flex flex-col' : `flex items-start${mapExpanded ? ' justify-center' : ''}`}
+        className={isMobile ? 'flex flex-col' : 'flex items-start'}
         style={{
           transition: 'height 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
@@ -938,6 +948,10 @@ export default function TripMapPage() {
             borderRightWidth: '0.5px',
             width: '100%',
             order: 2,
+          } : !isDesktop ? {
+            borderRightWidth: '0.5px',
+            width: '20rem',
+            flexShrink: 0,
           } : {
             borderRightWidth: '0.5px',
             width: (sidebarOpen && !mapExpanded) ? '24rem' : '0',
@@ -977,7 +991,7 @@ export default function TripMapPage() {
                     </button>
                   </div>
                 )}
-                {!isMobile && (
+                {isDesktop && (
                   <button onClick={() => setSidebarOpen(false)} className="p-1 hover:bg-gray-100 rounded flex-shrink-0" title="Close sidebar">
                     <X size={16} />
                   </button>
@@ -1160,17 +1174,33 @@ export default function TripMapPage() {
           </div>
 
         {/* ── Map area ──────────────────────────────────────────────────────────── */}
-        <div className="relative" style={isMobile ? {
-          width: '100%',
-          height: '55vh',
-          flexShrink: 0,
-          order: 1,
-        } : {
-          width:  mapExpanded ? '95vw'  : '650px',
-          height: mapExpanded ? '90vh'  : '550px',
-          flexShrink: 0,
-          transition: 'width 0.35s cubic-bezier(0.4, 0, 0.2, 1), height 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
-        }}>
+        <div
+          className={isMobile ? 'relative border-b border-gray-200' : 'relative'}
+          style={mapExpanded ? {
+            position: 'fixed',
+            inset: '14px',
+            zIndex: 50,
+            borderRadius: '8px',
+            border: '0.5px solid #d1d5db',
+            overflow: 'hidden',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.10)',
+          } : isMobile ? {
+            width: '100%',
+            height: '45vh',
+            flexShrink: 0,
+            order: 1,
+          } : !isDesktop ? {
+            flex: 1,
+            minWidth: 0,
+            height: '500px',
+            flexShrink: 0,
+          } : {
+            width: '650px',
+            height: '550px',
+            flexShrink: 0,
+            transition: 'width 0.35s cubic-bezier(0.4, 0, 0.2, 1), height 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+          }}
+        >
           {/* Sidebar toggle — shows when sidebar is hidden */}
           {(!sidebarOpen || mapExpanded) && (
             <button
@@ -1182,7 +1212,7 @@ export default function TripMapPage() {
             </button>
           )}
 
-          {/* Expand / collapse map button — desktop only */}
+          {/* Expand / collapse map button — tablet and desktop */}
           {!isMobile && (
             <button
               onClick={mapExpanded ? collapseMap : expandMap}

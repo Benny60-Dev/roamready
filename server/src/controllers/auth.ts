@@ -9,6 +9,21 @@ import { createStripeCustomer } from '../services/stripe'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
+// When requests arrive via Vite's dev proxy (e.g. from http://10.0.0.214:3000),
+// the proxy sets x-forwarded-host to the original hostname:port.
+// This lets server-side redirects go back to the correct host instead of localhost.
+function getClientOrigin(req: Request): string {
+  const fwdHost = req.headers['x-forwarded-host']
+  if (fwdHost) {
+    const host = Array.isArray(fwdHost) ? fwdHost[0] : fwdHost
+    const proto = Array.isArray(req.headers['x-forwarded-proto'])
+      ? req.headers['x-forwarded-proto'][0]
+      : (req.headers['x-forwarded-proto'] as string | undefined) || 'http'
+    return `${proto}://${host}`
+  }
+  return process.env.CLIENT_URL || 'http://localhost:3000'
+}
+
 function generateTokens(userId: string) {
   const accessToken = jwt.sign({ userId }, process.env.JWT_SECRET!, { expiresIn: '15m' })
   const refreshToken = jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET!, { expiresIn: '30d' })
@@ -138,7 +153,7 @@ export async function forgotPassword(req: Request, res: Response, next: NextFunc
     if (!user) return res.json({ message: 'If that email exists, a reset link was sent.' })
 
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1h' })
-    const resetUrl = `${process.env.CLIENT_URL}/reset-password?token=${token}`
+    const resetUrl = `${getClientOrigin(req)}/reset-password?token=${token}`
 
     console.log('Password reset token for', email, ':', token)
 
@@ -204,14 +219,15 @@ export async function getMe(req: AuthRequest, res: Response, next: NextFunction)
 
 export async function googleCallback(req: Request, res: Response) {
   const user = req.user as any
-  if (!user) return res.redirect(`${process.env.CLIENT_URL}/login?error=auth_failed`)
+  const origin = getClientOrigin(req)
+  if (!user) return res.redirect(`${origin}/login?error=auth_failed`)
 
   const { accessToken, refreshToken } = generateTokens(user.id)
   setRefreshCookie(res, refreshToken)
 
-  res.redirect(`${process.env.CLIENT_URL}/auth/callback?token=${accessToken}`)
+  res.redirect(`${origin}/auth/callback?token=${accessToken}`)
 }
 
 export async function appleCallback(req: Request, res: Response) {
-  res.redirect(`${process.env.CLIENT_URL}/login?error=apple_not_configured`)
+  res.redirect(`${getClientOrigin(req)}/login?error=apple_not_configured`)
 }

@@ -8,14 +8,14 @@ export async function createStripeCustomer(email: string, name: string) {
   return stripe.customers.create({ email, name })
 }
 
-export async function createCheckoutSession(customerId: string, priceId: string, userId: string) {
+export async function createCheckoutSession(customerId: string, priceId: string, userId: string, clientOrigin: string) {
   return stripe.checkout.sessions.create({
     customer: customerId,
     payment_method_types: ['card'],
     line_items: [{ price: priceId, quantity: 1 }],
     mode: 'subscription',
-    success_url: `${process.env.CLIENT_URL}/profile/billing?success=true`,
-    cancel_url: `${process.env.CLIENT_URL}/pricing`,
+    success_url: `${clientOrigin}/profile/billing?success=true`,
+    cancel_url: `${clientOrigin}/pricing`,
     metadata: { userId },
     subscription_data: {
       metadata: { userId },
@@ -23,9 +23,9 @@ export async function createCheckoutSession(customerId: string, priceId: string,
   })
 }
 
-export async function createPortalSession(customerId: string) {
+export async function createPortalSession(customerId: string, clientOrigin: string) {
   return stripe.billingPortal.sessions.create({
     customer: customerId,
-    return_url: `${process.env.CLIENT_URL}/profile/billing`,
+    return_url: `${clientOrigin}/profile/billing`,
   })
 }

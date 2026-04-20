@@ -4,6 +4,18 @@ import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
 import { stripe, createCheckoutSession, createPortalSession } from '../services/stripe'
 
+function getClientOrigin(req: AuthRequest): string {
+  const fwdHost = req.headers['x-forwarded-host']
+  if (fwdHost) {
+    const host = Array.isArray(fwdHost) ? fwdHost[0] : fwdHost
+    const proto = Array.isArray(req.headers['x-forwarded-proto'])
+      ? req.headers['x-forwarded-proto'][0]
+      : (req.headers['x-forwarded-proto'] as string | undefined) || 'http'
+    return `${proto}://${host}`
+  }
+  return process.env.CLIENT_URL || 'http://localhost:3000'
+}
+
 export async function createCheckout(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { priceId } = req.body
@@ -14,7 +26,7 @@ export async function createCheckout(req: AuthRequest, res: Response, next: Next
 
     if (!user.customerId) throw new AppError('No Stripe customer found', 400)
 
-    const session = await createCheckoutSession(user.customerId, priceId, user.id)
+    const session = await createCheckoutSession(user.customerId, priceId, user.id, getClientOrigin(req))
     res.json({ url: session.url })
   } catch (err) { next(err) }
 }
@@ -24,7 +36,7 @@ export async function createPortal(req: AuthRequest, res: Response, next: NextFu
     const user = await prisma.user.findUnique({ where: { id: req.user!.id } })
     if (!user?.customerId) throw new AppError('No billing account found', 400)
 
-    const session = await createPortalSession(user.customerId)
+    const session = await createPortalSession(user.customerId, getClientOrigin(req))
     res.json({ url: session.url })
   } catch (err) { next(err) }
 }

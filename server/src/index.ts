@@ -127,7 +127,7 @@ async function fixEndpointStopTypes() {
 }
 
 const PORT = process.env.PORT || 3001
-app.listen(PORT, async () => {
+app.listen(Number(PORT), '0.0.0.0', async () => {
   console.log(`RoamReady server running on port ${PORT}`)
   await fixEndpointStopTypes()
 })
