@@ -4,6 +4,8 @@ import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { Camera, Star, DollarSign, Save } from 'lucide-react'
 import { tripsApi, journalApi } from '../../services/api'
 import { Trip, Stop, JournalEntry } from '../../types'
+import { useAuthStore } from '../../store/authStore'
+import { buildStopBadges } from '../../utils/stopBadge'
 
 function StarRating({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   const [hover, setHover] = useState(0)
@@ -18,7 +20,7 @@ function StarRating({ value, onChange }: { value: number; onChange: (v: number) 
   )
 }
 
-function StopJournal({ stop, displayNum }: { stop: Stop; displayNum: number }) {
+function StopJournal({ stop, badge }: { stop: Stop; badge: 'S' | 'H' | 'F' | number }) {
   const [entry, setEntry] = useState<Partial<JournalEntry>>(stop.journalEntry || {})
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -42,8 +44,8 @@ function StopJournal({ stop, displayNum }: { stop: Stop; displayNum: number }) {
   return (
     <div className="card-lg space-y-4">
       <div className="flex items-center gap-3">
-        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs ${stop.type === 'HOME' ? 'bg-gray-400' : 'bg-[#1D9E75]'}`}>
-          {stop.type === 'HOME' ? 'H' : displayNum}
+        <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs bg-[#1D9E75]">
+          {String(badge)}
         </div>
         <div>
           <h3 className="font-medium text-gray-900">{stop.locationName}</h3>
@@ -98,6 +100,7 @@ function StopJournal({ stop, displayNum }: { stop: Stop; displayNum: number }) {
 }
 
 export default function TripJournalPage() {
+  const { user } = useAuthStore()
   const { id } = useParams<{ id: string }>()
   const [trip, setTrip] = useState<Trip | null>(null)
   const [loading, setLoading] = useState(true)
@@ -124,13 +127,11 @@ export default function TripJournalPage() {
       <div className="space-y-4">
         {(() => {
           const sorted = [...(trip.stops || [])].sort((a, b) => a.order - b.order)
-          const displayNums: Record<string, number> = {}
-          let n = 1
-          sorted.forEach(s => { if (s.type !== 'HOME') displayNums[s.id] = n++ })
+          const badges = buildStopBadges(sorted, user)
           return sorted
             .filter(s => s.type !== 'HOME')
             .map(stop => (
-              <StopJournal key={stop.id} stop={stop} displayNum={displayNums[stop.id]} />
+              <StopJournal key={stop.id} stop={stop} badge={badges[stop.id]} />
             ))
         })()}
       </div>

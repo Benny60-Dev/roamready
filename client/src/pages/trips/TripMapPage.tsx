@@ -12,9 +12,11 @@ import { tripsApi } from '../../services/api'
 import { Trip, Stop, StopWeather, LiveForecast } from '../../types'
 import { StopWeatherCard, ALERT_STYLES } from '../../components/weather/StopWeatherCard'
 import ModifyTripPanel from '../../components/trip/ModifyTripPanel'
+import { useAuthStore } from '../../store/authStore'
+import { buildStopBadges } from '../../utils/stopBadge'
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' }
-const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 'geometry']
+const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 'geometry', 'places']
 
 // ─── Marker colors ──────────────────────────────────────────────────────────────
 const MC = {
@@ -48,10 +50,10 @@ function haversineMiles(lat1?: number, lng1?: number, lat2?: number, lng2?: numb
 // ─── Marker helpers ──────────────────────────────────────────────────────────────
 
 /** Creates the HTML element used as the AdvancedMarkerElement content. */
-function makeMarkerContent(kind: MarkerKind, displayNum: number | undefined): HTMLElement {
+function makeMarkerContent(kind: MarkerKind, badge: string | number | undefined): HTMLElement {
   const div = document.createElement('div')
   div.style.cssText = `width:26px;height:26px;border-radius:50%;background:${KIND_COLOR[kind]};border:3px solid white;display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.3);cursor:pointer`
-  div.textContent = kind === 'home' ? 'H' : (displayNum != null ? String(displayNum) : '')
+  div.textContent = badge != null ? String(badge) : ''
   return div
 }
 
@@ -137,8 +139,8 @@ function MapLegend() {
       <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5">Legend</p>
       <div className="space-y-1.5">
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full flex items-center justify-center text-white text-[8px] font-bold flex-shrink-0" style={{ backgroundColor: MC.home }}>H</div>
-          <span className="text-[11px] text-gray-600 leading-none">Home / Start</span>
+          <div className="w-3 h-3 rounded-full flex items-center justify-center text-white text-[8px] font-bold flex-shrink-0" style={{ backgroundColor: MC.home }}>S</div>
+          <span className="text-[11px] text-gray-600 leading-none">Start</span>
         </div>
         {/* Numbered stops */}
         {[
@@ -170,7 +172,7 @@ function StopPopup({
   stop: Stop
   kind: MarkerKind
   weather: StopWeather | null | undefined
-  displayNum?: number
+  displayNum?: 'S' | 'H' | 'F' | number
   onClose: () => void
   onUpdateNights: (id: string, nights: number) => void
 }) {
@@ -210,7 +212,7 @@ function StopPopup({
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-            {stop.type === 'HOME' ? 'Departure' : `Stop ${displayNum}`}
+            {displayNum === 'S' ? 'Start' : displayNum === 'H' ? 'Home · Finish' : displayNum === 'F' ? 'Finish' : `Stop ${displayNum}`}
           </span>
           <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${badge.cls}`}>{badge.label}</span>
         </div>
@@ -374,6 +376,7 @@ function SidebarWeatherTab({ trip, weatherData, loading }: {
 
 // ─── Page ────────────────────────────────────────────────────────────────────────
 export default function TripMapPage() {
+  const { user } = useAuthStore()
   const { id } = useParams<{ id: string }>()
   const [trip, setTrip]                     = useState<Trip | null>(null)
   const [selectedStop, setSelectedStop]     = useState<Stop | null>(null)
@@ -483,14 +486,58 @@ export default function TripMapPage() {
   // ── Geocode stops missing lat/lng, save to DB ─────────────────────────────────
   useEffect(() => {
     if (!isLoaded || !id || !trip?.stops?.length || geocoding) return
-    const missing = trip.stops.filter(s => !s.latitude || !s.longitude)
-    if (!missing.length) return
+    const allMissing = trip.stops.filter(s => !s.latitude || !s.longitude)
+    if (!allMissing.length) return
 
-    console.log('[TripMapPage] geocoding', missing.length, 'stop(s) missing coordinates')
+    const sortedAll  = trip.stops.slice().sort((a, b) => a.order - b.order)
+    const lastStop   = sortedAll[sortedAll.length - 1]
+    const hasExactHome = !!(user?.homeLat && user?.homeLng)
+
+    console.log('[TripMapPage:geocodeEffect] allMissing=%d hasExactHome=%s homeLat=%s homeLng=%s homeCity=%s',
+      allMissing.length, hasExactHome, user?.homeLat, user?.homeLng, user?.homeCity)
+    allMissing.forEach(s => console.log('[TripMapPage:geocodeEffect]   missing stop id=%s type=%s locationName=%s', s.id, s.type, s.locationName))
+
+    // Stops that get the user's exact home coordinates instead of geocoding:
+    //   • Any HOME-typed stop
+    //   • The last stop when its city matches the user's homeCity (returning home)
+    const exactHomeStops = hasExactHome
+      ? allMissing.filter(s => {
+          if (s.type === 'HOME') return true
+          if (s.id === lastStop?.id && user?.homeCity)
+            return s.locationName.toLowerCase().trim() === user.homeCity.toLowerCase().trim()
+          return false
+        })
+      : []
+
+    console.log('[TripMapPage:geocodeEffect] exactHomeStops=%d toGeocode=%d',
+      exactHomeStops.length, allMissing.length - exactHomeStops.length)
+
+    const exactHomeIds = new Set(exactHomeStops.map(s => s.id))
+    const toGeocode    = allMissing.filter(s => !exactHomeIds.has(s.id))
+
+    // Apply exact home coords immediately — fire-and-forget DB saves
+    if (exactHomeStops.length) {
+      Promise.allSettled(
+        exactHomeStops.map(s =>
+          tripsApi.updateStop(id, s.id, { latitude: user!.homeLat!, longitude: user!.homeLng! })
+        )
+      )
+      setTrip(prev => prev ? {
+        ...prev,
+        stops: prev.stops?.map(s =>
+          exactHomeIds.has(s.id) ? { ...s, latitude: user!.homeLat!, longitude: user!.homeLng! } : s
+        ),
+      } : prev)
+      console.log('[TripMapPage] applied exact home coords to', exactHomeStops.length, 'stop(s)')
+    }
+
+    if (!toGeocode.length) return
+
+    console.log('[TripMapPage] geocoding', toGeocode.length, 'stop(s) missing coordinates')
     setGeocoding(true)
     const geocoder = new window.google.maps.Geocoder()
 
-    Promise.all(missing.map(stop =>
+    Promise.all(toGeocode.map(stop =>
       new Promise<{ stop: Stop; lat: number; lng: number } | null>(resolve => {
         const q = [stop.locationName, stop.locationState, 'USA'].filter(Boolean).join(', ')
         geocoder.geocode({ address: q }, (results, status) => {
@@ -518,7 +565,42 @@ export default function TripMapPage() {
       } : prev)
       setGeocoding(false)
     })
-  }, [isLoaded, trip?.id])
+  }, [isLoaded, trip?.id, user?.homeLat, user?.homeLng])
+
+  // ── Pin HOME stops to exact home coordinates ───────────────────────────────────
+  // Runs independently of the geocode effect so it also corrects stops that were
+  // previously geocoded to city center (non-null coords that are still wrong).
+  useEffect(() => {
+    if (!id || !trip?.stops?.length || !user?.homeLat || !user?.homeLng) return
+
+    const sortedAll = trip.stops.slice().sort((a, b) => a.order - b.order)
+    const lastStop  = sortedAll[sortedAll.length - 1]
+
+    const stopsToPin = trip.stops.filter(s => {
+      const isHomeType = s.type === 'HOME'
+      const isReturnHome = s.id === lastStop?.id && !!user?.homeCity &&
+        s.locationName.toLowerCase().trim() === user.homeCity.toLowerCase().trim()
+      if (!isHomeType && !isReturnHome) return false
+      return s.latitude !== user.homeLat || s.longitude !== user.homeLng
+    })
+
+    if (!stopsToPin.length) return
+
+    console.log('[TripMapPage:homePin] pinning', stopsToPin.length, 'stop(s) to exact home coords', user.homeLat, user.homeLng)
+    Promise.allSettled(
+      stopsToPin.map(s =>
+        tripsApi.updateStop(id, s.id, { latitude: user.homeLat!, longitude: user.homeLng! })
+      )
+    )
+    setTrip(prev => prev ? {
+      ...prev,
+      stops: prev.stops?.map(s =>
+        stopsToPin.find(p => p.id === s.id)
+          ? { ...s, latitude: user.homeLat!, longitude: user.homeLng! }
+          : s
+      ),
+    } : prev)
+  }, [trip?.id, user?.homeLat, user?.homeLng])
 
   // ── Routes API (replaces deprecated DirectionsService) ────────────────────────
   useEffect(() => {
@@ -641,14 +723,11 @@ export default function TripMapPage() {
     [trip?.stops]
   )
 
-  // Sequential display numbers 1, 2, 3… assigned to non-HOME stops in order.
-  const stopDisplayNumbers = useMemo(() => {
+  // Badge values: 'S' for first stop, 'H'/'F' for last, sequential numbers for middle stops.
+  const stopBadges = useMemo(() => {
     const sorted = trip?.stops?.slice().sort((a, b) => a.order - b.order) ?? []
-    const map: Record<string, number> = {}
-    let n = 1
-    sorted.forEach(s => { if (s.type !== 'HOME') map[s.id] = n++ })
-    return map
-  }, [trip?.stops])
+    return buildStopBadges(sorted, user)
+  }, [trip?.stops, user])
 
   // Drive segments with per-segment miles (Routes API actual or Haversine fallback)
   const { driveSegments, liveTotalMiles } = useMemo(() => {
@@ -667,7 +746,7 @@ export default function TripMapPage() {
   const { totalCost, nonHomeStops, bookedStops } = useMemo(() => {
     const stops = trip?.stops || []
     const camp = stops.reduce((sum, s) => sum + ((s as any).siteRate || 0) * s.nights, 0)
-    const nonHome = stops.filter(s => s.type !== 'HOME')
+    const nonHome = stops.filter((s: Stop) => s.type !== 'HOME')
     const booked = nonHome.filter(s => s.bookingStatus === 'CONFIRMED').length
     return {
       totalCost: camp + (trip?.estimatedFuel || 0),
@@ -697,10 +776,10 @@ export default function TripMapPage() {
     console.log(`[TripMapPage] placing ${stopsWithCoords.length} marker(s) on map`)
 
     stopsWithCoords.forEach(stop => {
-      const kind       = classifyStop(stop)
-      const displayNum = stopDisplayNumbers[stop.id]
+      const kind  = classifyStop(stop)
+      const badge = stopBadges[stop.id]
 
-      // Layer visibility — HOME always shows
+      // Layer visibility — HOME (start) always shows
       if (kind !== 'home') {
         if (!layers.stops && stop.type !== 'OVERNIGHT_ONLY') return
         if (!layers.overnight && stop.type === 'OVERNIGHT_ONLY') return
@@ -708,14 +787,14 @@ export default function TripMapPage() {
       }
 
       console.log(
-        `[TripMapPage] marker #${displayNum ?? 'home'} "${stop.locationName}" kind=${kind}`,
+        `[TripMapPage] marker badge=${badge} "${stop.locationName}" kind=${kind}`,
         `lat=${stop.latitude} lng=${stop.longitude}`,
       )
 
       const marker = new window.google.maps.marker.AdvancedMarkerElement({
         position: { lat: stop.latitude!, lng: stop.longitude! },
         map:      mapInstance,
-        content:  makeMarkerContent(kind, displayNum),
+        content:  makeMarkerContent(kind, badge),
         title:    stop.locationName,
         zIndex:   KIND_Z[kind],
       })
@@ -725,7 +804,7 @@ export default function TripMapPage() {
 
     console.log(`[TripMapPage] ${markersRef.current.length} marker(s) added to map`)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapInstance, stopsWithCoords, stopDisplayNumbers, layers])
+  }, [mapInstance, stopsWithCoords, stopBadges, layers])
 
   // Cleanup markers on unmount
   useEffect(() => () => { markersRef.current.forEach(m => { m.map = null }) }, [])
@@ -965,7 +1044,7 @@ export default function TripMapPage() {
                 <div className="space-y-0.5">
                   {trip?.stops?.slice().sort((a, b) => a.order - b.order).map(stop => {
                     const isHome   = stop.type === 'HOME'
-                    const displayN = stopDisplayNumbers[stop.id]
+                    const badge    = stopBadges[stop.id]
                     const hasAlert = stopHasAlerts(weatherData[stop.id])
                     const alerts   = stopAlerts(weatherData[stop.id])
 
@@ -993,18 +1072,12 @@ export default function TripMapPage() {
                         onClick={() => setSelectedStop(stop)}
                         className="w-full text-left flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-50 transition-colors"
                       >
-                        {isHome ? (
-                          <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0" style={{ backgroundColor: MC.home }}>
-                            H
-                          </div>
-                        ) : (
-                          <div
-                            className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
-                            style={{ backgroundColor: colorForStop(stop) }}
-                          >
-                            {displayN}
-                          </div>
-                        )}
+                        <div
+                          className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
+                          style={{ backgroundColor: isHome ? MC.home : colorForStop(stop) }}
+                        >
+                          {String(badge)}
+                        </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium text-gray-900 truncate">{stop.locationName}</p>
                           <p className="text-[10px] text-gray-400">
@@ -1098,7 +1171,7 @@ export default function TripMapPage() {
                     stop={selectedStop}
                     kind={classifyStop(selectedStop)}
                     weather={weatherData[selectedStop.id]}
-                    displayNum={stopDisplayNumbers[selectedStop.id]}
+                    displayNum={stopBadges[selectedStop.id]}
                     onClose={() => setSelectedStop(null)}
                     onUpdateNights={handleUpdateNights}
                   />

@@ -272,8 +272,8 @@ export default function NewTripPage() {
     setCreating(true)
     setBuildError(null)
     try {
-      // Use user's homeLocation as the trip startLocation so the server-side HOME
-      // stop guard has the correct departure city, even if the AI omits the HOME stop.
+      // Use the HOME stop's locationName as confirmed in the AI conversation.
+      // Falls back to homeLocation only if the AI omitted the HOME stop entirely.
       const homeStopName = itinerary.stops?.[0]?.type === 'HOME'
         ? itinerary.stops[0].locationName
         : user?.homeLocation || itinerary.stops?.[0]?.locationName || 'Start'

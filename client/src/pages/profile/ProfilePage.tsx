@@ -1,19 +1,59 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
-import { Truck, Map, CreditCard, Bell, Shield, ChevronRight, Save } from 'lucide-react'
+import { Autocomplete, useJsApiLoader } from '@react-google-maps/api'
+import { Truck, Map, CreditCard, Bell, Shield, ChevronRight, Save, MapPin } from 'lucide-react'
 import { usersApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
+
+const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 'geometry', 'places']
 
 export default function ProfilePage() {
   const { user, setUser } = useAuthStore()
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const { register, handleSubmit, reset } = useForm({ defaultValues: user || {} })
+  const { register, handleSubmit, reset, setValue, watch } = useForm({ defaultValues: user || {} })
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null)
+
+  const { isLoaded } = useJsApiLoader({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
+    libraries: LIBRARIES,
+  })
 
   useEffect(() => {
     if (user) reset(user)
   }, [user])
+
+  const watchedCity  = watch('homeCity')  as string | undefined
+  const watchedState = watch('homeState') as string | undefined
+
+  function onPlaceChanged() {
+    const place = autocompleteRef.current?.getPlace()
+    if (!place?.address_components) return
+
+    let streetNum = '', route = '', city = '', state = '', zip = ''
+    for (const comp of place.address_components) {
+      if (comp.types.includes('street_number'))            streetNum = comp.long_name
+      if (comp.types.includes('route'))                    route     = comp.long_name
+      if (comp.types.includes('locality'))                 city      = comp.long_name
+      if (comp.types.includes('administrative_area_level_1')) state  = comp.short_name
+      if (comp.types.includes('postal_code'))              zip       = comp.long_name
+    }
+
+    const street  = streetNum ? `${streetNum} ${route}`.trim() : route
+    const lat     = place.geometry?.location?.lat()
+    const lng     = place.geometry?.location?.lng()
+    const full    = place.formatted_address || ''
+
+    setValue('homeStreet',  street,  { shouldDirty: true })
+    setValue('homeCity',    city,    { shouldDirty: true })
+    setValue('homeState',   state,   { shouldDirty: true })
+    setValue('homeZip',     zip,     { shouldDirty: true })
+    setValue('homeLat',     lat,     { shouldDirty: true })
+    setValue('homeLng',     lng,     { shouldDirty: true })
+    setValue('homeAddress', full,    { shouldDirty: true })
+    setValue('homeLocation', full,   { shouldDirty: true })
+  }
 
   async function onSubmit(data: any) {
     setSaving(true)
@@ -28,11 +68,11 @@ export default function ProfilePage() {
   }
 
   const profileLinks = [
-    { to: '/profile/rig', icon: Truck, label: 'Rig & Vehicle', sub: 'Manage your rigs' },
-    { to: '/profile/style', icon: Map, label: 'Travel Style', sub: 'Preferences & budget' },
-    { to: '/profile/memberships', icon: Shield, label: 'Memberships', sub: 'ATB, Good Sam, etc.' },
-    { to: '/profile/notifications', icon: Bell, label: 'Notifications', sub: 'Alerts & reminders' },
-    { to: '/profile/billing', icon: CreditCard, label: 'Billing', sub: user?.subscriptionTier === 'FREE' ? 'Free plan' : `${user?.subscriptionTier} plan` },
+    { to: '/profile/rig',           icon: Truck,   label: 'Rig & Vehicle',  sub: 'Manage your rigs' },
+    { to: '/profile/style',         icon: Map,     label: 'Travel Style',   sub: 'Preferences & budget' },
+    { to: '/profile/memberships',   icon: Shield,  label: 'Memberships',    sub: 'ATB, Good Sam, etc.' },
+    { to: '/profile/notifications', icon: Bell,    label: 'Notifications',  sub: 'Alerts & reminders' },
+    { to: '/profile/billing',       icon: CreditCard, label: 'Billing',     sub: user?.subscriptionTier === 'FREE' ? 'Free plan' : `${user?.subscriptionTier} plan` },
   ]
 
   return (
@@ -65,10 +105,36 @@ export default function ProfilePage() {
             <label className="label">Phone</label>
             <input className="input" type="tel" {...register('phone')} />
           </div>
+
           <div>
             <label className="label">Home address</label>
-            <input className="input" placeholder="Enter your home address" {...register('homeLocation')} />
+            {isLoaded ? (
+              <Autocomplete
+                onLoad={ac => { autocompleteRef.current = ac }}
+                onPlaceChanged={onPlaceChanged}
+                options={{ types: ['address'], componentRestrictions: { country: 'us' } }}
+              >
+                <input
+                  className="input"
+                  placeholder="Start typing your address…"
+                  defaultValue={user?.homeAddress || user?.homeLocation || ''}
+                />
+              </Autocomplete>
+            ) : (
+              <input
+                className="input"
+                placeholder="Loading…"
+                disabled
+              />
+            )}
+            {watchedCity && watchedState && (
+              <p className="mt-1.5 flex items-center gap-1 text-xs text-[#1D9E75]">
+                <MapPin size={11} />
+                {watchedCity}, {watchedState}{watch('homeZip') ? ` ${watch('homeZip')}` : ''}
+              </p>
+            )}
           </div>
+
           <div>
             <label className="label">Emergency contact name</label>
             <input className="input" {...register('emergencyContact')} />
@@ -77,6 +143,17 @@ export default function ProfilePage() {
             <label className="label">Emergency contact phone</label>
             <input className="input" type="tel" {...register('emergencyPhone')} />
           </div>
+
+          {/* Hidden structured fields — populated by Autocomplete */}
+          <input type="hidden" {...register('homeStreet')} />
+          <input type="hidden" {...register('homeCity')} />
+          <input type="hidden" {...register('homeState')} />
+          <input type="hidden" {...register('homeZip')} />
+          <input type="hidden" {...register('homeLat')} />
+          <input type="hidden" {...register('homeLng')} />
+          <input type="hidden" {...register('homeAddress')} />
+          <input type="hidden" {...register('homeLocation')} />
+
           <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2">
             <Save size={15} /> {saving ? 'Saving...' : saved ? 'Saved!' : 'Save changes'}
           </button>

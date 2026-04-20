@@ -4,6 +4,7 @@ import { MapPin, Calendar, DollarSign, Tent } from 'lucide-react'
 import { tripsApi } from '../services/api'
 import { Trip } from '../types'
 import { format } from 'date-fns'
+import { buildStopBadges } from '../utils/stopBadge'
 
 export default function SharedTripPage() {
   const { token } = useParams<{ token: string }>()
@@ -27,10 +28,9 @@ export default function SharedTripPage() {
   )
   if (!trip) return null
 
-  const sortedStops = [...(trip.stops || [])].sort((a, b) => a.order - b.order)
-  const stopDisplayNumbers: Record<string, number> = {}
-  let _n = 1
-  sortedStops.forEach(s => { if (s.type !== 'HOME') stopDisplayNumbers[s.id] = _n++ })
+  const sortedStops        = [...(trip.stops || [])].sort((a, b) => a.order - b.order)
+  // No homeLocation available in public shared view — last stop always gets 'F'
+  const stopDisplayNumbers = buildStopBadges(sortedStops)
   const totalCost = (trip.estimatedFuel || 0) + (trip.estimatedCamp || 0)
 
   return (
@@ -73,14 +73,14 @@ export default function SharedTripPage() {
             <div key={stop.id} className="flex gap-3">
               <div className="flex flex-col items-center">
                 <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-medium ${stop.type === 'HOME' ? 'bg-gray-400' : 'bg-[#1D9E75]'}`}>
-                  {stop.type === 'HOME' ? 'H' : stopDisplayNumbers[stop.id]}
+                  {String(stopDisplayNumbers[stop.id] ?? '')}
                 </div>
                 {i < sortedStops.length - 1 && <div className="w-px flex-1 bg-gray-200 mt-1 min-h-6" />}
               </div>
               <div className="flex-1 pb-3">
                 <p className="font-medium text-gray-900">{stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}</p>
                 {stop.type === 'HOME'
-                  ? <p className="text-xs text-gray-400">Departure point</p>
+                  ? <p className="text-xs text-gray-400">Starting point</p>
                   : stop.campgroundName && <p className="text-sm text-gray-500">{stop.campgroundName}</p>
                 }
                 {stop.type !== 'HOME' && (

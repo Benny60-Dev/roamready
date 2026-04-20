@@ -30,10 +30,12 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     })
 
     const userProfile = {
-      homeLocation: user?.homeLocation,
-      rigs: user?.rigs,
+      homeCity:     user?.homeCity     || undefined,
+      homeState:    user?.homeState    || undefined,
+      homeLocation: user?.homeLocation || undefined,
+      rigs:         user?.rigs,
       travelProfile: user?.travelProfile,
-      memberships: user?.memberships?.map(m => m.type),
+      memberships:  user?.memberships?.map(m => m.type),
     }
 
     const response = await chatWithAI(messages, userProfile)

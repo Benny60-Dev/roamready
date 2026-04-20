@@ -8,6 +8,7 @@ import {
 import { tripsApi, campgroundsApi, bookingsApi } from '../../services/api'
 import { Trip, Stop, Campground } from '../../types'
 import { useAuthStore } from '../../store/authStore'
+import { buildStopBadges } from '../../utils/stopBadge'
 import { useUIStore } from '../../store/uiStore'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -505,7 +506,7 @@ export default function TripBookingPage() {
   const [pendingAlt, setPendingAlt] = useState<{ cg: Campground; stop: Stop } | null>(null)
   const [confirming, setConfirming] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
-  const { hasAccess } = useAuthStore()
+  const { hasAccess, user } = useAuthStore()
   const { openPaywall } = useUIStore()
 
   // Load trip — honor ?stopId param from TripDetailPage Reserve button
@@ -605,10 +606,8 @@ export default function TripBookingPage() {
   )
   if (!trip) return null
 
-  const sortedStops   = [...(trip.stops ?? [])].sort((a, b) => a.order - b.order)
-  const stopDisplayNumbers: Record<string, number> = {}
-  let _dn = 1
-  sortedStops.forEach(s => { if (s.type !== 'HOME') stopDisplayNumbers[s.id] = _dn++ })
+  const sortedStops        = [...(trip.stops ?? [])].sort((a, b) => a.order - b.order)
+  const stopDisplayNumbers = buildStopBadges(sortedStops, user)
   const bookableStops = sortedStops.filter(s => s.type !== 'HOME')
   const bookedCount   = sortedStops.filter(s => s.bookingStatus === 'CONFIRMED').length
   const incompatCount = sortedStops.filter(s => !s.isCompatible).length
@@ -645,7 +644,7 @@ export default function TripBookingPage() {
             stop.type === 'HOME' ? 'bg-gray-400' :
             stop.type === 'OVERNIGHT_ONLY' ? 'bg-[#7F77DD]' : 'bg-[#1D9E75]'
           }`}>
-            {stop.type === 'HOME' ? 'H' : stopDisplayNumbers[stop.id]}
+            {String(stopDisplayNumbers[stop.id] ?? '')}
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="text-base font-semibold text-gray-900 leading-tight">
@@ -778,7 +777,7 @@ export default function TripBookingPage() {
               <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-semibold ${
                 activeStop === stop.id ? 'bg-white/20' : 'bg-gray-100 text-gray-600'
               }`}>
-                {stop.type === 'HOME' ? 'H' : stopDisplayNumbers[stop.id]}
+                {String(stopDisplayNumbers[stop.id] ?? '')}
               </span>
               <span className="max-w-[90px] truncate">{stop.locationName}</span>
               {stop.bookingStatus === 'CONFIRMED' && (
@@ -818,7 +817,7 @@ export default function TripBookingPage() {
                     stop.type === 'HOME' ? 'bg-gray-400' :
                     stop.type === 'OVERNIGHT_ONLY' ? 'bg-[#7F77DD]' : 'bg-[#1D9E75]'
                   }`}>
-                    {stop.type === 'HOME' ? 'H' : stopDisplayNumbers[stop.id]}
+                    {String(stopDisplayNumbers[stop.id] ?? '')}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className={`text-xs font-medium truncate ${isActive ? 'text-[#1D9E75]' : 'text-gray-800'}`}>

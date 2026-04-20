@@ -23,6 +23,13 @@ model User {
   emergencyContact    String?
   emergencyPhone      String?
   homeLocation        String?
+  homeAddress         String?
+  homeStreet          String?
+  homeCity            String?
+  homeState           String?
+  homeZip             String?
+  homeLat             Float?
+  homeLng             Float?
   avatarUrl           String?
   subscriptionTier    SubscriptionTier     @default(FREE)
   subscriptionId      String?

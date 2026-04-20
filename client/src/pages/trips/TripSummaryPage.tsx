@@ -10,6 +10,8 @@ import ModifyTripPanel from '../../components/trip/ModifyTripPanel'
 import { pdf } from '@react-pdf/renderer'
 import { tripsApi, aiApi } from '../../services/api'
 import { Trip, Stop, ItineraryDay, ItineraryActivity, StopWeather } from '../../types'
+import { useAuthStore } from '../../store/authStore'
+import { buildStopBadges } from '../../utils/stopBadge'
 import { format, addDays } from 'date-fns'
 import { TripPDF } from '../../components/pdf/TripPDF'
 import { StopWeatherCard } from '../../components/weather/StopWeatherCard'
@@ -304,6 +306,7 @@ const ROW_CONFIG = {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function TripSummaryPage() {
+  const { user } = useAuthStore()
   const { id } = useParams<{ id: string }>()
   const [trip, setTrip] = useState<Trip | null>(null)
   const [loading, setLoading] = useState(true)
@@ -654,9 +657,7 @@ export default function TripSummaryPage() {
   if (!trip) return null
 
   const sortedStops = [...(trip.stops || [])].sort((a, b) => a.order - b.order)
-  const stopDisplayNumbers: Record<string, number> = {}
-  let _dn = 1
-  sortedStops.forEach(s => { if (s.type !== 'HOME') stopDisplayNumbers[s.id] = _dn++ })
+  const stopDisplayNumbers = buildStopBadges(sortedStops, user)
   const totalCamp = sortedStops.reduce((sum, s) => sum + (s.siteRate || 0) * s.nights, 0)
   const grandTotal = totalCamp + (trip.estimatedFuel || 0)
 
@@ -833,7 +834,7 @@ export default function TripSummaryPage() {
             <div key={stop.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
               <div className="flex items-center gap-2">
                 <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${stop.type === 'HOME' ? 'bg-gray-100 text-gray-500' : 'bg-[#E1F5EE] text-[#1D9E75]'}`}>
-                  {stop.type === 'HOME' ? 'H' : stopDisplayNumbers[stop.id]}
+                  {String(stopDisplayNumbers[stop.id] ?? '')}
                 </div>
                 <span className="text-sm text-gray-700">{stop.locationName}</span>
               </div>

@@ -206,7 +206,7 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
       where: { tripId: req.params.id },
       _max: { order: true },
     })
-    const order = (maxOrder._max.order ?? 0) + 1
+    let order = (maxOrder._max.order ?? 0) + 1
 
     // Whitelist only known Stop fields — AI response may include extras like `notes`
     // that don't exist in the schema and would cause a Prisma validation error
@@ -235,6 +235,16 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
       type = 'DESTINATION'
     }
 
+    // Fetch user's exact home coordinates — used to pin HOME stops precisely instead
+    // of geocoding the city name (which resolves to city center, not the street address).
+    const homeOwner = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { homeLat: true, homeLng: true },
+    })
+    const exactHomeLat = homeOwner?.homeLat ?? null
+    const exactHomeLng = homeOwner?.homeLng ?? null
+    console.log('[createStop:homeCoords] userId=%s homeLat=%s homeLng=%s', req.user!.id, exactHomeLat, exactHomeLng)
+
     // If this is the first stop being added and it is NOT a HOME stop,
     // automatically prepend a HOME stop using the trip's starting location.
     if (order === 1 && type !== 'HOME' && (trip as any).startLocation) {
@@ -248,6 +258,8 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
           type: 'HOME',
           locationName: homeName,
           locationState: homeState,
+          latitude: exactHomeLat,
+          longitude: exactHomeLng,
           nights: 0,
           bookingStatus: 'NOT_BOOKED',
           isCompatible: true,
@@ -266,11 +278,17 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
     const bookingStatus = rawBookingStatus ?? 'NOT_BOOKED'
     const isCompatible = rawIsCompatible ?? true
 
-    console.log('[createStop] tripId=%s locationName=%s type=%s order=%d', req.params.id, locationName, type, order)
+    // For HOME stops, always use the user's exact home coordinates (if available) so the
+    // marker lands on the street address rather than the city center returned by geocoding.
+    const resolvedLat = (type === 'HOME' && exactHomeLat != null) ? exactHomeLat : (latitude ?? null)
+    const resolvedLng = (type === 'HOME' && exactHomeLng != null) ? exactHomeLng : (longitude ?? null)
+
+    console.log('[createStop] tripId=%s locationName=%s type=%s order=%d incomingLat=%s incomingLng=%s resolvedLat=%s resolvedLng=%s',
+      req.params.id, locationName, type, order, latitude, longitude, resolvedLat, resolvedLng)
 
     const stop = await prisma.stop.create({
       data: {
-        type, locationName, locationState, latitude, longitude,
+        type, locationName, locationState, latitude: resolvedLat, longitude: resolvedLng,
         arrivalDate, departureDate, nights, campgroundName, campgroundId,
         bookingStatus, confirmationNum, siteRate, estimatedFuel, hookupType,
         isPetFriendly, isMilitaryOnly, isCompatible,
@@ -369,10 +387,13 @@ export async function exportPdf(req: AuthRequest, res: Response, next: NextFunct
 
 export async function getTripMapImage(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const trip = await prisma.trip.findFirst({
-      where: { id: req.params.id, userId: req.user!.id },
-      include: { stops: { orderBy: { order: 'asc' } } },
-    })
+    const [trip, user] = await Promise.all([
+      prisma.trip.findFirst({
+        where: { id: req.params.id, userId: req.user!.id },
+        include: { stops: { orderBy: { order: 'asc' } } },
+      }),
+      prisma.user.findUnique({ where: { id: req.user!.id }, select: { homeCity: true, homeState: true, homeLocation: true } }),
+    ])
     if (!trip) throw new AppError('Trip not found', 404)
 
     const apiKey = process.env.GOOGLE_MAPS_API_KEY
@@ -386,15 +407,43 @@ export async function getTripMapImage(req: AuthRequest, res: Response, next: Nex
     params.set('maptype', 'roadmap')
     params.set('key', apiKey)
 
-    // Build markers and path
+    // Build markers and path using S / H / F / number badge logic
     const pathPoints: string[] = []
+    const lastStop = stops[stops.length - 1]
     let stopNum = 1
+
+    function normalizeCity(s: string): string {
+      return s.toLowerCase()
+        .replace(/,?\s*\d{5}(-\d{4})?$/, '')
+        .replace(/,?\s*(usa|united states)$/, '')
+        .replace(/,?\s*(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming)$/, '')
+        .replace(/,?\s+[a-z]{2}$/, '')
+        .trim()
+    }
 
     for (const stop of stops) {
       if (!stop.latitude || !stop.longitude) continue
       const coord = `${stop.latitude},${stop.longitude}`
       pathPoints.push(coord)
-      const label = stop.type === 'HOME' ? 'H' : String(stopNum++)
+      let label: string
+      if (stop.order === stops[0].order) {
+        label = 'S'
+      } else if (stop.id === lastStop.id) {
+        let isHome = false
+        if (user?.homeCity) {
+          const stopCity  = normalizeCity(stop.locationName)
+          const hCity     = user.homeCity.toLowerCase().trim()
+          const hState    = user.homeState?.toLowerCase().trim()
+          const stopState = stop.locationState ? normalizeCity(stop.locationState) : undefined
+          isHome = stopCity === hCity && (!hState || !stopState || stopState === hState)
+        } else if (user?.homeLocation) {
+          const stopCity = normalizeCity(stop.locationName + (stop.locationState ? `, ${stop.locationState}` : ''))
+          isHome = stopCity === normalizeCity(user.homeLocation)
+        }
+        label = isHome ? 'H' : 'F'
+      } else {
+        label = String(stopNum++)
+      }
       params.append('markers', `color:green|label:${label}|${coord}`)
     }
 

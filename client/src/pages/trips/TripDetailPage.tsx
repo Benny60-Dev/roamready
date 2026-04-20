@@ -8,6 +8,8 @@ import {
 } from 'lucide-react'
 import { tripsApi } from '../../services/api'
 import { Trip, Stop, StopWeather, LiveForecast } from '../../types'
+import { useAuthStore } from '../../store/authStore'
+import { buildStopBadges } from '../../utils/stopBadge'
 import { format } from 'date-fns'
 import { StopWeatherCard, ALERT_STYLES, ALERT_ICONS } from '../../components/weather/StopWeatherCard'
 
@@ -26,7 +28,7 @@ function haversineMiles(lat1?: number, lng1?: number, lat2?: number, lng2?: numb
 
 // ─── Stop row ─────────────────────────────────────────────────────────────────
 
-function StopRow({ stop, tripId, weather, displayNum }: { stop: Stop; tripId: string; weather: StopWeather | null | undefined; displayNum: number }) {
+function StopRow({ stop, tripId, weather, badge }: { stop: Stop; tripId: string; weather: StopWeather | null | undefined; badge: 'S' | 'H' | 'F' | number }) {
   const alertCount = weather?.mode === 'live'
     ? (weather as LiveForecast).days.flatMap(d => d.alerts).filter(
         (a, i, arr) => arr.findIndex(x => x.type === a.type) === i
@@ -81,7 +83,7 @@ function StopRow({ stop, tripId, weather, displayNum }: { stop: Stop; tripId: st
             stop.type === 'HOME' ? 'bg-gray-400' :
             stop.type === 'OVERNIGHT_ONLY' ? 'bg-[#7F77DD]' : 'bg-[#1D9E75]'
           }`}>
-            {stop.type === 'HOME' ? 'H' : displayNum}
+            {String(badge)}
           </div>
         </div>
         <div className="flex-1 min-w-0">
@@ -240,6 +242,7 @@ function WeatherTab({ trip, weatherData, loading }: {
 type Tab = 'stops' | 'weather'
 
 export default function TripDetailPage() {
+  const { user } = useAuthStore()
   const { id } = useParams<{ id: string }>()
   const [trip, setTrip]               = useState<Trip | null>(null)
   const [loading, setLoading]         = useState(true)
@@ -324,15 +327,9 @@ export default function TripDetailPage() {
   const bookedStops  = nonHomeStops.filter(s => s.bookingStatus === 'CONFIRMED').length
   const totalStops   = nonHomeStops.length
 
-  // Sequential display numbers for non-HOME stops: 1, 2, 3…
-  const stopDisplayNumbers: Record<string, number> = {}
-  let _n = 1
-  for (const s of [...(trip.stops || [])].sort((a, b) => a.order - b.order)) {
-    if (s.type !== 'HOME') stopDisplayNumbers[s.id] = _n++
-  }
-
   // Calculate live total miles from per-stop driveDistanceMiles (Routes API) or Haversine fallback.
   const sortedStops = [...(trip.stops || [])].sort((a, b) => a.order - b.order)
+  const stopDisplayNumbers = buildStopBadges(sortedStops, user)
   const driveSegments = sortedStops.slice(1).map((stop, i) => {
     const prev = sortedStops[i]
     const miles = stop.driveDistanceMiles
@@ -469,7 +466,7 @@ export default function TripDetailPage() {
                     stop={displayStop}
                     tripId={id!}
                     weather={weatherData[stop.id]}
-                    displayNum={stopDisplayNumbers[stop.id]}
+                    badge={stopDisplayNumbers[stop.id]}
                   />
                 )
               })}

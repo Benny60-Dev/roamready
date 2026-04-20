@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express'
+import axios from 'axios'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
@@ -20,20 +21,66 @@ const DEFAULT_RV_MAINTENANCE = [
 
 export async function getMe(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const user = await prisma.user.findUnique({
+    console.log('[getMe] called for user', req.user!.id)
+    let user = await prisma.user.findUnique({
       where: { id: req.user!.id },
       include: { rigs: true, travelProfile: true, memberships: true },
     })
+
+    console.log('[getMe] backfill check — homeLat is', user?.homeLat, 'homeLocation is', user?.homeLocation)
+
+    // One-time backfill: if the user has a legacy homeLocation string but no structured
+    // lat/lng yet, geocode it now and persist the result so downstream features work correctly.
+    if (user && user.homeLocation && user.homeLat == null) {
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY
+      console.log('[getMe] backfill running — calling geocoder for', user.homeLocation, '| apiKey present:', !!apiKey)
+      if (apiKey) {
+        try {
+          const geoRes = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
+            params: { address: user.homeLocation, key: apiKey },
+          })
+          const result = geoRes.data?.results?.[0]
+          console.log('[getMe] geocoder returned status=%s result=%s', geoRes.data?.status, result ? result.formatted_address : 'null')
+          if (result) {
+            const { lat, lng } = result.geometry.location
+            const components: any[] = result.address_components || []
+            const get = (type: string, short = false) =>
+              components.find((c: any) => c.types.includes(type))?.[short ? 'short_name' : 'long_name'] ?? null
+            const homeCity    = get('locality') || get('sublocality') || null
+            const homeState   = get('administrative_area_level_1', true)
+            const homeZip     = get('postal_code')
+            const homeStreet  = [get('street_number'), get('route')].filter(Boolean).join(' ') || null
+            const homeAddress = result.formatted_address || user.homeLocation
+
+            user = await prisma.user.update({
+              where: { id: req.user!.id },
+              data: { homeLat: lat, homeLng: lng, homeCity, homeState, homeZip, homeStreet, homeAddress },
+              include: { rigs: true, travelProfile: true, memberships: true },
+            }) as typeof user
+            console.log('[getMe] backfill complete — saved', { homeLat: lat, homeLng: lng, homeCity, homeState, homeZip, homeStreet, homeAddress })
+          }
+        } catch (geoErr) {
+          console.warn('[getMe:backfill] geocode failed for user %s:', req.user!.id, geoErr)
+        }
+      }
+    }
+
     res.json(user)
   } catch (err) { next(err) }
 }
 
 export async function updateMe(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { firstName, lastName, phone, emergencyContact, emergencyPhone, homeLocation, avatarUrl } = req.body
+    const {
+      firstName, lastName, phone, emergencyContact, emergencyPhone, avatarUrl,
+      homeLocation, homeAddress, homeStreet, homeCity, homeState, homeZip, homeLat, homeLng,
+    } = req.body
     const user = await prisma.user.update({
       where: { id: req.user!.id },
-      data: { firstName, lastName, phone, emergencyContact, emergencyPhone, homeLocation, avatarUrl },
+      data: {
+        firstName, lastName, phone, emergencyContact, emergencyPhone, avatarUrl,
+        homeLocation, homeAddress, homeStreet, homeCity, homeState, homeZip, homeLat, homeLng,
+      },
     })
     res.json(user)
   } catch (err) { next(err) }

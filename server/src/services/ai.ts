@@ -21,7 +21,7 @@ Trip planning rules:
 - Maximum 3 questions before building the itinerary
 - When you have enough information, respond with a JSON itinerary block inside <itinerary> tags — after the JSON block, do NOT add any closing message asking the user to click a button, build the itinerary, or take any UI action; the interface detects the itinerary automatically and shows the build button on its own
 - Stop "type" must be exactly one of: DESTINATION, OVERNIGHT_ONLY, HOME — never use TRAVEL or any other value
-- Always include the trip starting location as the first stop in the itinerary with type HOME and order 1. This is the departure point and should always be the first entry in the stops array regardless of whether the user mentioned it explicitly. Use the user's homeLocation from their profile as this stop's locationName. Set nights to 0 for the HOME stop.
+- Always include the trip starting location as the first stop in the itinerary with type HOME and order 1. This is the departure point and should always be the first entry in the stops array regardless of whether the user mentioned it explicitly. Use the starting location confirmed during the conversation as this stop's locationName and locationState — if the user said they are leaving from home or did not specify a starting city, use homeCity and homeState from their profile if present, otherwise extract the city from homeLocation; if the user explicitly specified a different starting city (e.g. "I'm leaving from Austin"), use that city and state instead. Set nights to 0 for the HOME stop.
 - The FIRST stop (order: 1) must always be HOME type — NEVER DESTINATION or OVERNIGHT_ONLY
 - The LAST stop must always be DESTINATION — NEVER OVERNIGHT_ONLY
 - OVERNIGHT_ONLY is exclusively for mid-route transit stops where the traveler is simply sleeping before continuing the next morning — it is never the trip origin or final destination
@@ -32,7 +32,7 @@ Trip planning rules:
 - Apply military campground options only if user has military/first responder status
 - Apply membership discounts automatically
 - Starting location confirmation rules (must happen before any other trip questions):
-  - If the user says "home", "leaving from home", "starting from home", "from home", or anything else indicating they are departing from their home location, respond with exactly this format: "Perfect — I'll use your home address in [CITY] as the starting point. Now where are we headed?" — replacing [CITY] with only the city name extracted from their homeLocation in their profile. Never include a street address, zip code, or any other address detail — city name only.
+  - If the user says "home", "leaving from home", "starting from home", "from home", or anything else indicating they are departing from their home location, respond with exactly this format: "Perfect — I'll use your home address in [CITY] as the starting point. Now where are we headed?" — replacing [CITY] with only the city name from their profile (prefer homeCity if present, otherwise extract the city portion from homeLocation). Never include a street address, zip code, or any other address detail — city name only.
   - If the user provides a specific city as their starting point (e.g. "I'm leaving from Austin"), confirm it back before asking anything else: "Got it — starting from [City, State]. Where are we headed?"
   - Always confirm the starting location as the very first response before asking any other questions about the trip.
 - Be warm, knowledgeable, and conversational — like a well-traveled friend
@@ -119,7 +119,7 @@ Return a JSON array of categories with items. Format:
 ]`
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-5',
     max_tokens: 4096,
     messages: [{ role: 'user', content: prompt }],
   })
@@ -208,7 +208,7 @@ Return this exact JSON structure (array of objects):
 ]`
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-5',
     max_tokens: 4096,
     messages: [{ role: 'user', content: prompt }],
   })
@@ -256,7 +256,7 @@ Rules:
 - No city names, exits, mile markers, or narrative — highway numbers and directions only`
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-5',
     max_tokens: 2048,
     messages: [{ role: 'user', content: prompt }],
   })
@@ -296,7 +296,7 @@ Rules:
 - 3 activities minimum, 5 maximum per stop`
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-5',
     max_tokens: 2048,
     messages: [{ role: 'user', content: prompt }],
   })
@@ -325,7 +325,7 @@ Please:
 Format your response in clear sections with headers.`
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-5',
     max_tokens: 4096,
     messages: [{ role: 'user', content: prompt }],
   })

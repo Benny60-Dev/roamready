@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import { useUIStore } from './store/uiStore'
@@ -84,6 +84,11 @@ function OwnerRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const { feedbackModalOpen, closeFeedbackModal, paywallModal, closePaywall } = useUIStore()
+  const rehydrateUser = useAuthStore(s => s.rehydrateUser)
+
+  useEffect(() => {
+    rehydrateUser()
+  }, [])
 
   return (
     <BrowserRouter>

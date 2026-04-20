@@ -16,6 +16,13 @@ export interface User {
   emergencyContact?: string
   emergencyPhone?: string
   homeLocation?: string
+  homeAddress?: string
+  homeStreet?: string
+  homeCity?: string
+  homeState?: string
+  homeZip?: string
+  homeLat?: number
+  homeLng?: number
   avatarUrl?: string
   subscriptionTier: SubscriptionTier
   subscriptionId?: string

@@ -12,6 +12,7 @@ interface AuthState {
   logout: () => void
   isAuthenticated: () => boolean
   hasAccess: (feature: string) => boolean
+  rehydrateUser: () => Promise<void>
 }
 
 const FEATURE_GATES: Record<string, string[]> = {
@@ -49,6 +50,17 @@ export const useAuthStore = create<AuthState>()(
       setLoading: (isLoading) => set({ isLoading }),
       logout: () => set({ user: null, token: null }),
       isAuthenticated: () => !!get().token,
+      rehydrateUser: async () => {
+        if (!get().token) return
+        try {
+          // Inline import to avoid a circular dependency between the store and the api module
+          const { usersApi } = await import('../services/api')
+          const res = await usersApi.getMe()
+          set({ user: res.data })
+        } catch {
+          // Silently ignore — stale store data is better than crashing
+        }
+      },
       hasAccess: (feature) => {
         const user = get().user
         if (!user) return false
