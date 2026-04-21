@@ -19,13 +19,15 @@ Trip planning rules:
 - Never ask for information already in their profile (rig size, pets, budget, home base, memberships, accessibility needs)
 - Ask only what you need: destination, dates, and must-see stops
 - Maximum 3 questions before building the itinerary
+- Surprise trip rule: If the user asks you to "pick a destination", "surprise me", "choose somewhere", or submits a message indicating they want you to select the destination, propose ONE specific destination — never a list of options. Base the choice on their rig type/size, travel style, pet-friendly requirements, current season, and reasonable driving distance from their starting location. State the destination confidently (e.g. "I'd send you to Zion National Park, UT"), explain in 2–3 sentences why you chose it, then proceed directly to building the itinerary without asking for further confirmation.
 - When you have enough information, respond with a JSON itinerary block inside <itinerary> tags — after the JSON block, do NOT add any closing message asking the user to click a button, build the itinerary, or take any UI action; the interface detects the itinerary automatically and shows the build button on its own
 - Stop "type" must be exactly one of: DESTINATION, OVERNIGHT_ONLY, HOME — never use TRAVEL or any other value
 - Always include the trip starting location as the first stop in the itinerary with type HOME and order 1. This is the departure point and should always be the first entry in the stops array regardless of whether the user mentioned it explicitly. Use the starting location confirmed during the conversation as this stop's locationName and locationState — if the user said they are leaving from home or did not specify a starting city, use homeCity and homeState from their profile if present, otherwise extract the city from homeLocation; if the user explicitly specified a different starting city (e.g. "I'm leaving from Austin"), use that city and state instead. Set nights to 0 for the HOME stop.
 - The FIRST stop (order: 1) must always be HOME type — NEVER DESTINATION or OVERNIGHT_ONLY
 - The LAST stop must always be DESTINATION — NEVER OVERNIGHT_ONLY or HOME
 - OVERNIGHT_ONLY is exclusively for mid-route transit stops where the traveler is simply sleeping before continuing the next morning — it is never the trip origin or final destination
-- ROUND TRIP / RETURN HOME RULE — this is mandatory and must never be skipped: if the user says anything indicating they are returning home — including but not limited to "coming back home", "returning home", "round trip", "end at home", "back to [home city]", "heading home after", or any similar phrasing — you MUST include a final DESTINATION stop whose locationName matches the user's home city. This return stop must have type DESTINATION (never HOME), nights: 0, and be the last stop in the itinerary. Omitting this stop when the user has indicated a return is a critical error. Example: "leaving Mesa, going to Flagstaff for 2 nights, then coming back home" → stops must be: HOME(Mesa), DESTINATION(Flagstaff, 2 nights), DESTINATION(Mesa, 0 nights). The word "trip" alone does NOT imply round-trip — only explicit return language triggers this rule. One-way phrasing ("moving to Austin", "one-way to Portland", no mention of returning) must NOT add a return stop.
+- ROUND TRIP / RETURN HOME RULE — NEVER add a return-home stop unless the user EXPLICITLY uses one of these exact phrases: "round trip", "round-trip", "coming back home", "returning home", "back home", "end at home", "back to [home city]", "heading home after". If the user provides a destination and dates without any of those phrases, the trip is ONE-WAY — do NOT add a return stop. Example of correct one-way behavior: "Plan a one-way trip from Mesa to Del Rio, leaving May 15, 3 nights" → stops: HOME(Mesa), any transit stops, DESTINATION(Del Rio). NO Mesa return stop. Example of correct round-trip behavior: "leaving Mesa, going to Flagstaff for 2 nights, then coming back home" → stops: HOME(Mesa), DESTINATION(Flagstaff, 2 nights), DESTINATION(Mesa, 0 nights). Dates alone ("leaving May 15, arriving around May 18") do NOT imply round-trip. The phrase "arriving at destination" does NOT imply returning home. One-way is the default — round-trip requires an explicit request.
+- Points of interest and drive-through stops: pointsOfInterest on a stop must contain ONLY stops, attractions, or photo ops that the user explicitly named in this conversation (e.g. "stop at Prada Marfa on the way", "drive through Marfa", "we want to see the Marfa Lights"). When the user names a POI, do NOT add it as a separate Stop in the stops array — instead, note it in your conversational response AND add the POI name (just the name, no description) to the pointsOfInterest array of the nearest stop the user is driving toward on that leg. Every user-requested POI must appear in exactly one stop's pointsOfInterest array. NEVER populate pointsOfInterest with AI-generated attraction suggestions, destination highlights, or anything the user did not explicitly request — not even for surprise trips or trips where the user gave no specific POI requests. If the user named no POIs, every stop's pointsOfInterest must be omitted entirely or set to [].
 - Always consider rig compatibility — never suggest campgrounds incompatible with their rig
 - For toy haulers, prioritize OHV destinations matching their terrain preferences
 - For vans, prioritize BLM/dispersed/Harvest Hosts over hookup campgrounds
@@ -61,10 +63,24 @@ Itinerary JSON format:
     },
     {
       "order": 2,
+      "type": "OVERNIGHT_ONLY",
+      "locationName": "Van Horn",
+      "locationState": "TX",
+      "nights": 1,
+      "campgroundName": "Mountain View RV Park",
+      "siteRate": 45,
+      "estimatedFuel": 0,
+      "hookupType": "full",
+      "isPetFriendly": true,
+      "isMilitaryOnly": false,
+      "pointsOfInterest": ["Prada Marfa", "Marfa Lights viewing area"]
+    },
+    {
+      "order": 3,
       "type": "DESTINATION",
       "locationName": "",
       "locationState": "",
-      "nights": 1,
+      "nights": 3,
       "campgroundName": "",
       "siteRate": 0,
       "estimatedFuel": 0,
@@ -73,7 +89,7 @@ Itinerary JSON format:
       "isMilitaryOnly": false
     },
     {
-      "order": 3,
+      "order": 4,
       "type": "DESTINATION",
       "locationName": "Austin",
       "locationState": "TX",
@@ -167,6 +183,7 @@ export async function generateTripItineraryAI(trip: any, user: any): Promise<any
     departureDate: s.departureDate || null,
     lat: s.latitude,
     lng: s.longitude,
+    pointsOfInterest: s.pointsOfInterest?.length ? s.pointsOfInterest : [],
   }))
 
   const prompt = `Generate a detailed day-by-day itinerary for this RV/camping trip. You must return ONLY valid JSON — no prose, no markdown, no code fences.
@@ -183,7 +200,7 @@ ${JSON.stringify(stopSummaries, null, 2)}
 
 Rules:
 - Return a JSON array of day entries (one per day of the trip)
-- For each DRIVE day between two stops, include: highwayRoute (major highway route string such as "US-60 East → I-17 North → US-89 North" — official highway designations with cardinal directions, 2-5 highways in travel order separated by →, no city names), routeDescription (2-3 sentences about the drive, highways, scenery), terrainSummary (1 sentence), pointsOfInterest (array of 2-4 strings like "City, State - quick description")
+- For each DRIVE day between two stops, include: highwayRoute (major highway route string such as "US-60 East → I-17 North → US-89 North" — official highway designations with cardinal directions, 2-5 highways in travel order separated by →, no city names), routeDescription (2-3 sentences about the drive, highways, scenery), terrainSummary (1 sentence). Do NOT include a pointsOfInterest field on DRIVE days — omit it entirely or set it to null.
 - For DESTINATION/HOME arrival day: routeDescription is optional (short "arriving at X" note)
 - For each ACTIVITY day (nights 2+ at a destination): provide activities array with 3-5 suggested activities as strings tailored to the location and user interests
 - For OVERNIGHT_ONLY stops: provide a brief transitNote (1 sentence about the overnight location)
@@ -235,7 +252,18 @@ Return this exact JSON structure (array of objects):
 
   try {
     const jsonMatch = text.match(/\[[\s\S]*\]/)
-    return jsonMatch ? JSON.parse(jsonMatch[0]) : []
+    const parsed: any[] = jsonMatch ? JSON.parse(jsonMatch[0]) : []
+
+    // Replace AI's pointsOfInterest on DRIVE days with only user-requested POIs from the
+    // destination stop. AI-generated suggestions are excluded entirely.
+    const merged = parsed.map((day: any) => {
+      if (day.type !== 'DRIVE') return day
+      const stop = stops.find((s: any) => s.order === day.stopOrder)
+      const stopPOIs: string[] = stop?.pointsOfInterest ?? []
+      return { ...day, pointsOfInterest: stopPOIs.length ? stopPOIs : null }
+    })
+    console.log('[generateTripItineraryAI] final DRIVE day POIs:', merged.filter((d: any) => d.type === 'DRIVE').map((d: any) => ({ dayNum: d.dayNum, pointsOfInterest: d.pointsOfInterest })))
+    return merged
   } catch {
     console.error('[generateTripItineraryAI] JSON parse failed, text:', text.slice(0, 200))
     return []

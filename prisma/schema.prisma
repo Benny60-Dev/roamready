@@ -207,6 +207,7 @@ model Stop {
   driveDuration          String?
   driveDistanceMiles     Float?
   routeHighlights        String?
+  pointsOfInterest       String[]
   createdAt              DateTime      @default(now())
   updatedAt              DateTime      @updatedAt
   journalEntry           JournalEntry?

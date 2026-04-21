@@ -1235,7 +1235,7 @@ export default function TripMapPage() {
               {layers.route && routePath && (
                 <Polyline
                   path={routePath}
-                  options={{ strokeColor: '#1E3A8A', strokeWeight: 2.5, strokeOpacity: 0.85 }}
+                  options={{ strokeColor: '#F97316', strokeWeight: 2.5, strokeOpacity: 0.85 }}
                 />
               )}
 

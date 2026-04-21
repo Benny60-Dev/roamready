@@ -160,6 +160,7 @@ export interface Stop {
   driveDuration?: string | null
   driveDistanceMiles?: number | null
   routeHighlights?: string | null
+  pointsOfInterest?: string[]
   journalEntry?: JournalEntry
 }
 

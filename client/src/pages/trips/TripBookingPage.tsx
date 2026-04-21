@@ -516,7 +516,7 @@ export default function TripBookingPage() {
     const targetStopId = searchParams.get('stopId')
     tripsApi.get(id).then(res => {
       setTrip(res.data)
-      setActiveStop(targetStopId ?? res.data.stops?.[0]?.id ?? null)
+      setActiveStop(targetStopId ?? res.data.stops?.find((s: any) => s.type !== 'HOME')?.id ?? null)
       setLoading(false)
       // Scroll to the target stop after React renders the sections
       if (targetStopId) setTimeout(() => scrollToStop(targetStopId), 80)
@@ -527,6 +527,7 @@ export default function TripBookingPage() {
   useEffect(() => {
     if (!trip?.stops?.length) return
     trip.stops.forEach(stop => {
+      if (stop.type === 'HOME') return
       campgroundsApi.search({
         q: stop.locationName,
         lat: stop.latitude,
@@ -763,7 +764,7 @@ export default function TripBookingPage() {
       {/* ── MOBILE: horizontal tab bar (hidden on md+) ── */}
       <div className="md:hidden flex-shrink-0 bg-white border-b border-gray-100 overflow-x-auto">
         <div className="flex gap-1.5 p-3">
-          {sortedStops.map(stop => (
+          {sortedStops.filter(s => s.type !== 'HOME').map(stop => (
             <button
               key={stop.id}
               onClick={() => setActiveStop(stop.id)}
@@ -800,7 +801,7 @@ export default function TripBookingPage() {
           </div>
           {/* Stop nav list */}
           <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
-            {sortedStops.map(stop => {
+            {sortedStops.filter(s => s.type !== 'HOME').map(stop => {
               const badge    = statusBadge(stop.bookingStatus)
               const isActive = activeStop === stop.id
               return (
@@ -873,16 +874,19 @@ export default function TripBookingPage() {
           >
             {/* DESKTOP: all stops as sections */}
             <div className="hidden md:block">
-              {sortedStops.map((stop, idx) => (
+              {sortedStops.filter(s => s.type !== 'HOME').map((stop) => {
+                const stopIdx = sortedStops.findIndex(s => s.id === stop.id)
+                return (
                 <section
                   key={stop.id}
                   id={`stop-section-${stop.id}`}
                   data-stop-section={stop.id}
                   className="px-6 py-6 border-b border-gray-100 last:border-0"
                 >
-                  {renderStopContent(stop, sortedStops[idx - 1])}
+                  {renderStopContent(stop, sortedStops[stopIdx - 1])}
                 </section>
-              ))}
+                )
+              })}
             </div>
 
             {/* MOBILE: single active stop */}

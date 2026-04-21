@@ -243,7 +243,7 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
       bookingStatus: rawBookingStatus, confirmationNum, siteRate, estimatedFuel, hookupType,
       isPetFriendly, isMilitaryOnly, isCompatible: rawIsCompatible,
       incompatibilityReasons, alternates, weatherForecast,
-      notes, checkInTime, checkOutTime, siteNumber,
+      notes, checkInTime, checkOutTime, siteNumber, pointsOfInterest,
     } = req.body
 
     // Map any invalid stop type to a valid enum value
@@ -327,7 +327,7 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
         bookingStatus, confirmationNum, siteRate, estimatedFuel, hookupType,
         isPetFriendly, isMilitaryOnly, isCompatible,
         incompatibilityReasons, alternates, weatherForecast,
-        notes, checkInTime, checkOutTime, siteNumber,
+        notes, checkInTime, checkOutTime, siteNumber, pointsOfInterest,
         tripId: req.params.id,
         order,
       },
@@ -353,7 +353,7 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
       bookingStatus, confirmationNum, siteRate, estimatedFuel, hookupType,
       isPetFriendly, isMilitaryOnly, isCompatible,
       incompatibilityReasons, alternates, weatherForecast,
-      notes, checkInTime, checkOutTime, siteNumber, highwayRoute, driveDuration,
+      notes, checkInTime, checkOutTime, siteNumber, pointsOfInterest, highwayRoute, driveDuration,
       routeHighlights, driveDistanceMiles, order,
     } = req.body
 
@@ -363,7 +363,7 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
       bookingStatus, confirmationNum, siteRate, estimatedFuel, hookupType,
       isPetFriendly, isMilitaryOnly, isCompatible,
       incompatibilityReasons, alternates, weatherForecast,
-      notes, checkInTime, checkOutTime, siteNumber, highwayRoute, driveDuration,
+      notes, checkInTime, checkOutTime, siteNumber, pointsOfInterest, highwayRoute, driveDuration,
       driveDistanceMiles, order,
     }
 
@@ -485,7 +485,7 @@ export async function getTripMapImage(req: AuthRequest, res: Response, next: Nex
     }
 
     if (pathPoints.length > 1) {
-      params.append('path', `color:0x1D9E75ff|weight:3|${pathPoints.join('|')}`)
+      params.append('path', `color:0xF97316ff|weight:3|${pathPoints.join('|')}`)
     }
 
     const url = `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`
@@ -497,6 +497,7 @@ export async function getTripMapImage(req: AuthRequest, res: Response, next: Nex
 
 export async function generateItinerary(req: AuthRequest, res: Response, next: NextFunction) {
   try {
+    console.log('[generateItinerary] endpoint hit — tripId=%s userId=%s', req.params.id, req.user?.id)
     const trip = await prisma.trip.findFirst({
       where: { id: req.params.id, userId: req.user!.id },
       include: { stops: true },

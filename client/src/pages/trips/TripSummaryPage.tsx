@@ -219,12 +219,94 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
   return entries
 }
 
+// ─── Day Group ────────────────────────────────────────────────────────────────
+
+interface DayGroup {
+  type: 'TRAVEL_DAY' | 'STAY_GROUP' | 'HOME' | 'OVERNIGHT_SOLO'
+  entries: TimelineEntry[]
+  indices: number[]
+  stopId: string | null
+  stopOrder: number
+}
+
+function buildGroups(entries: TimelineEntry[]): DayGroup[] {
+  const groups: DayGroup[] = []
+  let i = 0
+  while (i < entries.length) {
+    const e = entries[i]
+    const stopId = e.stop?.id ?? null
+    const stopOrder = e.stop?.order ?? 0
+
+    if (e.stop?.type === 'HOME') {
+      const next = entries[i + 1]
+      if (next?.type === 'DRIVE') {
+        // Merge HOME departure into the first travel day card
+        const grpE: TimelineEntry[] = [e, entries[i + 1]]
+        const grpI: number[] = [i, i + 1]
+        i++ // consume DRIVE
+        const next2 = entries[i + 1]
+        if (next2 && (next2.type === 'STAY' || next2.type === 'OVERNIGHT') &&
+            next2.date?.toDateString() === entries[i].date?.toDateString()) {
+          i++
+          grpE.push(entries[i])
+          grpI.push(i)
+        }
+        const dest = grpE[grpE.length - 1]
+        groups.push({
+          type: 'TRAVEL_DAY',
+          entries: grpE,
+          indices: grpI,
+          stopId: dest.stop?.id ?? null,
+          stopOrder: dest.stop?.order ?? 0,
+        })
+      } else {
+        groups.push({ type: 'HOME', entries: [e], indices: [i], stopId, stopOrder })
+      }
+    } else if (e.type === 'DRIVE') {
+      const grpE: TimelineEntry[] = [e]
+      const grpI: number[] = [i]
+      const next = entries[i + 1]
+      if (next && (next.type === 'STAY' || next.type === 'OVERNIGHT') &&
+          next.date?.toDateString() === e.date?.toDateString()) {
+        i++
+        grpE.push(entries[i])
+        grpI.push(i)
+      }
+      const dest = grpE[grpE.length - 1]
+      groups.push({
+        type: 'TRAVEL_DAY',
+        entries: grpE,
+        indices: grpI,
+        stopId: dest.stop?.id ?? null,
+        stopOrder: dest.stop?.order ?? 0,
+      })
+    } else if (e.type === 'ACTIVITY') {
+      const grpE: TimelineEntry[] = [e]
+      const grpI: number[] = [i]
+      while (entries[i + 1]?.type === 'ACTIVITY' && entries[i + 1].stop?.id === stopId) {
+        i++
+        grpE.push(entries[i])
+        grpI.push(i)
+      }
+      groups.push({ type: 'STAY_GROUP', entries: grpE, indices: grpI, stopId, stopOrder })
+    } else if (e.type === 'OVERNIGHT') {
+      groups.push({ type: 'OVERNIGHT_SOLO', entries: [e], indices: [i], stopId, stopOrder })
+    } else {
+      groups.push({ type: 'TRAVEL_DAY', entries: [e], indices: [i], stopId, stopOrder })
+    }
+    i++
+  }
+  return groups
+}
+
 // ─── Merge AI content into entries ────────────────────────────────────────────
 
 function mergeAI(entries: TimelineEntry[], aiDays: ItineraryDay[]): TimelineEntry[] {
   if (!aiDays?.length) return entries
-  return entries.map((entry, idx) => {
-    const ai = aiDays[idx]
+  return entries.map((entry) => {
+    const ai = aiDays.find(d =>
+      d.type === entry.type && d.stopOrder === (entry.stop?.order ?? entry.prevStop?.order)
+    )
     if (!ai) return entry
     return {
       ...entry,
@@ -294,15 +376,6 @@ function cascadeChange(entries: TimelineEntry[], idx: number, field: CascadeFiel
   return next
 }
 
-// ─── Row config ───────────────────────────────────────────────────────────────
-
-const ROW_CONFIG = {
-  DRIVE:     { bg: 'bg-blue-50',   border: 'border-blue-200',   text: 'text-blue-700',   icon: Car,  label: 'Drive Day' },
-  STAY:      { bg: 'bg-[#CCFBF1]/40', border: 'border-[#0F766E]/30', text: 'text-[#0D5F58]', icon: Tent, label: 'Arrival & Check-in' },
-  ACTIVITY:  { bg: 'bg-amber-50',  border: 'border-amber-200',  text: 'text-amber-700',  icon: Star, label: 'Explore Day' },
-  OVERNIGHT: { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700', icon: Moon, label: 'Overnight Stop' },
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function TripSummaryPage() {
@@ -315,6 +388,7 @@ export default function TripSummaryPage() {
   const [generatingActivities, setGeneratingActivities] = useState(false)
   const [entries, setEntries] = useState<TimelineEntry[]>([])
   const [addingActivity, setAddingActivity] = useState<Record<number, string>>({})
+  const [addingPOI, setAddingPOI] = useState<Record<number, string>>({})
   const [weatherData, setWeatherData] = useState<Record<string, StopWeather | null | undefined>>({})
   const [editingStop, setEditingStop] = useState<Stop | null>(null)
   const [addAfterOrder, setAddAfterOrder] = useState<number | null>(null)
@@ -649,6 +723,29 @@ export default function TripSummaryPage() {
     })
   }
 
+  const deletePOI = (entryIdx: number, poiIdx: number) => {
+    setEntries(prev => {
+      const next = prev.map((e, i) =>
+        i !== entryIdx ? e : { ...e, pointsOfInterest: (e.pointsOfInterest ?? []).filter((_, j) => j !== poiIdx) }
+      )
+      persistItinerary(next)
+      return next
+    })
+  }
+
+  const addPOI = (entryIdx: number) => {
+    const name = (addingPOI[entryIdx] || '').trim()
+    if (!name) return
+    setEntries(prev => {
+      const next = prev.map((e, i) =>
+        i !== entryIdx ? e : { ...e, pointsOfInterest: [...(e.pointsOfInterest ?? []), name] }
+      )
+      persistItinerary(next)
+      return next
+    })
+    setAddingPOI(prev => ({ ...prev, [entryIdx]: '' }))
+  }
+
   if (loading) return (
     <div className="flex justify-center py-20">
       <div className="w-6 h-6 border-2 border-[#1E3A8A] border-t-transparent rounded-full animate-spin" />
@@ -729,75 +826,72 @@ export default function TripSummaryPage() {
           </button>
         </div>
 
-        {/* Legend */}
-        <div className="flex items-center gap-4 flex-wrap mb-4 px-1">
-          {[
-            { color: 'bg-blue-500',   icon: Car,  label: 'Drive day' },
-            { color: 'bg-[#0F766E]',  icon: Tent, label: 'Campground stay' },
-            { color: 'bg-amber-500',  icon: Star, label: 'Activity day' },
-            { color: 'bg-purple-500', icon: Moon, label: 'Overnight stop' },
-          ].map(({ color, icon: Icon, label }) => (
-            <div key={label} className="flex items-center gap-1.5">
-              <div className={`w-3.5 h-3.5 rounded-sm ${color} flex items-center justify-center flex-shrink-0`}>
-                <Icon size={9} className="text-white" />
-              </div>
-              <span className="text-xs text-gray-500">{label}</span>
-            </div>
-          ))}
-        </div>
-
         <div className="space-y-3">
           {(() => {
-            // Group consecutive entries that share the same stop.id
-            type Group = { stopId: string | null; stopOrder: number; isHome: boolean; entries: TimelineEntry[] }
-            const groups: Group[] = []
-            for (const entry of entries) {
-              const sid = entry.stop?.id ?? null
-              const last = groups[groups.length - 1]
-              if (!last || last.stopId !== sid) {
-                groups.push({
-                  stopId: sid,
-                  stopOrder: entry.stop?.order ?? 0,
-                  isHome: entry.stop?.type === 'HOME',
-                  entries: [entry],
-                })
-              } else {
-                last.entries.push(entry)
-              }
-            }
-
+            const dayGroups = buildGroups(entries)
             const rendered: JSX.Element[] = []
-            // Track flat index for handlers
-            let flatIdx = 0
-            groups.forEach((group, gi) => {
-              group.entries.forEach(entry => {
-                const idx = flatIdx++
-                const isEditable = (entry.type === 'STAY' || entry.type === 'OVERNIGHT') && entry.stop?.type !== 'HOME'
-                const isDeletable = isEditable && (sortedStops.length > 2) // keep at least 2 stops (start + end)
-                rendered.push(
-                  <TimelineRow
-                    key={`entry-${idx}`}
-                    entry={entry}
-                    generatingActivities={generatingActivities}
-                    weather={entry.stop ? weatherData[entry.stop.id] : undefined}
-                    onDriveDepart={time => updateDriveDepart(idx, time)}
-                    onToggleActivity={actIdx => toggleActivity(idx, actIdx)}
-                    onDeleteActivity={actIdx => deleteActivity(idx, actIdx)}
-                    addingText={addingActivity[idx] ?? ''}
-                    onAddingChange={text => setAddingActivity(prev => ({ ...prev, [idx]: text }))}
-                    onAddActivity={() => addActivity(idx)}
-                    onEdit={isEditable ? () => setEditingStop(entry.stop!) : undefined}
-                    onDelete={isDeletable ? () => handleDeleteStop(entry.stop!) : undefined}
-                  />
-                )
-              })
-              // Insert "Add stop" button after each non-last group (and not after HOME groups)
-              if (gi < groups.length - 1 && !group.isHome) {
-                const afterOrder = group.stopOrder
+            let currentDay = 1
+
+            dayGroups.forEach((group, gi) => {
+              const startDay = currentDay
+
+              // Find DRIVE entry local index (may be 0 or 1 if HOME is 0)
+              const driveLocalIdx = group.type === 'TRAVEL_DAY'
+                ? group.entries.findIndex(e => e.type === 'DRIVE')
+                : -1
+              const driveIdx = driveLocalIdx >= 0 ? group.indices[driveLocalIdx] : -1
+
+              // Find arrival entry (STAY or OVERNIGHT)
+              const arrivalEntry = group.type === 'TRAVEL_DAY'
+                ? group.entries.find(e => e.type === 'STAY' || e.type === 'OVERNIGHT')
+                : undefined
+
+              const editableStop = (() => {
+                if (group.type === 'TRAVEL_DAY') return arrivalEntry?.stop?.type !== 'HOME' ? arrivalEntry?.stop : undefined
+                if (group.type === 'STAY_GROUP' || group.type === 'OVERNIGHT_SOLO') return group.entries[0].stop
+                return undefined
+              })()
+              const canEdit = !!editableStop
+              const canDelete = canEdit && sortedStops.length > 2
+              const poiIdx = driveIdx >= 0 ? driveIdx : group.indices[0]
+
+              rendered.push(
+                <DayCard
+                  key={`group-${gi}`}
+                  group={group}
+                  startDay={startDay}
+                  generatingActivities={generatingActivities}
+                  weatherData={weatherData}
+                  addingActivity={addingActivity}
+                  addingPOI={addingPOI}
+                  onDriveDepart={driveIdx >= 0 ? (time) => updateDriveDepart(driveIdx, time) : () => {}}
+                  onToggleActivity={(li, actIdx) => toggleActivity(group.indices[li], actIdx)}
+                  onDeleteActivity={(li, actIdx) => deleteActivity(group.indices[li], actIdx)}
+                  onAddingActivityChange={(li, text) => setAddingActivity(prev => ({ ...prev, [group.indices[li]]: text }))}
+                  onAddActivity={(li) => addActivity(group.indices[li])}
+                  onDeletePOI={(poi) => deletePOI(poiIdx, poi)}
+                  onAddingPOIChange={(text) => setAddingPOI(prev => ({ ...prev, [poiIdx]: text }))}
+                  onAddPOI={() => addPOI(poiIdx)}
+                  onEdit={canEdit ? () => setEditingStop(editableStop!) : undefined}
+                  onDelete={canDelete ? () => handleDeleteStop(editableStop!) : undefined}
+                />
+              )
+
+              // Advance sequential day counter
+              if (group.type === 'HOME') {
+                // standalone HOME doesn't count as a travel day
+              } else if (group.type === 'STAY_GROUP') {
+                currentDay += group.entries.length
+              } else {
+                currentDay += 1
+              }
+
+              const nextGroup = dayGroups[gi + 1]
+              if (nextGroup && group.stopOrder !== nextGroup.stopOrder && group.type !== 'HOME') {
                 rendered.push(
                   <button
                     key={`insert-${gi}`}
-                    onClick={() => setAddAfterOrder(afterOrder)}
+                    onClick={() => setAddAfterOrder(group.stopOrder)}
                     disabled={mutating}
                     className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-gray-400 hover:text-[#1E3A8A] hover:bg-[#EFF6FF] rounded-lg border border-dashed border-gray-200 hover:border-[#1E3A8A]/30 transition-colors disabled:opacity-40"
                   >
@@ -927,120 +1021,261 @@ function StatCell({ value, label }: { value: string; label: string }) {
   )
 }
 
-// ─── TimelineRow ──────────────────────────────────────────────────────────────
+// ─── DayCard ──────────────────────────────────────────────────────────────────
 
-interface TimelineRowProps {
-  entry: TimelineEntry
+interface DayCardProps {
+  group: DayGroup
+  startDay: number
   generatingActivities: boolean
-  weather?: StopWeather | null
-  onDriveDepart: (t: string) => void
-  onToggleActivity: (actIdx: number) => void
-  onDeleteActivity: (actIdx: number) => void
-  addingText: string
-  onAddingChange: (text: string) => void
-  onAddActivity: () => void
+  weatherData: Record<string, StopWeather | null | undefined>
+  addingActivity: Record<number, string>
+  addingPOI: Record<number, string>
+  onDriveDepart: (time: string) => void
+  onToggleActivity: (entryLocalIdx: number, actIdx: number) => void
+  onDeleteActivity: (entryLocalIdx: number, actIdx: number) => void
+  onAddingActivityChange: (entryLocalIdx: number, text: string) => void
+  onAddActivity: (entryLocalIdx: number) => void
+  onDeletePOI: (poiIdx: number) => void
+  onAddingPOIChange: (text: string) => void
+  onAddPOI: () => void
   onEdit?: () => void
   onDelete?: () => void
 }
 
-function TimelineRow({
-  entry, generatingActivities, weather,
+function DayCard({
+  group, startDay, generatingActivities, weatherData,
+  addingActivity, addingPOI,
   onDriveDepart,
-  onToggleActivity, onDeleteActivity, addingText, onAddingChange, onAddActivity,
+  onToggleActivity, onDeleteActivity, onAddingActivityChange, onAddActivity,
+  onDeletePOI, onAddingPOIChange, onAddPOI,
   onEdit, onDelete,
-}: TimelineRowProps) {
-  const cfg = ROW_CONFIG[entry.type]
-  const Icon = cfg.icon
-
-  return (
-    <div className={`rounded-lg border ${cfg.bg} ${cfg.border} overflow-hidden`}>
-      <div className="flex items-start gap-3 px-4 py-3">
-
-        {/* Date column */}
-        <div className="flex-shrink-0 w-16 text-center">
-          {entry.date ? (
-            <>
-              <div className="text-xs text-gray-400">{format(entry.date, 'EEE')}</div>
-              <div className="text-sm font-semibold text-gray-700">{format(entry.date, 'MMM d')}</div>
-            </>
-          ) : (
-            <div className={`text-xs font-medium ${cfg.text}`}>Day {entry.dayNum}</div>
-          )}
-        </div>
-
-        <div className={`w-px self-stretch border-l ${cfg.border}`} />
-
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          {/* Row header */}
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5">
-              <Icon size={13} className={cfg.text} />
-              <span className={`text-xs font-semibold uppercase tracking-wide ${cfg.text}`}>
-                {entry.type === 'STAY' && entry.stop?.type === 'HOME'
-                  ? 'Departure Point'
-                  : entry.type === 'ACTIVITY' && entry.stop
-                    ? `Day ${entry.nightNum} at ${entry.stop.locationName}`
-                    : cfg.label}
-              </span>
-            </div>
-            <div className="flex items-center gap-1">
-              {entry.type === 'DRIVE' && entry.driveDuration && (
-                <span className="flex items-center gap-1 text-xs font-semibold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
-                  <Clock size={10} />
-                  {entry.driveDuration}
-                </span>
-              )}
-              {onEdit && (
-                <button
-                  onClick={onEdit}
-                  title="Edit stop"
-                  className="p-1 text-gray-300 hover:text-gray-600 transition-colors rounded"
-                >
-                  <Pencil size={12} />
-                </button>
-              )}
-              {onDelete && (
-                <button
-                  onClick={onDelete}
-                  title="Remove stop"
-                  className="p-1 text-gray-300 hover:text-red-500 transition-colors rounded"
-                >
-                  <Trash2 size={12} />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {entry.type === 'DRIVE' && (
-            <DriveContent entry={entry} onDepart={onDriveDepart} />
-          )}
-          {entry.type === 'STAY' && entry.stop && (
-            <StayContent entry={entry} weather={weather} />
-          )}
-          {entry.type === 'ACTIVITY' && entry.stop && (
-            <ActivityContent
-              entry={entry}
-              generatingActivities={generatingActivities}
-              onToggleActivity={onToggleActivity}
-              onDeleteActivity={onDeleteActivity}
-              addingText={addingText}
-              onAddingChange={onAddingChange}
-              onAddActivity={onAddActivity}
-            />
-          )}
-          {entry.type === 'OVERNIGHT' && entry.stop && (
-            <OvernightContent entry={entry} weather={weather} />
-          )}
-        </div>
-      </div>
+}: DayCardProps) {
+  const EditDeleteButtons = () => (
+    <div className="flex items-center gap-1 flex-shrink-0">
+      {onEdit && (
+        <button onClick={onEdit} title="Edit stop" className="p-1 text-gray-300 hover:text-gray-600 transition-colors rounded">
+          <Pencil size={12} />
+        </button>
+      )}
+      {onDelete && (
+        <button onClick={onDelete} title="Remove stop" className="p-1 text-gray-300 hover:text-red-500 transition-colors rounded">
+          <Trash2 size={12} />
+        </button>
+      )}
     </div>
   )
+
+  // ── HOME standalone (edge case — no drive follows) ──────────────────────────
+  if (group.type === 'HOME') {
+    const entry = group.entries[0]
+    return (
+      <div className="rounded-lg border border-gray-200 bg-gray-50 overflow-hidden">
+        <div className="px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <MapPin size={13} className="text-gray-400" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Departure Point</span>
+            <span className="text-sm text-gray-700">
+              {entry.stop?.locationName}{entry.stop?.locationState ? `, ${entry.stop.locationState}` : ''}
+            </span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── TRAVEL_DAY (depart + drive + optional check-in / overnight) ─────────────
+  if (group.type === 'TRAVEL_DAY') {
+    const hasHome = group.entries[0].stop?.type === 'HOME'
+    const homeEntry = hasHome ? group.entries[0] : undefined
+    const driveEntry = hasHome ? group.entries[1] : group.entries[0]
+    const arrivalEntry = hasHome
+      ? (group.entries.length > 2 ? group.entries[2] : undefined)
+      : (group.entries.length > 1 ? group.entries[1] : undefined)
+    const driveIdx = hasHome ? group.indices[1] : group.indices[0]
+    const arrivalStop = arrivalEntry?.stop
+    const weather = arrivalStop ? weatherData[arrivalStop.id] : undefined
+    const headerDate = (hasHome ? homeEntry?.date : driveEntry?.date)
+
+    if (!driveEntry || driveEntry.type !== 'DRIVE') return null
+
+    return (
+      <div className="rounded-lg border border-gray-200 overflow-hidden bg-white">
+        {/* Card header */}
+        <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Day {startDay}</span>
+            {headerDate && <span className="text-sm font-medium text-gray-700">{format(headerDate, 'EEE MMM d')}</span>}
+          </div>
+          <EditDeleteButtons />
+        </div>
+
+        {/* Depart section — only shown when HOME is merged in */}
+        {homeEntry && (
+          <div className="px-4 py-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              <MapPin size={12} className="text-[#1E3A8A]" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-[#1E3A8A]">Depart</span>
+            </div>
+            <p className="text-sm text-gray-700">
+              {homeEntry.stop?.locationName}{homeEntry.stop?.locationState ? `, ${homeEntry.stop.locationState}` : ''}
+            </p>
+          </div>
+        )}
+
+        {/* Drive section */}
+        <div className={`px-4 py-3${homeEntry ? ' border-t border-gray-100' : ''}`}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Car size={13} className="text-blue-600" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-blue-600">Drive</span>
+            {driveEntry.driveDuration && (
+              <span className="flex items-center gap-1 text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full ml-1">
+                <Clock size={10} />{driveEntry.driveDuration}
+              </span>
+            )}
+          </div>
+          <DriveContent
+            entry={driveEntry}
+            onDepart={onDriveDepart}
+            onDeletePOI={onDeletePOI}
+            addingPOIText={addingPOI[driveIdx] ?? ''}
+            onAddingPOIChange={onAddingPOIChange}
+            onAddPOI={onAddPOI}
+          />
+        </div>
+
+        {/* Check-in section */}
+        {arrivalEntry?.type === 'STAY' && arrivalStop && (
+          <div className="px-4 py-3 border-t border-gray-100">
+            <StayContent entry={arrivalEntry} weather={weather} />
+          </div>
+        )}
+
+        {/* Overnight section */}
+        {arrivalEntry?.type === 'OVERNIGHT' && arrivalStop && (
+          <div className="px-4 py-3 border-t border-gray-100">
+            <OvernightContent entry={arrivalEntry} weather={weather} />
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── STAY_GROUP (activity days at one stop) ──────────────────────────────────
+  if (group.type === 'STAY_GROUP') {
+    const firstEntry = group.entries[0]
+    const lastEntry = group.entries[group.entries.length - 1]
+    const stop = firstEntry.stop!
+    const weather = weatherData[stop.id]
+    const isMulti = group.entries.length > 1
+    const endDay = startDay + group.entries.length - 1
+
+    const dayLabel = isMulti ? `Days ${startDay}–${endDay}` : `Day ${startDay}`
+    const dateLabel = isMulti && firstEntry.date && lastEntry.date
+      ? `${format(firstEntry.date, 'MMM d')} – ${format(lastEntry.date, 'MMM d')}`
+      : firstEntry.date ? format(firstEntry.date, 'EEE MMM d') : undefined
+    const hasAnyActivities = group.entries.some(e => e.activities.length > 0)
+    const anyAdding = group.indices.some(idx => (addingActivity[idx] ?? '') !== '')
+
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-amber-200">
+          <div className="flex items-center gap-2 flex-wrap min-w-0">
+            <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide flex-shrink-0">{dayLabel}</span>
+            <span className="text-sm font-medium text-gray-700 truncate">
+              {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
+            </span>
+            {dateLabel && <span className="text-xs text-gray-400 flex-shrink-0">· {dateLabel}</span>}
+          </div>
+          <EditDeleteButtons />
+        </div>
+
+        {/* Sub-header: campground + weather */}
+        {(stop.campgroundName || (stop.latitude && stop.longitude)) && (
+          <div className="px-4 pt-2.5 pb-0 space-y-1.5">
+            {stop.campgroundName && (
+              <p className="text-sm text-gray-500">Staying at {stop.campgroundName}</p>
+            )}
+            {stop.latitude && stop.longitude && (
+              <StopWeatherCard stop={stop} weather={weather} compact />
+            )}
+          </div>
+        )}
+
+        {/* Layover fallback */}
+        {!hasAnyActivities && !generatingActivities && !anyAdding && (
+          <p className="px-4 py-2 text-xs text-amber-600 italic">Rest day · No activities planned</p>
+        )}
+
+        {/* Per-day activity sub-sections */}
+        <div className="px-4 pb-3 space-y-3 pt-2.5">
+          {group.entries.map((entry, li) => {
+            const flatIdx = group.indices[li]
+            return (
+              <div key={li} className={isMulti ? 'pt-2 border-t border-amber-100 first:border-0 first:pt-0' : ''}>
+                {isMulti && (
+                  <p className="text-xs font-semibold text-amber-700 mb-1.5">
+                    {entry.date ? format(entry.date, 'EEE, MMM d') : `Night ${entry.nightNum}`}
+                  </p>
+                )}
+                <ActivityContent
+                  entry={entry}
+                  generatingActivities={generatingActivities}
+                  suppressHeader
+                  onToggleActivity={(actIdx) => onToggleActivity(li, actIdx)}
+                  onDeleteActivity={(actIdx) => onDeleteActivity(li, actIdx)}
+                  addingText={addingActivity[flatIdx] ?? ''}
+                  onAddingChange={(text) => onAddingActivityChange(li, text)}
+                  onAddActivity={() => onAddActivity(li)}
+                />
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  // ── OVERNIGHT_SOLO (edge case) ──────────────────────────────────────────────
+  if (group.type === 'OVERNIGHT_SOLO') {
+    const entry = group.entries[0]
+    const stop = entry.stop!
+    const weather = weatherData[stop.id]
+    return (
+      <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Day {startDay}</span>
+            {entry.date && <span className="text-sm font-medium text-gray-700">{format(entry.date, 'EEE MMM d')}</span>}
+          </div>
+          <EditDeleteButtons />
+        </div>
+        <div className="px-4 py-3">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Moon size={13} className="text-purple-600" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-purple-600">Overnight Stop</span>
+          </div>
+          <OvernightContent entry={entry} weather={weather} />
+        </div>
+      </div>
+    )
+  }
+
+  return null
 }
 
 // ─── DriveContent ─────────────────────────────────────────────────────────────
 
-function DriveContent({ entry, onDepart }: { entry: TimelineEntry; onDepart: (t: string) => void }) {
+function DriveContent({
+  entry, onDepart, onDeletePOI, addingPOIText, onAddingPOIChange, onAddPOI,
+}: {
+  entry: TimelineEntry
+  onDepart: (t: string) => void
+  onDeletePOI: (poiIdx: number) => void
+  addingPOIText: string
+  onAddingPOIChange: (text: string) => void
+  onAddPOI: () => void
+}) {
   const [expanded, setExpanded] = useState(false)
   const [highlights, setHighlights] = useState<string | null>(entry.routeHighlights ?? null)
   const [loadingHighlights, setLoadingHighlights] = useState(false)
@@ -1123,6 +1358,56 @@ function DriveContent({ entry, onDepart }: { entry: TimelineEntry; onDepart: (t:
         {expanded ? 'Show less ↑' : 'Tell me more about this route ↓'}
       </button>
 
+      {/* Stops along the way — POI pills + add input */}
+      {((entry.pointsOfInterest?.length ?? 0) > 0 || addingPOIText !== '') && (
+        <div className="mt-3 pt-2.5 border-t border-blue-100">
+          <p className="text-xs font-semibold text-amber-700 mb-2 flex items-center gap-1">
+            <Star size={11} className="text-amber-500" />
+            Stops along the way
+          </p>
+          {(entry.pointsOfInterest?.length ?? 0) > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {entry.pointsOfInterest!.map((poi, i) => (
+                <span key={i} className="inline-flex items-center gap-1 text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">
+                  {poi}
+                  <button
+                    onClick={() => onDeletePOI(i)}
+                    className="hover:text-amber-900 flex-shrink-0 ml-0.5"
+                    title="Remove stop"
+                  >
+                    <XCircle size={11} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-1">
+            <input
+              className="text-xs border border-gray-200 rounded px-2 py-1 flex-1 focus:outline-none focus:border-amber-400 bg-white"
+              placeholder="Add a stop or attraction…"
+              value={addingPOIText}
+              onChange={e => onAddingPOIChange(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') onAddPOI() }}
+            />
+            <button
+              onClick={onAddPOI}
+              disabled={!addingPOIText.trim()}
+              className="text-xs px-2.5 py-1 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 transition-colors disabled:opacity-40 whitespace-nowrap"
+            >
+              Add
+            </button>
+          </div>
+        </div>
+      )}
+      {(entry.pointsOfInterest?.length ?? 0) === 0 && addingPOIText === '' && (
+        <button
+          onClick={() => onAddingPOIChange(' ')}
+          className="mt-2 text-xs text-amber-600 hover:text-amber-800 transition-colors"
+        >
+          + Add stops along the way
+        </button>
+      )}
+
       {expanded && (
         <div className="mt-2 pl-3 border-l-2 border-[#1E3A8A]/20">
           {loadingHighlights ? (
@@ -1176,15 +1461,18 @@ function StayContent({ entry, weather }: { entry: TimelineEntry; weather?: StopW
     <div className="space-y-2.5">
       {/* Location + campground name */}
       <div className="space-y-0.5">
-        <div className="text-sm font-semibold text-gray-800">
-          {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
+        <div className="flex items-center gap-1.5">
+          <Tent size={12} className="text-[#0D5F58] flex-shrink-0" />
+          <span className="text-sm font-semibold text-gray-800">
+            {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
+          </span>
         </div>
         {stop.campgroundName && (
-          <div className="text-sm text-gray-500">{stop.campgroundName}</div>
+          <div className="text-sm text-gray-500 ml-4">{stop.campgroundName}</div>
         )}
       </div>
 
-      {/* Reserve Now / Confirmed — not shown for HOME (departure) stops */}
+      {/* Reserve Now / Confirmed — not shown for HOME stops */}
       {stop.type !== 'HOME' && (stop.confirmationNum ? (
         <div className="flex items-center gap-1.5 text-xs font-semibold text-[#0D5F58] bg-[#CCFBF1] px-2.5 py-1 rounded-full w-fit">
           <Check size={11} />
@@ -1252,9 +1540,10 @@ function StayContent({ entry, weather }: { entry: TimelineEntry; weather?: StopW
 
 // ─── ActivityContent ──────────────────────────────────────────────────────────
 
-function ActivityContent({ entry, generatingActivities, onToggleActivity, onDeleteActivity, addingText, onAddingChange, onAddActivity }: {
+function ActivityContent({ entry, generatingActivities, suppressHeader, onToggleActivity, onDeleteActivity, addingText, onAddingChange, onAddActivity }: {
   entry: TimelineEntry
   generatingActivities: boolean
+  suppressHeader?: boolean
   onToggleActivity: (actIdx: number) => void
   onDeleteActivity: (actIdx: number) => void
   addingText: string
@@ -1265,19 +1554,21 @@ function ActivityContent({ entry, generatingActivities, onToggleActivity, onDele
   return (
     <div className="space-y-2">
       {/* Date + staying-at */}
-      <div className="flex items-baseline gap-2 flex-wrap">
-        {entry.date && (
-          <span className="text-base font-semibold text-gray-800">{fmtDate(entry.date)}</span>
-        )}
-        {stop.campgroundName && (
-          <span className="text-sm text-gray-500">Staying at {stop.campgroundName}</span>
-        )}
-        {!stop.campgroundName && (
-          <span className="text-sm text-gray-500">
-            {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
-          </span>
-        )}
-      </div>
+      {!suppressHeader && (
+        <div className="flex items-baseline gap-2 flex-wrap">
+          {entry.date && (
+            <span className="text-base font-semibold text-gray-800">{fmtDate(entry.date)}</span>
+          )}
+          {stop.campgroundName && (
+            <span className="text-sm text-gray-500">Staying at {stop.campgroundName}</span>
+          )}
+          {!stop.campgroundName && (
+            <span className="text-sm text-gray-500">
+              {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Activities list */}
       {entry.activities.length > 0 ? (
@@ -1342,18 +1633,39 @@ function ActivityContent({ entry, generatingActivities, onToggleActivity, onDele
 
 function OvernightContent({ entry, weather }: { entry: TimelineEntry; weather?: StopWeather | null }) {
   const stop = entry.stop!
+  const navigate = useNavigate()
   return (
-    <div className="space-y-1">
-      <div className="text-sm font-semibold text-gray-800">
-        {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
+    <div className="space-y-2">
+      <div className="space-y-0.5">
+        <div className="flex items-center gap-1.5">
+          <Moon size={12} className="text-purple-500 flex-shrink-0" />
+          <span className="text-sm font-semibold text-gray-800">
+            {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
+          </span>
+        </div>
+        {stop.campgroundName && <div className="text-sm text-gray-500 ml-4">{stop.campgroundName}</div>}
+        {stop.siteRate != null && (
+          <div className="text-xs text-gray-400 ml-4">${stop.siteRate}/night · Early departure</div>
+        )}
+        {stop.siteRate == null && (
+          <div className="text-xs text-gray-400 ml-4 italic">Early departure planned</div>
+        )}
       </div>
-      {stop.campgroundName && <div className="text-sm text-gray-500">{stop.campgroundName}</div>}
-      {stop.siteRate != null && (
-        <div className="text-xs text-gray-400">${stop.siteRate}/night</div>
-      )}
-      <p className="text-xs text-gray-400 italic">Early departure planned</p>
 
-      {/* Weather card */}
+      {stop.confirmationNum ? (
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-[#0D5F58] bg-[#CCFBF1] px-2.5 py-1 rounded-full w-fit">
+          <Check size={11} />
+          Confirmed · #{stop.confirmationNum}
+        </div>
+      ) : (
+        <button
+          onClick={() => navigate(`/trips/${stop.tripId}/booking?stopId=${stop.id}`)}
+          className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#EA6A0A] hover:bg-[#C2580A] px-3 py-1.5 rounded-lg transition-colors"
+        >
+          Reserve Now →
+        </button>
+      )}
+
       {stop.latitude && stop.longitude && (
         <StopWeatherCard stop={stop} weather={weather} compact />
       )}
