@@ -158,8 +158,9 @@ model Trip {
   fuelPrice      Float?
   sharedToken    String?    @unique
   packingList    Json?
-  aiConversation Json?
-  itinerary      Json?
+  aiConversation     Json?
+  modifyConversation Json?
+  itinerary          Json?
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
   stops          Stop[]

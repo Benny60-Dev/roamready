@@ -93,7 +93,11 @@ Itinerary JSON format:
   // system context must be passed as the top-level system parameter.
   const systemMessages = messages.filter(m => m.role === 'system').map(m => typeof m.content === 'string' ? m.content : '').join('\n')
   const cleanMessages = messages.filter(m => m.role !== 'system') as Array<{ role: 'user' | 'assistant'; content: string }>
-  const combinedSystem = systemPrompt + (systemMessages ? '\n\n' + systemMessages : '')
+  // Fix A: In modify mode (systemMessages present), put modify instructions FIRST so Claude
+  // anchors on the <modify> tag requirement before reading the base planner rules.
+  const combinedSystem = systemMessages
+    ? systemMessages + '\n\n' + systemPrompt
+    : systemPrompt
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-5',

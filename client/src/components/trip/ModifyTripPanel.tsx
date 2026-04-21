@@ -17,12 +17,16 @@ const QUICK_CHIPS = [
 
 interface ModifyAction {
   action: 'add_stop' | 'remove_stop' | 'change_nights' | 'suggest_campground'
-  // add_stop
-  after_stop?: string
+  // new schema (server-injected prompt)
+  locationName?: string
+  locationState?: string
+  afterStopOrder?: number
+  // legacy schema fallbacks (kept for backward-compat with any stored history)
   location?: string
+  after_stop?: string
+  // shared
   nights?: number
   type?: StopType
-  // suggest_campground
   campgroundName?: string
 }
 
@@ -35,44 +39,6 @@ interface ChatMsg {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function buildSystemPrompt(trip: Trip): string {
-  const itineraryData = {
-    name: trip.name,
-    startLocation: trip.startLocation,
-    endLocation: trip.endLocation,
-    totalMiles: trip.totalMiles,
-    totalNights: trip.totalNights,
-    stops: trip.stops?.slice().sort((a, b) => a.order - b.order).map(s => ({
-      order: s.order,
-      type: s.type,
-      locationName: s.locationName,
-      locationState: s.locationState ?? null,
-      nights: s.nights,
-      campgroundName: s.campgroundName ?? null,
-      bookingStatus: s.bookingStatus,
-      arrivalDate: s.arrivalDate ?? null,
-      driveDistanceMiles: s.driveDistanceMiles ?? null,
-      driveDuration: s.driveDuration ?? null,
-      highwayRoute: s.highwayRoute ?? null,
-    })) ?? [],
-  }
-
-  return `You are helping a user modify an existing RoamReady trip. Here is their current itinerary: ${JSON.stringify(itineraryData, null, 2)}.
-
-The user wants to make changes. You can: add new stops, remove existing stops, change the number of nights at a stop, suggest different campgrounds, extend or shorten the trip.
-
-When the user requests a change, respond with the specific modification in a structured format inside modify tags like this:
-<modify>{"action": "add_stop", "after_stop": "Amarillo", "location": "Santa Fe NM", "nights": 2, "type": "DESTINATION"}</modify>
-or
-<modify>{"action": "remove_stop", "location": "Nashville"}</modify>
-or
-<modify>{"action": "change_nights", "location": "Yellowstone", "nights": 4}</modify>
-or
-<modify>{"action": "suggest_campground", "location": "Sedona", "campgroundName": "Manzanita Campground"}</modify>
-
-Always include a modify tag when the user requests a specific change. Be friendly and conversational. Keep responses concise. Always confirm the change with the user before applying it — the user will see an Apply button so don't ask them to confirm in words.`
-}
 
 function parseModify(text: string): ModifyAction | null {
   const match = text.match(/<modify>([\s\S]*?)<\/modify>/)
@@ -89,18 +55,19 @@ function cleanText(text: string): string {
 }
 
 function getConfirmationText(action: ModifyAction): string {
+  const name = action.locationName ?? action.location ?? 'stop'
+  const state = action.locationState ? `, ${action.locationState}` : ''
   switch (action.action) {
     case 'add_stop': {
       const nights = action.nights ? ` for ${action.nights} night${action.nights !== 1 ? 's' : ''}` : ''
-      const after = action.after_stop ? ` after ${action.after_stop}` : ''
-      return `Add ${action.location}${nights}${after}`
+      return `Add ${name}${state}${nights}`
     }
     case 'remove_stop':
-      return `Remove ${action.location} from the trip`
+      return `Remove ${name}${state} from the trip`
     case 'change_nights':
-      return `Change ${action.location} to ${action.nights} night${action.nights !== 1 ? 's' : ''}`
+      return `Change ${name}${state} to ${action.nights} night${action.nights !== 1 ? 's' : ''}`
     case 'suggest_campground':
-      return `Switch ${action.location} campground to ${action.campgroundName}`
+      return `Switch ${name}${state} campground to ${action.campgroundName}`
     default:
       return 'Apply this change'
   }
@@ -129,18 +96,42 @@ interface ModifyTripPanelProps {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+const GREETING = (name: string) =>
+  `I can help you modify ${name}! What changes would you like to make?`
+
 export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }: ModifyTripPanelProps) {
-  const [messages, setMessages] = useState<ChatMsg[]>([
-    {
-      role: 'assistant',
-      content: `I can help you modify ${trip.name}! What changes would you like to make?`,
-    },
-  ])
+  const [messages, setMessages] = useState<ChatMsg[]>([])
+  const [historyLoaded, setHistoryLoaded] = useState(false)
   const [input, setInput] = useState('')
   const [typing, setTyping] = useState(false)
   const [applying, setApplying] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Load persisted modify conversation when trip changes OR panel is opened.
+  // isOpen is included so the history refreshes from DB every time the panel
+  // is opened — otherwise cleared/updated history won't appear until navigation.
+  useEffect(() => {
+    if (!isOpen) return
+    setHistoryLoaded(false)
+    aiApi.getModifyHistory(trip.id)
+      .then(res => {
+        const history: Array<{ role: 'user' | 'assistant'; content: string }> = res.data ?? []
+        if (history.length === 0) {
+          setMessages([{ role: 'assistant', content: GREETING(trip.name) }])
+        } else {
+          setMessages(history.map(m => {
+            if (m.role !== 'assistant') return m
+            const modifyAction = parseModify(m.content)
+            return modifyAction ? { ...m, modifyAction, modifyApplied: true } : m
+          }))
+        }
+      })
+      .catch(() => {
+        setMessages([{ role: 'assistant', content: GREETING(trip.name) }])
+      })
+      .finally(() => setHistoryLoaded(true))
+  }, [trip.id, isOpen])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -164,13 +155,11 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
     setTyping(true)
 
     try {
-      // Always include the system context so Claude knows the current trip state.
-      // Map ChatMsg → plain role/content pairs for the API.
-      const apiMessages = [
-        { role: 'system', content: buildSystemPrompt(trip) },
-        ...newMessages.map(m => ({ role: m.role, content: m.content })),
-      ]
-      const res = await aiApi.chat(apiMessages, trip.id)
+      // The server injects a live ground-truth state message on every modify call,
+      // so we no longer send the (potentially stale) client-side system prompt.
+      // Sending it would give Claude two conflicting stop lists.
+      const apiMessages = newMessages.map(m => ({ role: m.role, content: m.content }))
+      const res = await aiApi.chat(apiMessages, trip.id, 'modify')
       const aiText: string = res.data.message
 
       const modifyAction = parseModify(aiText)
@@ -191,55 +180,87 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
   }
 
   async function applyModification(msgIndex: number, action: ModifyAction) {
+    console.log('[applyMod] ENTRY — msgIndex:', msgIndex, '| action:', JSON.stringify(action))
     setApplying(true)
     try {
-      const sortedStops = [...(trip.stops ?? [])].sort((a, b) => a.order - b.order)
+      // Fetch fresh trip data from the DB so position math uses current stop orders,
+      // not the (potentially stale) React prop captured at last render.
+      const freshRes = await tripsApi.get(trip.id)
+      const freshStops = freshRes.data.stops ?? []
+      const sortedStops = [...freshStops].sort((a: any, b: any) => a.order - b.order)
+      console.log('[applyMod] freshStops count:', sortedStops.length, '| stops:', sortedStops.map((s: any) => s.order + ':' + s.locationName))
 
       // Fuzzy match a stop by location name
       function findStop(name?: string) {
         if (!name) return undefined
         const needle = name.toLowerCase()
         return sortedStops.find(
-          s =>
+          (s: any) =>
             s.locationName.toLowerCase().includes(needle) ||
             needle.includes(s.locationName.toLowerCase())
         )
       }
 
-      if (action.action === 'add_stop') {
-        const afterStop = findStop(action.after_stop) ?? sortedStops[sortedStops.length - 2]
-        const afterOrder = afterStop?.order ?? (sortedStops[sortedStops.length - 1]?.order ?? 0)
-        const nextStop = sortedStops.find(s => s.order > afterOrder)
-        // Use midpoint order so we don't need to renumber existing stops
-        const newOrder = nextStop
-          ? (afterOrder + nextStop.order) / 2
-          : afterOrder + 1
-
-        // Parse "Santa Fe NM" or "Santa Fe, NM" into locationName + locationState
+      // Resolve location name from either new schema (locationName) or legacy (location)
+      const resolvedName = action.locationName ?? action.location ?? ''
+      const resolvedState = action.locationState ?? (() => {
         const raw = action.location ?? ''
         const commaIdx = raw.lastIndexOf(',')
-        const locationName = commaIdx >= 0 ? raw.slice(0, commaIdx).trim() : raw.trim()
-        const locationState = commaIdx >= 0 ? raw.slice(commaIdx + 1).trim() : undefined
+        return commaIdx >= 0 ? raw.slice(commaIdx + 1).trim() : undefined
+      })()
+      const cleanName = action.locationName
+        ? resolvedName
+        : (() => { const raw = resolvedName; const c = raw.lastIndexOf(','); return c >= 0 ? raw.slice(0, c).trim() : raw.trim() })()
 
-        await tripsApi.createStop(trip.id, {
-          locationName,
-          locationState: locationState || undefined,
+      if (action.action === 'add_stop') {
+        // Duplicate guard — block if a stop with a matching name already exists
+        const locationNeedle = cleanName.toLowerCase()
+        const duplicate = locationNeedle ? sortedStops.find(
+          (s: any) =>
+            s.locationName.toLowerCase().includes(locationNeedle) ||
+            locationNeedle.includes(s.locationName.toLowerCase())
+        ) : undefined
+        console.log('[applyMod] duplicate check — needle:', locationNeedle, '| duplicate:', duplicate ? duplicate.locationName : 'none')
+        if (duplicate) {
+          setMessages(prev => [
+            ...prev,
+            { role: 'assistant', content: `${duplicate.locationName} is already on your trip (stop #${duplicate.order}). No change was made.` },
+          ])
+          setApplying(false)
+          return
+        }
+
+        // Resolve insertion position: new schema uses afterStopOrder (number), legacy uses after_stop (name).
+        // Server uses integer shift-up, so we send afterOrder + 1 (no fractional midpoints needed).
+        const afterStop = action.afterStopOrder != null
+          ? sortedStops.find((s: any) => s.order === action.afterStopOrder)
+          : (findStop(action.after_stop) ?? sortedStops[sortedStops.length - 2])
+        const afterOrder = afterStop?.order ?? (sortedStops[sortedStops.length - 1]?.order ?? 0)
+        const newOrder = afterOrder + 1
+        console.log('[applyMod] position — afterStop:', afterStop?.locationName, '| afterOrder:', afterOrder, '| newOrder:', newOrder)
+
+        const payload = {
+          locationName: cleanName,
+          locationState: resolvedState || undefined,
           nights: action.nights ?? 1,
           type: action.type ?? 'DESTINATION',
           order: newOrder,
           bookingStatus: 'NOT_BOOKED',
           isCompatible: true,
-        })
+        }
+        console.log('[applyMod] calling createStop with payload:', JSON.stringify(payload))
+        const createRes = await tripsApi.createStop(trip.id, payload)
+        console.log('[applyMod] createStop response status:', createRes.status, '| data:', JSON.stringify(createRes.data))
       } else if (action.action === 'remove_stop') {
-        const stop = findStop(action.location)
+        const stop = findStop(cleanName)
         if (stop) await tripsApi.deleteStop(trip.id, stop.id)
-        else throw new Error(`Could not find stop: ${action.location}`)
+        else throw new Error(`Could not find stop: ${cleanName}`)
       } else if (action.action === 'change_nights') {
-        const stop = findStop(action.location)
+        const stop = findStop(cleanName)
         if (stop && action.nights) await tripsApi.updateStop(trip.id, stop.id, { nights: action.nights })
-        else throw new Error(`Could not find stop or nights missing: ${action.location}`)
+        else throw new Error(`Could not find stop or nights missing: ${cleanName}`)
       } else if (action.action === 'suggest_campground') {
-        const stop = findStop(action.location)
+        const stop = findStop(cleanName)
         if (stop && action.campgroundName) {
           await tripsApi.updateStop(trip.id, stop.id, { campgroundName: action.campgroundName })
         } else throw new Error(`Could not find stop or campground name missing`)
@@ -263,6 +284,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
         },
       ])
     } catch (err: any) {
+      console.error('[applyMod] CAUGHT ERROR:', err?.message, err?.response?.status, err?.response?.data)
       setMessages(prev => [
         ...prev,
         {
@@ -342,7 +364,12 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
-          {messages.map((msg, i) => (
+          {!historyLoaded && (
+            <div className="flex justify-center pt-8">
+              <div className="w-4 h-4 border-2 border-[#1E3A8A] border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+          {historyLoaded && messages.map((msg, i) => (
             <div key={i}>
               {/* Bubble */}
               <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>

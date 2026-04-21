@@ -85,8 +85,9 @@ export const tripsApi = {
 
 // AI
 export const aiApi = {
-  chat: (messages: any[], tripId?: string) => api.post('/ai/chat', { messages, tripId }),
+  chat: (messages: any[], tripId?: string, context?: string) => api.post('/ai/chat', { messages, tripId, context }),
   getChatHistory: (tripId: string) => api.get(`/ai/chat/${tripId}/history`),
+  getModifyHistory: (tripId: string) => api.get(`/ai/chat/${tripId}/modify-history`),
   generatePackingList: (tripId: string) => api.post('/ai/generate-packing-list', { tripId }),
   analyzeFeedback: () => api.post('/ai/analyze-feedback'),
 }

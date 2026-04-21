@@ -7,6 +7,21 @@ import { AppError } from '../middleware/errorHandler'
 import { generatePackingListAI, generateTripItineraryAI, generateStopActivitiesAI, generateRouteHighlightsAI } from '../services/ai'
 import { fetchLiveForecast, fetchHistoricalWeather, isoDate } from '../services/weatherFetch'
 
+// ─── Stop order helpers ───────────────────────────────────────────────────────
+
+/** Re-number all stops for a trip to 1, 2, 3, … in their current relative order.
+ *  Runs after any create/update/delete so fractional midpoint orders never accumulate. */
+async function resequenceStops(tripId: string): Promise<void> {
+  const stops = await prisma.stop.findMany({
+    where: { tripId },
+    orderBy: { order: 'asc' },
+    select: { id: true },
+  })
+  await prisma.$transaction(
+    stops.map((s, i) => prisma.stop.update({ where: { id: s.id }, data: { order: i + 1 } }))
+  )
+}
+
 // ─── Google Maps Directions helpers ──────────────────────────────────────────
 
 const DIR_MAP: Record<string, string> = { N: 'North', S: 'South', E: 'East', W: 'West' }
@@ -206,7 +221,19 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
       where: { tripId: req.params.id },
       _max: { order: true },
     })
-    let order = (maxOrder._max.order ?? 0) + 1
+    // Caller may send a fractional midpoint; round to nearest int so it never breaks the Int column.
+    let order = Math.round(req.body.order ?? (maxOrder._max.order ?? 0) + 1)
+
+    // Fix 2: HOME stop guard — never allow inserting at or before the HOME stop's position.
+    // The HOME stop is the departure point and must always be order 1.
+    const homeStopForGuard = await prisma.stop.findFirst({
+      where: { tripId: req.params.id, type: 'HOME' },
+      select: { order: true },
+    })
+    if (homeStopForGuard && order <= homeStopForGuard.order) {
+      order = homeStopForGuard.order + 1
+      console.warn('[createStop] Clamped insertion order to %d — cannot place stop before HOME', order)
+    }
 
     // Whitelist only known Stop fields — AI response may include extras like `notes`
     // that don't exist in the schema and would cause a Prisma validation error
@@ -286,6 +313,13 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
     console.log('[createStop] tripId=%s locationName=%s type=%s order=%d incomingLat=%s incomingLng=%s resolvedLat=%s resolvedLng=%s',
       req.params.id, locationName, type, order, latitude, longitude, resolvedLat, resolvedLng)
 
+    // Fix 1: Integer shift-up — bump every existing stop at the target position (and above) up by 1
+    // so the new stop slots in cleanly without fractional orders or collisions on the Int column.
+    await prisma.stop.updateMany({
+      where: { tripId: req.params.id, order: { gte: order } },
+      data: { order: { increment: 1 } },
+    })
+
     const stop = await prisma.stop.create({
       data: {
         type, locationName, locationState, latitude: resolvedLat, longitude: resolvedLng,
@@ -298,6 +332,7 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
         order,
       },
     })
+    await resequenceStops(req.params.id)
     res.status(201).json(stop)
   } catch (err: any) {
     console.error('[createStop] FAILED tripId=%s:', req.params.id, err?.message)
@@ -342,6 +377,7 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
       await prisma.$executeRaw`UPDATE "Stop" SET "routeHighlights" = ${routeHighlights} WHERE id = ${req.params.stopId}`
     }
 
+    await resequenceStops(req.params.id)
     res.json(updated)
   } catch (err) { next(err) }
 }
@@ -351,6 +387,7 @@ export async function deleteStop(req: AuthRequest, res: Response, next: NextFunc
     const trip = await prisma.trip.findFirst({ where: { id: req.params.id, userId: req.user!.id } })
     if (!trip) throw new AppError('Trip not found', 404)
     await prisma.stop.delete({ where: { id: req.params.stopId } })
+    await resequenceStops(req.params.id)
     res.json({ message: 'Stop deleted' })
   } catch (err) { next(err) }
 }
