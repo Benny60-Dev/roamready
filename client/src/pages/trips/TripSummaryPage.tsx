@@ -1424,7 +1424,7 @@ function DriveContent({
             Stops along the way
           </p>
           {(entry.pointsOfInterest?.length ?? 0) > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-2">
+            <div className="flex flex-col gap-1.5 mb-2">
               {entry.pointsOfInterest!.map((poi, i) => (
                 <span key={i} className="inline-flex items-center gap-1 text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">
                   {poi}
