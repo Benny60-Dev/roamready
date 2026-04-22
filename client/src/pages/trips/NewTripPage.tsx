@@ -328,9 +328,9 @@ export default function NewTripPage() {
       await tripsApi.reassignPOIs(trip.data.id)
       console.timeEnd('[buildItinerary] reassignPOIs')
 
-      console.time('[buildItinerary] generateItinerary')
-      await tripsApi.generateItinerary(trip.data.id)
-      console.timeEnd('[buildItinerary] generateItinerary')
+      tripsApi.generateItinerary(trip.data.id).catch(err =>
+        console.error('[buildItinerary] generateItinerary failed in background:', err)
+      )
 
       console.timeEnd('[buildItinerary] total')
       navigate(`/trips/${trip.data.id}/map`)

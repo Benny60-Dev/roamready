@@ -396,6 +396,16 @@ export default function TripSummaryPage() {
   const [modifyPanelOpen, setModifyPanelOpen] = useState(false)
   const itinerarySaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const activityGenAttempted = useRef(false)
+  const [itineraryPending, setItineraryPending] = useState(false)
+  const [itineraryError, setItineraryError] = useState(false)
+  const itineraryPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const stopPolling = useCallback(() => {
+    if (itineraryPollRef.current) {
+      clearInterval(itineraryPollRef.current)
+      itineraryPollRef.current = null
+    }
+  }, [])
 
   const reloadTrip = useCallback(async () => {
     if (!id) return
@@ -405,12 +415,43 @@ export default function TripSummaryPage() {
     const sorted = [...(t.stops || [])].sort((a, b) => a.order - b.order)
     const raw = buildTimeline(sorted, t.startDate ?? undefined)
     setEntries(t.itinerary ? mergeAI(raw, t.itinerary) : raw)
-  }, [id])
+    if (!t.itinerary) {
+      setItineraryPending(true)
+      setItineraryError(false)
+      if (!itineraryPollRef.current) {
+        const started = Date.now()
+        itineraryPollRef.current = setInterval(async () => {
+          if (Date.now() - started > 60_000) {
+            stopPolling()
+            setItineraryPending(false)
+            setItineraryError(true)
+            return
+          }
+          try {
+            const poll = await tripsApi.get(id)
+            if (poll.data.itinerary) {
+              stopPolling()
+              setItineraryPending(false)
+              const pollSorted = [...(poll.data.stops || [])].sort((a: Stop, b: Stop) => a.order - b.order)
+              const pollRaw = buildTimeline(pollSorted, poll.data.startDate ?? undefined)
+              setTrip(poll.data)
+              setEntries(mergeAI(pollRaw, poll.data.itinerary))
+            }
+          } catch { /* ignore */ }
+        }, 3000)
+      }
+    } else {
+      stopPolling()
+      setItineraryPending(false)
+    }
+  }, [id, stopPolling])
 
   useEffect(() => {
     if (!id) return
     reloadTrip().finally(() => setLoading(false))
   }, [id])
+
+  useEffect(() => () => stopPolling(), [stopPolling])
 
   // Load weather once trip is ready
   useEffect(() => {
@@ -433,7 +474,7 @@ export default function TripSummaryPage() {
 
   // Auto-generate activities when page loads (once, if any ACTIVITY rows have no activities)
   useEffect(() => {
-    if (loading || !id || activityGenAttempted.current) return
+    if (loading || !id || activityGenAttempted.current || itineraryPending) return
     const needsActivities = entries.some(e => e.type === 'ACTIVITY' && e.activities.length === 0)
     if (!needsActivities) return
     activityGenAttempted.current = true
@@ -465,7 +506,7 @@ export default function TripSummaryPage() {
       })
       .catch(() => {})
       .finally(() => setGeneratingActivities(false))
-  }, [loading, id, entries.length])
+  }, [loading, id, entries.length, itineraryPending])
 
   const handleGenerate = async () => {
     if (!id) return
@@ -818,13 +859,30 @@ export default function TripSummaryPage() {
           <h2 className="font-medium text-gray-900">Day-by-Day Itinerary</h2>
           <button
             onClick={handleGenerate}
-            disabled={generating}
+            disabled={generating || itineraryPending}
             className="flex items-center gap-1.5 text-sm text-[#1E3A8A] hover:text-[#1E40AF] disabled:opacity-50 transition-colors"
           >
             {generating ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
             {generating ? 'Generating…' : hasAI ? 'Regenerate' : 'Generate AI Itinerary'}
           </button>
         </div>
+        {itineraryPending && (
+          <div className="flex items-center gap-2 text-xs text-[#1E3A8A] bg-[#EFF6FF] border border-[#1E3A8A]/10 rounded-lg px-3 py-2 mb-4">
+            <RefreshCw size={12} className="animate-spin flex-shrink-0" />
+            Building your AI itinerary in the background…
+          </div>
+        )}
+        {itineraryError && (
+          <div className="flex items-center justify-between gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+            <span>AI itinerary generation timed out.</span>
+            <button
+              onClick={handleGenerate}
+              className="font-semibold text-[#1E3A8A] hover:underline whitespace-nowrap"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         <div className="space-y-3">
           {(() => {
