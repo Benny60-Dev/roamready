@@ -130,6 +130,135 @@ async function fetchAllSegmentRoutes(
   return results
 }
 
+// ─── POI geocoding helpers ────────────────────────────────────────────────────
+
+function pointToSegmentDistance(
+  lat1: number, lng1: number,
+  lat2: number, lng2: number,
+  latP: number, lngP: number,
+): number {
+  const cosLat = Math.cos(((lat1 + lat2) / 2) * (Math.PI / 180))
+  const dx = lat2 - lat1
+  const dy = (lng2 - lng1) * cosLat
+  const lenSq = dx * dx + dy * dy
+  if (lenSq === 0) return Math.hypot(latP - lat1, (lngP - lng1) * cosLat)
+  const t = Math.max(0, Math.min(1,
+    ((latP - lat1) * dx + (lngP - lng1) * cosLat * dy) / lenSq
+  ))
+  return Math.hypot(latP - lat1 - t * dx, (lngP - lng1 - t * (lng2 - lng1)) * cosLat)
+}
+
+async function geocodeQuery(query: string, apiKey: string): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const res = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
+      params: { address: query, key: apiKey },
+      timeout: 5000,
+    })
+    if (res.data.status === 'OK' && res.data.results?.[0]) {
+      const loc = res.data.results[0].geometry.location
+      return { lat: loc.lat, lng: loc.lng }
+    }
+    console.warn('[geocode] status=%s for "%s"', res.data.status, query)
+    return null
+  } catch (err: any) {
+    console.error('[geocode] error for "%s":', query, err?.message)
+    return null
+  }
+}
+
+export async function reassignPOIs(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY
+    if (!apiKey) {
+      console.warn('[reassignPOIs] GOOGLE_MAPS_API_KEY not set — skipping')
+      return res.json({ skipped: true })
+    }
+
+    const trip = await prisma.trip.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+      include: { stops: { orderBy: { order: 'asc' } } },
+    })
+    if (!trip) throw new AppError('Trip not found', 404)
+
+    const stops = trip.stops as any[]
+
+    const hasPOIs = stops.some((s: any) => (s.pointsOfInterest ?? []).length > 0)
+    if (!hasPOIs) return res.json({ skipped: true })
+
+    // Resolve coordinates for all stops in parallel — use DB value if present, geocode city otherwise
+    const stopCoords = await Promise.all(
+      stops.map(async (stop: any) => {
+        if (stop.latitude && stop.longitude) {
+          return { id: stop.id, order: stop.order, lat: stop.latitude as number, lng: stop.longitude as number }
+        }
+        const query = [stop.locationName, stop.locationState].filter(Boolean).join(', ')
+        const coords = await geocodeQuery(query, apiKey)
+        return { id: stop.id, order: stop.order, lat: coords?.lat ?? null, lng: coords?.lng ?? null }
+      })
+    )
+
+    // Build drive legs from consecutive stops that both have coordinates
+    interface Leg { fromLat: number; fromLng: number; toStopId: string; toLat: number; toLng: number }
+    const legs: Leg[] = []
+    for (let i = 1; i < stopCoords.length; i++) {
+      const from = stopCoords[i - 1]
+      const to   = stopCoords[i]
+      if (from.lat && from.lng && to.lat && to.lng) {
+        legs.push({ fromLat: from.lat, fromLng: from.lng, toStopId: to.id, toLat: to.lat, toLng: to.lng })
+      }
+    }
+
+    if (legs.length < 2) {
+      console.log('[reassignPOIs] fewer than 2 resolvable legs — skipping')
+      return res.json({ skipped: true })
+    }
+
+    // Geocode all POIs across all stops in parallel
+    const poiTasks: Array<{ poi: string; originalStopId: string }> = stops.flatMap((stop: any) =>
+      (stop.pointsOfInterest ?? []).map((poi: string) => ({ poi, originalStopId: stop.id }))
+    )
+
+    const poiCoords = await Promise.all(
+      poiTasks.map(({ poi }) => geocodeQuery(poi, apiKey))
+    )
+
+    // Assign each POI to the destination stop of the nearest leg
+    const reassigned: Record<string, string[]> = {}
+
+    poiTasks.forEach(({ poi, originalStopId }, idx) => {
+      const coords = poiCoords[idx]
+
+      if (!coords) {
+        console.warn('[reassignPOIs] could not geocode "%s" — keeping on original stop', poi)
+        reassigned[originalStopId] = [...(reassigned[originalStopId] ?? []), poi]
+        return
+      }
+
+      let bestStopId = originalStopId
+      let minDist = Infinity
+      for (const leg of legs) {
+        const dist = pointToSegmentDistance(leg.fromLat, leg.fromLng, leg.toLat, leg.toLng, coords.lat, coords.lng)
+        if (dist < minDist) { minDist = dist; bestStopId = leg.toStopId }
+      }
+
+      console.log('[reassignPOIs] "%s" → stopId=%s (dist=%.5f)', poi, bestStopId, minDist)
+      reassigned[bestStopId] = [...(reassigned[bestStopId] ?? []), poi]
+    })
+
+    // Write updated pointsOfInterest back to all stops in parallel
+    await Promise.all(
+      stops.map((stop: any) =>
+        prisma.stop.update({
+          where: { id: stop.id },
+          data: { pointsOfInterest: reassigned[stop.id] ?? [] },
+        })
+      )
+    )
+
+    res.json({ reassigned })
+  } catch (err) { next(err) }
+}
+
 export async function getTrips(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const trips = await prisma.trip.findMany({

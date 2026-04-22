@@ -74,6 +74,7 @@ export const tripsApi = {
   deleteStop: (id: string, stopId: string) => api.delete(`/trips/${id}/stops/${stopId}`),
   generatePackingList: (id: string) => api.post(`/trips/${id}/packing-list`),
   exportPdf: (id: string) => api.post(`/trips/${id}/export/pdf`),
+  reassignPOIs: (id: string) => api.post(`/trips/${id}/stops/reassign-pois`),
   generateItinerary: (id: string) => api.post(`/trips/${id}/itinerary/generate`),
   saveItinerary: (id: string, itinerary: any[]) => api.put(`/trips/${id}/itinerary`, itinerary),
   generateRoutes: (id: string) => api.post(`/trips/${id}/routes`),

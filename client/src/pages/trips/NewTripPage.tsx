@@ -293,6 +293,9 @@ export default function NewTripPage() {
         ? itinerary.stops[0].locationName
         : user?.homeLocation || itinerary.stops?.[0]?.locationName || 'Start'
 
+      console.time('[buildItinerary] total')
+
+      console.time('[buildItinerary] createTrip')
       const trip = await tripsApi.create({
         name: itinerary.name,
         startLocation: homeStopName,
@@ -304,18 +307,32 @@ export default function NewTripPage() {
         status: 'PLANNING',
         aiConversation: messages,
       })
+      console.timeEnd('[buildItinerary] createTrip')
 
       const stops: any[] = itinerary.stops || []
       const lastIdx = stops.length - 1
+      console.time('[buildItinerary] createStops')
       for (let i = 0; i < stops.length; i++) {
         const stop = stops[i]
         const isEndpoint = i === 0 || i === lastIdx
         const fixedStop = isEndpoint && stop.type === 'OVERNIGHT_ONLY'
           ? { ...stop, type: 'DESTINATION' }
           : stop
+        console.time(`[buildItinerary] createStop[${i}] ${stop.locationName}`)
         await tripsApi.createStop(trip.data.id, fixedStop)
+        console.timeEnd(`[buildItinerary] createStop[${i}] ${stop.locationName}`)
       }
+      console.timeEnd('[buildItinerary] createStops')
+
+      console.time('[buildItinerary] reassignPOIs')
+      await tripsApi.reassignPOIs(trip.data.id)
+      console.timeEnd('[buildItinerary] reassignPOIs')
+
+      console.time('[buildItinerary] generateItinerary')
       await tripsApi.generateItinerary(trip.data.id)
+      console.timeEnd('[buildItinerary] generateItinerary')
+
+      console.timeEnd('[buildItinerary] total')
       navigate(`/trips/${trip.data.id}/map`)
     } catch (e: any) {
       console.error('[buildItinerary] failed:', e)
@@ -705,25 +722,6 @@ export default function NewTripPage() {
         )}
       </div>
 
-      {/* Itinerary ready banner + build button */}
-      {itinerary && (
-        <div className="mt-3 flex flex-col gap-2">
-          <div className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#EFF6FF] border border-[#1E3A8A] rounded-xl">
-            <span className="text-[#1E3A8A] text-sm font-medium">Your itinerary is ready! Click below to build your full trip.</span>
-          </div>
-          {buildError && <p className="text-xs text-red-600 text-center">{buildError}</p>}
-          <button
-            onClick={buildItinerary}
-            disabled={creating}
-            className="w-full py-3.5 bg-[#EA6A0A] hover:bg-[#C2580A] active:bg-[#A84D09] text-white font-semibold text-base rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
-          >
-            {creating
-              ? <><Loader size={18} className="animate-spin" /> Building your trip...</>
-              : 'Build Full Itinerary →'
-            }
-          </button>
-        </div>
-      )}
     </div>
   )
 }
