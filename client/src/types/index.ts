@@ -160,7 +160,7 @@ export interface Stop {
   driveDuration?: string | null
   driveDistanceMiles?: number | null
   routeHighlights?: string | null
-  pointsOfInterest?: string[]
+  pointsOfInterest?: POI[]
   journalEntry?: JournalEntry
 }
 
@@ -272,6 +272,11 @@ export interface LiveForecast {
 
 export type StopWeather = HistoricalWeather | LiveForecast
 
+export interface POI {
+  name: string
+  durationMinutes: number
+}
+
 export interface ItineraryActivity {
   name: string
   checked: boolean
@@ -284,7 +289,7 @@ export interface ItineraryDay {
   stopOrder: number
   routeDescription?: string | null
   terrainSummary?: string | null
-  pointsOfInterest?: string[] | null
+  pointsOfInterest?: POI[] | null
   activities?: ItineraryActivity[] | string[] | null
   transitNote?: string | null
   departureTime?: string | null

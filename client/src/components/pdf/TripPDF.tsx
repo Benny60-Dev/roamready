@@ -1,7 +1,7 @@
 import {
   Document, Page, View, Text, StyleSheet, Image,
 } from '@react-pdf/renderer'
-import { Trip, Stop, ItineraryDay, ItineraryActivity } from '../../types/index'
+import { Trip, Stop, ItineraryDay, ItineraryActivity, POI } from '../../types/index'
 import logoIconUrl from '../../assets/logo-icon.png'
 import { format, addDays } from 'date-fns'
 
@@ -22,7 +22,7 @@ export interface TimelineEntry {
   highwayRoute?: string | null
   routeDescription?: string | null
   terrainSummary?: string | null
-  pointsOfInterest?: string[] | null
+  pointsOfInterest?: POI[] | null
   activities: ItineraryActivity[]
   transitNote?: string | null
 }
@@ -311,7 +311,7 @@ function DriveEntry({ entry }: { entry: TimelineEntry }) {
         {entry.pointsOfInterest?.length ? (
           <View style={s.poiRow}>
             {entry.pointsOfInterest.map((poi, i) => (
-              <View key={i} style={s.poiChip}><Text style={s.poiText}>{poi}</Text></View>
+              <View key={i} style={s.poiChip}><Text style={s.poiText}>{poi.name} · {poi.durationMinutes} min</Text></View>
             ))}
           </View>
         ) : null}

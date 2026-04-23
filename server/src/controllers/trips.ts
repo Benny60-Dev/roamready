@@ -214,22 +214,22 @@ export async function reassignPOIs(req: AuthRequest, res: Response, next: NextFu
     }
 
     // Geocode all POIs across all stops in parallel
-    const poiTasks: Array<{ poi: string; originalStopId: string }> = stops.flatMap((stop: any) =>
-      (stop.pointsOfInterest ?? []).map((poi: string) => ({ poi, originalStopId: stop.id }))
+    const poiTasks: Array<{ poi: { name: string; durationMinutes: number }; originalStopId: string }> = stops.flatMap((stop: any) =>
+      (stop.pointsOfInterest ?? []).map((poi: any) => ({ poi, originalStopId: stop.id }))
     )
 
     const poiCoords = await Promise.all(
-      poiTasks.map(({ poi }) => geocodeQuery(poi, apiKey))
+      poiTasks.map(({ poi }) => geocodeQuery(poi.name, apiKey))
     )
 
     // Assign each POI to the destination stop of the nearest leg
-    const reassigned: Record<string, string[]> = {}
+    const reassigned: Record<string, any[]> = {}
 
     poiTasks.forEach(({ poi, originalStopId }, idx) => {
       const coords = poiCoords[idx]
 
       if (!coords) {
-        console.warn('[reassignPOIs] could not geocode "%s" — keeping on original stop', poi)
+        console.warn('[reassignPOIs] could not geocode "%s" — keeping on original stop', poi.name)
         reassigned[originalStopId] = [...(reassigned[originalStopId] ?? []), poi]
         return
       }
@@ -241,7 +241,7 @@ export async function reassignPOIs(req: AuthRequest, res: Response, next: NextFu
         if (dist < minDist) { minDist = dist; bestStopId = leg.toStopId }
       }
 
-      console.log('[reassignPOIs] "%s" → stopId=%s (dist=%.5f)', poi, bestStopId, minDist)
+      console.log('[reassignPOIs] "%s" → stopId=%s (dist=%.5f)', poi.name, bestStopId, minDist)
       reassigned[bestStopId] = [...(reassigned[bestStopId] ?? []), poi]
     })
 

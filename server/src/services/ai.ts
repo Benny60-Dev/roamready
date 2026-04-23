@@ -27,7 +27,7 @@ Trip planning rules:
 - The LAST stop must always be DESTINATION — NEVER OVERNIGHT_ONLY or HOME
 - OVERNIGHT_ONLY is exclusively for mid-route transit stops where the traveler is simply sleeping before continuing the next morning — it is never the trip origin or final destination
 - ROUND TRIP / RETURN HOME RULE — NEVER add a return-home stop unless the user EXPLICITLY uses one of these exact phrases: "round trip", "round-trip", "coming back home", "returning home", "back home", "end at home", "back to [home city]", "heading home after". If the user provides a destination and dates without any of those phrases, the trip is ONE-WAY — do NOT add a return stop. Example of correct one-way behavior: "Plan a one-way trip from Mesa to Del Rio, leaving May 15, 3 nights" → stops: HOME(Mesa), any transit stops, DESTINATION(Del Rio). NO Mesa return stop. Example of correct round-trip behavior: "leaving Mesa, going to Flagstaff for 2 nights, then coming back home" → stops: HOME(Mesa), DESTINATION(Flagstaff, 2 nights), DESTINATION(Mesa, 0 nights). Dates alone ("leaving May 15, arriving around May 18") do NOT imply round-trip. The phrase "arriving at destination" does NOT imply returning home. One-way is the default — round-trip requires an explicit request.
-- Points of interest and drive-through stops: pointsOfInterest on a stop must contain ONLY stops, attractions, or photo ops that the user explicitly named in this conversation (e.g. "stop at Prada Marfa on the way", "drive through Marfa", "we want to see the Marfa Lights"). When the user names a POI, do NOT add it as a separate Stop in the stops array — instead, note it in your conversational response AND add the POI name (just the name, no description) to the pointsOfInterest array of the nearest stop the user is driving toward on that leg. Every user-requested POI must appear in exactly one stop's pointsOfInterest array. NEVER populate pointsOfInterest with AI-generated attraction suggestions, destination highlights, or anything the user did not explicitly request — not even for surprise trips or trips where the user gave no specific POI requests. If the user named no POIs, every stop's pointsOfInterest must be omitted entirely or set to [].
+- Points of interest and drive-through stops: pointsOfInterest on a stop must contain ONLY stops, attractions, or photo ops that the user explicitly named in this conversation (e.g. "stop at Prada Marfa on the way", "drive through Marfa", "we want to see the Marfa Lights"). When the user names a POI, do NOT add it as a separate Stop in the stops array — instead, note it in your conversational response AND add the POI as {"name": "...", "durationMinutes": N} to the pointsOfInterest array of the nearest stop the user is driving toward on that leg. Estimate durationMinutes from context: quick photo stop → 15, short visit → 30, meal or longer stop → 60, half-day attraction → 120; default to 30 if unspecified. Every user-requested POI must appear in exactly one stop's pointsOfInterest array. NEVER populate pointsOfInterest with AI-generated attraction suggestions, destination highlights, or anything the user did not explicitly request — not even for surprise trips or trips where the user gave no specific POI requests. If the user named no POIs, every stop's pointsOfInterest must be omitted entirely or set to [].
 - Always consider rig compatibility — never suggest campgrounds incompatible with their rig
 - For toy haulers, prioritize OHV destinations matching their terrain preferences
 - For vans, prioritize BLM/dispersed/Harvest Hosts over hookup campgrounds
@@ -73,7 +73,7 @@ Itinerary JSON format:
       "hookupType": "full",
       "isPetFriendly": true,
       "isMilitaryOnly": false,
-      "pointsOfInterest": ["Prada Marfa", "Marfa Lights viewing area"]
+      "pointsOfInterest": [{"name": "Prada Marfa", "durationMinutes": 15}, {"name": "Marfa Lights viewing area", "durationMinutes": 30}]
     },
     {
       "order": 3,
@@ -183,7 +183,7 @@ export async function generateTripItineraryAI(trip: any, user: any): Promise<any
     departureDate: s.departureDate || null,
     lat: s.latitude,
     lng: s.longitude,
-    pointsOfInterest: s.pointsOfInterest?.length ? s.pointsOfInterest : [],
+    pointsOfInterest: s.pointsOfInterest?.length ? (s.pointsOfInterest as any[]).map((p: any) => p.name) : [],
   }))
 
   const prompt = `Generate a detailed day-by-day itinerary for this RV/camping trip. You must return ONLY valid JSON — no prose, no markdown, no code fences.
@@ -216,7 +216,7 @@ Return this exact JSON structure (array of objects):
     "highwayRoute": "US-60 East → I-17 North → US-89 North",
     "routeDescription": "...",
     "terrainSummary": "...",
-    "pointsOfInterest": ["Location - description"],
+    "pointsOfInterest": [{"name": "Location", "durationMinutes": 30}],
     "activities": null,
     "transitNote": null
   },
@@ -259,7 +259,7 @@ Return this exact JSON structure (array of objects):
     const merged = parsed.map((day: any) => {
       if (day.type !== 'DRIVE') return day
       const stop = stops.find((s: any) => s.order === day.stopOrder)
-      const stopPOIs: string[] = stop?.pointsOfInterest ?? []
+      const stopPOIs: any[] = (stop?.pointsOfInterest as any[]) ?? []
       return { ...day, pointsOfInterest: stopPOIs.length ? stopPOIs : null }
     })
     console.log('[generateTripItineraryAI] final DRIVE day POIs:', merged.filter((d: any) => d.type === 'DRIVE').map((d: any) => ({ dayNum: d.dayNum, pointsOfInterest: d.pointsOfInterest })))

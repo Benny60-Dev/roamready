@@ -9,7 +9,7 @@ import {
 import ModifyTripPanel from '../../components/trip/ModifyTripPanel'
 import { pdf } from '@react-pdf/renderer'
 import { tripsApi, aiApi } from '../../services/api'
-import { Trip, Stop, ItineraryDay, ItineraryActivity, StopWeather } from '../../types'
+import { Trip, Stop, ItineraryDay, ItineraryActivity, StopWeather, POI } from '../../types'
 import { useAuthStore } from '../../store/authStore'
 import { buildStopBadges } from '../../utils/stopBadge'
 import { format, addDays } from 'date-fns'
@@ -108,7 +108,7 @@ interface TimelineEntry {
   routeHighlights?: string | null
   routeDescription?: string | null
   terrainSummary?: string | null
-  pointsOfInterest?: string[] | null
+  pointsOfInterest?: POI[] | null
   activities: ItineraryActivity[]
   transitNote?: string | null
 }
@@ -389,6 +389,7 @@ export default function TripSummaryPage() {
   const [entries, setEntries] = useState<TimelineEntry[]>([])
   const [addingActivity, setAddingActivity] = useState<Record<number, string>>({})
   const [addingPOI, setAddingPOI] = useState<Record<number, string>>({})
+  const [addingPOIDuration, setAddingPOIDuration] = useState<Record<number, number>>({})
   const [weatherData, setWeatherData] = useState<Record<string, StopWeather | null | undefined>>({})
   const [editingStop, setEditingStop] = useState<Stop | null>(null)
   const [addAfterOrder, setAddAfterOrder] = useState<number | null>(null)
@@ -777,14 +778,16 @@ export default function TripSummaryPage() {
   const addPOI = (entryIdx: number) => {
     const name = (addingPOI[entryIdx] || '').trim()
     if (!name) return
+    const durationMinutes = addingPOIDuration[entryIdx] ?? 30
     setEntries(prev => {
       const next = prev.map((e, i) =>
-        i !== entryIdx ? e : { ...e, pointsOfInterest: [...(e.pointsOfInterest ?? []), name] }
+        i !== entryIdx ? e : { ...e, pointsOfInterest: [...(e.pointsOfInterest ?? []), { name, durationMinutes }] }
       )
       persistItinerary(next)
       return next
     })
     setAddingPOI(prev => ({ ...prev, [entryIdx]: '' }))
+    setAddingPOIDuration(prev => ({ ...prev, [entryIdx]: 30 }))
   }
 
   if (loading) return (
@@ -928,7 +931,9 @@ export default function TripSummaryPage() {
                   onAddingActivityChange={(li, text) => setAddingActivity(prev => ({ ...prev, [group.indices[li]]: text }))}
                   onAddActivity={(li) => addActivity(group.indices[li])}
                   onDeletePOI={(poi) => deletePOI(poiIdx, poi)}
+                  addingPOIDuration={addingPOIDuration}
                   onAddingPOIChange={(text) => setAddingPOI(prev => ({ ...prev, [poiIdx]: text }))}
+                  onAddingPOIDurationChange={(m) => setAddingPOIDuration(prev => ({ ...prev, [poiIdx]: m }))}
                   onAddPOI={() => addPOI(poiIdx)}
                   onEdit={canEdit ? () => setEditingStop(editableStop!) : undefined}
                   onDelete={canDelete ? () => handleDeleteStop(editableStop!) : undefined}
@@ -1088,6 +1093,7 @@ interface DayCardProps {
   weatherData: Record<string, StopWeather | null | undefined>
   addingActivity: Record<number, string>
   addingPOI: Record<number, string>
+  addingPOIDuration: Record<number, number>
   onDriveDepart: (time: string) => void
   onToggleActivity: (entryLocalIdx: number, actIdx: number) => void
   onDeleteActivity: (entryLocalIdx: number, actIdx: number) => void
@@ -1095,6 +1101,7 @@ interface DayCardProps {
   onAddActivity: (entryLocalIdx: number) => void
   onDeletePOI: (poiIdx: number) => void
   onAddingPOIChange: (text: string) => void
+  onAddingPOIDurationChange: (minutes: number) => void
   onAddPOI: () => void
   onEdit?: () => void
   onDelete?: () => void
@@ -1102,10 +1109,10 @@ interface DayCardProps {
 
 function DayCard({
   group, startDay, generatingActivities, weatherData,
-  addingActivity, addingPOI,
+  addingActivity, addingPOI, addingPOIDuration,
   onDriveDepart,
   onToggleActivity, onDeleteActivity, onAddingActivityChange, onAddActivity,
-  onDeletePOI, onAddingPOIChange, onAddPOI,
+  onDeletePOI, onAddingPOIChange, onAddingPOIDurationChange, onAddPOI,
   onEdit, onDelete,
 }: DayCardProps) {
   const EditDeleteButtons = () => (
@@ -1196,7 +1203,9 @@ function DayCard({
             onDepart={onDriveDepart}
             onDeletePOI={onDeletePOI}
             addingPOIText={addingPOI[driveIdx] ?? ''}
+            addingPOIDurationVal={addingPOIDuration[driveIdx] ?? 30}
             onAddingPOIChange={onAddingPOIChange}
+            onAddingPOIDurationChange={onAddingPOIDurationChange}
             onAddPOI={onAddPOI}
           />
         </div>
@@ -1325,18 +1334,21 @@ function DayCard({
 // ─── DriveContent ─────────────────────────────────────────────────────────────
 
 function DriveContent({
-  entry, onDepart, onDeletePOI, addingPOIText, onAddingPOIChange, onAddPOI,
+  entry, onDepart, onDeletePOI, addingPOIText, addingPOIDurationVal, onAddingPOIChange, onAddingPOIDurationChange, onAddPOI,
 }: {
   entry: TimelineEntry
   onDepart: (t: string) => void
   onDeletePOI: (poiIdx: number) => void
   addingPOIText: string
+  addingPOIDurationVal: number
   onAddingPOIChange: (text: string) => void
+  onAddingPOIDurationChange: (minutes: number) => void
   onAddPOI: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const [highlights, setHighlights] = useState<string | null>(entry.routeHighlights ?? null)
   const [loadingHighlights, setLoadingHighlights] = useState(false)
+  const [isCustomDuration, setIsCustomDuration] = useState(false)
 
   const fromName = entry.prevStop
     ? `${entry.prevStop.locationName}${entry.prevStop.locationState ? ', ' + entry.prevStop.locationState : ''}`
@@ -1346,7 +1358,8 @@ function DriveContent({
     : '—'
 
   const driveHours = parseDurationToHours(entry.driveDuration) ?? entry.driveHours
-  const arrival = driveHours ? calcArrival(entry.departureTime, driveHours) : null
+  const poiMinutes = (entry.pointsOfInterest ?? []).reduce((s, p) => s + p.durationMinutes, 0)
+  const arrival = driveHours ? calcArrival(entry.departureTime, driveHours + poiMinutes / 60) : null
 
   const handleToggle = async () => {
     const opening = !expanded
@@ -1389,10 +1402,15 @@ function DriveContent({
         {arrival && (
           <>
             <ArrowRight size={12} className="text-gray-400 flex-shrink-0" />
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-gray-500">Arrive</span>
-              <span className="text-sm font-semibold text-gray-700">{arrival.timeStr}</span>
-              {arrival.nextDay && <span className="text-xs text-gray-400">(+1 day)</span>}
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-gray-500">Arrive</span>
+                <span className="text-sm font-semibold text-gray-700">{arrival.timeStr}</span>
+                {arrival.nextDay && <span className="text-xs text-gray-400">(+1 day)</span>}
+              </div>
+              {poiMinutes > 0 && (
+                <span className="text-xs text-gray-400">Includes {poiMinutes} min for stops along the way</span>
+              )}
             </div>
             {arrival.level === 'amber' && (
               <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full whitespace-nowrap">
@@ -1427,7 +1445,8 @@ function DriveContent({
             <div className="flex flex-col gap-1.5 mb-2">
               {entry.pointsOfInterest!.map((poi, i) => (
                 <span key={i} className="inline-flex items-center gap-1 text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">
-                  {poi}
+                  <span>{poi.name}</span>
+                  <span className="text-amber-400">· {poi.durationMinutes} min</span>
                   <button
                     onClick={() => onDeletePOI(i)}
                     className="hover:text-amber-900 flex-shrink-0 ml-0.5"
@@ -1439,14 +1458,39 @@ function DriveContent({
               ))}
             </div>
           )}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-wrap">
             <input
-              className="text-xs border border-gray-200 rounded px-2 py-1 flex-1 focus:outline-none focus:border-amber-400 bg-white"
+              className="text-xs border border-gray-200 rounded px-2 py-1 flex-1 min-w-[120px] focus:outline-none focus:border-amber-400 bg-white"
               placeholder="Add a stop or attraction…"
               value={addingPOIText}
               onChange={e => onAddingPOIChange(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') onAddPOI() }}
             />
+            {isCustomDuration ? (
+              <input
+                type="number"
+                min={1}
+                className="text-xs border border-gray-200 rounded px-2 py-1 w-20 focus:outline-none focus:border-amber-400 bg-white"
+                value={addingPOIDurationVal}
+                placeholder="min"
+                onChange={e => onAddingPOIDurationChange(Math.max(1, parseInt(e.target.value) || 1))}
+              />
+            ) : (
+              <select
+                value={[15, 30, 60, 120].includes(addingPOIDurationVal) ? String(addingPOIDurationVal) : 'custom'}
+                onChange={e => {
+                  if (e.target.value === 'custom') { setIsCustomDuration(true) }
+                  else { onAddingPOIDurationChange(parseInt(e.target.value)) }
+                }}
+                className="text-xs border border-gray-200 rounded px-1.5 py-1 bg-white focus:outline-none focus:border-amber-400"
+              >
+                <option value="15">15 min</option>
+                <option value="30">30 min</option>
+                <option value="60">60 min</option>
+                <option value="120">120 min</option>
+                <option value="custom">Custom…</option>
+              </select>
+            )}
             <button
               onClick={onAddPOI}
               disabled={!addingPOIText.trim()}
