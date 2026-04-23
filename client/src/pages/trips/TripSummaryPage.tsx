@@ -1594,7 +1594,7 @@ function StayContent({ entry, weather, arrival, poiMinutes }: {
           onClick={() => navigate(`/trips/${stop.tripId}/booking?stopId=${stop.id}`)}
           className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#EA6A0A] hover:bg-[#C2580A] px-3 py-1.5 rounded-lg transition-colors"
         >
-          Reserve Now →
+          Let's book it! →
         </button>
       ))}
 
@@ -1804,7 +1804,7 @@ function OvernightContent({ entry, weather, arrival, poiMinutes }: {
           onClick={() => navigate(`/trips/${stop.tripId}/booking?stopId=${stop.id}`)}
           className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#EA6A0A] hover:bg-[#C2580A] px-3 py-1.5 rounded-lg transition-colors"
         >
-          Reserve Now →
+          Let's book it! →
         </button>
       )}
 
