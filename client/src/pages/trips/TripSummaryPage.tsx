@@ -1163,6 +1163,10 @@ function DayCard({
 
     if (!driveEntry || driveEntry.type !== 'DRIVE') return null
 
+    const driveHours = parseDurationToHours(driveEntry.driveDuration) ?? driveEntry.driveHours
+    const poiMinutes = (driveEntry.pointsOfInterest ?? []).reduce((s, p) => s + p.durationMinutes, 0)
+    const arrival = driveHours ? calcArrival(driveEntry.departureTime, driveHours + poiMinutes / 60) : null
+
     return (
       <div className="rounded-lg border border-gray-200 overflow-hidden bg-white">
         {/* Card header */}
@@ -1174,21 +1178,34 @@ function DayCard({
           <EditDeleteButtons />
         </div>
 
-        {/* Depart section — only shown when HOME is merged in */}
-        {homeEntry && (
+        {/* Depart row — HOME or prior stop — with inline time selector */}
+        {homeEntry ? (
           <div className="px-4 py-3">
-            <div className="flex items-center gap-1.5 mb-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <MapPin size={12} className="text-[#1E3A8A]" />
               <span className="text-xs font-semibold uppercase tracking-wide text-[#1E3A8A]">Depart</span>
+              <span className="text-sm text-gray-700">
+                {homeEntry.stop?.locationName}{homeEntry.stop?.locationState ? `, ${homeEntry.stop.locationState}` : ''}
+              </span>
+              <TimePicker value={driveEntry.departureTime} onChange={onDriveDepart} />
             </div>
-            <p className="text-sm text-gray-700">
-              {homeEntry.stop?.locationName}{homeEntry.stop?.locationState ? `, ${homeEntry.stop.locationState}` : ''}
-            </p>
           </div>
-        )}
+        ) : driveEntry.prevStop ? (
+          <div className="px-4 py-3">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <MapPin size={12} className="text-[#1E3A8A]" />
+              <span className="text-sm font-semibold text-gray-700">
+                {driveEntry.prevStop.locationName}{driveEntry.prevStop.locationState ? `, ${driveEntry.prevStop.locationState}` : ''}
+              </span>
+              <span className="text-xs text-gray-400">·</span>
+              <span className="text-xs text-gray-500">Depart</span>
+              <TimePicker value={driveEntry.departureTime} onChange={onDriveDepart} />
+            </div>
+          </div>
+        ) : null}
 
         {/* Drive section */}
-        <div className={`px-4 py-3${homeEntry ? ' border-t border-gray-100' : ''}`}>
+        <div className="px-4 py-3 border-t border-gray-100">
           <div className="flex items-center gap-1.5 mb-2">
             <Car size={13} className="text-blue-600" />
             <span className="text-xs font-semibold uppercase tracking-wide text-blue-600">Drive</span>
@@ -1200,7 +1217,6 @@ function DayCard({
           </div>
           <DriveContent
             entry={driveEntry}
-            onDepart={onDriveDepart}
             onDeletePOI={onDeletePOI}
             addingPOIText={addingPOI[driveIdx] ?? ''}
             addingPOIDurationVal={addingPOIDuration[driveIdx] ?? 30}
@@ -1213,14 +1229,14 @@ function DayCard({
         {/* Check-in section */}
         {arrivalEntry?.type === 'STAY' && arrivalStop && (
           <div className="px-4 py-3 border-t border-gray-100">
-            <StayContent entry={arrivalEntry} weather={weather} />
+            <StayContent entry={arrivalEntry} weather={weather} arrival={arrival} poiMinutes={poiMinutes} />
           </div>
         )}
 
         {/* Overnight section */}
         {arrivalEntry?.type === 'OVERNIGHT' && arrivalStop && (
           <div className="px-4 py-3 border-t border-gray-100">
-            <OvernightContent entry={arrivalEntry} weather={weather} />
+            <OvernightContent entry={arrivalEntry} weather={weather} arrival={arrival} poiMinutes={poiMinutes} />
           </div>
         )}
       </div>
@@ -1334,10 +1350,9 @@ function DayCard({
 // ─── DriveContent ─────────────────────────────────────────────────────────────
 
 function DriveContent({
-  entry, onDepart, onDeletePOI, addingPOIText, addingPOIDurationVal, onAddingPOIChange, onAddingPOIDurationChange, onAddPOI,
+  entry, onDeletePOI, addingPOIText, addingPOIDurationVal, onAddingPOIChange, onAddingPOIDurationChange, onAddPOI,
 }: {
   entry: TimelineEntry
-  onDepart: (t: string) => void
   onDeletePOI: (poiIdx: number) => void
   addingPOIText: string
   addingPOIDurationVal: number
@@ -1356,10 +1371,6 @@ function DriveContent({
   const toName = entry.stop
     ? `${entry.stop.locationName}${entry.stop.locationState ? ', ' + entry.stop.locationState : ''}`
     : '—'
-
-  const driveHours = parseDurationToHours(entry.driveDuration) ?? entry.driveHours
-  const poiMinutes = (entry.pointsOfInterest ?? []).reduce((s, p) => s + p.durationMinutes, 0)
-  const arrival = driveHours ? calcArrival(entry.departureTime, driveHours + poiMinutes / 60) : null
 
   const handleToggle = async () => {
     const opening = !expanded
@@ -1393,39 +1404,6 @@ function DriveContent({
       {entry.highwayRoute && (
         <p className="text-xs text-gray-400 mb-1.5 ml-4">{entry.highwayRoute}</p>
       )}
-      {/* Depart / arrive row */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-gray-500">Depart</span>
-          <TimePicker value={entry.departureTime} onChange={onDepart} />
-        </div>
-        {arrival && (
-          <>
-            <ArrowRight size={12} className="text-gray-400 flex-shrink-0" />
-            <div className="flex flex-col gap-0.5">
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-gray-500">Arrive</span>
-                <span className="text-sm font-semibold text-gray-700">{arrival.timeStr}</span>
-                {arrival.nextDay && <span className="text-xs text-gray-400">(+1 day)</span>}
-              </div>
-              {poiMinutes > 0 && (
-                <span className="text-xs text-gray-400">Includes {poiMinutes} min for stops along the way</span>
-              )}
-            </div>
-            {arrival.level === 'amber' && (
-              <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full whitespace-nowrap">
-                Late arrival — confirm after-hours check-in
-              </span>
-            )}
-            {arrival.level === 'red' && (
-              <span className="text-xs font-medium text-red-700 bg-red-100 px-2 py-0.5 rounded-full whitespace-nowrap">
-                Very late arrival — consider an earlier departure
-              </span>
-            )}
-          </>
-        )}
-      </div>
-
       {/* Tell me more */}
       <button
         onClick={handleToggle}
@@ -1536,7 +1514,12 @@ function DriveContent({
 
 // ─── StayContent ──────────────────────────────────────────────────────────────
 
-function StayContent({ entry, weather }: { entry: TimelineEntry; weather?: StopWeather | null }) {
+function StayContent({ entry, weather, arrival, poiMinutes }: {
+  entry: TimelineEntry
+  weather?: StopWeather | null
+  arrival?: ArrivalInfo | null
+  poiMinutes?: number
+}) {
   const stop = entry.stop!
   const navigate = useNavigate()
 
@@ -1563,12 +1546,38 @@ function StayContent({ entry, weather }: { entry: TimelineEntry; weather?: StopW
     <div className="space-y-2.5">
       {/* Location + campground name */}
       <div className="space-y-0.5">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <Tent size={12} className="text-[#0D5F58] flex-shrink-0" />
           <span className="text-sm font-semibold text-gray-800">
             {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
           </span>
+          {arrival && (
+            <>
+              <span className="text-xs text-gray-400">·</span>
+              <span className="text-xs text-gray-500">Arrive</span>
+              <span className={`text-sm font-semibold ${
+                arrival.level === 'red' ? 'text-red-700'
+                : arrival.level === 'amber' ? 'text-amber-700'
+                : 'text-gray-700'}`}>
+                {arrival.timeStr}
+              </span>
+              {arrival.nextDay && <span className="text-xs text-gray-400">(+1 day)</span>}
+              {arrival.level === 'amber' && (
+                <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                  Late arrival — confirm after-hours check-in
+                </span>
+              )}
+              {arrival.level === 'red' && (
+                <span className="text-xs font-medium text-red-700 bg-red-100 px-2 py-0.5 rounded-full">
+                  Very late arrival — consider an earlier departure
+                </span>
+              )}
+            </>
+          )}
         </div>
+        {(poiMinutes ?? 0) > 0 && arrival && (
+          <div className="text-xs text-gray-400 ml-4">Includes {poiMinutes} min for stops along the way</div>
+        )}
         {stop.campgroundName && (
           <div className="text-sm text-gray-500 ml-4">{stop.campgroundName}</div>
         )}
@@ -1733,18 +1742,49 @@ function ActivityContent({ entry, generatingActivities, suppressHeader, onToggle
 
 // ─── OvernightContent ─────────────────────────────────────────────────────────
 
-function OvernightContent({ entry, weather }: { entry: TimelineEntry; weather?: StopWeather | null }) {
+function OvernightContent({ entry, weather, arrival, poiMinutes }: {
+  entry: TimelineEntry
+  weather?: StopWeather | null
+  arrival?: ArrivalInfo | null
+  poiMinutes?: number
+}) {
   const stop = entry.stop!
   const navigate = useNavigate()
   return (
     <div className="space-y-2">
       <div className="space-y-0.5">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <Moon size={12} className="text-purple-500 flex-shrink-0" />
           <span className="text-sm font-semibold text-gray-800">
             {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
           </span>
+          {arrival && (
+            <>
+              <span className="text-xs text-gray-400">·</span>
+              <span className="text-xs text-gray-500">Arrive</span>
+              <span className={`text-sm font-semibold ${
+                arrival.level === 'red' ? 'text-red-700'
+                : arrival.level === 'amber' ? 'text-amber-700'
+                : 'text-gray-700'}`}>
+                {arrival.timeStr}
+              </span>
+              {arrival.nextDay && <span className="text-xs text-gray-400">(+1 day)</span>}
+              {arrival.level === 'amber' && (
+                <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                  Late arrival — confirm after-hours check-in
+                </span>
+              )}
+              {arrival.level === 'red' && (
+                <span className="text-xs font-medium text-red-700 bg-red-100 px-2 py-0.5 rounded-full">
+                  Very late arrival — consider an earlier departure
+                </span>
+              )}
+            </>
+          )}
         </div>
+        {(poiMinutes ?? 0) > 0 && arrival && (
+          <div className="text-xs text-gray-400 ml-4">Includes {poiMinutes} min for stops along the way</div>
+        )}
         {stop.campgroundName && <div className="text-sm text-gray-500 ml-4">{stop.campgroundName}</div>}
         {stop.siteRate != null && (
           <div className="text-xs text-gray-400 ml-4">${stop.siteRate}/night · Early departure</div>
