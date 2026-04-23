@@ -364,8 +364,7 @@ export default function NewTripPage() {
       {/* Google Places pac-container overrides — wider dropdown, app styling */}
       <style>{`
         .pac-container {
-          min-width: 420px !important;
-          max-width: 90vw !important;
+          width: min(420px, 90vw);
           z-index: 9999 !important;
           border-radius: 0.75rem !important;
           border: 0.5px solid #e5e7eb !important;

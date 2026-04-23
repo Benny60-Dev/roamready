@@ -6,12 +6,18 @@
   * {
     box-sizing: border-box;
   }
+  html {
+    overflow-x: hidden; /* iOS Safari: prevent any child from widening page scroll */
+    overflow-x: clip;   /* better where supported: no new stacking context */
+  }
   body {
     font-family: 'Inter', sans-serif;
     font-weight: 400;
     color: #1a1a1a;
     background: #f9fafb;
     -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    overflow-x: clip;
   }
   h1, h2, h3, h4, h5, h6 {
     font-weight: 500;
