@@ -466,14 +466,6 @@ export default function TripMapPage() {
     return () => clearTimeout(t)
   }, [mapExpanded, mapInstance])
 
-  // Mobile: expand to full screen on first mount
-  useEffect(() => {
-    if (window.innerWidth < 768) {
-      setMapExpanded(true)
-      setSidebarOpen(false)
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
   // ── Load trip ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!id) return
