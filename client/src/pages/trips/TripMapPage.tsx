@@ -7,6 +7,8 @@ import {
   Pencil, Check, BookOpen, Package, Share2, Download, CheckCircle, Clock, XCircle, CloudRain, ChevronRight, Wand2,
   Maximize2, Minimize2,
 } from 'lucide-react'
+import { pdf } from '@react-pdf/renderer'
+import { TripPDF } from '../../components/pdf/TripPDF'
 import { format } from 'date-fns'
 import { tripsApi } from '../../services/api'
 import { Trip, Stop, StopWeather, LiveForecast } from '../../types'
@@ -409,6 +411,7 @@ export default function TripMapPage() {
   const [mapExpanded, setMapExpanded]       = useState(false)
   const [isMobile, setIsMobile]             = useState(() => window.innerWidth < 768)
   const [isDesktop, setIsDesktop]           = useState(() => window.innerWidth >= 1024)
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
 
   const mapRowRef = useRef<HTMLDivElement>(null)
 
@@ -871,6 +874,44 @@ export default function TripMapPage() {
     setRenaming(false)
   }
 
+  async function handleExportPdf() {
+    if (downloadingPdf || !trip) return
+    setDownloadingPdf(true)
+    try {
+      // Fetch static map image and convert to blob URL
+      // (react-pdf v4 uses Buffer to decode data: URLs in the browser — passing a blob URL avoids that)
+      let mapBlobUrl: string | null = null
+      try {
+        const mapRes = await tripsApi.getMapImage(trip.id)
+        const dataUrl: string | null = mapRes.data?.base64 ?? null
+        if (dataUrl) {
+          const fetchRes = await fetch(dataUrl)
+          const imgBlob = await fetchRes.blob()
+          mapBlobUrl = URL.createObjectURL(imgBlob)
+        }
+      } catch (mapErr) {
+        console.error('[PDF] map image fetch failed:', mapErr)
+        // Map image is optional — proceed without it
+      }
+
+      const blob = await pdf(<TripPDF trip={trip} mapImageBase64={mapBlobUrl} />).toBlob()
+      if (mapBlobUrl) URL.revokeObjectURL(mapBlobUrl)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `RoamReady-${trip.name || 'Trip'}-Itinerary.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('PDF export failed', err)
+      alert('PDF generation failed. Please try again.')
+    } finally {
+      setDownloadingPdf(false)
+    }
+  }
+
   const center = stopsWithCoords[0]
     ? { lat: stopsWithCoords[0].latitude!, lng: stopsWithCoords[0].longitude! }
     : { lat: 39.5, lng: -98.35 }
@@ -911,8 +952,12 @@ export default function TripMapPage() {
         <button className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1E3A8A] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0">
           <Share2 size={13} /> Share
         </button>
-        <button className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1E3A8A] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0">
-          <Download size={13} /> PDF
+        <button
+          onClick={handleExportPdf}
+          disabled={downloadingPdf}
+          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1E3A8A] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50"
+        >
+          <Download size={13} /> {downloadingPdf ? 'Generating...' : 'PDF'}
         </button>
         <Link
           to={`/trips/${id}/booking`}
