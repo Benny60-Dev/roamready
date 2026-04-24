@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Calendar, CheckCircle, Clock, Tent, MapPin, DollarSign, ChevronRight } from 'lucide-react'
 import { tripsApi } from '../services/api'
 import { Trip } from '../types'
@@ -29,6 +29,7 @@ function getTripStats(trip: Trip) {
 // ─── Trip booking card ────────────────────────────────────────────────────────
 
 function TripBookingCard({ trip }: { trip: Trip }) {
+  const navigate = useNavigate()
   const { bookableStops, confirmed, pending, campCost, earliestDate, bookingLevel } = getTripStats(trip)
 
   const statusConfig = {
@@ -39,7 +40,18 @@ function TripBookingCard({ trip }: { trip: Trip }) {
   const sc = statusConfig[bookingLevel]
 
   return (
-    <div className="card hover:border-[#1E3A8A]/30 transition-all">
+    <div
+      onClick={() => navigate(`/trips/${trip.id}/map`)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          navigate(`/trips/${trip.id}/map`)
+        }
+      }}
+      role="link"
+      tabIndex={0}
+      className="card hover:border-[#1E3A8A]/30 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/40"
+    >
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
           {/* Trip name + booking status badge */}
@@ -87,6 +99,7 @@ function TripBookingCard({ trip }: { trip: Trip }) {
         {/* CTA */}
         <Link
           to={`/trips/${trip.id}/booking`}
+          onClick={(e) => e.stopPropagation()}
           className="flex-shrink-0 flex items-center gap-1 text-xs font-semibold px-3 py-2 rounded-lg bg-[#F7A829] text-white hover:bg-[#C9851A] transition-colors whitespace-nowrap"
         >
           View bookings <ChevronRight size={13} />

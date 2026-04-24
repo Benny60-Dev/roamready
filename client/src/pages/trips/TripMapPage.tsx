@@ -297,7 +297,7 @@ function StopPopup({
 
       {stop.bookingStatus !== 'CONFIRMED' && stop.type !== 'HOME' && (
         <a href={`/trips/${stop.tripId}/booking`} className="btn-primary w-full mt-3 text-center text-xs block">
-          Reserve Now
+          Book this stop!
         </a>
       )}
     </div>
