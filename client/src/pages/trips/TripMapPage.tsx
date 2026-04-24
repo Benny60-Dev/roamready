@@ -4,8 +4,8 @@ import { GoogleMap, useJsApiLoader, InfoWindow, Circle, Polyline } from '@react-
 import {
   Layers, X, Plus, Minus, DollarSign, Calendar, AlertTriangle,
   Wind, Droplets, Snowflake, Thermometer, ExternalLink,
-  Pencil, Check, BookOpen, Package, Share2, Download, CheckCircle, Clock, XCircle, CloudRain, ChevronRight, Wand2,
-  Maximize2, Minimize2,
+  Pencil, Check, BookOpen, Package, Share2, Download, CheckCircle, Clock, XCircle, CloudRain, Wand2,
+  Maximize2, Minimize2, Play,
 } from 'lucide-react'
 import { pdf } from '@react-pdf/renderer'
 import { TripPDF } from '../../components/pdf/TripPDF'
@@ -14,6 +14,7 @@ import { tripsApi } from '../../services/api'
 import { Trip, Stop, StopWeather, LiveForecast } from '../../types'
 import { StopWeatherCard, ALERT_STYLES } from '../../components/weather/StopWeatherCard'
 import ModifyTripPanel from '../../components/trip/ModifyTripPanel'
+import ConfirmModal from '../../components/ui/ConfirmModal'
 import { useAuthStore } from '../../store/authStore'
 import { buildStopBadges } from '../../utils/stopBadge'
 
@@ -412,6 +413,8 @@ export default function TripMapPage() {
   const [isMobile, setIsMobile]             = useState(() => window.innerWidth < 768)
   const [isDesktop, setIsDesktop]           = useState(() => window.innerWidth >= 1024)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
+  const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false)
+  const [changingStatus, setChangingStatus] = useState(false)
 
   const mapRowRef = useRef<HTMLDivElement>(null)
 
@@ -874,6 +877,35 @@ export default function TripMapPage() {
     setRenaming(false)
   }
 
+  async function handleStartTrip() {
+    if (!trip || changingStatus) return
+    setChangingStatus(true)
+    try {
+      const res = await tripsApi.update(trip.id, { status: 'ACTIVE' })
+      setTrip(res.data)
+    } catch (err) {
+      console.error('Failed to start trip', err)
+      alert('Could not start trip. Please try again.')
+    } finally {
+      setChangingStatus(false)
+    }
+  }
+
+  async function handleMarkCompleted() {
+    if (!trip || changingStatus) return
+    setChangingStatus(true)
+    try {
+      const res = await tripsApi.update(trip.id, { status: 'COMPLETED' })
+      setTrip(res.data)
+      setConfirmCompleteOpen(false)
+    } catch (err) {
+      console.error('Failed to mark trip completed', err)
+      alert('Could not mark trip as completed. Please try again.')
+    } finally {
+      setChangingStatus(false)
+    }
+  }
+
   async function handleExportPdf() {
     if (downloadingPdf || !trip) return
     setDownloadingPdf(true)
@@ -929,7 +961,7 @@ export default function TripMapPage() {
         <span className="text-xs text-gray-700 font-medium truncate max-w-[200px]">{trip?.name ?? '…'}</span>
       </div>
 
-      {/* Action tab bar — Itinerary, Journal, Packing list, Share, PDF + Reserve */}
+      {/* Action tab bar — Itinerary, Journal, Packing list, Share, PDF */}
       <div className="flex-shrink-0 bg-white border-b border-gray-100 px-2 flex flex-wrap lg:flex-nowrap items-center gap-0.5">
         <Link
           to={`/trips/${id}/itinerary`}
@@ -959,12 +991,6 @@ export default function TripMapPage() {
         >
           <Download size={13} /> {downloadingPdf ? 'Generating...' : 'PDF'}
         </button>
-        <Link
-          to={`/trips/${id}/booking`}
-          className="lg:ml-auto flex items-center gap-1 px-3 py-1.5 text-xs bg-[#F7A829] text-white rounded-lg hover:bg-[#C9851A] transition-colors whitespace-nowrap flex-shrink-0 mr-1"
-        >
-          Reserve <ChevronRight size={12} />
-        </Link>
       </div>
 
       {/* ── Map + sidebar row ─────────────────────────────────────────────────── */}
@@ -1035,13 +1061,60 @@ export default function TripMapPage() {
                 )}
               </div>
 
-              {/* Modify with AI button */}
-              <button
-                onClick={() => setModifyPanelOpen(true)}
-                className="w-full flex items-center justify-center gap-1.5 py-2 mb-3 rounded-lg bg-[#F7A829] text-white text-xs font-medium hover:bg-[#C9851A] transition-colors"
-              >
-                <Wand2 size={13} /> Modify trip with AI
-              </button>
+              {/* Status pill — ACTIVE or COMPLETED only */}
+              {(trip?.status === 'ACTIVE' || trip?.status === 'COMPLETED') && (
+                <div className="mt-1 mb-3">
+                  <span className={trip.status === 'ACTIVE' ? 'badge-active' : 'badge-completed'}>
+                    {trip.status === 'ACTIVE' ? 'Active' : 'Completed'}
+                  </span>
+                </div>
+              )}
+
+              {/* Action buttons stack */}
+              <div className="flex flex-col gap-2 mt-3">
+                {/* Let's book it! — always visible */}
+                <Link
+                  to={`/trips/${id}/booking`}
+                  className="bg-[#F7A829] text-white hover:bg-[#C9851A] active:bg-[#8A5A0E] text-sm font-medium px-4 py-2.5 rounded-md text-center transition-colors"
+                >
+                  Let's book it! ›
+                </Link>
+
+                {/* Status-dependent middle button */}
+                {trip?.status === 'PLANNING' && (
+                  <button
+                    onClick={handleStartTrip}
+                    disabled={changingStatus}
+                    className="border border-[#1F6F8B] text-[#1F6F8B] bg-white hover:bg-[#E0F0F4] text-sm font-medium px-4 py-2.5 rounded-md transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  >
+                    <Play size={14} /> {changingStatus ? 'Starting...' : 'Start trip'}
+                  </button>
+                )}
+
+                {trip?.status === 'ACTIVE' && (
+                  <button
+                    onClick={() => setConfirmCompleteOpen(true)}
+                    disabled={changingStatus}
+                    className="border border-[#3E5540] text-[#2F4030] bg-white hover:bg-[#DCE5D5] text-sm font-medium px-4 py-2.5 rounded-md transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  >
+                    <CheckCircle size={14} /> Mark completed
+                  </button>
+                )}
+
+                {trip?.status === 'COMPLETED' && (
+                  <div className="bg-[#DCE5D5] text-[#2F4030] text-sm font-medium px-4 py-2.5 rounded-md text-center flex items-center justify-center gap-1.5">
+                    <CheckCircle size={14} /> Trip completed
+                  </div>
+                )}
+
+                {/* Modify trip with AI */}
+                <button
+                  onClick={() => setModifyPanelOpen(true)}
+                  className="border border-[#1F6F8B] text-[#1F6F8B] bg-white hover:bg-[#E0F0F4] text-sm font-medium px-4 py-2.5 rounded-md transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Wand2 size={13} /> Modify trip with AI
+                </button>
+              </div>
 
               {/* Stats — 4 across */}
               <div className="grid grid-cols-4 gap-1.5">
@@ -1342,6 +1415,18 @@ export default function TripMapPage() {
           }}
         />
       )}
+
+      {/* Mark-completed confirmation */}
+      <ConfirmModal
+        isOpen={confirmCompleteOpen}
+        title="Mark trip as completed?"
+        message="This will move your trip to the Completed section. You'll still be able to view the itinerary and journal entries, but the trip won't appear in your active planning list."
+        confirmLabel="Mark completed"
+        cancelLabel="Not yet"
+        onConfirm={handleMarkCompleted}
+        onCancel={() => !changingStatus && setConfirmCompleteOpen(false)}
+        isConfirming={changingStatus}
+      />
     </div>
   )
 }
