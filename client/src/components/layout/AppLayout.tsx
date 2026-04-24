@@ -43,7 +43,7 @@ export default function AppLayout() {
             <NavLink to="/dashboard" className="flex items-center gap-2">
               <img src={logoIcon} alt="RoamReady" className="h-8 w-auto object-contain" />
               <span className="font-medium hidden sm:block">
-                <span style={{ color: '#1E3A8A' }}>Roam</span><span style={{ color: '#EA6A0A' }}>ready</span><span style={{ color: '#1E3A8A' }}>.ai</span>
+                <span style={{ color: '#1E3A8A' }}>Roam</span><span style={{ color: '#F7A829' }}>ready</span><span style={{ color: '#1E3A8A' }}>.ai</span>
               </span>
             </NavLink>
           </div>

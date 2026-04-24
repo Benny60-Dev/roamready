@@ -9,7 +9,7 @@ export default function PrivacyPolicyPage() {
           <Link to="/" className="inline-flex items-center gap-2 mb-6">
             <img src={logoIcon} alt="RoamReady" className="h-8 w-auto object-contain" />
             <span className="font-medium">
-              <span style={{ color: '#1E3A8A' }}>Roam</span><span style={{ color: '#EA6A0A' }}>ready</span><span style={{ color: '#1E3A8A' }}>.ai</span>
+              <span style={{ color: '#1E3A8A' }}>Roam</span><span style={{ color: '#F7A829' }}>ready</span><span style={{ color: '#1E3A8A' }}>.ai</span>
             </span>
           </Link>
           <h1 className="text-3xl font-semibold text-gray-900">Privacy Policy</h1>
