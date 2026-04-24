@@ -998,23 +998,23 @@ export default function TripMapPage() {
                 <Wand2 size={13} /> Modify trip with AI
               </button>
 
-              {/* Stats 2×2 */}
-              <div className="grid grid-cols-2 gap-1.5">
-                <div className="bg-gray-50 rounded-lg px-2.5 py-2">
+              {/* Stats — 4 across */}
+              <div className="grid grid-cols-4 gap-1.5">
+                <div className="bg-gray-50 rounded-lg px-2.5 py-2 text-center">
                   <p className="text-[10px] text-gray-400 mb-0.5">Miles</p>
                   <p className="text-sm font-semibold text-gray-900">
                     {liveTotalMiles > 0 ? liveTotalMiles.toLocaleString() : (trip?.totalMiles?.toLocaleString() || '–')}
                   </p>
                 </div>
-                <div className="bg-gray-50 rounded-lg px-2.5 py-2">
+                <div className="bg-gray-50 rounded-lg px-2.5 py-2 text-center">
                   <p className="text-[10px] text-gray-400 mb-0.5">Nights</p>
                   <p className="text-sm font-semibold text-gray-900">{trip?.totalNights || '–'}</p>
                 </div>
-                <div className="bg-gray-50 rounded-lg px-2.5 py-2">
+                <div className="bg-gray-50 rounded-lg px-2.5 py-2 text-center">
                   <p className="text-[10px] text-gray-400 mb-0.5">Est. cost</p>
                   <p className="text-sm font-semibold text-gray-900">{totalCost ? `$${totalCost.toLocaleString()}` : '–'}</p>
                 </div>
-                <div className="bg-gray-50 rounded-lg px-2.5 py-2">
+                <div className="bg-gray-50 rounded-lg px-2.5 py-2 text-center">
                   <p className="text-[10px] text-gray-400 mb-0.5">Booked</p>
                   <p className="text-sm font-semibold text-gray-900">{bookedStops}/{nonHomeStops.length}</p>
                 </div>
