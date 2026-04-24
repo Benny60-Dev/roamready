@@ -67,7 +67,7 @@ function StopRow({ stop, tripId, weather, badge }: { stop: Stop; tripId: string;
     return (
       <Link
         to={`/trips/${tripId}/booking?stopId=${stop.id}`}
-        className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-full bg-[#EA6A0A] text-white hover:bg-[#C2580A] transition-colors flex-shrink-0 whitespace-nowrap"
+        className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-full bg-[#F7A829] text-white hover:bg-[#C9851A] transition-colors flex-shrink-0 whitespace-nowrap"
         onClick={e => e.stopPropagation()}
       >
         Reserve

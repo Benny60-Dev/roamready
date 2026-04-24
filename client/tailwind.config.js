@@ -46,9 +46,9 @@ export default {
           ink:     '#1A1A1A',   // Primary body text
         },
         accent: {
-          DEFAULT: '#EA6A0A',
-          light: '#FFF7ED',
-          dark: '#C2580A',
+          DEFAULT: '#F7A829',
+          light: '#FDEFD9',
+          dark: '#C9851A',
           decorative: '#F97316',
         },
         success: {

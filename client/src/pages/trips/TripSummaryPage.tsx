@@ -1592,7 +1592,7 @@ function StayContent({ entry, weather, arrival, poiMinutes }: {
       ) : (
         <button
           onClick={() => navigate(`/trips/${stop.tripId}/booking?stopId=${stop.id}`)}
-          className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#EA6A0A] hover:bg-[#C2580A] px-3 py-1.5 rounded-lg transition-colors"
+          className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#F7A829] hover:bg-[#C9851A] px-3 py-1.5 rounded-lg transition-colors"
         >
           Let's book it! →
         </button>
@@ -1614,7 +1614,7 @@ function StayContent({ entry, weather, arrival, poiMinutes }: {
               <button
                 onClick={handleSaveNotes}
                 disabled={savingNotes}
-                className="text-xs font-semibold text-white bg-[#EA6A0A] hover:bg-[#C2580A] px-3 py-1 rounded-lg disabled:opacity-60 transition-colors"
+                className="text-xs font-semibold text-white bg-[#F7A829] hover:bg-[#C9851A] px-3 py-1 rounded-lg disabled:opacity-60 transition-colors"
               >
                 {savingNotes ? 'Saving…' : 'Save'}
               </button>
@@ -1802,7 +1802,7 @@ function OvernightContent({ entry, weather, arrival, poiMinutes }: {
       ) : (
         <button
           onClick={() => navigate(`/trips/${stop.tripId}/booking?stopId=${stop.id}`)}
-          className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#EA6A0A] hover:bg-[#C2580A] px-3 py-1.5 rounded-lg transition-colors"
+          className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#F7A829] hover:bg-[#C9851A] px-3 py-1.5 rounded-lg transition-colors"
         >
           Let's book it! →
         </button>

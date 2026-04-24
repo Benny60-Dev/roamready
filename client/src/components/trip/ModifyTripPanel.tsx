@@ -399,7 +399,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
                       <button
                         onClick={() => applyModification(i, msg.modifyAction!)}
                         disabled={applying}
-                        className="flex-1 py-1.5 text-xs font-medium rounded-lg bg-[#EA6A0A] text-white hover:bg-[#C2580A] transition-colors disabled:opacity-50"
+                        className="flex-1 py-1.5 text-xs font-medium rounded-lg bg-[#F7A829] text-white hover:bg-[#C9851A] transition-colors disabled:opacity-50"
                       >
                         {applying ? 'Applying…' : '✓ Apply'}
                       </button>

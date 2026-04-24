@@ -606,7 +606,7 @@ export default function NewTripPage() {
             <button
               onClick={handleFormSubmit}
               disabled={typing}
-              className="w-full sm:w-auto px-5 py-[7px] bg-[#EA6A0A] hover:bg-[#C2580A] active:bg-[#A84D09] text-white font-semibold text-sm rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap"
+              className="w-full sm:w-auto px-5 py-[7px] bg-[#F7A829] hover:bg-[#C9851A] active:bg-[#8A5A0E] text-white font-semibold text-sm rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap"
             >
               Plan my trip →
             </button>

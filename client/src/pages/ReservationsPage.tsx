@@ -87,7 +87,7 @@ function TripBookingCard({ trip }: { trip: Trip }) {
         {/* CTA */}
         <Link
           to={`/trips/${trip.id}/booking`}
-          className="flex-shrink-0 flex items-center gap-1 text-xs font-semibold px-3 py-2 rounded-lg bg-[#EA6A0A] text-white hover:bg-[#C2580A] transition-colors whitespace-nowrap"
+          className="flex-shrink-0 flex items-center gap-1 text-xs font-semibold px-3 py-2 rounded-lg bg-[#F7A829] text-white hover:bg-[#C9851A] transition-colors whitespace-nowrap"
         >
           View bookings <ChevronRight size={13} />
         </Link>

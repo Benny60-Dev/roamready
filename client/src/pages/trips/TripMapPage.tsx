@@ -916,7 +916,7 @@ export default function TripMapPage() {
         </button>
         <Link
           to={`/trips/${id}/booking`}
-          className="lg:ml-auto flex items-center gap-1 px-3 py-1.5 text-xs bg-[#EA6A0A] text-white rounded-lg hover:bg-[#C2580A] transition-colors whitespace-nowrap flex-shrink-0 mr-1"
+          className="lg:ml-auto flex items-center gap-1 px-3 py-1.5 text-xs bg-[#F7A829] text-white rounded-lg hover:bg-[#C9851A] transition-colors whitespace-nowrap flex-shrink-0 mr-1"
         >
           Reserve <ChevronRight size={12} />
         </Link>
@@ -993,7 +993,7 @@ export default function TripMapPage() {
               {/* Modify with AI button */}
               <button
                 onClick={() => setModifyPanelOpen(true)}
-                className="w-full flex items-center justify-center gap-1.5 py-2 mb-3 rounded-lg bg-[#EA6A0A] text-white text-xs font-medium hover:bg-[#C2580A] transition-colors"
+                className="w-full flex items-center justify-center gap-1.5 py-2 mb-3 rounded-lg bg-[#F7A829] text-white text-xs font-medium hover:bg-[#C9851A] transition-colors"
               >
                 <Wand2 size={13} /> Modify trip with AI
               </button>

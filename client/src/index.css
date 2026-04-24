@@ -36,7 +36,7 @@
     border-width: 0.5px;
   }
   .btn-primary {
-    @apply bg-[#EA6A0A] text-white px-4 py-2 rounded-lg font-medium text-sm hover:bg-[#C2580A] transition-colors;
+    @apply bg-[#F7A829] text-white px-4 py-2 rounded-lg font-medium text-sm hover:bg-[#C9851A] transition-colors;
   }
   .btn-secondary {
     @apply bg-[#EFF6FF] text-[#1E3A8A] px-4 py-2 rounded-lg font-medium text-sm hover:bg-[#1E3A8A] hover:text-white transition-colors;

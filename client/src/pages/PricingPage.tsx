@@ -141,7 +141,7 @@ export default function PricingPage() {
                   onClick={() => handleUpgrade(plan.id)}
                   disabled={loading === plan.id || user?.subscriptionTier === plan.id.replace('plus', '_PLUS').toUpperCase()}
                   className={`w-full py-2.5 rounded-lg text-sm font-medium mb-6 transition-colors ${
-                    plan.highlight ? 'bg-[#EA6A0A] text-white hover:bg-[#C2580A]' : 'border border-[#1E3A8A] text-[#1E3A8A] hover:bg-[#EFF6FF]'
+                    plan.highlight ? 'bg-[#F7A829] text-white hover:bg-[#C9851A]' : 'border border-[#1E3A8A] text-[#1E3A8A] hover:bg-[#EFF6FF]'
                   } disabled:opacity-40`}
                   style={{ borderWidth: '0.5px' }}
                 >
