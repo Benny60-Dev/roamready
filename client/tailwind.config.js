@@ -48,7 +48,7 @@ export default {
           },
 
           // Warm neutrals — subtle desert tint
-          bg:      '#F5F0E5',   // Warm off-white page background
+          bg:      '#F5F4F2',   // Neutral page background (barely-warm gray)
           surface: '#FFFFFF',   // Cards / raised surfaces
           border:  '#E8E4DA',   // Warm-tinted borders
           muted:   '#6B6458',   // Muted/secondary text
