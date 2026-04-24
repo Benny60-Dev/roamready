@@ -10,12 +10,16 @@
   --rr-gold-light: #FFC061;
   --rr-gold-dark: #C9851A;
 
+  --rr-pine: #3E5540;
+  --rr-pine-light: #5C7560;
+  --rr-pine-dark: #2F4030;
+
   /* Sunset gradient (hero moments only) */
   --rr-sunset-purple:  #531C8A;
   --rr-sunset-magenta: #B21A74;
   --rr-sunset-red:     #FC5237;
   --rr-sunset-gold:    #F7A829;
-  --rr-sunset-gradient: linear-gradient(90deg, #531C8A 0%, #B21A74 35%, #FC5237 70%, #F7A829 100%);
+  --rr-sunset-gradient: linear-gradient(90deg, #1F6F8B 0%, #8458B4 22%, #D4537E 42%, #E24B4A 60%, #F97316 80%, #F7A829 100%);
 
   /* Warm neutrals */
   --rr-bg:      #F7F5F0;

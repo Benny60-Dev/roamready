@@ -29,6 +29,15 @@ export default {
             700: '#8A5A0E',
             900: '#3D2705',
           },
+          pine: {
+            DEFAULT: '#3E5540',   // Desert pine green — sampled from splash end-frame hills
+            light:   '#5C7560',   // Hover / softer variant
+            dark:    '#2F4030',   // Text on light pine backgrounds
+            50:      '#DCE5D5',   // Pill backgrounds ("Completed" status)
+            100:     '#B8C8AC',   // Pill borders
+            700:     '#2F4030',   // Dark text on 50 backgrounds
+            900:     '#17210D',   // Deepest tone
+          },
 
           // Sunset gradient stops (hero moments only — splash, empty states)
           sunset: {
