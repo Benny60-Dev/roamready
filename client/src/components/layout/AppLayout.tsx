@@ -107,6 +107,7 @@ export default function AppLayout() {
             </div>
           </div>
         </div>
+        <div className="h-1 w-full" style={{ background: 'var(--rr-sunset-gradient)' }} />
       </header>
 
       {/* Mobile sidebar */}
