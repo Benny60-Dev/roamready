@@ -24,7 +24,7 @@ const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 
 // ─── Marker colors ──────────────────────────────────────────────────────────────
 const MC = {
   home:     '#F97316', // orange – home / start (unnumbered dot)
-  booked:   '#0F766E', // teal – confirmed
+  booked:   '#3E5540', // pine – confirmed
   pending:  '#EF9F27', // amber – pending
   unbooked: '#888780', // gray  – not booked
 }
@@ -179,7 +179,7 @@ function MapLegend() {
 // ─── Stop info popup ─────────────────────────────────────────────────────────────
 const BOOKING_BADGE: Record<MarkerKind, { cls: string; label: string }> = {
   home:     { cls: 'bg-slate-100 text-slate-600', label: 'Home' },
-  booked:   { cls: 'bg-[#CCFBF1] text-[#0D5F58]', label: 'Confirmed' },
+  booked:   { cls: 'bg-[#DCE5D5] text-[#2F4030]', label: 'Confirmed' },
   pending:  { cls: 'bg-amber-100 text-amber-700', label: 'Pending' },
   unbooked: { cls: 'bg-gray-100 text-gray-500',   label: 'Not booked' },
 }
@@ -204,7 +204,7 @@ function StopPopup({
   if (weather?.mode === 'live') {
     const today = (weather as LiveForecast).days[0]
     if (today) weatherSummary = (
-      <div className="flex items-center gap-2 text-xs text-gray-600 mb-2 bg-[#CCFBF1]/40 rounded px-2 py-1.5 border border-[#0F766E]/20">
+      <div className="flex items-center gap-2 text-xs text-gray-600 mb-2 bg-gray-100 rounded px-2 py-1.5 border border-gray-200">
         <span className="text-base leading-none">{today.icon}</span>
         <span>{today.high}° / {today.low}° · {today.conditions}</span>
         {nwsUrl && (
@@ -1247,7 +1247,7 @@ export default function TripMapPage() {
                     ) : badge === 'F' && isHome ? (
                       <span className="text-[9px] text-gray-400">Finish</span>
                     ) : stop.bookingStatus === 'CONFIRMED' ? (
-                      <span className="flex items-center gap-0.5 text-[9px] text-[#0D5F58] font-medium">
+                      <span className="flex items-center gap-0.5 text-[9px] text-[#2F4030] font-medium">
                         <CheckCircle size={9} /> Booked
                       </span>
                     ) : stop.bookingStatus === 'PENDING' || stop.bookingStatus === 'WAITLISTED' ? (

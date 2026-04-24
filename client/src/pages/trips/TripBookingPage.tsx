@@ -270,7 +270,7 @@ function ReservationConfirmModal({
 
           {/* Cost */}
           {cg.siteRate && (
-            <div className="bg-[#CCFBF1]/30 border border-[#0F766E]/20 rounded-lg px-3 py-2.5 text-xs">
+            <div className="bg-[#DCE5D5]/30 border border-[#3E5540]/20 rounded-lg px-3 py-2.5 text-xs">
               <div className="flex justify-between text-gray-600">
                 <span>${cg.siteRate}/night × {stop.nights} nights</span>
                 <span className="font-semibold text-gray-900">${totalCost}</span>
@@ -348,11 +348,11 @@ function RecommendedCampgroundCard({
 
   return (
     <div className={`card mb-3 transition-colors ${
-      isConfirmed ? 'border-[#0F766E]/40 bg-[#CCFBF1]/20' : 'border-[#1E3A8A]/20 bg-[#EFF6FF]/10'
+      isConfirmed ? 'border-[#3E5540]/40 bg-[#DCE5D5]/20' : 'border-[#1E3A8A]/20 bg-[#EFF6FF]/10'
     }`}>
       {/* Booked banner */}
       {isConfirmed && (
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-[#0D5F58] bg-[#CCFBF1] border border-[#0F766E]/30 rounded-lg px-3 py-2 mb-3">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-[#2F4030] bg-[#DCE5D5] border border-[#3E5540]/30 rounded-lg px-3 py-2 mb-3">
           <CheckCircle size={13} /> Selected campground — booked
         </div>
       )}
@@ -452,7 +452,7 @@ function CompactAltCard({
 
   return (
     <div className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 bg-white transition-colors ${
-      isConfirmed ? 'border-[#0F766E]/30 bg-[#CCFBF1]/20' : 'border-gray-200'
+      isConfirmed ? 'border-[#3E5540]/30 bg-[#DCE5D5]/20' : 'border-gray-200'
     }`} style={{ borderWidth: '0.5px' }}>
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium text-gray-800 truncate">{cg.name}</p>
@@ -463,7 +463,7 @@ function CompactAltCard({
           {cg.isPetFriendly && <span className="text-[11px] text-gray-400">🐾</span>}
           {cg.rating != null && <span className="text-[11px] text-amber-500">★ {cg.rating.toFixed(1)}</span>}
           {isConfirmed && (
-            <span className="text-[11px] font-semibold text-[#0D5F58] flex items-center gap-0.5">
+            <span className="text-[11px] font-semibold text-[#2F4030] flex items-center gap-0.5">
               <CheckCircle size={10} /> Booked
             </span>
           )}
@@ -484,7 +484,7 @@ function CompactAltCard({
 // ─── Sidebar stop item status config ─────────────────────────────────────────
 
 function statusBadge(status: string) {
-  if (status === 'CONFIRMED')  return { label: 'Booked',      cls: 'bg-[#CCFBF1] text-[#0D5F58]' }
+  if (status === 'CONFIRMED')  return { label: 'Booked',      cls: 'bg-[#DCE5D5] text-[#2F4030]' }
   if (status === 'PENDING')    return { label: 'Pending',     cls: 'bg-amber-100 text-amber-700' }
   if (status === 'CANCELLED')  return { label: 'Cancelled',   cls: 'bg-red-100 text-red-500' }
   if (status === 'WAITLISTED') return { label: 'Pending',     cls: 'bg-amber-100 text-amber-700' }
@@ -782,7 +782,7 @@ export default function TripBookingPage() {
               </span>
               <span className="max-w-[90px] truncate">{stop.locationName}</span>
               {stop.bookingStatus === 'CONFIRMED' && (
-                <CheckCircle size={10} className={activeStop === stop.id ? 'text-white' : 'text-[#0F766E]'} />
+                <CheckCircle size={10} className={activeStop === stop.id ? 'text-white' : 'text-[#3E5540]'} />
               )}
             </button>
           ))}
@@ -904,7 +904,7 @@ export default function TripBookingPage() {
           <footer className="flex-shrink-0 border-t border-gray-100 bg-white px-4 md:px-6 py-2.5 flex items-center justify-between">
             <div className="flex items-center gap-4 text-xs text-gray-500">
               <span className="flex items-center gap-1">
-                <CheckCircle size={12} className="text-[#0F766E]" />
+                <CheckCircle size={12} className="text-[#3E5540]" />
                 <span className="font-medium text-gray-700">{bookedCount}</span>/{bookableStops.length} booked
               </span>
               {incompatCount > 0 && (

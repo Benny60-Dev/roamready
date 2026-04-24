@@ -59,7 +59,7 @@
     @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
   }
   .badge-green {
-    @apply badge bg-[#CCFBF1] text-[#0D5F58];
+    @apply badge bg-[#DCE5D5] text-[#2F4030];
   }
   .badge-amber {
     @apply badge bg-amber-50 text-amber-800;

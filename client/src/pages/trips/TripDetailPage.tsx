@@ -45,7 +45,7 @@ function StopRow({ stop, tripId, weather, badge }: { stop: Stop; tripId: string;
     }
     if (stop.bookingStatus === 'CONFIRMED') {
       return (
-        <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-[#CCFBF1] text-[#0D5F58] flex-shrink-0">
+        <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-[#DCE5D5] text-[#2F4030] flex-shrink-0">
           <CheckCircle size={11} /> Booked
         </span>
       )

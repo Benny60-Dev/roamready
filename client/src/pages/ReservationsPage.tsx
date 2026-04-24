@@ -33,7 +33,7 @@ function TripBookingCard({ trip }: { trip: Trip }) {
   const { bookableStops, confirmed, pending, campCost, earliestDate, bookingLevel } = getTripStats(trip)
 
   const statusConfig = {
-    all:     { label: 'All booked',        cls: 'bg-[#CCFBF1] text-[#0D5F58]',  icon: <CheckCircle size={11} /> },
+    all:     { label: 'All booked',        cls: 'bg-[#DCE5D5] text-[#2F4030]',  icon: <CheckCircle size={11} /> },
     partial: { label: 'Partially booked',  cls: 'bg-amber-100 text-amber-700',  icon: <Clock size={11} /> },
     none:    { label: 'Not started',       cls: 'bg-gray-100 text-gray-500',    icon: null },
   }
@@ -110,7 +110,7 @@ function TripBookingCard({ trip }: { trip: Trip }) {
       {bookableStops.length > 0 && (
         <div className="mt-3 h-1.5 bg-gray-100 rounded-full overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all ${bookingLevel === 'all' ? 'bg-[#0F766E]' : 'bg-amber-400'}`}
+            className={`h-full rounded-full transition-all ${bookingLevel === 'all' ? 'bg-[#3E5540]' : 'bg-amber-400'}`}
             style={{ width: `${(confirmed.length / bookableStops.length) * 100}%` }}
           />
         </div>

@@ -61,9 +61,9 @@ export default {
           decorative: '#F97316',
         },
         success: {
-          DEFAULT: '#0F766E',
-          light: '#CCFBF1',
-          dark: '#0D5F58',
+          DEFAULT: '#3E5540',
+          light: '#DCE5D5',
+          dark: '#2F4030',
         },
         premium: {
           DEFAULT: '#7E22CE',

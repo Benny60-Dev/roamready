@@ -1547,7 +1547,7 @@ function StayContent({ entry, weather, arrival, poiMinutes }: {
       {/* Location + campground name */}
       <div className="space-y-0.5">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <Tent size={12} className="text-[#0D5F58] flex-shrink-0" />
+          <Tent size={12} className="text-gray-500 flex-shrink-0" />
           <span className="text-sm font-semibold text-gray-800">
             {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
           </span>
@@ -1586,7 +1586,7 @@ function StayContent({ entry, weather, arrival, poiMinutes }: {
       {/* Reserve Now / Confirmed — not shown for HOME stops */}
       {stop.type !== 'HOME' && (stop.bookingStatus === 'CONFIRMED' ? (
         stop.confirmationNum ? (
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-[#0D5F58] bg-[#CCFBF1] px-2.5 py-1 rounded-full w-fit">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-[#2F4030] bg-[#DCE5D5] px-2.5 py-1 rounded-full w-fit">
             <Check size={11} />
             Confirmed · #{stop.confirmationNum}
           </div>
@@ -1803,7 +1803,7 @@ function OvernightContent({ entry, weather, arrival, poiMinutes }: {
 
       {stop.bookingStatus === 'CONFIRMED' ? (
         stop.confirmationNum ? (
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-[#0D5F58] bg-[#CCFBF1] px-2.5 py-1 rounded-full w-fit">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-[#2F4030] bg-[#DCE5D5] px-2.5 py-1 rounded-full w-fit">
             <Check size={11} />
             Confirmed · #{stop.confirmationNum}
           </div>
