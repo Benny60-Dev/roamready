@@ -35,7 +35,7 @@ export default function SharedTripPage() {
   const totalCost = (trip.estimatedFuel || 0) + (trip.estimatedCamp || 0)
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-rr-bg">
       <header className="bg-white border-b border-gray-100 py-3 px-4 sticky top-0 z-10">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">

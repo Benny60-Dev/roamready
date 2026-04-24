@@ -16,7 +16,7 @@
     font-family: 'Inter', sans-serif;
     font-weight: 400;
     color: #1a1a1a;
-    background: #f9fafb;
+    background: var(--rr-bg);
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
     overflow-x: clip;

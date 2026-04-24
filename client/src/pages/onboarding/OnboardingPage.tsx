@@ -71,7 +71,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-rr-bg flex items-center justify-center p-4">
       <div className="w-full max-w-xl">
         {/* Progress */}
         <div className="flex items-center justify-center gap-2 mb-8">
