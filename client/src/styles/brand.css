@@ -1,0 +1,26 @@
+:root {
+  /* RoamReady brand tokens — see tailwind.config.js `rr` group for matching classes */
+
+  /* Primary */
+  --rr-blue: #1F6F8B;
+  --rr-blue-light: #2F7BD4;
+  --rr-blue-dark: #134756;
+
+  --rr-gold: #F7A829;
+  --rr-gold-light: #FFC061;
+  --rr-gold-dark: #C9851A;
+
+  /* Sunset gradient (hero moments only) */
+  --rr-sunset-purple:  #531C8A;
+  --rr-sunset-magenta: #B21A74;
+  --rr-sunset-red:     #FC5237;
+  --rr-sunset-gold:    #F7A829;
+  --rr-sunset-gradient: linear-gradient(90deg, #531C8A 0%, #B21A74 35%, #FC5237 70%, #F7A829 100%);
+
+  /* Warm neutrals */
+  --rr-bg:      #F7F5F0;
+  --rr-surface: #FFFFFF;
+  --rr-border:  #E8E4DA;
+  --rr-muted:   #6B6458;
+  --rr-ink:     #1A1A1A;
+}
