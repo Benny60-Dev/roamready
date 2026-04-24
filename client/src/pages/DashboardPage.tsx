@@ -8,10 +8,10 @@ import { format } from 'date-fns'
 
 function TripCard({ trip }: { trip: Trip }) {
   const statusColor = {
-    PLANNING: 'badge-amber',
-    ACTIVE: 'badge-green',
-    COMPLETED: 'bg-gray-100 text-gray-600',
-    DRAFT: 'bg-gray-100 text-gray-500',
+    PLANNING: 'badge-planning',
+    ACTIVE: 'badge-active',
+    COMPLETED: 'badge-completed',
+    DRAFT: 'badge-draft',
   }[trip.status]
 
   return (

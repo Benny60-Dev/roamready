@@ -87,10 +87,10 @@ export default function TripsPage() {
         <div className="space-y-2">
           {filtered.map(trip => {
             const statusColors = {
-              PLANNING: 'text-amber-600 bg-amber-50',
-              ACTIVE: 'text-[#0F766E] bg-[#CCFBF1]',
-              COMPLETED: 'text-gray-500 bg-gray-100',
-              DRAFT: 'text-gray-400 bg-gray-50',
+              PLANNING: 'badge-planning',
+              ACTIVE: 'badge-active',
+              COMPLETED: 'badge-completed',
+              DRAFT: 'badge-draft',
             }
             return (
               <Link
@@ -101,7 +101,7 @@ export default function TripsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="font-medium text-gray-900 text-sm truncate">{trip.name}</h3>
-                    <span className={`badge text-xs ${statusColors[trip.status]}`}>
+                    <span className={`${statusColors[trip.status]} text-xs`}>
                       {trip.status.toLowerCase()}
                     </span>
                   </div>
