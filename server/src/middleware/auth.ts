@@ -51,7 +51,7 @@ export function requireOwner(req: AuthRequest, _res: Response, next: NextFunctio
   next()
 }
 
-export function hasAccess(user: { subscriptionTier: string; trialEndsAt: Date | null }, feature: string): boolean {
+export function hasAccess(user: { subscriptionTier: string; trialEndsAt: Date | null; isOwner?: boolean }, feature: string): boolean {
   const FEATURE_GATES: Record<string, string[]> = {
     campgroundBooking: ['PRO', 'PRO_PLUS'],
     rigCompatibilityFilter: ['PRO', 'PRO_PLUS'],
@@ -76,6 +76,7 @@ export function hasAccess(user: { subscriptionTier: string; trialEndsAt: Date | 
     unlimitedJournal: ['PRO_PLUS'],
   }
 
+  if (user.isOwner) return true
   if (user.trialEndsAt && new Date() < new Date(user.trialEndsAt)) return true
   const gates = FEATURE_GATES[feature]
   if (!gates) return true

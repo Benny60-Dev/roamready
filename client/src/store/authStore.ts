@@ -64,6 +64,7 @@ export const useAuthStore = create<AuthState>()(
       hasAccess: (feature) => {
         const user = get().user
         if (!user) return false
+        if (user.isOwner) return true
         if (user.trialEndsAt && new Date() < new Date(user.trialEndsAt)) return true
         const gates = FEATURE_GATES[feature]
         if (!gates) return true
