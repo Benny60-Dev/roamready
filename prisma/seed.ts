@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client'
+import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
@@ -51,6 +52,31 @@ const RIG_DATABASE = [
   { make: 'Forest River', model: 'Cardinal 3250BLE', class: 'FIFTH_WHEEL', length: 36, height: 13, fuel: null, mpg: null, tank: null, slides: '3+', amps: '50' },
 ]
 
+async function seedTestUsers() {
+  const passwordHash = await bcrypt.hash('Dallas60!', 12)
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
+
+  await prisma.user.upsert({
+    where: { email: 'momannexpired@gmail.com' },
+    update: {
+      passwordHash,
+      subscriptionTier: 'FREE',
+      trialEndsAt: oneDayAgo,
+      isOwner: false,
+    },
+    create: {
+      email: 'momannexpired@gmail.com',
+      firstName: 'Expired',
+      lastName: 'Tester',
+      passwordHash,
+      subscriptionTier: 'FREE',
+      trialEndsAt: oneDayAgo,
+      isOwner: false,
+    },
+  })
+  console.log('Seeded test user: momannexpired@gmail.com / Dallas60!')
+}
+
 async function main() {
   console.log('Seeding rig database...')
   for (const rig of RIG_DATABASE) {
@@ -64,6 +90,8 @@ async function main() {
     })
   }
   console.log(`Seeded ${RIG_DATABASE.length} rigs`)
+
+  await seedTestUsers()
 }
 
 main()
