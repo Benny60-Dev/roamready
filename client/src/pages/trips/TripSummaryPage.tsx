@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import {
   Download, Share2, Sparkles, Car, Tent, Star, Moon,
@@ -1586,15 +1586,21 @@ function StayContent({ entry, weather, arrival, poiMinutes }: {
       {/* Reserve Now / Confirmed — not shown for HOME stops */}
       {stop.type !== 'HOME' && (stop.bookingStatus === 'CONFIRMED' ? (
         stop.confirmationNum ? (
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-[#2F4030] bg-[#DCE5D5] px-2.5 py-1 rounded-full w-fit">
+          <Link
+            to={`/trips/${stop.tripId}/booking?stopId=${stop.id}`}
+            className="flex items-center gap-1.5 text-xs font-semibold text-[#2F4030] bg-[#DCE5D5] hover:bg-[#C5D4BA] px-2.5 py-1 rounded-full w-fit transition-colors"
+          >
             <Check size={11} />
             Confirmed · #{stop.confirmationNum}
-          </div>
+          </Link>
         ) : (
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-[#2F4030] bg-[#DCE5D5] px-2.5 py-1 rounded-full w-fit">
+          <Link
+            to={`/trips/${stop.tripId}/booking?stopId=${stop.id}`}
+            className="flex items-center gap-1.5 text-xs font-semibold text-[#2F4030] bg-[#DCE5D5] hover:bg-[#C5D4BA] px-2.5 py-1 rounded-full w-fit transition-colors"
+          >
             <Check size={11} />
             Booked
-          </div>
+          </Link>
         )
       ) : (
         <button
@@ -1803,15 +1809,21 @@ function OvernightContent({ entry, weather, arrival, poiMinutes }: {
 
       {stop.bookingStatus === 'CONFIRMED' ? (
         stop.confirmationNum ? (
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-[#2F4030] bg-[#DCE5D5] px-2.5 py-1 rounded-full w-fit">
+          <Link
+            to={`/trips/${stop.tripId}/booking?stopId=${stop.id}`}
+            className="flex items-center gap-1.5 text-xs font-semibold text-[#2F4030] bg-[#DCE5D5] hover:bg-[#C5D4BA] px-2.5 py-1 rounded-full w-fit transition-colors"
+          >
             <Check size={11} />
             Confirmed · #{stop.confirmationNum}
-          </div>
+          </Link>
         ) : (
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-[#2F4030] bg-[#DCE5D5] px-2.5 py-1 rounded-full w-fit">
+          <Link
+            to={`/trips/${stop.tripId}/booking?stopId=${stop.id}`}
+            className="flex items-center gap-1.5 text-xs font-semibold text-[#2F4030] bg-[#DCE5D5] hover:bg-[#C5D4BA] px-2.5 py-1 rounded-full w-fit transition-colors"
+          >
             <Check size={11} />
             Booked
-          </div>
+          </Link>
         )
       ) : (
         <button

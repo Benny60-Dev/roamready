@@ -10,6 +10,7 @@ import { Trip, Stop, Campground } from '../../types'
 import { useAuthStore } from '../../store/authStore'
 import { buildStopBadges } from '../../utils/stopBadge'
 import { useUIStore } from '../../store/uiStore'
+import ConfirmModal from '../../components/ui/ConfirmModal'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -334,11 +335,13 @@ function RecommendedCampgroundCard({
   stop,
   onReserve,
   onStopUpdated,
+  onUnbook,
 }: {
   cg: Campground
   stop: Stop
   onReserve: () => void
   onStopUpdated: (stopId: string, data: Partial<Stop>) => void
+  onUnbook: (stop: Stop) => void
 }) {
   const isConfirmed = stop.campgroundId === cg.id && stop.bookingStatus === 'CONFIRMED'
   const mapQuery = [cg.name, cg.address].filter(Boolean).join(' ')
@@ -353,7 +356,14 @@ function RecommendedCampgroundCard({
       {/* Booked banner */}
       {isConfirmed && (
         <div className="flex items-center gap-1.5 text-xs font-semibold text-[#2F4030] bg-[#DCE5D5] border border-[#3E5540]/30 rounded-lg px-3 py-2 mb-3">
-          <CheckCircle size={13} /> Selected campground — booked
+          <CheckCircle size={13} />
+          <span>Selected campground — booked</span>
+          <button
+            onClick={() => onUnbook(stop)}
+            className="ml-auto text-[#2F4030]/70 hover:text-[#2F4030] underline underline-offset-2 font-medium"
+          >
+            Unbook
+          </button>
         </div>
       )}
 
@@ -505,6 +515,8 @@ export default function TripBookingPage() {
   // pendingAlt carries both the campground choice AND which stop it belongs to
   const [pendingAlt, setPendingAlt] = useState<{ cg: Campground; stop: Stop } | null>(null)
   const [confirming, setConfirming] = useState(false)
+  const [unbookTarget, setUnbookTarget] = useState<Stop | null>(null)
+  const [unbooking, setUnbooking] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
   const { hasAccess, user } = useAuthStore()
   const { openPaywall } = useUIStore()
@@ -587,6 +599,33 @@ export default function TripBookingPage() {
 
   function handleStopUpdated(stopId: string, data: Partial<Stop>) {
     setTrip(prev => prev ? { ...prev, stops: prev.stops?.map(s => s.id === stopId ? { ...s, ...data } : s) } : prev)
+  }
+
+  async function handleUnbook() {
+    if (!unbookTarget || !trip || unbooking) return
+    setUnbooking(true)
+    try {
+      await tripsApi.updateStop(trip.id, unbookTarget.id, { bookingStatus: 'NOT_BOOKED' })
+      setTrip(prev => {
+        if (!prev) return prev
+        const updatedStops = prev.stops?.map(s =>
+          s.id === unbookTarget.id
+            ? { ...s, bookingStatus: 'NOT_BOOKED' as any }
+            : s
+        )
+        const estimatedCamp = updatedStops?.reduce(
+          (sum, s) => s.bookingStatus === 'CONFIRMED' && s.siteRate ? sum + s.siteRate * s.nights : sum,
+          0
+        )
+        return { ...prev, stops: updatedStops, estimatedCamp }
+      })
+      setUnbookTarget(null)
+    } catch (err) {
+      console.error('Failed to unbook stop', err)
+      alert('Could not unbook. Please try again.')
+    } finally {
+      setUnbooking(false)
+    }
   }
 
   async function handleConfirmAlt() {
@@ -693,6 +732,7 @@ export default function TripBookingPage() {
             stop={stop}
             onReserve={() => setPendingAlt({ cg: recommended, stop })}
             onStopUpdated={handleStopUpdated}
+            onUnbook={(stop) => setUnbookTarget(stop)}
           />
         ) : (
           <div className="card py-6 text-center text-xs text-gray-400 mb-3">
@@ -922,6 +962,17 @@ export default function TripBookingPage() {
           </footer>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={unbookTarget !== null}
+        title="Unbook this stop?"
+        message={`This will mark "${unbookTarget?.campgroundName || 'this campground'}" as not booked. Your campground details and confirmation number will be preserved — you can re-book at any time.`}
+        confirmLabel="Unbook"
+        cancelLabel="Keep it"
+        onConfirm={handleUnbook}
+        onCancel={() => !unbooking && setUnbookTarget(null)}
+        isConfirming={unbooking}
+      />
     </div>
   )
 }
