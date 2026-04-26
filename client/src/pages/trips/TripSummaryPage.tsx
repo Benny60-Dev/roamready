@@ -1583,7 +1583,7 @@ function StayContent({ entry, weather, arrival, poiMinutes }: {
         )}
       </div>
 
-      {/* Reserve Now / Confirmed — not shown for HOME stops */}
+      {/* Book this stop! / Confirmed — not shown for HOME stops */}
       {stop.type !== 'HOME' && (stop.bookingStatus === 'CONFIRMED' ? (
         stop.confirmationNum ? (
           <Link
