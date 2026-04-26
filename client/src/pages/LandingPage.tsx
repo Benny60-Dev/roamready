@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { MapPin, Zap, Shield, Users, Truck, Wind, Compass, Check, ChevronRight } from 'lucide-react'
 import logoIcon from '../assets/logo-icon.png'
+import SplashScreen from '../components/SplashScreen'
 
 const VEHICLE_TYPES = [
   {
@@ -39,6 +40,7 @@ const FEATURES = [
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-white">
+      <SplashScreen />
       {/* Nav */}
       <header className="sticky top-0 z-40 bg-white border-b border-gray-100" style={{ borderBottomWidth: '0.5px' }}>
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
