@@ -141,7 +141,7 @@ export default function PricingPage() {
                   onClick={() => handleUpgrade(plan.id)}
                   disabled={loading === plan.id || user?.subscriptionTier === plan.id.replace('plus', '_PLUS').toUpperCase()}
                   className={`w-full py-2.5 rounded-lg text-sm font-medium mb-6 transition-colors ${
-                    plan.highlight ? 'bg-[#F7A829] text-white hover:bg-[#C9851A]' : 'border border-[#1E3A8A] text-[#1E3A8A] hover:bg-[#EFF6FF]'
+                    plan.highlight ? 'bg-[#F7A829] text-white hover:bg-[#C9851A]' : 'border border-[#1F6F8B] text-[#1F6F8B] hover:bg-[#E0F0F4]'
                   } disabled:opacity-40`}
                   style={{ borderWidth: '0.5px' }}
                 >
@@ -152,7 +152,7 @@ export default function PricingPage() {
               <ul className="space-y-2">
                 {plan.features.map(feature => (
                   <li key={feature} className="flex items-start gap-2 text-sm text-gray-600">
-                    <Check size={14} className="text-[#1E3A8A] flex-shrink-0 mt-0.5" />
+                    <Check size={14} className="text-[#1F6F8B] flex-shrink-0 mt-0.5" />
                     {feature}
                   </li>
                 ))}

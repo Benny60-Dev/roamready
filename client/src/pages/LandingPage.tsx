@@ -47,7 +47,7 @@ export default function LandingPage() {
           <div className="flex items-center gap-2">
             <img src={logoIcon} alt="RoamReady" className="h-8 w-auto object-contain" />
             <span className="font-medium">
-              <span style={{ color: '#1E3A8A' }}>Roam</span><span style={{ color: '#F7A829' }}>ready</span><span style={{ color: '#1E3A8A' }}>.ai</span>
+              <span style={{ color: '#1F6F8B' }}>Roam</span><span style={{ color: '#F7A829' }}>ready</span><span style={{ color: '#1F6F8B' }}>.ai</span>
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -61,13 +61,13 @@ export default function LandingPage() {
 
       {/* Hero */}
       <section className="max-w-6xl mx-auto px-4 pt-20 pb-16 text-center">
-        <div className="inline-flex items-center gap-1.5 bg-[#EFF6FF] text-[#1E40AF] px-3 py-1 rounded-full text-sm mb-6">
+        <div className="inline-flex items-center gap-1.5 bg-[#E0F0F4] text-[#134756] px-3 py-1 rounded-full text-sm mb-6">
           <Zap size={13} />
           Powered by Claude AI
         </div>
         <h1 className="text-4xl sm:text-5xl font-medium text-gray-900 mb-4 leading-tight">
           Plan your next adventure<br />
-          <span className="text-[#1E3A8A]">in minutes, not days</span>
+          <span className="text-[#1F6F8B]">in minutes, not days</span>
         </h1>
         <p className="text-lg text-gray-500 mb-8 max-w-2xl mx-auto">
           AI-powered trip planning for RV travelers, van lifers, and car campers.
@@ -93,7 +93,7 @@ export default function LandingPage() {
             <Link
               key={v.id}
               to="/signup"
-              className="card-lg hover:border-[#1E3A8A] hover:border-opacity-50 transition-all group"
+              className="card-lg hover:border-[#1F6F8B] hover:border-opacity-50 transition-all group"
             >
               <div className="text-4xl mb-3">{v.emoji}</div>
               <h3 className="font-medium text-gray-900 mb-0.5">{v.title}</h3>
@@ -101,12 +101,12 @@ export default function LandingPage() {
               <ul className="space-y-1.5">
                 {v.features.map(f => (
                   <li key={f} className="flex items-center gap-2 text-sm text-gray-600">
-                    <Check size={13} className="text-[#1E3A8A]" />
+                    <Check size={13} className="text-[#1F6F8B]" />
                     {f}
                   </li>
                 ))}
               </ul>
-              <div className="mt-4 text-[#1E3A8A] text-sm font-medium flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="mt-4 text-[#1F6F8B] text-sm font-medium flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 Get started <ChevronRight size={14} />
               </div>
             </Link>
@@ -122,8 +122,8 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {FEATURES.map(({ icon: Icon, title, desc }) => (
               <div key={title} className="card">
-                <div className="w-8 h-8 bg-[#EFF6FF] rounded-lg flex items-center justify-center mb-3">
-                  <Icon size={16} className="text-[#1E3A8A]" />
+                <div className="w-8 h-8 bg-[#E0F0F4] rounded-lg flex items-center justify-center mb-3">
+                  <Icon size={16} className="text-[#1F6F8B]" />
                 </div>
                 <h3 className="font-medium text-gray-900 mb-1">{title}</h3>
                 <p className="text-sm text-gray-500">{desc}</p>

@@ -9,7 +9,7 @@ export default function PrivacyPolicyPage() {
           <Link to="/" className="inline-flex items-center gap-2 mb-6">
             <img src={logoIcon} alt="RoamReady" className="h-8 w-auto object-contain" />
             <span className="font-medium">
-              <span style={{ color: '#1E3A8A' }}>Roam</span><span style={{ color: '#F7A829' }}>ready</span><span style={{ color: '#1E3A8A' }}>.ai</span>
+              <span style={{ color: '#1F6F8B' }}>Roam</span><span style={{ color: '#F7A829' }}>ready</span><span style={{ color: '#1F6F8B' }}>.ai</span>
             </span>
           </Link>
           <h1 className="text-3xl font-semibold text-gray-900">Privacy Policy</h1>
@@ -172,7 +172,7 @@ export default function PrivacyPolicyPage() {
 
             <p className="mt-4">
               To exercise any of these rights, email us at{' '}
-              <a href="mailto:dev@roamready.ai" className="text-[#1E3A8A] hover:underline">dev@roamready.ai</a>.
+              <a href="mailto:dev@roamready.ai" className="text-[#1F6F8B] hover:underline">dev@roamready.ai</a>.
               We will respond within 30 days.
             </p>
           </section>
@@ -196,7 +196,7 @@ export default function PrivacyPolicyPage() {
               RoamReady is intended for users aged 13 and older. Users must be 18 or older to purchase a paid
               subscription. We do not knowingly collect personal information from children under 13. If you believe
               a child under 13 has provided us with personal information, please contact us at{' '}
-              <a href="mailto:dev@roamready.ai" className="text-[#1E3A8A] hover:underline">dev@roamready.ai</a>{' '}
+              <a href="mailto:dev@roamready.ai" className="text-[#1F6F8B] hover:underline">dev@roamready.ai</a>{' '}
               and we will promptly delete it.
             </p>
           </section>
@@ -230,15 +230,15 @@ export default function PrivacyPolicyPage() {
             <div className="mt-3 space-y-1">
               <p><strong>Martini AI Media LLC (RoamReady)</strong></p>
               <p>Arizona</p>
-              <p>Email: <a href="mailto:dev@roamready.ai" className="text-[#1E3A8A] hover:underline">dev@roamready.ai</a></p>
-              <p>Website: <a href="https://roamready.ai" className="text-[#1E3A8A] hover:underline">roamready.ai</a></p>
+              <p>Email: <a href="mailto:dev@roamready.ai" className="text-[#1F6F8B] hover:underline">dev@roamready.ai</a></p>
+              <p>Website: <a href="https://roamready.ai" className="text-[#1F6F8B] hover:underline">roamready.ai</a></p>
             </div>
           </section>
 
         </div>
 
         <div className="mt-12 pt-8 border-t border-gray-100 text-center">
-          <Link to="/" className="text-sm text-[#1E3A8A] hover:underline">← Back to RoamReady</Link>
+          <Link to="/" className="text-sm text-[#1F6F8B] hover:underline">← Back to RoamReady</Link>
           <p className="text-xs text-gray-400 mt-4">© 2026 Martini AI Media LLC. All rights reserved.</p>
         </div>
       </div>

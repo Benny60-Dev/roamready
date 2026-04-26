@@ -26,7 +26,7 @@ function FeedbackCard({ item, onVote }: { item: Feedback; onVote: (id: string) =
         </div>
         <button
           onClick={() => isAuthenticated() && onVote(item.id)}
-          className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg border border-gray-200 hover:border-[#1E3A8A] hover:text-[#1E3A8A] transition-colors text-gray-400"
+          className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg border border-gray-200 hover:border-[#1F6F8B] hover:text-[#1F6F8B] transition-colors text-gray-400"
           style={{ borderWidth: '0.5px' }}
         >
           <ThumbsUp size={13} />
