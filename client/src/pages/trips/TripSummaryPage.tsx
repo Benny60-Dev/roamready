@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import {
@@ -6,7 +6,7 @@ import {
   MapPin, XCircle, Plus, Check, RefreshCw, ArrowRight, Clock,
   Pencil, Trash2, Wand2,
 } from 'lucide-react'
-import ModifyTripPanel from '../../components/trip/ModifyTripPanel'
+const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel'))
 import { pdf } from '@react-pdf/renderer'
 import { tripsApi, aiApi } from '../../services/api'
 import { Trip, Stop, ItineraryDay, ItineraryActivity, StopWeather, POI } from '../../types'
@@ -1028,14 +1028,16 @@ export default function TripSummaryPage() {
       )}
 
       {/* Modify Trip AI panel */}
-      <ModifyTripPanel
-        trip={trip}
-        isOpen={modifyPanelOpen}
-        onClose={() => setModifyPanelOpen(false)}
-        onTripUpdated={async (_updated) => {
-          await reloadTrip()
-        }}
-      />
+      <Suspense fallback={null}>
+        <ModifyTripPanel
+          trip={trip}
+          isOpen={modifyPanelOpen}
+          onClose={() => setModifyPanelOpen(false)}
+          onTripUpdated={async (_updated) => {
+            await reloadTrip()
+          }}
+        />
+      </Suspense>
     </div>
   )
 }

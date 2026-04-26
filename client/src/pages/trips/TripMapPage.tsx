@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { GoogleMap, useJsApiLoader, InfoWindow, Circle, Polyline } from '@react-google-maps/api'
 import {
@@ -13,7 +13,7 @@ import { format } from 'date-fns'
 import { tripsApi } from '../../services/api'
 import { Trip, Stop, StopWeather, LiveForecast } from '../../types'
 import { StopWeatherCard, ALERT_STYLES } from '../../components/weather/StopWeatherCard'
-import ModifyTripPanel from '../../components/trip/ModifyTripPanel'
+const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel'))
 import ConfirmModal from '../../components/ui/ConfirmModal'
 import { useAuthStore } from '../../store/authStore'
 import { buildStopBadges } from '../../utils/stopBadge'
@@ -1423,15 +1423,17 @@ export default function TripMapPage() {
 
       {/* Modify Trip AI panel */}
       {trip && (
-        <ModifyTripPanel
-          trip={trip}
-          isOpen={modifyPanelOpen}
-          onClose={() => setModifyPanelOpen(false)}
-          onTripUpdated={updatedTrip => {
-            setTrip(updatedTrip)
-            setTripNameInput(updatedTrip.name)
-          }}
-        />
+        <Suspense fallback={null}>
+          <ModifyTripPanel
+            trip={trip}
+            isOpen={modifyPanelOpen}
+            onClose={() => setModifyPanelOpen(false)}
+            onTripUpdated={updatedTrip => {
+              setTrip(updatedTrip)
+              setTripNameInput(updatedTrip.name)
+            }}
+          />
+        </Suspense>
       )}
 
       {/* Mark-completed confirmation */}

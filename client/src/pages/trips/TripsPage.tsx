@@ -90,6 +90,7 @@ export default function TripsPage() {
               PLANNING: 'badge-planning',
               ACTIVE: 'badge-active',
               COMPLETED: 'badge-completed',
+              // Reserved — no current code path sets status to DRAFT (future "resume planning" feature)
               DRAFT: 'badge-draft',
             }
             return (
