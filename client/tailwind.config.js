@@ -41,9 +41,6 @@ export default {
 
           // Sunset gradient stops (hero moments only — splash, empty states)
           sunset: {
-            purple:  '#531C8A',
-            magenta: '#B21A74',
-            red:     '#FC5237',
             gold:    '#F7A829',
           },
 

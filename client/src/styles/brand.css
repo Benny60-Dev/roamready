@@ -15,9 +15,6 @@
   --rr-pine-dark: #2F4030;
 
   /* Sunset gradient (hero moments only) */
-  --rr-sunset-purple:  #531C8A;
-  --rr-sunset-magenta: #B21A74;
-  --rr-sunset-red:     #FC5237;
   --rr-sunset-gold:    #F7A829;
   --rr-sunset-gradient: linear-gradient(90deg, #1F6F8B 0%, #8458B4 22%, #D4537E 42%, #E24B4A 60%, #F97316 80%, #F7A829 100%);
 
