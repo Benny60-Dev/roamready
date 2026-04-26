@@ -43,7 +43,7 @@ export default function AppLayout() {
             <NavLink to="/dashboard" className="flex items-center gap-2">
               <img src={logoIcon} alt="RoamReady" className="h-8 w-auto object-contain" />
               <span className="font-medium hidden sm:block">
-                <span style={{ color: '#1E3A8A' }}>Roam</span><span style={{ color: '#F7A829' }}>ready</span><span style={{ color: '#1E3A8A' }}>.ai</span>
+                <span style={{ color: '#1F6F8B' }}>Roam</span><span style={{ color: '#F7A829' }}>ready</span><span style={{ color: '#1F6F8B' }}>.ai</span>
               </span>
             </NavLink>
           </div>
@@ -56,7 +56,7 @@ export default function AppLayout() {
                 to={to}
                 className={({ isActive }) =>
                   `px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                    isActive ? 'bg-[#EFF6FF] text-[#1E3A8A] font-medium' : 'text-gray-600 hover:bg-gray-100'
+                    isActive ? 'bg-[#E0F0F4] text-[#1F6F8B] font-medium' : 'text-gray-600 hover:bg-gray-100'
                   }`
                 }
               >
@@ -65,7 +65,7 @@ export default function AppLayout() {
             ))}
             {user?.isOwner && (
               <NavLink to="/admin" className={({ isActive }) =>
-                `px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-[#EFF6FF] text-[#1E3A8A] font-medium' : 'text-gray-600 hover:bg-gray-100'}`
+                `px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-[#E0F0F4] text-[#1F6F8B] font-medium' : 'text-gray-600 hover:bg-gray-100'}`
               }>Admin</NavLink>
             )}
           </nav>
@@ -79,7 +79,7 @@ export default function AppLayout() {
                 onClick={() => setProfileOpen(!profileOpen)}
                 className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-lg hover:bg-gray-100"
               >
-                <div className="w-7 h-7 bg-[#1E3A8A] rounded-full flex items-center justify-center">
+                <div className="w-7 h-7 bg-[#1F6F8B] rounded-full flex items-center justify-center">
                   <span className="text-white text-xs font-medium">
                     {user?.firstName?.[0]}{user?.lastName?.[0]}
                   </span>
@@ -122,7 +122,7 @@ export default function AppLayout() {
                   onClick={() => setSidebarOpen(false)}
                   className={({ isActive }) =>
                     `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm ${
-                      isActive ? 'bg-[#EFF6FF] text-[#1E3A8A] font-medium' : 'text-gray-600 hover:bg-gray-100'
+                      isActive ? 'bg-[#E0F0F4] text-[#1F6F8B] font-medium' : 'text-gray-600 hover:bg-gray-100'
                     }`
                   }
                 >
@@ -149,7 +149,7 @@ export default function AppLayout() {
               to={to}
               className={({ isActive }) =>
                 `flex-1 flex flex-col items-center py-2 gap-0.5 text-xs ${
-                  isActive ? 'text-[#1E3A8A]' : 'text-gray-500'
+                  isActive ? 'text-[#1F6F8B]' : 'text-gray-500'
                 }`
               }
             >

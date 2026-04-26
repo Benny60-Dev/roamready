@@ -25,7 +25,7 @@ export function Breadcrumb({ items }: { items: BreadcrumbItem[] }) {
               {!isLast && item.href ? (
                 <Link
                   to={item.href}
-                  className="text-xs text-[#1E3A8A] hover:text-[#1E40AF] transition-colors"
+                  className="text-xs text-[#1F6F8B] hover:text-[#134756] transition-colors"
                 >
                   {item.label}
                 </Link>
@@ -45,7 +45,7 @@ export function Breadcrumb({ items }: { items: BreadcrumbItem[] }) {
           {parent.href ? (
             <Link
               to={parent.href}
-              className="flex items-center gap-1 text-xs text-[#1E3A8A] hover:text-[#1E40AF] transition-colors"
+              className="flex items-center gap-1 text-xs text-[#1F6F8B] hover:text-[#134756] transition-colors"
             >
               <ArrowLeft size={13} />
               {parent.label}
