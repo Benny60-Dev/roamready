@@ -29,9 +29,9 @@ export interface TimelineEntry {
 
 // ─── Colors / constants ───────────────────────────────────────────────────────
 
-const GREEN  = '#1E3A8A'
-const GREEN_L = '#EFF6FF'
-const BLUE_L  = '#EFF6FF'
+const GREEN  = '#1F6F8B'
+const GREEN_L = '#E0F0F4'
+const BLUE_L  = '#E0F0F4'
 const AMBER_L = '#FFFBEB'
 const PURP_L  = '#F5F3FF'
 const GRAY_9  = '#111827'
@@ -306,7 +306,7 @@ function DriveEntry({ entry }: { entry: TimelineEntry }) {
           <Text style={s.routeDesc}>{entry.routeDescription}</Text>
         ) : null}
         {entry.terrainSummary ? (
-          <Text style={[s.terrainText, { color: '#1E40AF', marginTop: 4 }]}>{entry.terrainSummary}</Text>
+          <Text style={[s.terrainText, { color: '#134756', marginTop: 4 }]}>{entry.terrainSummary}</Text>
         ) : null}
         {entry.pointsOfInterest?.length ? (
           <View style={s.poiRow}>

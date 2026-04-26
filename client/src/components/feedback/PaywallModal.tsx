@@ -60,8 +60,8 @@ export default function PaywallModal({ feature, onClose }: Props) {
       <div className="bg-white rounded-xl border border-gray-200 w-full max-w-lg p-6" style={{ borderWidth: '0.5px' }}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-[#EFF6FF] rounded-lg flex items-center justify-center">
-              <Zap size={16} className="text-[#1E3A8A]" />
+            <div className="w-8 h-8 bg-[#E0F0F4] rounded-lg flex items-center justify-center">
+              <Zap size={16} className="text-[#1F6F8B]" />
             </div>
             <div>
               <h2 className="font-medium text-gray-900">Upgrade to Pro</h2>
@@ -81,14 +81,14 @@ export default function PaywallModal({ feature, onClose }: Props) {
               onClick={() => setAnnual(true)}
               className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${annual ? 'bg-white text-gray-900' : 'text-gray-500'}`}
             >
-              Annual <span className="text-[#1E3A8A] ml-1">Save 35%</span>
+              Annual <span className="text-[#1F6F8B] ml-1">Save 35%</span>
             </button>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3 mb-6">
-          <div className="border border-[#1E3A8A] rounded-xl p-4" style={{ borderWidth: '0.5px' }}>
-            <div className="text-sm font-medium text-[#1E3A8A] mb-1">Pro</div>
+          <div className="border border-[#1F6F8B] rounded-xl p-4" style={{ borderWidth: '0.5px' }}>
+            <div className="text-sm font-medium text-[#1F6F8B] mb-1">Pro</div>
             <div className="text-2xl font-medium text-gray-900">
               ${annual ? '5.83' : '8.99'}
               <span className="text-sm text-gray-500 font-normal">/mo</span>
@@ -122,7 +122,7 @@ export default function PaywallModal({ feature, onClose }: Props) {
         <ul className="space-y-2 mb-4">
           {PRO_FEATURES.map(f => (
             <li key={f} className="flex items-center gap-2 text-sm text-gray-600">
-              <Check size={14} className="text-[#1E3A8A] flex-shrink-0" />
+              <Check size={14} className="text-[#1F6F8B] flex-shrink-0" />
               {f}
             </li>
           ))}

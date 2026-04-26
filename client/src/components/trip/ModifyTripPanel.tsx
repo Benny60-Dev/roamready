@@ -330,7 +330,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
           style={{ borderBottomWidth: '0.5px' }}
         >
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-[#1E3A8A] flex items-center justify-center flex-shrink-0">
+            <div className="w-6 h-6 rounded-full bg-[#1F6F8B] flex items-center justify-center flex-shrink-0">
               <Wand2 size={12} className="text-white" />
             </div>
             <div className="min-w-0">
@@ -354,7 +354,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
                 key={chip}
                 onClick={() => sendMessage(chip)}
                 disabled={typing || applying}
-                className="flex-shrink-0 text-[11px] px-2.5 py-1 rounded-full border border-[#1E3A8A] text-[#1E3A8A] bg-white hover:bg-[#EFF6FF] transition-colors disabled:opacity-40 whitespace-nowrap"
+                className="flex-shrink-0 text-[11px] px-2.5 py-1 rounded-full border border-[#1F6F8B] text-[#1F6F8B] bg-white hover:bg-[#E0F0F4] transition-colors disabled:opacity-40 whitespace-nowrap"
               >
                 {chip}
               </button>
@@ -366,7 +366,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
         <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
           {!historyLoaded && (
             <div className="flex justify-center pt-8">
-              <div className="w-4 h-4 border-2 border-[#1E3A8A] border-t-transparent rounded-full animate-spin" />
+              <div className="w-4 h-4 border-2 border-[#1F6F8B] border-t-transparent rounded-full animate-spin" />
             </div>
           )}
           {historyLoaded && messages.map((msg, i) => (
@@ -376,7 +376,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
                 <div
                   className={`max-w-[88%] rounded-xl px-3 py-2.5 text-[13px] leading-relaxed ${
                     msg.role === 'user'
-                      ? 'bg-[#1E3A8A] text-white'
+                      ? 'bg-[#1F6F8B] text-white'
                       : 'bg-gray-50 border border-gray-200 text-gray-800'
                   }`}
                   style={{ borderWidth: '0.5px' }}
@@ -390,7 +390,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
                 msg.modifyAction &&
                 !msg.modifyApplied &&
                 !msg.modifyCancelled && (
-                  <div className="mt-2 mr-4 bg-white border border-[#1E3A8A]/25 rounded-xl p-3 shadow-sm">
+                  <div className="mt-2 mr-4 bg-white border border-[#1F6F8B]/25 rounded-xl p-3 shadow-sm">
                     <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Proposed change</p>
                     <p className="text-sm font-medium text-gray-900 mb-2.5">
                       {getConfirmationText(msg.modifyAction)}

@@ -61,7 +61,7 @@ export function StopWeatherCard({ stop, weather, compact = false }: Props) {
                 href={nwsUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-0.5 text-[10px] text-[#1E3A8A] hover:text-[#1E40AF] font-medium transition-colors"
+                className="flex items-center gap-0.5 text-[10px] text-[#1F6F8B] hover:text-[#134756] font-medium transition-colors"
               >
                 View live forecast on NWS → <ExternalLink size={9} />
               </a>
@@ -105,10 +105,10 @@ export function StopWeatherCard({ stop, weather, compact = false }: Props) {
   )
 
   return (
-    <div className="mt-2 rounded-lg border border-[#1E3A8A]/20 bg-[#EFF6FF]/30 px-3 py-2.5 text-xs">
+    <div className="mt-2 rounded-lg border border-[#1F6F8B]/20 bg-[#E0F0F4]/30 px-3 py-2.5 text-xs">
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
-        <span className="font-semibold text-[#1E3A8A] flex items-center gap-1.5">
+        <span className="font-semibold text-[#1F6F8B] flex items-center gap-1.5">
           📡 Live {w.days.length}-day forecast
         </span>
         {nwsUrl && (
@@ -116,7 +116,7 @@ export function StopWeatherCard({ stop, weather, compact = false }: Props) {
             href={nwsUrl}
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-1 text-xs text-[#1E3A8A] hover:text-[#1E40AF] transition-colors"
+            className="flex items-center gap-1 text-xs text-[#1F6F8B] hover:text-[#134756] transition-colors"
           >
             Full forecast <ExternalLink size={10} />
           </a>
