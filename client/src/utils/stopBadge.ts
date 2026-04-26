@@ -54,7 +54,7 @@ function normalizeLocation(s: string): string {
 export function getStopBadge(
   stop: Stop,
   sortedStops: Stop[],
-  user?: Pick<User, 'homeCity' | 'homeState' | 'homeLocation'>,
+  user?: Pick<User, 'homeCity' | 'homeState' | 'homeLocation'> | null,
 ): 'S' | 'H' | 'F' | number {
   if (sortedStops.length === 0) return 1
   const firstId = sortedStops[0].id
@@ -99,7 +99,7 @@ export function getStopBadge(
  */
 export function buildStopBadges(
   sortedStops: Stop[],
-  user?: Pick<User, 'homeCity' | 'homeState' | 'homeLocation'>,
+  user?: Pick<User, 'homeCity' | 'homeState' | 'homeLocation'> | null,
 ): Record<string, 'S' | 'H' | 'F' | number> {
   const result: Record<string, 'S' | 'H' | 'F' | number> = {}
   sortedStops.forEach(s => { result[s.id] = getStopBadge(s, sortedStops, user) })
