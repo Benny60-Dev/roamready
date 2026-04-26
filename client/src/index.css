@@ -76,7 +76,7 @@
   .badge-planning  { @apply badge; background-color: #FDEFD9; color: #8A5A0E; }
   .badge-active    { @apply badge; background-color: #E0F0F4; color: #134756; }
   .badge-completed { @apply badge; background-color: #DCE5D5; color: #2F4030; }
-  .badge-draft     { @apply badge; background-color: #F7F5F0; color: #A09B90; }
+  .badge-draft     { @apply badge; background-color: #EDEAE3; color: #6B6458; }
 }
 
 .typing-dot {
