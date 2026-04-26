@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { Autocomplete, useJsApiLoader } from '@react-google-maps/api'
-import { Truck, Map, CreditCard, Bell, Shield, ChevronRight, Save, MapPin } from 'lucide-react'
+import { Truck, Map, CreditCard, Bell, Shield, ChevronRight, Save, MapPin, Accessibility } from 'lucide-react'
 import { usersApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 
@@ -70,6 +70,7 @@ export default function ProfilePage() {
   const profileLinks = [
     { to: '/profile/rig',           icon: Truck,   label: 'Rig & Vehicle',  sub: 'Manage your rigs' },
     { to: '/profile/style',         icon: Map,     label: 'Travel Style',   sub: 'Preferences & budget' },
+    { to: '/profile/accessibility', icon: Accessibility, label: 'Accessibility',  sub: 'Needs & requirements' },
     { to: '/profile/memberships',   icon: Shield,  label: 'Memberships',    sub: 'ATB, Good Sam, etc.' },
     { to: '/profile/notifications', icon: Bell,    label: 'Notifications',  sub: 'Alerts & reminders' },
     { to: '/profile/billing',       icon: CreditCard, label: 'Billing',     sub: user?.subscriptionTier === 'FREE' ? 'Free plan' : `${user?.subscriptionTier} plan` },
