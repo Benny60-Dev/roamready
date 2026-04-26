@@ -521,7 +521,7 @@ export default function TripBookingPage() {
   const { hasAccess, user } = useAuthStore()
   const { openPaywall } = useUIStore()
 
-  // Load trip — honor ?stopId param from TripDetailPage Reserve button
+  // Load trip — honor ?stopId param from incoming navigation
   useEffect(() => {
     if (!hasAccess('campgroundBooking')) { openPaywall('campgroundBooking'); return }
     if (!id) return
