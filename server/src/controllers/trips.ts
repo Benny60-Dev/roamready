@@ -783,7 +783,7 @@ export async function getTripWeather(req: AuthRequest, res: Response, next: Next
     if (!trip) throw new AppError('Trip not found', 404)
 
     const today      = new Date()
-    const tripStart  = trip.startDate ? new Date(trip.startDate as string) : null
+    const tripStart  = trip.startDate ? new Date(trip.startDate) : null
     const daysUntil  = tripStart
       ? Math.ceil((tripStart.getTime() - today.getTime()) / 86_400_000)
       : null
