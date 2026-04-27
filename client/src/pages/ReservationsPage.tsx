@@ -50,7 +50,7 @@ function TripBookingCard({ trip }: { trip: Trip }) {
       }}
       role="link"
       tabIndex={0}
-      className="card hover:border-[#1E3A8A]/30 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/40"
+      className="card hover:border-[#1F6F8B]/30 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1F6F8B]/40"
     >
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
@@ -177,7 +177,7 @@ export default function ReservationsPage() {
 
   if (loading) return (
     <div className="flex justify-center py-20">
-      <div className="w-6 h-6 border-2 border-[#1E3A8A] border-t-transparent rounded-full animate-spin" />
+      <div className="w-6 h-6 border-2 border-[#1F6F8B] border-t-transparent rounded-full animate-spin" />
     </div>
   )
 
@@ -194,7 +194,7 @@ export default function ReservationsPage() {
             { icon: Clock,       label: 'Trips w/ pending', value: tripsWithPending || '—' },
           ].map(({ icon: Icon, label, value }) => (
             <div key={label} className="card text-center py-3">
-              <Icon size={15} className="text-[#1E3A8A] mx-auto mb-1" />
+              <Icon size={15} className="text-[#1F6F8B] mx-auto mb-1" />
               <div className="text-base font-semibold text-gray-900">{value}</div>
               <div className="text-[11px] text-gray-500 leading-tight">{label}</div>
             </div>
@@ -211,7 +211,7 @@ export default function ReservationsPage() {
               onClick={() => setFilter(f)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 filter === f
-                  ? 'bg-[#1E3A8A] text-white'
+                  ? 'bg-[#1F6F8B] text-white'
                   : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
               }`}
               style={{ borderWidth: '0.5px' }}

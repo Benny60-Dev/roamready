@@ -18,7 +18,7 @@ export default function SharedTripPage() {
     tripsApi.getShared(token).then(res => { setTrip(res.data); setLoading(false) }).catch(() => { setNotFound(true); setLoading(false) })
   }, [token])
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="w-6 h-6 border-2 border-[#1E3A8A] border-t-transparent rounded-full animate-spin" /></div>
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="w-6 h-6 border-2 border-[#1F6F8B] border-t-transparent rounded-full animate-spin" /></div>
   if (notFound) return (
     <div className="min-h-screen flex flex-col items-center justify-center text-center p-4">
       <div className="text-4xl mb-3">🗺️</div>
@@ -41,7 +41,7 @@ export default function SharedTripPage() {
           <Link to="/" className="flex items-center gap-2">
             <img src={logoIcon} alt="RoamReady" className="h-8 w-auto object-contain" />
             <span className="font-medium text-sm">
-              <span style={{ color: '#1E3A8A' }}>Roam</span><span style={{ color: '#F7A829' }}>ready</span><span style={{ color: '#1E3A8A' }}>.ai</span>
+              <span style={{ color: '#1F6F8B' }}>Roam</span><span style={{ color: '#F7A829' }}>ready</span><span style={{ color: '#1F6F8B' }}>.ai</span>
             </span>
           </Link>
           <Link to="/signup" className="btn-primary text-sm">Plan your own trip</Link>
@@ -62,7 +62,7 @@ export default function SharedTripPage() {
             { icon: DollarSign, label: 'Est. cost', value: totalCost ? `$${totalCost.toLocaleString()}` : '–' },
           ].map(({ icon: Icon, label, value }) => (
             <div key={label} className="card text-center">
-              <Icon size={15} className="text-[#1E3A8A] mx-auto mb-1" />
+              <Icon size={15} className="text-[#1F6F8B] mx-auto mb-1" />
               <div className="font-medium text-gray-900">{value}</div>
               <div className="text-xs text-gray-500">{label}</div>
             </div>
@@ -73,7 +73,7 @@ export default function SharedTripPage() {
           {sortedStops.map((stop, i) => (
             <div key={stop.id} className="flex gap-3">
               <div className="flex flex-col items-center">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-medium ${stop.type === 'HOME' ? 'bg-gray-400' : 'bg-[#1E3A8A]'}`}>
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-medium ${stop.type === 'HOME' ? 'bg-gray-400' : 'bg-[#1F6F8B]'}`}>
                   {String(stopDisplayNumbers[stop.id] ?? '')}
                 </div>
                 {i < sortedStops.length - 1 && <div className="w-px flex-1 bg-gray-200 mt-1 min-h-6" />}

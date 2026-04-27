@@ -55,7 +55,7 @@ export default function ResourcesPage() {
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`flex-shrink-0 px-3 py-2 rounded-lg text-sm border transition-colors ${
-              activeTab === tab.id ? 'bg-[#1E3A8A] text-white border-[#1E3A8A]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+              activeTab === tab.id ? 'bg-[#1F6F8B] text-white border-[#1F6F8B]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
             }`}
             style={{ borderWidth: '0.5px' }}
           >
@@ -77,7 +77,7 @@ export default function ResourcesPage() {
           {resources.map(r => (
             <div key={r.id} className="card flex items-start gap-3">
               <div className="w-8 h-8 bg-gray-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                <MapPin size={15} className="text-[#1E3A8A]" />
+                <MapPin size={15} className="text-[#1F6F8B]" />
               </div>
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-900">{r.name}</p>
@@ -96,7 +96,7 @@ export default function ResourcesPage() {
                 </div>
               </div>
               {r.phone && (
-                <a href={`tel:${r.phone}`} className="flex items-center gap-1 text-xs text-[#1E3A8A]">
+                <a href={`tel:${r.phone}`} className="flex items-center gap-1 text-xs text-[#1F6F8B]">
                   <Phone size={12} /> Call
                 </a>
               )}

@@ -380,7 +380,7 @@ export default function NewTripPage() {
           line-height: 1.4 !important;
         }
         .pac-item:hover, .pac-item.pac-item-selected {
-          background-color: #EFF6FF !important;
+          background-color: #E0F0F4 !important;
         }
         .pac-item-query {
           font-size: 0.8125rem !important;
@@ -391,7 +391,7 @@ export default function NewTripPage() {
       `}</style>
 
       {/* Profile context bar */}
-      <div className="flex items-center gap-3 px-4 py-2 bg-[#EFF6FF] rounded-xl mb-3 text-xs text-[#1E3A8A] flex-shrink-0">
+      <div className="flex items-center gap-3 px-4 py-2 bg-[#E0F0F4] rounded-xl mb-3 text-xs text-[#1F6F8B] flex-shrink-0">
         {rig && (
           <span className="flex items-center gap-1">
             <MapPin size={12} />
@@ -415,7 +415,7 @@ export default function NewTripPage() {
       </div>
 
       {/* Block A — Greeting */}
-      <div className="flex items-center gap-3 border-l-4 border-[#1E3A8A] bg-[#EFF6FF] rounded-r-xl px-4 py-3 mb-2 flex-shrink-0">
+      <div className="flex items-center gap-3 border-l-4 border-[#1F6F8B] bg-[#E0F0F4] rounded-r-xl px-4 py-3 mb-2 flex-shrink-0">
         <span className="text-2xl leading-none flex-shrink-0">🏕️</span>
         <p className="text-base font-medium text-gray-900">{buildGreeting(user)}</p>
       </div>
@@ -475,7 +475,7 @@ export default function NewTripPage() {
                 style={{ borderWidth: '0.5px' }}
               >
                 {/* Brand color overrides for react-day-picker */}
-                <div style={{ '--rdp-accent-color': '#1E3A8A', '--rdp-accent-background-color': '#EFF6FF' } as React.CSSProperties}>
+                <div style={{ '--rdp-accent-color': '#1F6F8B', '--rdp-accent-background-color': '#E0F0F4' } as React.CSSProperties}>
                   <DayPicker
                     mode="range"
                     selected={liveRange}
@@ -552,7 +552,7 @@ export default function NewTripPage() {
                   <span className="text-gray-800 truncate min-w-0 flex-1">{startLocation}</span>
                 ) : (
                   <>
-                    <Home size={13} className="text-[#1E3A8A] flex-shrink-0" />
+                    <Home size={13} className="text-[#1F6F8B] flex-shrink-0" />
                     <span className="text-gray-700 truncate min-w-0 flex-1">{homeLabel}</span>
                   </>
                 )}
@@ -625,7 +625,7 @@ export default function NewTripPage() {
                 <div
                   className={`max-w-[80%] rounded-xl px-4 py-3 text-sm ${
                     msg.role === 'user'
-                      ? 'bg-[#1E3A8A] text-white'
+                      ? 'bg-[#1F6F8B] text-white'
                       : 'bg-white border border-gray-200 text-gray-800'
                   }`}
                   style={{ borderWidth: '0.5px' }}
@@ -697,7 +697,7 @@ export default function NewTripPage() {
               <div className="flex-1 overflow-y-auto min-h-0 space-y-2">
                 {itinerary.stops?.map((stop: any, i: number) => (
                   <div key={i} className="flex gap-2">
-                    <div className="w-5 h-5 bg-[#1E3A8A] rounded-full flex items-center justify-center text-white text-xs flex-shrink-0">
+                    <div className="w-5 h-5 bg-[#1F6F8B] rounded-full flex items-center justify-center text-white text-xs flex-shrink-0">
                       {i + 1}
                     </div>
                     <div className="flex-1">

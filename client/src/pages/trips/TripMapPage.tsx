@@ -208,7 +208,7 @@ function StopPopup({
         <span className="text-base leading-none">{today.icon}</span>
         <span>{today.high}° / {today.low}° · {today.conditions}</span>
         {nwsUrl && (
-          <a href={nwsUrl} target="_blank" rel="noreferrer" className="ml-auto text-[#1E3A8A] hover:underline flex-shrink-0">
+          <a href={nwsUrl} target="_blank" rel="noreferrer" className="ml-auto text-[#1F6F8B] hover:underline flex-shrink-0">
             <ExternalLink size={10} />
           </a>
         )}
@@ -333,7 +333,7 @@ function SidebarWeatherTab({ trip, weatherData, loading }: {
     <div className="space-y-3">
       {loading && !hasAnyData && (
         <div className="flex items-center gap-2 text-xs text-gray-500 py-3">
-          <div className="w-3 h-3 border-2 border-[#1E3A8A] border-t-transparent rounded-full animate-spin" />
+          <div className="w-3 h-3 border-2 border-[#1F6F8B] border-t-transparent rounded-full animate-spin" />
           Loading weather…
         </div>
       )}
@@ -364,7 +364,7 @@ function SidebarWeatherTab({ trip, weatherData, loading }: {
         return (
           <div key={stop.id}>
             <div className="flex items-center gap-2 mb-1">
-              <div className="w-4 h-4 rounded-full bg-[#1E3A8A] flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0">
+              <div className="w-4 h-4 rounded-full bg-[#1F6F8B] flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0">
                 {idx + 1}
               </div>
               <div className="flex-1 min-w-0">
@@ -966,7 +966,7 @@ export default function TripMapPage() {
 
       {/* Breadcrumb strip */}
       <div className="flex-shrink-0 bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-1.5">
-        <Link to="/trips" className="text-xs text-[#1E3A8A] hover:text-[#1E40AF] transition-colors">My Trips</Link>
+        <Link to="/trips" className="text-xs text-[#1F6F8B] hover:text-[#134756] transition-colors">My Trips</Link>
         <span className="text-gray-300 text-xs">›</span>
         <span className="text-xs text-gray-700 font-medium truncate max-w-[200px]">{trip?.name ?? '…'}</span>
       </div>
@@ -975,29 +975,29 @@ export default function TripMapPage() {
       <div className="flex-shrink-0 bg-white border-b border-gray-100 px-2 flex flex-wrap lg:flex-nowrap items-center gap-0.5">
         <Link
           to={`/trips/${id}/itinerary`}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1E3A8A] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
+          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1F6F8B] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
         >
           <Calendar size={13} /> Itinerary
         </Link>
         <Link
           to={`/trips/${id}/journal`}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1E3A8A] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
+          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1F6F8B] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
         >
           <BookOpen size={13} /> Journal
         </Link>
         <Link
           to={`/packing/${id}`}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1E3A8A] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
+          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1F6F8B] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
         >
           <Package size={13} /> Packing list
         </Link>
-        <button className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1E3A8A] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0">
+        <button className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1F6F8B] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0">
           <Share2 size={13} /> Share
         </button>
         <button
           onClick={handleExportPdf}
           disabled={downloadingPdf}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1E3A8A] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1F6F8B] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50"
         >
           <Download size={13} /> {downloadingPdf ? 'Generating...' : 'PDF'}
         </button>
@@ -1039,7 +1039,7 @@ export default function TripMapPage() {
                 {renaming ? (
                   <div className="flex-1 flex items-center gap-1 min-w-0">
                     <input
-                      className="flex-1 min-w-0 text-sm font-medium text-gray-900 border border-[#1E3A8A] rounded px-2 py-1 focus:outline-none"
+                      className="flex-1 min-w-0 text-sm font-medium text-gray-900 border border-[#1F6F8B] rounded px-2 py-1 focus:outline-none"
                       value={tripNameInput}
                       onChange={e => setTripNameInput(e.target.value)}
                       onKeyDown={e => {
@@ -1048,7 +1048,7 @@ export default function TripMapPage() {
                       }}
                       autoFocus
                     />
-                    <button onClick={handleRename} className="p-1 text-[#1E3A8A] hover:bg-[#EFF6FF] rounded flex-shrink-0">
+                    <button onClick={handleRename} className="p-1 text-[#1F6F8B] hover:bg-[#E0F0F4] rounded flex-shrink-0">
                       <Check size={14} />
                     </button>
                   </div>
@@ -1207,7 +1207,7 @@ export default function TripMapPage() {
                 onClick={() => setSidebarTab('stops')}
                 className={`flex-1 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
                   sidebarTab === 'stops'
-                    ? 'border-[#1E3A8A] text-[#1E3A8A]'
+                    ? 'border-[#1F6F8B] text-[#1F6F8B]'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -1217,7 +1217,7 @@ export default function TripMapPage() {
                 onClick={() => setSidebarTab('weather')}
                 className={`flex-1 py-2 text-xs font-medium transition-colors border-b-2 -mb-px flex items-center justify-center gap-1 ${
                   sidebarTab === 'weather'
-                    ? 'border-[#1E3A8A] text-[#1E3A8A]'
+                    ? 'border-[#1F6F8B] text-[#1F6F8B]'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -1413,7 +1413,7 @@ export default function TripMapPage() {
           {/* Geocoding indicator */}
           {geocoding && (
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white border border-gray-200 rounded-full px-4 py-2 text-xs text-gray-600 shadow-md flex items-center gap-2 z-10">
-              <span className="w-3 h-3 rounded-full border-2 border-[#1E3A8A] border-t-transparent animate-spin" />
+              <span className="w-3 h-3 rounded-full border-2 border-[#1F6F8B] border-t-transparent animate-spin" />
               Finding stop locations…
             </div>
           )}

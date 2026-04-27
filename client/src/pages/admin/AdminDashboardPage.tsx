@@ -38,7 +38,7 @@ export default function AdminDashboardPage() {
           {stats.map(({ icon: Icon, label, value, sub }) => (
             <div key={label} className="card">
               <div className="flex items-center gap-2 mb-2">
-                <Icon size={15} className="text-[#1E3A8A]" />
+                <Icon size={15} className="text-[#1F6F8B]" />
                 <span className="text-xs text-gray-500">{label}</span>
               </div>
               <div className="text-2xl font-medium text-gray-900">{value?.toLocaleString()}</div>
