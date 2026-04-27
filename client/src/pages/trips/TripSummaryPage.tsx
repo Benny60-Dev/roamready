@@ -846,13 +846,13 @@ export default function TripSummaryPage() {
       </div>
 
       {/* Stats */}
-      <div className="card-lg">
-        <h2 className="font-medium text-gray-900 mb-4">Trip at a Glance</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <StatCell value={liveTotalMiles > 0 ? liveTotalMiles.toLocaleString() : (trip.totalMiles?.toLocaleString() || '–')} label="Total miles" />
-          <StatCell value={String(trip.totalNights || sortedStops.reduce((s, st) => s + st.nights, 0))} label="Nights" />
-          <StatCell value={String(sortedStops.length)} label="Stops" />
-          <StatCell value={`$${grandTotal.toLocaleString()}`} label="Est. total" />
+      <div className="card-lg !p-3 sm:!p-6">
+        <h2 className="text-xs sm:text-base font-medium text-gray-500 sm:text-gray-900 mb-2 sm:mb-4">Trip at a Glance</h2>
+        <div className="grid grid-cols-4 gap-1 sm:gap-4 divide-x divide-gray-200 sm:divide-x-0">
+          <StatCell value={liveTotalMiles > 0 ? liveTotalMiles.toLocaleString() : (trip.totalMiles?.toLocaleString() || '–')} label="Total miles" shortLabel="miles" />
+          <StatCell value={String(trip.totalNights || sortedStops.reduce((s, st) => s + st.nights, 0))} label="Nights" shortLabel="nights" />
+          <StatCell value={String(sortedStops.length)} label="Stops" shortLabel="stops" />
+          <StatCell value={`$${grandTotal.toLocaleString()}`} label="Est. total" shortLabel="est." />
         </div>
       </div>
 
@@ -1077,11 +1077,14 @@ function TimePicker({ value, onChange, className }: {
 
 // ─── StatCell ─────────────────────────────────────────────────────────────────
 
-function StatCell({ value, label }: { value: string; label: string }) {
+function StatCell({ value, label, shortLabel }: { value: string; label: string; shortLabel: string }) {
   return (
     <div className="text-center">
-      <div className="text-2xl font-medium text-[#1F6F8B]">{value}</div>
-      <div className="text-xs text-gray-500 mt-0.5">{label}</div>
+      <div className="text-base sm:text-2xl font-medium text-[#1F6F8B]">{value}</div>
+      <div className="text-[10px] sm:text-xs text-gray-500 mt-0.5">
+        <span className="sm:hidden">{shortLabel}</span>
+        <span className="hidden sm:inline">{label}</span>
+      </div>
     </div>
   )
 }
