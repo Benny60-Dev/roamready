@@ -4,11 +4,6 @@ export default {
   theme: {
     extend: {
       colors: {
-        brand: {
-          DEFAULT: '#1E3A8A',
-          light: '#EFF6FF',
-          dark: '#1E40AF',
-        },
         rr: {
           // Primary identity
           blue: {
