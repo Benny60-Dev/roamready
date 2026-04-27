@@ -781,7 +781,7 @@ export default function TripBookingPage() {
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
     // Break out of layout padding, fill viewport like the map page
-    <div className="-mx-4 -my-6 h-[calc(100vh-3.5rem)] flex flex-col">
+    <div className="-mx-4 -my-6 h-[calc(100dvh-3.5rem)] flex flex-col">
 
       {/* Breadcrumb strip */}
       <div className="flex-shrink-0 bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-1.5">

@@ -362,7 +362,7 @@ export default function NewTripPage() {
   )
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)]">
+    <div className="flex flex-col h-[calc(100dvh-8rem)]">
       {/* Google Places pac-container overrides — wider dropdown, app styling */}
       <style>{`
         .pac-container {
@@ -712,6 +712,7 @@ export default function NewTripPage() {
           isOpen={sheetOpen}
           onClose={() => setSheetOpen(false)}
           title={itinerary?.name || 'Itinerary'}
+          locked={creating}
         >
           {itinerary && (
             <div className="px-5 py-4">
