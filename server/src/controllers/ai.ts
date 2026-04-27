@@ -1,10 +1,22 @@
 import { Response, NextFunction } from 'express'
+import { Prisma } from '@prisma/client'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
 import { chatWithAI, generatePackingListAI, analyzeFeedbackAI } from '../services/ai'
 
 const TURN_LIMIT = 20 // max message entries (user + assistant combined) per planning session
+
+const VIBES = [
+  'a quiet alpine lake setting',
+  'high desert with red rock formations',
+  'coastal cliffs or rugged shoreline',
+  'dense old-growth forest',
+  'wide open prairie or grassland',
+  'a river canyon, ideally with hot springs nearby',
+  'volcanic or geothermal landscape',
+  'boreal lakes and birch forest',
+]
 
 const TURN_LIMIT_RESPONSE =
   "We've covered a lot of ground in this planning session! 🗺️ Your itinerary is ready to build. " +
@@ -149,7 +161,45 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       memberships:  user?.memberships?.map(m => m.type),
     }
 
-    let response = await chatWithAI(messagesForAI, userProfile)
+    // Surprise-trip variety: detect "surprise trip" in the latest user message,
+    // then pull the user's last 5 surprise destinations to exclude and pick a
+    // random landscape vibe to nudge variety. Falls through silently on any error.
+    const lastUserMsg = [...messages].reverse().find((m: any) => m.role === 'user')
+    const isSurprise = typeof lastUserMsg?.content === 'string'
+      && lastUserMsg.content.toLowerCase().includes('surprise trip')
+
+    let recentSurpriseDestinations: string[] | undefined
+    let surpriseVibe: string | undefined
+    if (isSurprise) {
+      try {
+        const recent = await prisma.trip.findMany({
+          where: {
+            userId: req.user!.id,
+            aiConversation: { not: Prisma.JsonNull },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 30,
+          include: {
+            stops: {
+              where: { type: 'DESTINATION' },
+              orderBy: { order: 'asc' },
+              take: 1,
+            },
+          },
+        })
+        recentSurpriseDestinations = recent
+          .filter(t => JSON.stringify(t.aiConversation).toLowerCase().includes('surprise trip'))
+          .slice(0, 5)
+          .map(t => t.stops[0]?.locationName)
+          .filter(Boolean) as string[]
+      } catch (err) {
+        console.warn('[AI surprise] recent-picks query failed, continuing without exclusion:', err)
+      }
+      surpriseVibe = VIBES[Math.floor(Math.random() * VIBES.length)]
+      console.log('[AI surprise] excluding=%j vibe=%s', recentSurpriseDestinations, surpriseVibe)
+    }
+
+    let response = await chatWithAI(messagesForAI, userProfile, recentSurpriseDestinations, surpriseVibe)
     if (liveStateMsg) {
       const hasTag = /<modify>/.test(response)
       console.log('[AI modify] response hasModifyTag=%s preview=%s', hasTag, response.slice(0, 200))
@@ -169,7 +219,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
               'Please repeat your response and include the <modify> JSON block exactly as specified in the instructions above.]',
           },
         ]
-        const retryResponse = await chatWithAI(retryMessages, userProfile)
+        const retryResponse = await chatWithAI(retryMessages, userProfile, recentSurpriseDestinations, surpriseVibe)
         const retryHasTag = /<modify>/.test(retryResponse)
         console.log('[AI modify] retry hasModifyTag=%s preview=%s', retryHasTag, retryResponse.slice(0, 200))
         if (retryHasTag) {

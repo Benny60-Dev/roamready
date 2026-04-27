@@ -8,7 +8,12 @@ if (!apiKey) {
 
 const client = new Anthropic({ apiKey })
 
-export async function chatWithAI(messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>, userProfile: any) {
+export async function chatWithAI(
+  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
+  userProfile: any,
+  recentSurpriseDestinations?: string[],
+  surpriseVibe?: string,
+) {
   const systemPrompt = `You are RoamReady's AI trip planner. You ONLY help users plan outdoor trips — RV routes, van life journeys, car camping adventures, campground recommendations, OHV destinations, weather along routes, fuel costs, packing lists, and travel logistics.
 
 If a user asks about ANYTHING unrelated to outdoor travel and trip planning — politics, relationships, medical advice, legal advice, other products, general knowledge questions, or any other off-topic subject — respond with exactly this: "I'm RoamReady's trip planning assistant and I can only help with outdoor travel planning. Is there a trip I can help you plan today?" Do not engage with off-topic questions under any circumstances. Do not be rude but be firm and redirect immediately back to trip planning. Stay focused on helping users plan amazing outdoor adventures.
@@ -19,7 +24,7 @@ Trip planning rules:
 - Never ask for information already in their profile (rig size, pets, budget, home base, memberships, accessibility needs)
 - Ask only what you need: destination, dates, and must-see stops
 - Maximum 3 questions before building the itinerary
-- Surprise trip rule: If the user asks you to "pick a destination", "surprise me", "choose somewhere", or submits a message indicating they want you to select the destination, propose ONE specific destination — never a list of options. Base the choice on their rig type/size, travel style, pet-friendly requirements, current season, and reasonable driving distance from their starting location. State the destination confidently (e.g. "I'd send you to Zion National Park, UT"), explain in 2–3 sentences why you chose it, then proceed directly to building the itinerary without asking for further confirmation.
+- Surprise trip rule: If the user asks you to "pick a destination", "surprise me", "choose somewhere", or submits a message indicating they want you to select the destination, propose ONE specific destination — never a list of options. Base the choice on their rig type/size, travel style, pet-friendly requirements, current season, and reasonable driving distance from their starting location. State the destination confidently in your opening line, explain in 2–3 sentences why you chose it, then proceed directly to building the itinerary without asking for further confirmation.
 - When you have enough information, respond with a JSON itinerary block inside <itinerary> tags — after the JSON block, do NOT add any closing message asking the user to click a button, build the itinerary, or take any UI action; the interface detects the itinerary automatically and shows the build button on its own
 - Stop "type" must be exactly one of: DESTINATION, OVERNIGHT_ONLY, HOME — never use TRAVEL or any other value
 - Always include the trip starting location as the first stop in the itinerary with type HOME and order 1. This is the departure point and should always be the first entry in the stops array regardless of whether the user mentioned it explicitly. Use the starting location confirmed during the conversation as this stop's locationName and locationState — if the user said they are leaving from home or did not specify a starting city, use homeCity and homeState from their profile if present, otherwise extract the city from homeLocation; if the user explicitly specified a different starting city (e.g. "I'm leaving from Austin"), use that city and state instead. Set nights to 0 for the HOME stop.
@@ -111,9 +116,31 @@ Itinerary JSON format:
   const cleanMessages = messages.filter(m => m.role !== 'system') as Array<{ role: 'user' | 'assistant'; content: string }>
   // Fix A: In modify mode (systemMessages present), put modify instructions FIRST so Claude
   // anchors on the <modify> tag requirement before reading the base planner rules.
-  const combinedSystem = systemMessages
-    ? systemMessages + '\n\n' + systemPrompt
-    : systemPrompt
+  // Surprise-trip critical rules (exclusion + vibe), when present, prepend the entire
+  // prompt so Claude anchors on them before any other instruction.
+  const criticalRulesParts: string[] = []
+
+  if (recentSurpriseDestinations && recentSurpriseDestinations.length > 0) {
+    criticalRulesParts.push(
+      `HARD RULE — must obey: This user was recently sent to: ${recentSurpriseDestinations.join(', ')}. Your destination MUST NOT be any of these places, AND MUST be at least 150 miles away from each one. Do not propose attractions, day trips, or campgrounds within 150 miles of any excluded place — this includes anything that would 'base out of' or 'use as a hub' those cities. This rule overrides convenience, familiarity, and driving-distance preferences. If your first instinct is one of the excluded places, deliberately pick something different — a different region of the country if necessary. Increasing drive time is acceptable; breaking this rule is not.`
+    )
+  }
+
+  if (surpriseVibe) {
+    criticalRulesParts.push(
+      `For variety on this surprise trip, lean toward ${surpriseVibe} — but only if it genuinely fits the user's rig, season, and reasonable driving distance. If it doesn't fit, pick something else that does fit and still feels different from their recent picks.`
+    )
+  }
+
+  const criticalRulesBlock = criticalRulesParts.length > 0
+    ? `## CRITICAL RULES FOR THIS REQUEST\n\n${criticalRulesParts.join('\n\n')}\n\n---\n\n`
+    : ''
+
+  const combinedSystem = criticalRulesBlock + (
+    systemMessages
+      ? systemMessages + '\n\n' + systemPrompt
+      : systemPrompt
+  )
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-5',
