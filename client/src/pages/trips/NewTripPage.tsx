@@ -7,6 +7,7 @@ import { Autocomplete, useJsApiLoader } from '@react-google-maps/api'
 import { aiApi, tripsApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 import { ChatMessage, User as UserType } from '../../types'
+import BottomSheet from '../../components/ui/BottomSheet'
 
 const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 'geometry', 'places']
 
@@ -93,6 +94,7 @@ export default function NewTripPage() {
   // Range that was committed before the current calendar session (for cancel)
   const prevRangeRef = useRef<DateRange | undefined>(undefined)
   const [calendarOpen, setCalendarOpen] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
 
   const [nights, setNights] = useState('')
   // Starting location: empty string = use home default; non-empty = custom override
@@ -648,6 +650,25 @@ export default function NewTripPage() {
             <div ref={bottomRef} />
           </div>
 
+          {/* Mobile-only peek tab — shown when itinerary is ready */}
+          {itinerary && (
+            <button
+              type="button"
+              onClick={() => setSheetOpen(true)}
+              className="lg:hidden flex items-center justify-between gap-2 mt-3 px-4 py-2.5 bg-[#E0F0F4] border border-[#1F6F8B]/20 rounded-xl text-sm hover:bg-[#1F6F8B]/10 transition-colors"
+              style={{ borderWidth: '0.5px' }}
+            >
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <span className="text-base flex-shrink-0">🗺️</span>
+                <span className="font-medium text-[#1F6F8B] truncate">{itinerary.name}</span>
+                <span className="text-xs text-[#134756] flex-shrink-0">
+                  · {itinerary.totalNights}n · ${((itinerary.estimatedFuel || 0) + (itinerary.estimatedCamp || 0)).toLocaleString()}
+                </span>
+              </div>
+              <span className="text-sm text-[#1F6F8B] font-medium flex-shrink-0">Review →</span>
+            </button>
+          )}
+
           {/* Chat input */}
           <div className="flex gap-2 mt-3">
             <input
@@ -685,6 +706,44 @@ export default function NewTripPage() {
             </button>
           </div>
         </div>
+
+        {/* Mobile-only BottomSheet — same content as desktop sidebar */}
+        <BottomSheet
+          isOpen={sheetOpen}
+          onClose={() => setSheetOpen(false)}
+          title={itinerary?.name || 'Itinerary'}
+        >
+          {itinerary && (
+            <div className="px-5 py-4">
+              <div className="grid grid-cols-2 gap-2 mb-4 text-xs text-gray-500">
+                <div>~{itinerary.totalMiles?.toLocaleString()} mi</div>
+                <div>~${((itinerary.estimatedFuel || 0) + (itinerary.estimatedCamp || 0)).toLocaleString()}</div>
+              </div>
+              <div className="space-y-2 mb-4">
+                {itinerary.stops?.map((stop: any, i: number) => (
+                  <div key={i} className="flex gap-2">
+                    <div className="w-5 h-5 bg-[#1F6F8B] rounded-full flex items-center justify-center text-white text-xs flex-shrink-0">
+                      {i + 1}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-gray-800 truncate">{stop.locationName}, {stop.locationState}</p>
+                      {stop.campgroundName && <p className="text-xs text-gray-500 truncate">{stop.campgroundName}</p>}
+                      <p className="text-xs text-gray-400">{stop.nights} night{stop.nights !== 1 ? 's' : ''}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {buildError && <p className="text-xs text-red-600 mb-3 text-center">{buildError}</p>}
+              <button
+                onClick={buildItinerary}
+                disabled={creating}
+                className="btn-primary w-full text-sm flex items-center justify-center gap-2"
+              >
+                {creating ? <><Loader size={15} className="animate-spin" /> Building...</> : 'Build full itinerary'}
+              </button>
+            </div>
+          )}
+        </BottomSheet>
 
         {/* Itinerary preview — desktop only */}
         {itinerary && (
