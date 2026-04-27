@@ -51,9 +51,11 @@ export default function LandingPage() {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <Link to="/pricing" className="text-sm text-gray-600 hover:text-gray-900">Pricing</Link>
-            <Link to="/roadmap" className="text-sm text-gray-600 hover:text-gray-900">Roadmap</Link>
-            <Link to="/login" className="text-sm text-gray-600 hover:text-gray-900">Sign in</Link>
+            <div className="hidden sm:flex items-center gap-3">
+              <Link to="/pricing" className="text-sm text-gray-600 hover:text-gray-900">Pricing</Link>
+              <Link to="/roadmap" className="text-sm text-gray-600 hover:text-gray-900">Roadmap</Link>
+              <Link to="/login" className="text-sm text-gray-600 hover:text-gray-900">Sign in</Link>
+            </div>
             <Link to="/signup" className="btn-primary text-sm">Get started free</Link>
           </div>
         </div>
