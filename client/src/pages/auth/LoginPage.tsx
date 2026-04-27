@@ -82,7 +82,7 @@ export default function LoginPage() {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="label mb-0">Password</label>
-                <Link to="/forgot-password" className="text-xs text-[#1E3A8A]">Forgot password?</Link>
+                <Link to="/forgot-password" className="text-xs text-[#1F6F8B]">Forgot password?</Link>
               </div>
               <input
                 type="password"
@@ -98,7 +98,7 @@ export default function LoginPage() {
 
         <p className="text-center text-sm text-gray-500 mt-4">
           New to RoamReady?{' '}
-          <Link to="/signup" className="text-[#1E3A8A] font-medium">Create account</Link>
+          <Link to="/signup" className="text-[#1F6F8B] font-medium">Create account</Link>
         </p>
       </div>
     </div>

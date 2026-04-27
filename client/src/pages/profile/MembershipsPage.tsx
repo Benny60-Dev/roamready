@@ -63,10 +63,10 @@ export default function MembershipsPage() {
           const membership = memberships.find(m => m.type === type.id)
           const active = !!membership
           return (
-            <div key={type.id} className={`card flex items-start justify-between ${active ? 'border-[#1E3A8A]/30' : ''}`}>
+            <div key={type.id} className={`card flex items-start justify-between ${active ? 'border-[#1F6F8B]/30' : ''}`}>
               <div className="flex items-start gap-2">
                 {active ? (
-                  <CheckCircle size={16} className="text-[#1E3A8A] flex-shrink-0 mt-0.5" />
+                  <CheckCircle size={16} className="text-[#1F6F8B] flex-shrink-0 mt-0.5" />
                 ) : (
                   <div className="w-4 h-4 rounded-full border-2 border-gray-200 flex-shrink-0 mt-0.5" />
                 )}
@@ -82,7 +82,7 @@ export default function MembershipsPage() {
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => toggleAutoApply(membership)}
-                    className={`text-xs px-2 py-1 rounded ${membership.autoApply ? 'text-[#1E3A8A]' : 'text-gray-400'}`}
+                    className={`text-xs px-2 py-1 rounded ${membership.autoApply ? 'text-[#1F6F8B]' : 'text-gray-400'}`}
                   >
                     Auto-apply {membership.autoApply ? 'on' : 'off'}
                   </button>

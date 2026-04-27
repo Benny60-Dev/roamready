@@ -89,7 +89,7 @@ export default function TravelStylePage() {
                 type="button"
                 onClick={() => toggleArray('campgroundTypes', type, campgroundTypes)}
                 className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
-                  campgroundTypes.includes(type) ? 'bg-[#1E3A8A] text-white border-[#1E3A8A]' : 'border-gray-200 text-gray-600 hover:border-[#1E3A8A]'
+                  campgroundTypes.includes(type) ? 'bg-[#1F6F8B] text-white border-[#1F6F8B]' : 'border-gray-200 text-gray-600 hover:border-[#1F6F8B]'
                 }`}
                 style={{ borderWidth: '0.5px' }}
               >
@@ -108,7 +108,7 @@ export default function TravelStylePage() {
                 type="button"
                 onClick={() => toggleArray('interests', interest, interests)}
                 className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
-                  interests.includes(interest) ? 'bg-[#1E3A8A] text-white border-[#1E3A8A]' : 'border-gray-200 text-gray-600 hover:border-[#1E3A8A]'
+                  interests.includes(interest) ? 'bg-[#1F6F8B] text-white border-[#1F6F8B]' : 'border-gray-200 text-gray-600 hover:border-[#1F6F8B]'
                 }`}
                 style={{ borderWidth: '0.5px' }}
               >

@@ -35,7 +35,7 @@ export default function AccessibilityPage() {
             { id: 'low_elevation', label: 'Prefer low elevation' },
           ].map(({ id, label }) => (
             <label key={id} className="flex items-center gap-3 cursor-pointer">
-              <input type="checkbox" {...register(id)} className="rounded w-4 h-4 text-[#1E3A8A]" />
+              <input type="checkbox" {...register(id)} className="rounded w-4 h-4 text-[#1F6F8B]" />
               <span className="text-sm text-gray-700">{label}</span>
             </label>
           ))}

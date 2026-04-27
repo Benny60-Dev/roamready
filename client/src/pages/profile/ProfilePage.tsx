@@ -82,7 +82,7 @@ export default function ProfilePage() {
 
       <div className="card-lg">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 bg-[#1E3A8A] rounded-full flex items-center justify-center text-white font-medium">
+          <div className="w-12 h-12 bg-[#1F6F8B] rounded-full flex items-center justify-center text-white font-medium">
             {user?.firstName?.[0]}{user?.lastName?.[0]}
           </div>
           <div>
@@ -129,7 +129,7 @@ export default function ProfilePage() {
               />
             )}
             {watchedCity && watchedState && (
-              <p className="mt-1.5 flex items-center gap-1 text-xs text-[#1E3A8A]">
+              <p className="mt-1.5 flex items-center gap-1 text-xs text-[#1F6F8B]">
                 <MapPin size={11} />
                 {watchedCity}, {watchedState}{watch('homeZip') ? ` ${watch('homeZip')}` : ''}
               </p>
@@ -163,7 +163,7 @@ export default function ProfilePage() {
 
       <div className="space-y-1">
         {profileLinks.map(({ to, icon: Icon, label, sub }) => (
-          <Link key={to} to={to} className="card flex items-center gap-3 hover:border-[#1E3A8A]/30 transition-all">
+          <Link key={to} to={to} className="card flex items-center gap-3 hover:border-[#1F6F8B]/30 transition-all">
             <div className="w-8 h-8 bg-gray-50 rounded-lg flex items-center justify-center">
               <Icon size={16} className="text-gray-600" />
             </div>

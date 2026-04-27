@@ -98,15 +98,15 @@ export default function SignupPage() {
           </form>
           <p className="text-xs text-center text-gray-400 mt-3">
             By creating an account, you agree to our{' '}
-            <Link to="/terms" className="text-[#1E3A8A] hover:underline">Terms of Service</Link>{' '}
+            <Link to="/terms" className="text-[#1F6F8B] hover:underline">Terms of Service</Link>{' '}
             and{' '}
-            <Link to="/privacy" className="text-[#1E3A8A] hover:underline">Privacy Policy</Link>
+            <Link to="/privacy" className="text-[#1F6F8B] hover:underline">Privacy Policy</Link>
           </p>
         </div>
 
         <p className="text-center text-sm text-gray-500 mt-4">
           Already have an account?{' '}
-          <Link to="/login" className="text-[#1E3A8A] font-medium">Sign in</Link>
+          <Link to="/login" className="text-[#1F6F8B] font-medium">Sign in</Link>
         </p>
       </div>
     </div>

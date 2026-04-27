@@ -78,8 +78,8 @@ export default function OnboardingPage() {
           {['Vehicle', 'Rig', 'Style', 'Done'].map((label, i) => (
             <div key={label} className="flex items-center gap-2">
               <div className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-medium ${
-                i < stepIndex ? 'bg-[#1E3A8A] text-white' :
-                i === stepIndex ? 'bg-[#1E3A8A] text-white' :
+                i < stepIndex ? 'bg-[#1F6F8B] text-white' :
+                i === stepIndex ? 'bg-[#1F6F8B] text-white' :
                 'bg-gray-200 text-gray-500'
               }`}>
                 {i < stepIndex ? <Check size={13} /> : i + 1}
@@ -105,8 +105,8 @@ export default function OnboardingPage() {
                     setVehicleType(v.type)
                     setStep('rig')
                   }}
-                  className={`flex items-center gap-3 p-3 rounded-xl border text-left hover:border-[#1E3A8A] transition-colors ${
-                    vehicleType === v.type ? 'border-[#1E3A8A] bg-[#EFF6FF]' : 'border-gray-200 bg-white'
+                  className={`flex items-center gap-3 p-3 rounded-xl border text-left hover:border-[#1F6F8B] transition-colors ${
+                    vehicleType === v.type ? 'border-[#1F6F8B] bg-[#E0F0F4]' : 'border-gray-200 bg-white'
                   }`}
                   style={{ borderWidth: '0.5px' }}
                 >
