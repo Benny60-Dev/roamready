@@ -420,199 +420,203 @@ export default function NewTripPage() {
         <p className="text-base font-medium text-gray-900">{buildGreeting(user)}</p>
       </div>
 
-      {/* Block B — Instructions */}
-      <div className="flex items-start gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3 mb-3 flex-shrink-0" style={{ borderWidth: '0.5px' }}>
-        <span className="text-lg leading-none mt-0.5 flex-shrink-0">💡</span>
-        <div className="text-sm text-gray-600 min-w-0">
-          <p>
-            Fill out the form below to get started —{' '}
-            <span className="font-medium text-gray-800">the form is optional.</span>{' '}
-            You can also just type everything in the chat and I'll ask about dates, destination, and nights as we go.
-          </p>
-          <p className="mt-1 text-gray-400 italic text-xs">
-            Example: "Plan a trip to Moab for 3 nights starting next Saturday."
-          </p>
-        </div>
-      </div>
+      {!messages.some(m => m.role === 'user') && (
+        <>
+          {/* Block B — Instructions */}
+          <div className="flex items-start gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3 mb-3 flex-shrink-0" style={{ borderWidth: '0.5px' }}>
+            <span className="text-lg leading-none mt-0.5 flex-shrink-0">💡</span>
+            <div className="text-sm text-gray-600 min-w-0">
+              <p>
+                Fill out the form below to get started —{' '}
+                <span className="font-medium text-gray-800">the form is optional.</span>{' '}
+                You can also just type everything in the chat and I'll ask about dates, destination, and nights as we go.
+              </p>
+              <p className="mt-1 text-gray-400 italic text-xs">
+                Example: "Plan a trip to Moab for 3 nights starting next Saturday."
+              </p>
+            </div>
+          </div>
 
-      {/* Compact form row — horizontal on desktop, stacked on mobile */}
-      <div
-        className="bg-white border border-gray-200 rounded-xl px-4 py-3 mb-3 flex-shrink-0"
-        style={{ borderWidth: '0.5px' }}
-      >
-        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:items-end">
+          {/* Compact form row — horizontal on desktop, stacked on mobile */}
+          <div
+            className="bg-white border border-gray-200 rounded-xl px-4 py-3 mb-3 flex-shrink-0"
+            style={{ borderWidth: '0.5px' }}
+          >
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:items-end">
 
-          {/* Trip dates — range picker */}
-          <div className="w-full sm:w-64 relative flex-shrink-0" ref={calendarRef}>
-            <label className="block text-xs text-gray-500 mb-1">Trip dates</label>
-            <button
-              type="button"
-              onClick={openCalendar}
-              className="input w-full text-sm text-left flex items-center justify-between gap-1"
-            >
-              <span className={dateRangeLabel ? 'text-gray-800 truncate' : 'text-gray-400'}>
-                {dateRangeLabel || 'Select dates…'}
-              </span>
-              <span className="flex items-center gap-0.5 text-gray-400 flex-shrink-0">
-                {dateRangeLabel && (
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={e => { e.stopPropagation(); clearDates() }}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.stopPropagation(); clearDates() } }}
-                    className="hover:text-gray-600 cursor-pointer p-0.5"
-                  >
-                    <X size={12} />
+              {/* Trip dates — range picker */}
+              <div className="w-full sm:w-64 relative flex-shrink-0" ref={calendarRef}>
+                <label className="block text-xs text-gray-500 mb-1">Trip dates</label>
+                <button
+                  type="button"
+                  onClick={openCalendar}
+                  className="input w-full text-sm text-left flex items-center justify-between gap-1"
+                >
+                  <span className={dateRangeLabel ? 'text-gray-800 truncate' : 'text-gray-400'}>
+                    {dateRangeLabel || 'Select dates…'}
                   </span>
+                  <span className="flex items-center gap-0.5 text-gray-400 flex-shrink-0">
+                    {dateRangeLabel && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={e => { e.stopPropagation(); clearDates() }}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.stopPropagation(); clearDates() } }}
+                        className="hover:text-gray-600 cursor-pointer p-0.5"
+                      >
+                        <X size={12} />
+                      </span>
+                    )}
+                    <CalendarDays size={14} />
+                  </span>
+                </button>
+
+                {calendarOpen && (
+                  <div
+                    className="absolute left-0 top-full z-50 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden"
+                    style={{ borderWidth: '0.5px' }}
+                  >
+                    {/* Brand color overrides for react-day-picker */}
+                    <div style={{ '--rdp-accent-color': '#1F6F8B', '--rdp-accent-background-color': '#E0F0F4' } as React.CSSProperties}>
+                      <DayPicker
+                        mode="range"
+                        selected={liveRange}
+                        onSelect={handleDateSelect}
+                        disabled={{ before: new Date() }}
+                        numberOfMonths={2}
+                        pagedNavigation
+                        footer={calendarFooter}
+                      />
+                    </div>
+                  </div>
                 )}
-                <CalendarDays size={14} />
-              </span>
-            </button>
-
-            {calendarOpen && (
-              <div
-                className="absolute left-0 top-full z-50 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden"
-                style={{ borderWidth: '0.5px' }}
-              >
-                {/* Brand color overrides for react-day-picker */}
-                <div style={{ '--rdp-accent-color': '#1F6F8B', '--rdp-accent-background-color': '#E0F0F4' } as React.CSSProperties}>
-                  <DayPicker
-                    mode="range"
-                    selected={liveRange}
-                    onSelect={handleDateSelect}
-                    disabled={{ before: new Date() }}
-                    numberOfMonths={2}
-                    pagedNavigation
-                    footer={calendarFooter}
-                  />
-                </div>
               </div>
-            )}
-          </div>
 
-          {/* Nights */}
-          <div className="w-full sm:w-20 flex-shrink-0">
-            <label className="block text-xs text-gray-500 mb-1">Nights</label>
-            <input
-              type="number"
-              min={0}
-              value={nights}
-              onChange={e => setNights(e.target.value)}
-              placeholder="—"
-              className="input w-full text-sm"
-            />
-          </div>
+              {/* Nights */}
+              <div className="w-full sm:w-20 flex-shrink-0">
+                <label className="block text-xs text-gray-500 mb-1">Nights</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={nights}
+                  onChange={e => setNights(e.target.value)}
+                  placeholder="—"
+                  className="input w-full text-sm"
+                />
+              </div>
 
-          {/* Starting location */}
-          <div className="w-full sm:w-56 flex-shrink-0">
-            <label className="block text-xs text-gray-500 mb-1">Starting from</label>
-            {editingStart ? (
-              <div className="flex items-center gap-1">
+              {/* Starting location */}
+              <div className="w-full sm:w-56 flex-shrink-0">
+                <label className="block text-xs text-gray-500 mb-1">Starting from</label>
+                {editingStart ? (
+                  <div className="flex items-center gap-1">
+                    {isLoaded ? (
+                      <Autocomplete
+                        onLoad={ac => { startAutoRef.current = ac }}
+                        onPlaceChanged={onStartPlaceChanged}
+                        options={{ types: [] }}
+                      >
+                        <input
+                          autoFocus
+                          className="input w-full text-sm"
+                          placeholder="Address, campground, city…"
+                          defaultValue={startLocation}
+                          onKeyDown={e => { if (e.key === 'Escape') setEditingStart(false) }}
+                        />
+                      </Autocomplete>
+                    ) : (
+                      <input
+                        autoFocus
+                        className="input w-full text-sm"
+                        placeholder="Address, campground, city…"
+                        value={startLocation}
+                        onChange={e => setStartLocation(e.target.value)}
+                        onBlur={() => setEditingStart(false)}
+                      />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => { setStartLocation(''); setEditingStart(false) }}
+                      className="text-gray-400 hover:text-gray-600 flex-shrink-0"
+                      title="Reset to home"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setEditingStart(true)}
+                    title={startLocation || homeLabel}
+                    className="input w-full text-sm text-left flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 transition-colors overflow-hidden"
+                  >
+                    {startLocation ? (
+                      <span className="text-gray-800 truncate min-w-0 flex-1">{startLocation}</span>
+                    ) : (
+                      <>
+                        <Home size={13} className="text-[#1F6F8B] flex-shrink-0" />
+                        <span className="text-gray-700 truncate min-w-0 flex-1">{homeLabel}</span>
+                      </>
+                    )}
+                    {startLocation && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={e => { e.stopPropagation(); setStartLocation('') }}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.stopPropagation(); setStartLocation('') } }}
+                        className="text-gray-400 hover:text-gray-600 flex-shrink-0"
+                      >
+                        <X size={12} />
+                      </span>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {/* Destination */}
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-xs text-gray-500 mb-1">Destination</label>
                 {isLoaded ? (
                   <Autocomplete
-                    onLoad={ac => { startAutoRef.current = ac }}
-                    onPlaceChanged={onStartPlaceChanged}
+                    onLoad={ac => { destAutoRef.current = ac }}
+                    onPlaceChanged={onDestPlaceChanged}
                     options={{ types: [] }}
                   >
                     <input
-                      autoFocus
+                      ref={destInputRef}
                       className="input w-full text-sm"
-                      placeholder="Address, campground, city…"
-                      defaultValue={startLocation}
-                      onKeyDown={e => { if (e.key === 'Escape') setEditingStart(false) }}
+                      placeholder="Where to? Leave blank to let me plan a random trip for you"
+                      defaultValue={destination}
+                      onChange={e => setDestination(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleFormSubmit() }}
                     />
                   </Autocomplete>
                 ) : (
                   <input
-                    autoFocus
                     className="input w-full text-sm"
-                    placeholder="Address, campground, city…"
-                    value={startLocation}
-                    onChange={e => setStartLocation(e.target.value)}
-                    onBlur={() => setEditingStart(false)}
+                    placeholder="Where to? Leave blank to let me plan a random trip for you"
+                    value={destination}
+                    onChange={e => setDestination(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleFormSubmit() }}
                   />
                 )}
+              </div>
+
+              {/* Submit — spacer label keeps button bottom-aligned with inputs on desktop */}
+              <div className="w-full sm:w-auto flex-shrink-0 flex flex-col">
+                <span className="hidden sm:block text-xs mb-1 opacity-0" aria-hidden>x</span>
                 <button
-                  type="button"
-                  onClick={() => { setStartLocation(''); setEditingStart(false) }}
-                  className="text-gray-400 hover:text-gray-600 flex-shrink-0"
-                  title="Reset to home"
+                  onClick={handleFormSubmit}
+                  disabled={typing}
+                  className="w-full sm:w-auto px-5 py-[7px] bg-[#F7A829] hover:bg-[#C9851A] active:bg-[#8A5A0E] text-white font-semibold text-sm rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap"
                 >
-                  <X size={14} />
+                  Plan my trip →
                 </button>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setEditingStart(true)}
-                title={startLocation || homeLabel}
-                className="input w-full text-sm text-left flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 transition-colors overflow-hidden"
-              >
-                {startLocation ? (
-                  <span className="text-gray-800 truncate min-w-0 flex-1">{startLocation}</span>
-                ) : (
-                  <>
-                    <Home size={13} className="text-[#1F6F8B] flex-shrink-0" />
-                    <span className="text-gray-700 truncate min-w-0 flex-1">{homeLabel}</span>
-                  </>
-                )}
-                {startLocation && (
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={e => { e.stopPropagation(); setStartLocation('') }}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.stopPropagation(); setStartLocation('') } }}
-                    className="text-gray-400 hover:text-gray-600 flex-shrink-0"
-                  >
-                    <X size={12} />
-                  </span>
-                )}
-              </button>
-            )}
+            </div>
           </div>
-
-          {/* Destination */}
-          <div className="flex-1 min-w-[200px]">
-            <label className="block text-xs text-gray-500 mb-1">Destination</label>
-            {isLoaded ? (
-              <Autocomplete
-                onLoad={ac => { destAutoRef.current = ac }}
-                onPlaceChanged={onDestPlaceChanged}
-                options={{ types: [] }}
-              >
-                <input
-                  ref={destInputRef}
-                  className="input w-full text-sm"
-                  placeholder="Where to? Leave blank to let me plan a random trip for you"
-                  defaultValue={destination}
-                  onChange={e => setDestination(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleFormSubmit() }}
-                />
-              </Autocomplete>
-            ) : (
-              <input
-                className="input w-full text-sm"
-                placeholder="Where to? Leave blank to let me plan a random trip for you"
-                value={destination}
-                onChange={e => setDestination(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleFormSubmit() }}
-              />
-            )}
-          </div>
-
-          {/* Submit — spacer label keeps button bottom-aligned with inputs on desktop */}
-          <div className="w-full sm:w-auto flex-shrink-0 flex flex-col">
-            <span className="hidden sm:block text-xs mb-1 opacity-0" aria-hidden>x</span>
-            <button
-              onClick={handleFormSubmit}
-              disabled={typing}
-              className="w-full sm:w-auto px-5 py-[7px] bg-[#F7A829] hover:bg-[#C9851A] active:bg-[#8A5A0E] text-white font-semibold text-sm rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap"
-            >
-              Plan my trip →
-            </button>
-          </div>
-        </div>
-      </div>
+        </>
+      )}
 
       {/* Main area: chat column + optional itinerary sidebar */}
       <div className="flex flex-1 gap-4 overflow-hidden min-h-0">
