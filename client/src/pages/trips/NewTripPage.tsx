@@ -362,7 +362,7 @@ export default function NewTripPage() {
   )
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-8rem)]">
+    <div className="flex flex-col min-h-[calc(100dvh-8rem)] md:h-[calc(100dvh-8rem)]">
       {/* Google Places pac-container overrides — wider dropdown, app styling */}
       <style>{`
         .pac-container {
