@@ -504,57 +504,117 @@ function RecommendedCampgroundCard({
   )
 }
 
-// ─── Compact alternative card (shown in collapsed alternatives list) ──────────
+// ─── Alternate campground card (shown in expanded alternatives list) ─────────
 
-function CompactAltCard({
+function AlternateCampgroundCard({
   cg,
   stop,
-  originLat,
-  originLng,
+  primary,
+  draftMode,
   onSelectCampground,
 }: {
   cg: Campground
   stop: Stop
-  originLat?: number
-  originLng?: number
+  // The currently-recommended campground for this stop. Used both as the anchor for the
+  // distance line ("X mi from {primary.name}") and to size context vs. the primary card.
+  primary: Campground | null
+  // True only when *this specific alt* is the active draft for the stop. In practice the
+  // draft alt is promoted to the primary slot and filtered out of altOptions, so this is
+  // defensive — kept to mirror the primary card's draftMode visibility logic.
+  draftMode: boolean
   // Kept in the type — see RecommendedCampgroundCard for the same rationale. Not consumed
   // by the card body since the gold button calls onSelectCampground directly.
   onReserve: () => void
   onSelectCampground: () => void
 }) {
   const isConfirmed = stop.campgroundId === cg.id && stop.bookingStatus === 'CONFIRMED'
-  const dist = calcDistance(originLat, originLng, cg.latitude, cg.longitude)
+  const dist = calcDistance(primary?.latitude, primary?.longitude, cg.latitude, cg.longitude)
+  const distLabel = dist
+    ? primary?.name
+      ? `${dist} mi from ${primary.name}`
+      : `${dist} mi away`
+    : null
+
+  const mapQuery = [cg.name, cg.address].filter(Boolean).join(' ')
+  const mapUrl = cg.latitude && cg.longitude
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cg.name)}&ll=${cg.latitude},${cg.longitude}`
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`
 
   return (
-    <div className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 bg-white transition-colors ${
+    <div className={`rounded-lg border bg-white p-3 transition-colors ${
       isConfirmed ? 'border-[#3E5540]/30 bg-[#DCE5D5]/20' : 'border-gray-200'
     }`} style={{ borderWidth: '0.5px' }}>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-gray-800 truncate">{cg.name}</p>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
-          {dist && <span className="text-[11px] text-gray-400">{dist} mi</span>}
-          {cg.hookupTypes?.[0] && <span className="text-[11px] text-gray-400">{cg.hookupTypes[0]}</span>}
-          {cg.siteRate != null && <span className="text-[11px] font-medium text-gray-600">${cg.siteRate}/nt</span>}
-          {cg.isPetFriendly && <span className="text-[11px] text-gray-400">🐾</span>}
-          {cg.rating != null && <span className="text-[11px] text-amber-500">★ {cg.rating.toFixed(1)}</span>}
-          {isConfirmed && (
-            <span className={`text-[11px] font-semibold flex items-center gap-0.5 ${
-              stop.confirmationNum ? 'text-[#2F4030]' : 'text-gray-600'
-            }`}>
-              {stop.confirmationNum
-                ? <><CheckCircle size={10} /> Booked</>
-                : 'Enter confirmation to book'}
-            </span>
-          )}
+      {/* Booked pill — only when the user happened to commit to this specific alt. In
+          practice the booked cg is promoted to the recommended slot, so this is defensive.
+          No Unbook button here — the primary card already exposes that affordance. */}
+      {isConfirmed && (
+        <div className="flex items-center gap-1.5 text-xs font-semibold rounded-lg px-2.5 py-1.5 mb-2.5 border text-[#2F4030] bg-[#DCE5D5] border-[#3E5540]/30">
+          <CheckCircle size={12} />
+          <span>Booked</span>
         </div>
+      )}
+
+      {/* Name + rating */}
+      <div className="flex items-start justify-between gap-3">
+        <h4 className="text-sm font-medium text-gray-900 leading-snug min-w-0 flex-1">{cg.name}</h4>
+        {cg.rating != null && (
+          <span className="text-xs text-amber-500 flex-shrink-0">★ {cg.rating.toFixed(1)}</span>
+        )}
       </div>
-      {!isConfirmed && (
+
+      {/* Address */}
+      {cg.address && (
+        <div className="flex items-center gap-1 mt-0.5 text-xs text-gray-500">
+          <MapPin size={10} className="flex-shrink-0" />{cg.address}
+        </div>
+      )}
+
+      {/* Distance from primary */}
+      {distLabel && (
+        <p className="text-xs text-gray-600 mt-0.5">{distLabel}</p>
+      )}
+
+      {/* Tags */}
+      <div className="flex flex-wrap gap-1.5 mt-2">
+        {cg.hookupTypes?.map(h => <span key={h} className="badge-green text-xs">{h}</span>)}
+        {cg.isPetFriendly && <span className="badge-blue text-xs">🐾 Pets OK</span>}
+        {cg.maxRigLength && <span className="badge text-xs bg-gray-100 text-gray-600">Max {cg.maxRigLength}ft</span>}
+        {cg.isMilitaryOnly && <span className="badge text-xs bg-blue-50 text-blue-700">🎖️ Military</span>}
+        {cg.siteRate != null && <span className="badge text-xs bg-gray-100 text-gray-600">${cg.siteRate}/nt</span>}
+      </div>
+
+      {/* Contact links — same pattern as primary card's footer so users can phone /
+          click out to Recreation.gov / open Map without committing to an alt first. */}
+      <div className="flex items-center gap-4 mt-3 pt-2.5 border-t border-gray-100" style={{ borderTopWidth: '0.5px' }}>
+        {cg.phone && (
+          <a href={`tel:${cg.phone}`} className="flex items-center gap-1 text-xs text-[#1F6F8B] hover:text-[#134756] transition-colors">
+            <Phone size={11} />{cg.phone}
+          </a>
+        )}
+        {cg.website && (
+          <a href={cg.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-[#1F6F8B] hover:text-[#134756] transition-colors">
+            <Globe size={11} /> Website
+          </a>
+        )}
+        {cg.reservationUrl && (
+          <a href={cg.reservationUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-[#1F6F8B] hover:text-[#134756] transition-colors">
+            <ExternalLink size={11} /> Recreation.gov
+          </a>
+        )}
+        <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#1F6F8B] transition-colors ml-auto">
+          <MapPin size={11} /> Map
+        </a>
+      </div>
+
+      {/* Gold button — same visibility logic as the primary card: hidden once this alt is
+          confirmed or while it's the active draft (it's been promoted to the primary slot). */}
+      {!isConfirmed && !draftMode && (
         <button
           onClick={() => {
             if (cg.reservationUrl) window.open(cg.reservationUrl, '_blank', 'noopener,noreferrer')
             onSelectCampground()
           }}
-          className="bg-rr-gold hover:bg-rr-gold-dark text-white rounded-lg font-medium transition-colors text-xs px-3 py-1.5 flex-shrink-0 whitespace-nowrap"
+          className="bg-rr-gold hover:bg-rr-gold-dark text-white rounded-lg font-medium transition-colors text-sm w-full flex items-center justify-center gap-1.5 py-2.5 mt-3"
         >
           Add reservation details here
         </button>
@@ -887,7 +947,10 @@ export default function TripBookingPage() {
         )}
 
         {/* ── See other campgrounds link + animated alternatives ── */}
-        {isLoaded && altOptions.length > 0 && !confirmed && (
+        {/* Visible whether or not the stop is booked: a user might commit to one campground,
+            then call Recreation.gov, find their dates aren't available, and need to compare
+            other options without unbooking first. */}
+        {isLoaded && altOptions.length > 0 && (
           <div>
             <button
               onClick={() => setExpandedAlts(prev => ({ ...prev, [stop.id]: !(prev[stop.id] ?? false) }))}
@@ -904,12 +967,15 @@ export default function TripBookingPage() {
               <div className="overflow-hidden">
                 <div className="space-y-2">
                   {altOptions.map(cg => (
-                    <CompactAltCard
+                    <AlternateCampgroundCard
                       key={cg.id}
                       cg={cg}
                       stop={stop}
-                      originLat={stop.latitude}
-                      originLng={stop.longitude}
+                      primary={recommended}
+                      // Per-alt draft check (not stopDraftMode): only THIS alt should suppress
+                      // its gold button while it's the active draft. Other alts in the list
+                      // stay clickable so the user can switch drafts before committing.
+                      draftMode={draftSelections[stop.id]?.id === cg.id}
                       onReserve={() => setPendingAlt({ cg, stop })}
                       onSelectCampground={() => handleSelectCampground(stop, cg)}
                     />
