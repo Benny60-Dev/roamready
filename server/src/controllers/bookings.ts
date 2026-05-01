@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
+import type { StopUpdateInput } from '../schemas'
 
 export async function getBookings(req: AuthRequest, res: Response, next: NextFunction) {
   try {
@@ -53,12 +54,16 @@ export async function getBooking(req: AuthRequest, res: Response, next: NextFunc
 
 export async function updateBooking(req: AuthRequest, res: Response, next: NextFunction) {
   try {
+    // Defense-in-depth: ownership check stays even though validateBody has already
+    // stripped any client-supplied tripId/userId from the payload.
     const stop = await prisma.stop.findFirst({
       where: { id: req.params.id, trip: { userId: req.user!.id } },
     })
     if (!stop) throw new AppError('Booking not found', 404)
 
-    const updated = await prisma.stop.update({ where: { id: req.params.id }, data: req.body })
+    // req.body is guaranteed to be a parsed StopUpdateInput by validateBody on the route.
+    const data: StopUpdateInput = req.body
+    const updated = await prisma.stop.update({ where: { id: req.params.id }, data })
     res.json(updated)
   } catch (err) { next(err) }
 }

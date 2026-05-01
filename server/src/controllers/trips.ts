@@ -4,6 +4,7 @@ import axios from 'axios'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
+import type { StopUpdateInput } from '../schemas'
 import { generatePackingListAI, generateTripItineraryAI, generateStopActivitiesAI, generateRouteHighlightsAI } from '../services/ai'
 import { fetchLiveForecast, fetchHistoricalWeather, isoDate } from '../services/weatherFetch'
 
@@ -476,30 +477,16 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
     const stop = await prisma.stop.findFirst({ where: { id: req.params.stopId, tripId: req.params.id } })
     if (!stop) throw new AppError('Stop not found', 404)
 
-    const {
-      type, locationName, locationState, latitude, longitude,
-      arrivalDate, departureDate, nights, campgroundName, campgroundId,
-      bookingStatus, confirmationNum, siteRate, estimatedFuel, hookupType,
-      isPetFriendly, isMilitaryOnly, isCompatible,
-      incompatibilityReasons, alternates, weatherForecast,
-      notes, checkInTime, checkOutTime, siteNumber, pointsOfInterest, highwayRoute, driveDuration,
-      routeHighlights, driveDistanceMiles, order,
-    } = req.body
-
-    const data: any = {
-      type, locationName, locationState, latitude, longitude,
-      arrivalDate, departureDate, nights, campgroundName, campgroundId,
-      bookingStatus, confirmationNum, siteRate, estimatedFuel, hookupType,
-      isPetFriendly, isMilitaryOnly, isCompatible,
-      incompatibilityReasons, alternates, weatherForecast,
-      notes, checkInTime, checkOutTime, siteNumber, pointsOfInterest, highwayRoute, driveDuration,
-      driveDistanceMiles, order,
-    }
+    // req.body has been parsed and stripped by validateBody(StopUpdateSchema) on the route,
+    // so unknown keys (incl. id, tripId, type, createdAt, updatedAt) cannot reach Prisma.
+    // Pull routeHighlights out of the data object — it goes through a raw-SQL fallback below.
+    const body: StopUpdateInput = req.body
+    const { routeHighlights, ...data } = body
 
     // Reservation Honesty: when a stop is being unbooked, force-clear the user-entered
     // reservation detail fields so stale data can't leak across rebook cycles. Overrides
     // anything the client may have sent for these fields in the same request.
-    if (bookingStatus === 'NOT_BOOKED') {
+    if (data.bookingStatus === 'NOT_BOOKED') {
       data.confirmationNum = null
       data.siteNumber = null
       data.checkInTime = null

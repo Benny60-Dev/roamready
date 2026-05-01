@@ -607,7 +607,9 @@ function AlternateCampgroundCard({
       </div>
 
       {/* Gold button — same visibility logic as the primary card: hidden once this alt is
-          confirmed or while it's the active draft (it's been promoted to the primary slot). */}
+          confirmed or while it's the active draft (it's been promoted to the primary slot).
+          Label differs from the primary card on purpose: on an alt this action *promotes*
+          the campground to the recommended slot, not just opens the form. */}
       {!isConfirmed && !draftMode && (
         <button
           onClick={() => {
@@ -616,7 +618,7 @@ function AlternateCampgroundCard({
           }}
           className="bg-rr-gold hover:bg-rr-gold-dark text-white rounded-lg font-medium transition-colors text-sm w-full flex items-center justify-center gap-1.5 py-2.5 mt-3"
         >
-          Add reservation details here
+          Choose this campground instead
         </button>
       )}
     </div>
