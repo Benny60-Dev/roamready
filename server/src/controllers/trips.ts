@@ -496,6 +496,17 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
       driveDistanceMiles, order,
     }
 
+    // Reservation Honesty: when a stop is being unbooked, force-clear the user-entered
+    // reservation detail fields so stale data can't leak across rebook cycles. Overrides
+    // anything the client may have sent for these fields in the same request.
+    if (bookingStatus === 'NOT_BOOKED') {
+      data.confirmationNum = null
+      data.siteNumber = null
+      data.checkInTime = null
+      data.checkOutTime = null
+      data.notes = null
+    }
+
     const updated = await prisma.stop.update({
       where: { id: req.params.stopId },
       data,

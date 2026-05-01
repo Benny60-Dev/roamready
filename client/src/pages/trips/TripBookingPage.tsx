@@ -42,9 +42,13 @@ interface ReservationForm {
 
 function ReservationSection({
   stop,
+  cg,
+  draftMode,
   onSaved,
 }: {
   stop: Stop
+  cg: Campground
+  draftMode: boolean
   onSaved: (data: Partial<Stop>) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -58,8 +62,40 @@ function ReservationSection({
     notes: stop.notes || '',
   })
 
-  const hasData =
-    form.confirmationNum || form.siteNumber || form.checkInTime || form.checkOutTime || form.notes
+  // Track previous bookingStatus + draftMode across renders. The component stays mounted
+  // unconditionally so these refs can see real transitions: false→true on the draftMode
+  // flag (user just clicked the gold button) drives auto-expand; CONFIRMED→non-CONFIRMED
+  // on bookingStatus (unbook) drives the form reset.
+  const prevStatusRef = useRef(stop.bookingStatus)
+  const prevDraftRef = useRef(draftMode)
+  const confirmationInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const prevStatus = prevStatusRef.current
+    const status = stop.bookingStatus
+    const prevDraft = prevDraftRef.current
+
+    if (!prevDraft && draftMode) {
+      // User just clicked the gold button: open the form and focus the confirmation input
+      // so they can paste the # they get back from Recreation.gov.
+      setOpen(true)
+      setTimeout(() => confirmationInputRef.current?.focus(), 50)
+    } else if (prevStatus === 'CONFIRMED' && status !== 'CONFIRMED') {
+      // Unbook: component stays mounted, so resync local form to the prop and collapse —
+      // otherwise stale values would survive the next rebook.
+      setForm({
+        confirmationNum: stop.confirmationNum || '',
+        siteNumber: stop.siteNumber || '',
+        checkInTime: stop.checkInTime || '',
+        checkOutTime: stop.checkOutTime || '',
+        notes: stop.notes || '',
+      })
+      setOpen(false)
+    }
+
+    prevStatusRef.current = status
+    prevDraftRef.current = draftMode
+  }, [stop.bookingStatus, draftMode])
 
   function set(field: keyof ReservationForm, value: string) {
     setForm(f => ({ ...f, [field]: value }))
@@ -75,6 +111,16 @@ function ReservationSection({
         checkOutTime: form.checkOutTime || undefined,
         notes: form.notes || undefined,
       }
+      // Reservation Honesty: when this save fires from draft mode it IS the booking commit —
+      // flip bookingStatus and link the chosen campground in the same updateStop call so we
+      // never publish a CONFIRMED stop without the user-entered fields. Already-confirmed
+      // edits skip this block and behave as before (form-field updates only).
+      if (draftMode && stop.bookingStatus !== 'CONFIRMED') {
+        payload.bookingStatus = 'CONFIRMED'
+        payload.campgroundId = cg.id
+        payload.campgroundName = cg.name
+        if (cg.siteRate !== undefined) payload.siteRate = cg.siteRate
+      }
       await tripsApi.updateStop(stop.tripId, stop.id, payload)
       onSaved(payload)
       setJustSaved(true)
@@ -87,37 +133,37 @@ function ReservationSection({
     }
   }
 
+  // Render only when the stop is actually booked OR the user is filling in a draft.
+  // Keeping the component mounted regardless lets the transition useEffect above see flips.
+  if (stop.bookingStatus !== 'CONFIRMED' && !draftMode) return null
+
+  // Collapsed-state summary — shows the three highest-signal fields if any are set,
+  // or a hint that prompts the user to click. Check-out and notes are intentionally
+  // omitted to keep the line short and scannable.
+  const summaryParts: string[] = []
+  if (form.confirmationNum) summaryParts.push(`Confirmation: ${form.confirmationNum}`)
+  if (form.siteNumber) summaryParts.push(`Site: ${form.siteNumber}`)
+  if (form.checkInTime) summaryParts.push(`Check-in: ${form.checkInTime}`)
+  const collapsedSummary = summaryParts.length > 0
+    ? summaryParts.join(' · ')
+    : 'Click to add confirmation #, site number, and notes'
+
   return (
     <div className="border-t border-gray-100 mt-3 pt-3" style={{ borderTopWidth: '0.5px' }}>
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between text-xs font-medium text-gray-600 hover:text-gray-800 transition-colors"
+        className="w-full text-left -mx-1.5 px-1.5 py-1 rounded-md hover:bg-gray-50 transition-colors"
       >
-        <span>Reservation &amp; Notes</span>
-        {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-      </button>
-
-      {!open && hasData && (
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
-          {form.confirmationNum && (
-            <span>Conf # <span className="font-medium text-gray-700">{form.confirmationNum}</span></span>
-          )}
-          {form.siteNumber && (
-            <span>Site <span className="font-medium text-gray-700">{form.siteNumber}</span></span>
-          )}
-          {form.checkInTime && (
-            <span>Check-in <span className="text-gray-700">{form.checkInTime}</span></span>
-          )}
-          {form.checkOutTime && (
-            <span>Check-out <span className="text-gray-700">{form.checkOutTime}</span></span>
-          )}
-          {form.notes && (
-            <span className="text-gray-400 truncate max-w-[240px]" title={form.notes}>
-              📝 {form.notes}
-            </span>
-          )}
+        <div className="flex items-center justify-between text-xs font-medium text-gray-600">
+          <span className="text-rr-blue hover:underline underline-offset-2">Reservation &amp; Notes</span>
+          {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
         </div>
-      )}
+        {!open && (
+          <div className="mt-1 text-xs text-gray-600">
+            {collapsedSummary}
+          </div>
+        )}
+      </button>
 
       {justSaved && !open && (
         <p className="mt-1.5 text-xs text-[#0F766E] flex items-center gap-1">
@@ -131,6 +177,7 @@ function ReservationSection({
             <div>
               <label className="block text-xs text-gray-500 mb-1">Confirmation #</label>
               <input
+                ref={confirmationInputRef}
                 className="input text-xs w-full"
                 placeholder="ABC123456"
                 value={form.confirmationNum}
@@ -333,13 +380,19 @@ function ReservationConfirmModal({
 function RecommendedCampgroundCard({
   cg,
   stop,
-  onReserve,
+  draftMode,
+  onSelectCampground,
   onStopUpdated,
   onUnbook,
 }: {
   cg: Campground
   stop: Stop
+  draftMode: boolean
+  // Kept in the type for callers that still want to open the legacy ReservationConfirmModal —
+  // currently the parent still passes setPendingAlt as onReserve. Not consumed by the card body
+  // anymore since the gold button calls onSelectCampground directly.
   onReserve: () => void
+  onSelectCampground: () => void
   onStopUpdated: (stopId: string, data: Partial<Stop>) => void
   onUnbook: (stop: Stop) => void
 }) {
@@ -353,14 +406,16 @@ function RecommendedCampgroundCard({
     <div className={`card mb-3 transition-colors ${
       isConfirmed ? 'border-[#3E5540]/40 bg-[#DCE5D5]/20' : 'border-[#1F6F8B]/20 bg-[#E0F0F4]/10'
     }`}>
-      {/* Booked banner */}
+      {/* Booked banner — single-state pill driven only by bookingStatus. The gray
+          "Enter confirmation to book" interim state is gone: until the user clicks Save,
+          the stop is genuinely not booked and the pill stays absent. */}
       {isConfirmed && (
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-[#2F4030] bg-[#DCE5D5] border border-[#3E5540]/30 rounded-lg px-3 py-2 mb-3">
+        <div className="flex items-center gap-1.5 text-xs font-semibold rounded-lg px-3 py-2 mb-3 border text-[#2F4030] bg-[#DCE5D5] border-[#3E5540]/30">
           <CheckCircle size={13} />
-          <span>Selected campground — booked</span>
+          <span>Booked</span>
           <button
             onClick={() => onUnbook(stop)}
-            className="ml-auto text-[#2F4030]/70 hover:text-[#2F4030] underline underline-offset-2 font-medium"
+            className="ml-auto underline underline-offset-2 font-medium text-[#2F4030]/70 hover:text-[#2F4030]"
           >
             Unbook
           </button>
@@ -401,21 +456,28 @@ function RecommendedCampgroundCard({
         {cg.isMilitaryOnly && <span className="badge text-xs bg-blue-50 text-blue-700">🎖️ Military</span>}
       </div>
 
-      {/* Reserve button (full-width, green) or booked state */}
-      {!isConfirmed ? (
+      {/* Gold button — opens Recreation.gov and signals draft mode (no DB write). Hidden
+          once the stop is confirmed (already booked) or in draft (form is open below).
+          ReservationSection mounts unconditionally so its useEffect can see the draftMode
+          flip; it returns null internally when neither confirmed nor in draft. */}
+      {!isConfirmed && !draftMode && (
         <button
-          onClick={onReserve}
-          className="btn-primary text-sm w-full flex items-center justify-center gap-1.5 py-2.5"
+          onClick={() => {
+            if (cg.reservationUrl) window.open(cg.reservationUrl, '_blank', 'noopener,noreferrer')
+            onSelectCampground()
+          }}
+          className="bg-rr-gold hover:bg-rr-gold-dark text-white rounded-lg font-medium transition-colors text-sm w-full flex items-center justify-center gap-1.5 py-2.5"
         >
-          {cg.siteRate ? `Reserve · $${cg.siteRate}/nt` : 'Reserve this campground'}
+          Add reservation details here
         </button>
-      ) : (
-        <ReservationSection
-          key={stop.id}
-          stop={stop}
-          onSaved={data => onStopUpdated(stop.id, data)}
-        />
       )}
+      <ReservationSection
+        key={stop.id}
+        stop={stop}
+        cg={cg}
+        draftMode={draftMode}
+        onSaved={data => onStopUpdated(stop.id, data)}
+      />
 
       {/* Links */}
       <div className="flex items-center gap-4 mt-3 pt-2.5 border-t border-gray-100" style={{ borderTopWidth: '0.5px' }}>
@@ -449,13 +511,16 @@ function CompactAltCard({
   stop,
   originLat,
   originLng,
-  onReserve,
+  onSelectCampground,
 }: {
   cg: Campground
   stop: Stop
   originLat?: number
   originLng?: number
+  // Kept in the type — see RecommendedCampgroundCard for the same rationale. Not consumed
+  // by the card body since the gold button calls onSelectCampground directly.
   onReserve: () => void
+  onSelectCampground: () => void
 }) {
   const isConfirmed = stop.campgroundId === cg.id && stop.bookingStatus === 'CONFIRMED'
   const dist = calcDistance(originLat, originLng, cg.latitude, cg.longitude)
@@ -473,18 +538,25 @@ function CompactAltCard({
           {cg.isPetFriendly && <span className="text-[11px] text-gray-400">🐾</span>}
           {cg.rating != null && <span className="text-[11px] text-amber-500">★ {cg.rating.toFixed(1)}</span>}
           {isConfirmed && (
-            <span className="text-[11px] font-semibold text-[#2F4030] flex items-center gap-0.5">
-              <CheckCircle size={10} /> Booked
+            <span className={`text-[11px] font-semibold flex items-center gap-0.5 ${
+              stop.confirmationNum ? 'text-[#2F4030]' : 'text-gray-600'
+            }`}>
+              {stop.confirmationNum
+                ? <><CheckCircle size={10} /> Booked</>
+                : 'Enter confirmation to book'}
             </span>
           )}
         </div>
       </div>
       {!isConfirmed && (
         <button
-          onClick={onReserve}
-          className="btn-outline text-xs flex-shrink-0 whitespace-nowrap"
+          onClick={() => {
+            if (cg.reservationUrl) window.open(cg.reservationUrl, '_blank', 'noopener,noreferrer')
+            onSelectCampground()
+          }}
+          className="bg-rr-gold hover:bg-rr-gold-dark text-white rounded-lg font-medium transition-colors text-xs px-3 py-1.5 flex-shrink-0 whitespace-nowrap"
         >
-          Reserve
+          Add reservation details here
         </button>
       )}
     </div>
@@ -515,6 +587,11 @@ export default function TripBookingPage() {
   // pendingAlt carries both the campground choice AND which stop it belongs to
   const [pendingAlt, setPendingAlt] = useState<{ cg: Campground; stop: Stop } | null>(null)
   const [confirming, setConfirming] = useState(false)
+  // Reservation Honesty: clicking the gold button records the user's chosen campground here
+  // *without* writing to the DB. The form expands in draft mode and only the user's "Save
+  // reservation info" click (in ReservationSection) commits the booking. Keys are stopIds;
+  // presence implies draft mode for that stop. Cleared when the save commits or on unbook.
+  const [draftSelections, setDraftSelections] = useState<Record<string, Campground>>({})
   const [unbookTarget, setUnbookTarget] = useState<Stop | null>(null)
   const [unbooking, setUnbooking] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -597,8 +674,40 @@ export default function TripBookingPage() {
     })
   }
 
+  // Reservation Honesty: gold button now opens the form in *draft mode* only — no DB write.
+  // The user's "Save reservation info" click is the actual commit (see ReservationSection.save).
+  // Storing the chosen campground here also lets renderStopContent promote it as the
+  // recommended display (so clicking gold on an alt swaps the recommended card to that alt).
+  function handleSelectCampground(stop: Stop, cg: Campground) {
+    setDraftSelections(prev => ({ ...prev, [stop.id]: cg }))
+  }
+
   function handleStopUpdated(stopId: string, data: Partial<Stop>) {
-    setTrip(prev => prev ? { ...prev, stops: prev.stops?.map(s => s.id === stopId ? { ...s, ...data } : s) } : prev)
+    setTrip(prev => {
+      if (!prev) return prev
+      const updatedStops = prev.stops?.map(s => s.id === stopId ? { ...s, ...data } : s)
+      // Recompute the trip-level camp total when a save touches booking status or rate —
+      // the footer/header summary needs to reflect a draft commit (NOT_BOOKED → CONFIRMED).
+      if (data.bookingStatus !== undefined || data.siteRate !== undefined) {
+        const estimatedCamp = updatedStops?.reduce(
+          (sum, s) => s.bookingStatus === 'CONFIRMED' && s.siteRate ? sum + s.siteRate * s.nights : sum,
+          0
+        ) ?? 0
+        return { ...prev, stops: updatedStops, estimatedCamp }
+      }
+      return { ...prev, stops: updatedStops }
+    })
+    // Reservation Honesty: a draft commit (save with bookingStatus=CONFIRMED) ends draft
+    // mode for that stop — drop the entry so the gold button stays hidden behind the now-
+    // visible "Booked" pill, not because of stale draft state.
+    if (data.bookingStatus === 'CONFIRMED') {
+      setDraftSelections(prev => {
+        if (!prev[stopId]) return prev
+        const next = { ...prev }
+        delete next[stopId]
+        return next
+      })
+    }
   }
 
   async function handleUnbook() {
@@ -610,7 +719,18 @@ export default function TripBookingPage() {
         if (!prev) return prev
         const updatedStops = prev.stops?.map(s =>
           s.id === unbookTarget.id
-            ? { ...s, bookingStatus: 'NOT_BOOKED' as any }
+            ? {
+                ...s,
+                bookingStatus: 'NOT_BOOKED' as any,
+                // Mirror the backend's reservation-detail clear (see updateStop in trips.ts)
+                // so the local prop matches the DB and ReservationSection's reset useEffect
+                // sees empty values when it mirrors the prop.
+                confirmationNum: undefined,
+                siteNumber: undefined,
+                checkInTime: undefined,
+                checkOutTime: undefined,
+                notes: undefined,
+              }
             : s
         )
         const estimatedCamp = updatedStops?.reduce(
@@ -618,6 +738,13 @@ export default function TripBookingPage() {
           0
         )
         return { ...prev, stops: updatedStops, estimatedCamp }
+      })
+      // Defensive: an unbooked stop has no draft selection either.
+      setDraftSelections(prev => {
+        if (!prev[unbookTarget.id]) return prev
+        const next = { ...prev }
+        delete next[unbookTarget.id]
+        return next
       })
       setUnbookTarget(null)
     } catch (err) {
@@ -661,12 +788,19 @@ export default function TripBookingPage() {
     const confirmed  = stop.bookingStatus === 'CONFIRMED'
     const showAlts   = expandedAlts[stop.id] ?? false
 
-    // If the stop is already booked, surface the booked campground as the recommendation
-    const bookedCg   = confirmed && stop.campgroundId
+    // If the stop is already booked, surface the booked campground as the recommendation.
+    const bookedCg = confirmed && stop.campgroundId
       ? (cgs ?? []).find(cg => cg.id === stop.campgroundId) ?? null
       : null
-    const recommended = bookedCg ?? compatible[0] ?? null
+    // Reservation Honesty: while a draft is active we promote the user's gold-button choice
+    // to the recommended slot so the form (which lives inside RecommendedCampgroundCard)
+    // shows under the right campground — even when they picked an alt rather than the default.
+    const draftCg = !confirmed && draftSelections[stop.id]
+      ? (cgs ?? []).find(cg => cg.id === draftSelections[stop.id].id) ?? draftSelections[stop.id]
+      : null
+    const recommended = bookedCg ?? draftCg ?? compatible[0] ?? null
     const altOptions  = compatible.filter(cg => cg.id !== recommended?.id)
+    const stopDraftMode = !!draftSelections[stop.id]
 
     // Was the first returned campground incompatible? (means we promoted an alternative)
     const originalWasIncompat = !confirmed && (cgs ?? []).length > 0 && cgs![0].isCompatible === false
@@ -701,18 +835,26 @@ export default function TripBookingPage() {
               {driveDistance && <span>~{driveDistance} mi from previous stop</span>}
             </div>
           </div>
-          <span className={`badge text-xs flex-shrink-0 ${
-            stop.type === 'HOME' ? 'bg-gray-100 text-gray-500' :
-            confirmed ? 'badge-green' :
-            stop.bookingStatus === 'PENDING' || stop.bookingStatus === 'WAITLISTED' ? 'badge-amber' :
-            stop.type === 'OVERNIGHT_ONLY' ? 'bg-purple-100 text-purple-700' :
-            'bg-gray-100 text-gray-500'
-          }`}>
-            {stop.type === 'HOME' ? 'Departure' :
-             confirmed ? 'Booked' :
-             stop.bookingStatus === 'PENDING' ? 'Pending' :
-             stop.type === 'OVERNIGHT_ONLY' ? 'Overnight' : 'Not booked'}
-          </span>
+          {stop.type === 'HOME' ? (
+            <span className="badge text-xs flex-shrink-0 bg-gray-100 text-gray-500">Departure</span>
+          ) : confirmed ? (
+            // Single-state header pill — green "Booked" whenever bookingStatus is CONFIRMED.
+            // Reservation Honesty: there's no longer a half-state where the stop is "booked"
+            // without a user-saved commit, so the pill no longer needs the gray interim copy.
+            <span className="flex-shrink-0 inline-flex items-center gap-1 text-xs font-semibold rounded-lg px-2 py-0.5 border text-[#2F4030] bg-[#DCE5D5] border-[#3E5540]/30">
+              <CheckCircle size={11} />
+              Booked
+            </span>
+          ) : (
+            <span className={`badge text-xs flex-shrink-0 ${
+              stop.bookingStatus === 'PENDING' || stop.bookingStatus === 'WAITLISTED' ? 'badge-amber' :
+              stop.type === 'OVERNIGHT_ONLY' ? 'bg-purple-100 text-purple-700' :
+              'bg-gray-100 text-gray-500'
+            }`}>
+              {stop.bookingStatus === 'PENDING' ? 'Pending' :
+               stop.type === 'OVERNIGHT_ONLY' ? 'Overnight' : 'Not booked'}
+            </span>
+          )}
         </div>
 
         {/* ── Incompatibility promotion note ── */}
@@ -730,7 +872,9 @@ export default function TripBookingPage() {
           <RecommendedCampgroundCard
             cg={recommended}
             stop={stop}
+            draftMode={stopDraftMode}
             onReserve={() => setPendingAlt({ cg: recommended, stop })}
+            onSelectCampground={() => handleSelectCampground(stop, recommended)}
             onStopUpdated={handleStopUpdated}
             onUnbook={(stop) => setUnbookTarget(stop)}
           />
@@ -767,6 +911,7 @@ export default function TripBookingPage() {
                       originLat={stop.latitude}
                       originLng={stop.longitude}
                       onReserve={() => setPendingAlt({ cg, stop })}
+                      onSelectCampground={() => handleSelectCampground(stop, cg)}
                     />
                   ))}
                 </div>
@@ -966,8 +1111,8 @@ export default function TripBookingPage() {
       <ConfirmModal
         isOpen={unbookTarget !== null}
         title="Unbook this stop?"
-        message={`This will mark "${unbookTarget?.campgroundName || 'this campground'}" as not booked. Your campground details and confirmation number will be preserved — you can re-book at any time.`}
-        confirmLabel="Unbook"
+        message={`Your confirmation number, site number, check-in/out times, and notes for "${unbookTarget?.campgroundName || 'this campground'}" will be cleared. This can't be undone.`}
+        confirmLabel="Unbook and clear details"
         cancelLabel="Keep it"
         onConfirm={handleUnbook}
         onCancel={() => !unbooking && setUnbookTarget(null)}
