@@ -47,6 +47,7 @@ import { handleWebhook } from './controllers/subscriptions'
 import { notificationsRouter } from './routes/notifications'
 import { adminRouter } from './routes/admin'
 import { bookingsRouter } from './routes/bookings'
+import { sessionsRouter } from './routes/sessions'
 
 const app = express()
 
@@ -85,6 +86,7 @@ app.use('/api/v1/subscriptions', subscriptionsRouter)
 app.use('/api/v1/notifications', notificationsRouter)
 app.use('/api/v1/admin', adminRouter)
 app.use('/api/v1/bookings', bookingsRouter)
+app.use('/api/v1/sessions', sessionsRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 

@@ -3,3 +3,4 @@
 export * from './stop'
 export * from './membership'
 export * from './trip'
+export * from './planningSession'

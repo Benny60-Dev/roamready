@@ -45,6 +45,7 @@ model User {
   notifications       NotificationSetting[]
   feedback            Feedback[]
   travelProfile       TravelProfile?
+  planningSessions    PlanningSession[]
 }
 
 enum SubscriptionTier {
@@ -164,6 +165,7 @@ model Trip {
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
   stops          Stop[]
+  planningSession PlanningSession?
 }
 
 enum TripStatus {
@@ -340,4 +342,27 @@ model Notification {
   isRead    Boolean  @default(false)
   data      Json?
   createdAt DateTime @default(now())
+}
+
+model PlanningSession {
+  id              String                @id @default(cuid())
+  userId          String
+  user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title           String?
+  messages        Json                  @default("[]")
+  partialTripData Json?
+  tripId          String?               @unique
+  trip            Trip?                 @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  status          PlanningSessionStatus @default(PLANNING)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([userId])
+  @@index([userId, status])
+}
+
+enum PlanningSessionStatus {
+  PLANNING
+  COMPLETED
+  ARCHIVED
 }
