@@ -4,7 +4,7 @@ import axios from 'axios'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
-import type { StopUpdateInput } from '../schemas'
+import type { StopUpdateInput, TripUpdateInput } from '../schemas'
 import { generatePackingListAI, generateTripItineraryAI, generateStopActivitiesAI, generateRouteHighlightsAI } from '../services/ai'
 import { fetchLiveForecast, fetchHistoricalWeather, isoDate } from '../services/weatherFetch'
 
@@ -313,9 +313,14 @@ export async function getTrip(req: AuthRequest, res: Response, next: NextFunctio
 
 export async function updateTrip(req: AuthRequest, res: Response, next: NextFunction) {
   try {
+    // Defense-in-depth: ownership check stays even though validateBody has already
+    // stripped any client-supplied userId/sharedToken/packingList/etc. from the payload.
     const trip = await prisma.trip.findFirst({ where: { id: req.params.id, userId: req.user!.id } })
     if (!trip) throw new AppError('Trip not found', 404)
-    const updated = await prisma.trip.update({ where: { id: req.params.id }, data: req.body })
+
+    // req.body is guaranteed to be a parsed TripUpdateInput by validateBody on the route.
+    const data: TripUpdateInput = req.body
+    const updated = await prisma.trip.update({ where: { id: req.params.id }, data })
     res.json(updated)
   } catch (err) { next(err) }
 }

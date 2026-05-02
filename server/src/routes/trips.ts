@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 import { validateBody } from '../middleware/validate'
-import { StopUpdateSchema } from '../schemas'
+import { StopUpdateSchema, TripUpdateSchema } from '../schemas'
 import {
   getTrips, createTrip, getTrip, updateTrip, deleteTrip,
   getStops, createStop, updateStop, deleteStop,
@@ -19,7 +19,7 @@ tripsRouter.use(requireAuth)
 tripsRouter.get('/', getTrips as any)
 tripsRouter.post('/', createTrip as any)
 tripsRouter.get('/:id', getTrip as any)
-tripsRouter.put('/:id', updateTrip as any)
+tripsRouter.put('/:id', validateBody(TripUpdateSchema), updateTrip as any)
 tripsRouter.delete('/:id', deleteTrip as any)
 
 tripsRouter.get('/:id/stops', getStops as any)
