@@ -3,6 +3,7 @@ import axios from 'axios'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
+import type { MembershipUpdateInput } from '../schemas'
 
 const DEFAULT_RV_MAINTENANCE = [
   { name: 'Engine oil & filter', intervalMiles: 5000 },
@@ -177,9 +178,14 @@ export async function createMembership(req: AuthRequest, res: Response, next: Ne
 
 export async function updateMembership(req: AuthRequest, res: Response, next: NextFunction) {
   try {
+    // Defense-in-depth: ownership check stays even though validateBody has already
+    // stripped any client-supplied id/userId/createdAt from the payload.
     const m = await prisma.membership.findFirst({ where: { id: req.params.id, userId: req.user!.id } })
     if (!m) throw new AppError('Membership not found', 404)
-    const updated = await prisma.membership.update({ where: { id: req.params.id }, data: req.body })
+
+    // req.body is guaranteed to be a parsed MembershipUpdateInput by validateBody on the route.
+    const data: MembershipUpdateInput = req.body
+    const updated = await prisma.membership.update({ where: { id: req.params.id }, data })
     res.json(updated)
   } catch (err) { next(err) }
 }
