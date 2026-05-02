@@ -8,6 +8,7 @@ import {
   getSharedTrip, exportPdf, generatePackingList,
   generateItinerary, saveItinerary, generateRoutes, generateActivities,
   generateRouteHighlights, getTripMapImage, getTripWeather, reassignPOIs,
+  createShareToken, regenerateShareToken, revokeShareToken,
 } from '../controllers/trips'
 
 export const tripsRouter = Router()
@@ -26,6 +27,10 @@ tripsRouter.get('/:id/stops', getStops as any)
 tripsRouter.post('/:id/stops', createStop as any)
 tripsRouter.put('/:id/stops/:stopId', validateBody(StopUpdateSchema), updateStop as any)
 tripsRouter.delete('/:id/stops/:stopId', deleteStop as any)
+
+tripsRouter.post('/:id/share', createShareToken as any)
+tripsRouter.post('/:id/share/regenerate', regenerateShareToken as any)
+tripsRouter.delete('/:id/share', revokeShareToken as any)
 
 tripsRouter.post('/:id/export/pdf', exportPdf as any)
 tripsRouter.get('/:id/map-image', getTripMapImage as any)

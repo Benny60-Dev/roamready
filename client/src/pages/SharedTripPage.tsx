@@ -88,7 +88,6 @@ export default function SharedTripPage() {
                   <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-400">
                     {stop.arrivalDate && <span><Calendar size={11} className="inline mr-0.5" />{format(new Date(stop.arrivalDate), 'EEE, MMM d')}</span>}
                     <span><Tent size={11} className="inline mr-0.5" />{stop.nights} night{stop.nights !== 1 ? 's' : ''}</span>
-                    {stop.siteRate && <span><DollarSign size={11} className="inline mr-0.5" />${stop.siteRate}/night</span>}
                     {stop.hookupType && <span className="badge-green">{stop.hookupType}</span>}
                   </div>
                 )}

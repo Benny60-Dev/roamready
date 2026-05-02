@@ -15,6 +15,7 @@ import { Trip, Stop, StopWeather, LiveForecast } from '../../types'
 import { StopWeatherCard, ALERT_STYLES } from '../../components/weather/StopWeatherCard'
 const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel'))
 import ConfirmModal from '../../components/ui/ConfirmModal'
+import ShareModal from '../../components/trip/ShareModal'
 import { useAuthStore } from '../../store/authStore'
 import { buildStopBadges } from '../../utils/stopBadge'
 
@@ -415,6 +416,7 @@ export default function TripMapPage() {
   const [downloadingPdf, setDownloadingPdf] = useState(false)
   const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false)
   const [changingStatus, setChangingStatus] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
 
   const mapRowRef = useRef<HTMLDivElement>(null)
 
@@ -991,7 +993,11 @@ export default function TripMapPage() {
         >
           <Package size={13} /> Packing list
         </Link>
-        <button className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1F6F8B] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0">
+        <button
+          onClick={() => setShareOpen(true)}
+          disabled={!trip}
+          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1F6F8B] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50"
+        >
           <Share2 size={13} /> Share
         </button>
         <button
@@ -1447,6 +1453,18 @@ export default function TripMapPage() {
         onCancel={() => !changingStatus && setConfirmCompleteOpen(false)}
         isConfirming={changingStatus}
       />
+
+      {/* Share trip */}
+      {trip && (
+        <ShareModal
+          trip={trip}
+          isOpen={shareOpen}
+          onClose={() => setShareOpen(false)}
+          onTripUpdated={(sharedToken) =>
+            setTrip(prev => prev ? { ...prev, sharedToken: sharedToken ?? undefined } : prev)
+          }
+        />
+      )}
     </div>
   )
 }

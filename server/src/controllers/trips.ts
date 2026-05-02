@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express'
 import { v4 as uuidv4 } from 'uuid'
+import { randomBytes } from 'crypto'
 import axios from 'axios'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
@@ -524,14 +525,135 @@ export async function deleteStop(req: AuthRequest, res: Response, next: NextFunc
   } catch (err) { next(err) }
 }
 
+// Public-view allowlist. Anything NOT in these select clauses is stripped before
+// reaching a share-link viewer. Adding a new column to Trip/Stop defaults to NOT
+// being exposed — keep it that way.
+const PUBLIC_TRIP_SELECT = {
+  id: true,
+  name: true,
+  status: true,
+  startLocation: true,
+  endLocation: true,
+  startDate: true,
+  endDate: true,
+  totalMiles: true,
+  totalNights: true,
+  estimatedFuel: true,
+  estimatedCamp: true,
+  fuelPrice: true,
+  itinerary: true,
+  createdAt: true,
+  updatedAt: true,
+  stops: {
+    orderBy: { order: 'asc' as const },
+    select: {
+      id: true,
+      tripId: true,
+      order: true,
+      type: true,
+      locationName: true,
+      locationState: true,
+      latitude: true,
+      longitude: true,
+      arrivalDate: true,
+      departureDate: true,
+      nights: true,
+      campgroundName: true,
+      campgroundId: true,
+      bookingStatus: true,
+      estimatedFuel: true,
+      checkInTime: true,
+      checkOutTime: true,
+      hookupType: true,
+      isPetFriendly: true,
+      isMilitaryOnly: true,
+      isCompatible: true,
+      incompatibilityReasons: true,
+      alternates: true,
+      weatherForecast: true,
+      highwayRoute: true,
+      driveDuration: true,
+      driveDistanceMiles: true,
+      routeHighlights: true,
+      pointsOfInterest: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  },
+}
+
 export async function getSharedTrip(req: Request, res: Response, next: NextFunction) {
   try {
     const trip = await prisma.trip.findFirst({
       where: { sharedToken: req.params.token },
-      include: { stops: { orderBy: { order: 'asc' } } },
+      select: PUBLIC_TRIP_SELECT,
     })
     if (!trip) throw new AppError('Shared trip not found', 404)
     res.json(trip)
+  } catch (err) { next(err) }
+}
+
+async function mintUniqueShareToken(tripId: string): Promise<string> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const token = randomBytes(24).toString('base64url')
+    try {
+      await prisma.trip.update({
+        where: { id: tripId },
+        data: { sharedToken: token },
+      })
+      return token
+    } catch (err: any) {
+      // P2002 = unique constraint violation on sharedToken — retry with a new token
+      if (err?.code === 'P2002') continue
+      throw err
+    }
+  }
+  throw new AppError('Could not mint a unique share token', 500)
+}
+
+export async function createShareToken(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const trip = await prisma.trip.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+      select: { id: true, sharedToken: true },
+    })
+    if (!trip) throw new AppError('Trip not found', 404)
+
+    if (trip.sharedToken) {
+      return res.json({ sharedToken: trip.sharedToken, regenerated: false })
+    }
+
+    const sharedToken = await mintUniqueShareToken(trip.id)
+    res.json({ sharedToken, regenerated: false })
+  } catch (err) { next(err) }
+}
+
+export async function regenerateShareToken(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const trip = await prisma.trip.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+      select: { id: true },
+    })
+    if (!trip) throw new AppError('Trip not found', 404)
+
+    const sharedToken = await mintUniqueShareToken(trip.id)
+    res.json({ sharedToken, regenerated: true })
+  } catch (err) { next(err) }
+}
+
+export async function revokeShareToken(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const trip = await prisma.trip.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+      select: { id: true },
+    })
+    if (!trip) throw new AppError('Trip not found', 404)
+
+    await prisma.trip.update({
+      where: { id: trip.id },
+      data: { sharedToken: null },
+    })
+    res.json({ sharedToken: null, revoked: true })
   } catch (err) { next(err) }
 }
 
