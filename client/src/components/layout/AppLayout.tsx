@@ -1,15 +1,17 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { Home, Map, MessageSquare, Tent, User, Bell, Menu, X, LogOut, ChevronDown } from 'lucide-react'
+import { Home, Map, MessageSquare, Tent, User, Bell, Menu, X, LogOut, ChevronDown, Clock } from 'lucide-react'
 import { useState } from 'react'
 import logoIcon from '../../assets/logo-icon.png'
 import { useAuthStore } from '../../store/authStore'
 import { useUIStore } from '../../store/uiStore'
 import { authApi } from '../../services/api'
 import FeedbackButton from '../feedback/FeedbackButton'
+import SessionsPanel from '../sessions/SessionsPanel'
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [sessionsPanelOpen, setSessionsPanelOpen] = useState(false)
   const { user, logout } = useAuthStore()
   const { openFeedbackModal } = useUIStore()
   const navigate = useNavigate()
@@ -23,7 +25,7 @@ export default function AppLayout() {
   const navLinks = [
     { to: '/dashboard', icon: Home, label: 'Home' },
     { to: '/trips', icon: Map, label: 'Trips' },
-    { to: '/trips/new', icon: MessageSquare, label: 'Plan' },
+    { to: '/sessions/new', icon: MessageSquare, label: 'Plan' },
     { to: '/reservations', icon: Tent, label: 'Bookings' },
     { to: '/profile', icon: User, label: 'Profile' },
   ]
@@ -71,6 +73,30 @@ export default function AppLayout() {
           </nav>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSessionsPanelOpen(o => !o)}
+              aria-label="Planning sessions"
+              aria-pressed={sessionsPanelOpen}
+              className="flex items-center justify-center transition-colors"
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                border: '0.5px solid',
+                borderColor: sessionsPanelOpen ? '#185FA5' : '#E8E4DA',
+                backgroundColor: sessionsPanelOpen ? '#E6F1FB' : '#FFFFFF',
+                color: sessionsPanelOpen ? '#0C447C' : '#6B6458',
+              }}
+              onMouseEnter={e => {
+                if (!sessionsPanelOpen) e.currentTarget.style.backgroundColor = '#F5F4F2'
+              }}
+              onMouseLeave={e => {
+                if (!sessionsPanelOpen) e.currentTarget.style.backgroundColor = '#FFFFFF'
+              }}
+            >
+              <Clock size={16} strokeWidth={2} />
+            </button>
             <button className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600">
               <Bell size={18} />
             </button>
@@ -161,6 +187,8 @@ export default function AppLayout() {
       </nav>
 
       <FeedbackButton onClick={openFeedbackModal} />
+
+      <SessionsPanel open={sessionsPanelOpen} onClose={() => setSessionsPanelOpen(false)} />
     </div>
   )
 }

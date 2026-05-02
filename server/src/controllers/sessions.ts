@@ -116,9 +116,12 @@ export async function promoteSession(req: AuthRequest, res: Response, next: Next
       const trip = await tx.trip.create({
         data: { ...data, userId: req.user!.id, status: 'PLANNING' },
       })
+      // Mirror trip.name onto session.title so the SessionsPanel reads
+      // consistently after promotion (the user-typed auto-title becomes the
+      // real trip name). Done in the same tx so promotion stays atomic.
       const updatedSession = await tx.planningSession.update({
         where: { id: req.params.id },
-        data: { tripId: trip.id, status: 'COMPLETED' },
+        data: { tripId: trip.id, status: 'COMPLETED', title: trip.name },
         select: SESSION_SELECT,
       })
       return { session: updatedSession, trip }

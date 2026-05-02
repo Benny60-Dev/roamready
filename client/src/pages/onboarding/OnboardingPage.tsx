@@ -234,7 +234,7 @@ export default function OnboardingPage() {
               Your 7-day Pro trial is active. Start planning your first trip with the AI planner.
             </p>
             <div className="flex flex-col gap-2">
-              <button onClick={() => navigate('/trips/new')} className="btn-primary py-3">
+              <button onClick={() => navigate('/sessions/new')} className="btn-primary py-3">
                 Plan my first trip
               </button>
               <button onClick={() => navigate('/dashboard')} className="btn-ghost">

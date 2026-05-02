@@ -33,7 +33,7 @@ export default function TripsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-medium text-gray-900">Trips</h1>
-        <Link to="/trips/new" className="btn-primary flex items-center gap-2 text-sm">
+        <Link to="/sessions/new" className="btn-primary flex items-center gap-2 text-sm">
           <Plus size={15} /> New trip
         </Link>
       </div>
@@ -75,7 +75,7 @@ export default function TripsPage() {
           {trips.length === 0 ? (
             <>
               <p className="text-sm text-gray-500 mb-4">Start planning your first trip</p>
-              <Link to="/trips/new" className="btn-primary inline-flex items-center gap-2">
+              <Link to="/sessions/new" className="btn-primary inline-flex items-center gap-2">
                 <Plus size={15} /> Plan a trip
               </Link>
             </>

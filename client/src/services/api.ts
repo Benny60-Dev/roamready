@@ -87,6 +87,51 @@ export const tripsApi = {
   getWeather:  (id: string) => api.get(`/trips/${id}/weather`),
 }
 
+// Planning Sessions
+import type { PlanningSession } from '../types'
+
+export interface PromoteSessionPayload {
+  rigId?: string | null
+  name: string
+  startLocation: string
+  endLocation: string
+  startDate?: Date | string | null
+  endDate?: Date | string | null
+  totalMiles?: number | null
+  totalNights?: number | null
+  estimatedFuel?: number | null
+  estimatedCamp?: number | null
+  fuelPrice?: number | null
+}
+
+export interface UpdateSessionPayload {
+  title?: string | null
+  messages?: any[]
+  partialTripData?: any
+  status?: 'PLANNING' | 'COMPLETED' | 'ARCHIVED'
+}
+
+export const sessionsApi = {
+  list: () => api.get<PlanningSession[]>('/sessions'),
+  getLatestActive: async (): Promise<PlanningSession | null> => {
+    try {
+      const res = await api.get<PlanningSession>('/sessions/latest-active')
+      return res.data
+    } catch (e: any) {
+      if (e?.response?.status === 404) return null
+      throw e
+    }
+  },
+  get: (id: string) => api.get<PlanningSession>(`/sessions/${id}`),
+  create: (data: { title?: string | null } = {}) =>
+    api.post<PlanningSession>('/sessions', data),
+  update: (id: string, data: UpdateSessionPayload) =>
+    api.put<PlanningSession>(`/sessions/${id}`, data),
+  promote: (id: string, data: PromoteSessionPayload) =>
+    api.post<{ session: PlanningSession; trip: any }>(`/sessions/${id}/promote`, data),
+  delete: (id: string) => api.delete<PlanningSession>(`/sessions/${id}`),
+}
+
 // AI
 export const aiApi = {
   chat: (messages: any[], tripId?: string, context?: string) => api.post('/ai/chat', { messages, tripId, context }),

@@ -25,7 +25,8 @@ import OnboardingPage from './pages/onboarding/OnboardingPage'
 // App pages
 import DashboardPage from './pages/DashboardPage'
 import TripsPage from './pages/trips/TripsPage'
-import NewTripPage from './pages/trips/NewTripPage'
+import SessionPage from './pages/SessionPage'
+import SessionNewPage from './pages/SessionNewPage'
 import TripBookingPage from './pages/trips/TripBookingPage'
 import TripJournalPage from './pages/trips/TripJournalPage'
 import PackingListPage from './pages/PackingListPage'
@@ -114,7 +115,9 @@ export default function App() {
         <Route element={<PrivateRoute><AppLayout /></PrivateRoute>}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/trips" element={<TripsPage />} />
-          <Route path="/trips/new" element={<NewTripPage />} />
+          <Route path="/trips/new" element={<Navigate to="/sessions/new" replace />} />
+          <Route path="/sessions/new" element={<SessionNewPage />} />
+          <Route path="/sessions/:id" element={<SessionPage />} />
           <Route path="/trips/:id" element={<TripDetailRedirect />} />
           <Route path="/trips/:id/map" element={<TripMapPage />} />
           <Route path="/trips/:id/booking" element={<TripBookingPage />} />

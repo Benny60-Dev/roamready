@@ -222,6 +222,20 @@ export interface ChatMessage {
   content: string
 }
 
+export type PlanningSessionStatus = 'PLANNING' | 'COMPLETED' | 'ARCHIVED'
+
+export interface PlanningSession {
+  id: string
+  userId: string
+  title: string | null
+  messages: ChatMessage[]
+  partialTripData: any | null
+  tripId: string | null
+  status: PlanningSessionStatus
+  createdAt: string
+  updatedAt: string
+}
+
 export interface WeatherDay {
   date: string
   temp: { min: number; max: number; feels: number }

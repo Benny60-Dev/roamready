@@ -77,7 +77,7 @@ export default function LandingPage() {
           <Link to="/signup" className="btn-primary px-6 py-3 text-base flex items-center gap-2">
             Start planning free <ChevronRight size={16} />
           </Link>
-          <Link to="/trips/new" className="btn-outline px-6 py-3 text-base">
+          <Link to="/sessions/new" className="btn-outline px-6 py-3 text-base">
             Try the AI planner
           </Link>
         </div>

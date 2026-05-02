@@ -91,7 +91,7 @@ export default function DashboardPage() {
           <h1 className="text-xl font-medium text-gray-900">Good morning, {user?.firstName}</h1>
           <p className="text-sm text-gray-500">Your trip dashboard</p>
         </div>
-        <Link to="/trips/new" className="btn-primary flex items-center gap-2">
+        <Link to="/sessions/new" className="btn-primary flex items-center gap-2">
           <Plus size={16} /> New trip
         </Link>
       </div>
@@ -129,7 +129,7 @@ export default function DashboardPage() {
             <div className="text-4xl mb-3">🗺️</div>
             <p className="font-medium text-gray-700 mb-1">No trips yet</p>
             <p className="text-sm text-gray-500 mb-4">Start planning your next adventure</p>
-            <Link to="/trips/new" className="btn-primary inline-flex items-center gap-2">
+            <Link to="/sessions/new" className="btn-primary inline-flex items-center gap-2">
               <Plus size={15} /> Plan a trip
             </Link>
           </div>

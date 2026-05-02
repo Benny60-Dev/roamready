@@ -228,7 +228,7 @@ export default function ReservationsPage() {
           <div className="text-4xl mb-3">🏕️</div>
           <p className="font-medium text-gray-700 mb-1">No trips to book yet</p>
           <p className="text-sm text-gray-500 mb-4">Create a trip and add campground stops to start booking</p>
-          <Link to="/trips/new" className="btn-primary inline-flex items-center gap-2 text-sm">
+          <Link to="/sessions/new" className="btn-primary inline-flex items-center gap-2 text-sm">
             Plan a trip
           </Link>
         </div>

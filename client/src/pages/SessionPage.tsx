@@ -1,13 +1,14 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { Send, MapPin, Tent, User, Loader, Mic, MicOff, CalendarDays, X, Home } from 'lucide-react'
 import { DayPicker, DateRange } from 'react-day-picker'
 import 'react-day-picker/style.css'
 import { Autocomplete, useJsApiLoader } from '@react-google-maps/api'
-import { aiApi, tripsApi } from '../../services/api'
-import { useAuthStore } from '../../store/authStore'
-import { ChatMessage, User as UserType } from '../../types'
-import BottomSheet from '../../components/ui/BottomSheet'
+import { aiApi, sessionsApi, tripsApi } from '../services/api'
+import { useAuthStore } from '../store/authStore'
+import { ChatMessage, User as UserType } from '../types'
+import BottomSheet from '../components/ui/BottomSheet'
+import { useSessionAutosave } from '../hooks/useSessionAutosave'
 
 const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 'geometry', 'places']
 
@@ -33,12 +34,20 @@ function buildGreeting(user: UserType | null): string {
   return `Hey ${name}! Your ${rigLabel} is ready to roll and ${petLine}.`
 }
 
-// Used as messages[0] content (conversation context sent to AI)
 function buildWelcomeMessage(user: UserType | null): string {
   return (
     buildGreeting(user) +
     "\n\nFill out the form below to get started — the form is optional. You can also type everything in the chat and I'll ask about dates, nights, and destination as we go."
   )
+}
+
+// Take the first 40 chars of a user message, cut at the last word boundary if reasonable.
+function deriveTitle(text: string): string {
+  const trimmed = text.trim().replace(/\s+/g, ' ')
+  if (trimmed.length <= 40) return trimmed
+  const slice = trimmed.slice(0, 40)
+  const lastSpace = slice.lastIndexOf(' ')
+  return (lastSpace > 20 ? slice.slice(0, lastSpace) : slice).trim()
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -77,7 +86,12 @@ function fmtDateRange(range: DateRange | undefined): string {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function NewTripPage() {
+export default function SessionPage() {
+  const { id: sessionId } = useParams<{ id: string }>()
+  const [hydrating, setHydrating] = useState(true)
+  const [hydrationError, setHydrationError] = useState<string | null>(null)
+  const [sessionTitle, setSessionTitle] = useState<string | null>(null)
+
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [typing, setTyping] = useState(false)
@@ -87,17 +101,13 @@ export default function NewTripPage() {
   const [listening, setListening] = useState(false)
   const [speechSupported, setSpeechSupported] = useState(false)
 
-  // Committed date range (shown in trigger, included in message)
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
-  // In-progress range inside the open calendar (2-step selection)
   const [liveRange, setLiveRange] = useState<DateRange | undefined>(undefined)
-  // Range that was committed before the current calendar session (for cancel)
   const prevRangeRef = useRef<DateRange | undefined>(undefined)
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
 
   const [nights, setNights] = useState('')
-  // Starting location: empty string = use home default; non-empty = custom override
   const [startLocation, setStartLocation] = useState('')
   const [editingStart, setEditingStart] = useState(false)
   const startAutoRef = useRef<google.maps.places.Autocomplete | null>(null)
@@ -116,21 +126,91 @@ export default function NewTripPage() {
     libraries: LIBRARIES,
   })
 
+  // ── Hydrate session from server (or initialize a new one) ────────────────────
+  useEffect(() => {
+    if (!sessionId) return
+    let cancelled = false
+    setHydrating(true)
+    setHydrationError(null)
+
+    sessionsApi
+      .get(sessionId)
+      .then(res => {
+        if (cancelled) return
+        const s = res.data
+        setSessionTitle(s.title)
+        const persistedMessages = Array.isArray(s.messages) ? (s.messages as ChatMessage[]) : []
+        if (persistedMessages.length > 0) {
+          setMessages(persistedMessages)
+          // Re-derive itinerary preview from the most recent assistant message, if any
+          const lastAssistant = [...persistedMessages].reverse().find(m => m.role === 'assistant')
+          if (lastAssistant) {
+            const parsed = parseItinerary(lastAssistant.content)
+            if (parsed) setItinerary(parsed)
+          }
+        } else {
+          setMessages([{ role: 'assistant', content: buildWelcomeMessage(user) }])
+        }
+
+        const partial = s.partialTripData || {}
+        if (partial.nights != null) setNights(String(partial.nights))
+        if (typeof partial.startLocation === 'string') setStartLocation(partial.startLocation)
+        if (typeof partial.destination === 'string') setDestination(partial.destination)
+        if (partial.dateRange?.from) {
+          const from = new Date(partial.dateRange.from)
+          const to = partial.dateRange.to ? new Date(partial.dateRange.to) : undefined
+          setDateRange({ from, to })
+        }
+      })
+      .catch(err => {
+        if (cancelled) return
+        if (err?.response?.status === 404) {
+          setHydrationError('That session was not found. Start a new one from "Plan a trip".')
+        } else {
+          setHydrationError('Could not load this session. Try again in a moment.')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setHydrating(false)
+      })
+
+    return () => { cancelled = true }
+  }, [sessionId])
+
+  // ── Autosave plumbing ────────────────────────────────────────────────────────
+  const partialTripData = useMemo(() => ({
+    nights: nights !== '' ? parseInt(nights, 10) : null,
+    startLocation: startLocation || null,
+    destination: destination || null,
+    dateRange: dateRange?.from
+      ? {
+          from: dateRange.from.toISOString(),
+          to: dateRange.to ? dateRange.to.toISOString() : null,
+        }
+      : null,
+  }), [nights, startLocation, destination, dateRange])
+
+  useSessionAutosave(
+    hydrating ? null : sessionId,
+    {
+      messages,
+      partialTripData,
+      ...(sessionTitle ? { title: sessionTitle } : {}),
+    }
+  )
+
   useEffect(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition
     setSpeechSupported(!!SR)
   }, [])
 
-  // Auto-calc nights from committed range (stays manually editable)
   useEffect(() => {
     if (dateRange?.from && dateRange?.to) {
       const diff = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86_400_000)
-      // Same-day selection → treat as 1 night per spec
       setNights(String(diff === 0 ? 1 : diff))
     }
   }, [dateRange])
 
-  // Close calendar on outside click → cancel (revert live to committed)
   useEffect(() => {
     if (!calendarOpen) return
     function handleOutside(e: MouseEvent) {
@@ -149,24 +229,13 @@ export default function NewTripPage() {
     setCalendarOpen(true)
   }
 
-  // 2-step selection:
-  // • First click  → set from only, stay open
-  // • Second click → set complete range, commit + close
-  //
-  // addToRange (react-day-picker internals) sets to:=date on first click when initial
-  // range is empty (min=0). We detect "first click" by whether liveRange currently has
-  // a from but no to — if not, this is the start of a new selection.
   function handleDateSelect(incoming: DateRange | undefined) {
     const hadFrom = !!(liveRange?.from)
     const hadTo   = !!(liveRange?.to)
 
     if (!hadFrom || hadTo) {
-      // No prior from, OR range was already complete → start fresh, first click only
-      // Force to:undefined regardless of what addToRange computed
       setLiveRange(incoming ? { from: incoming.from, to: undefined } : undefined)
-      // Stay open — waiting for arrival date
     } else {
-      // from was set, to was not → this is the second click
       const final = incoming ?? undefined
       setLiveRange(final)
       setDateRange(final)
@@ -207,16 +276,11 @@ export default function NewTripPage() {
   useEffect(() => () => stopListening(), [stopListening])
 
   useEffect(() => {
-    setMessages([{ role: 'assistant', content: buildWelcomeMessage(user) }])
-  }, [])
-
-  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, typing])
 
   const rig      = user?.rigs?.[0]
   const profile  = user?.travelProfile
-  // Show full street address when available; fall back to homeLocation or city/state
   const homeLabel = user?.homeAddress || user?.homeLocation
     || (user?.homeCity && user?.homeState ? `${user.homeCity}, ${user.homeState}` : 'Home')
 
@@ -234,7 +298,6 @@ export default function NewTripPage() {
     const place = startAutoRef.current?.getPlace()
     const name = place?.name || ''
     const addr = place?.formatted_address || ''
-    // Prefer "Place Name, City, State" for POIs; plain address for street addresses
     const hasName = name && addr && !addr.startsWith(name)
     setStartLocation(hasName ? `${name}, ${addr}` : addr || name)
     setEditingStart(false)
@@ -248,6 +311,16 @@ export default function NewTripPage() {
     setMessages(next)
     setInput('')
     setTyping(true)
+
+    // Auto-title once on the first user message if title is still null.
+    if (sessionId && !sessionTitle) {
+      const title = deriveTitle(text)
+      if (title) {
+        setSessionTitle(title)
+        sessionsApi.update(sessionId, { title }).catch(() => { /* non-fatal */ })
+      }
+    }
+
     try {
       const res = await aiApi.chat(next)
       const aiText = res.data.message
@@ -264,7 +337,7 @@ export default function NewTripPage() {
   function handleFormSubmit() {
     const dest       = destination.trim()
     const isSurprise = !dest
-    const from       = startLocation.trim()  // empty = home (AI knows from profile)
+    const from       = startLocation.trim()
     const nightsNum  = nights !== '' ? parseInt(nights, 10) : NaN
     const nightsStr  = !isNaN(nightsNum) ? `${nightsNum} night${nightsNum !== 1 ? 's' : ''}` : ''
 
@@ -287,7 +360,7 @@ export default function NewTripPage() {
   }
 
   async function buildItinerary() {
-    if (!itinerary) return
+    if (!itinerary || !sessionId) return
     setCreating(true)
     setBuildError(null)
     try {
@@ -297,8 +370,8 @@ export default function NewTripPage() {
 
       console.time('[buildItinerary] total')
 
-      console.time('[buildItinerary] createTrip')
-      const trip = await tripsApi.create({
+      console.time('[buildItinerary] promoteSession')
+      const promoted = await sessionsApi.promote(sessionId, {
         name: itinerary.name,
         startLocation: homeStopName,
         endLocation: itinerary.stops?.[itinerary.stops.length - 1]?.locationName || 'End',
@@ -306,10 +379,14 @@ export default function NewTripPage() {
         totalNights: itinerary.totalNights,
         estimatedFuel: itinerary.estimatedFuel,
         estimatedCamp: itinerary.estimatedCamp,
-        status: 'PLANNING',
-        aiConversation: messages,
       })
-      console.timeEnd('[buildItinerary] createTrip')
+      const tripId = promoted.data.trip.id
+      console.timeEnd('[buildItinerary] promoteSession')
+
+      // Preserve the conversation on the trip so legacy chat-history surfaces still work.
+      tripsApi.update(tripId, { aiConversation: messages }).catch(err =>
+        console.error('[buildItinerary] failed to attach aiConversation to trip:', err)
+      )
 
       const stops: any[] = itinerary.stops || []
       const lastIdx = stops.length - 1
@@ -321,21 +398,21 @@ export default function NewTripPage() {
           ? { ...stop, type: 'DESTINATION' }
           : stop
         console.time(`[buildItinerary] createStop[${i}] ${stop.locationName}`)
-        await tripsApi.createStop(trip.data.id, fixedStop)
+        await tripsApi.createStop(tripId, fixedStop)
         console.timeEnd(`[buildItinerary] createStop[${i}] ${stop.locationName}`)
       }
       console.timeEnd('[buildItinerary] createStops')
 
       console.time('[buildItinerary] reassignPOIs')
-      await tripsApi.reassignPOIs(trip.data.id)
+      await tripsApi.reassignPOIs(tripId)
       console.timeEnd('[buildItinerary] reassignPOIs')
 
-      tripsApi.generateItinerary(trip.data.id).catch(err =>
+      tripsApi.generateItinerary(tripId).catch(err =>
         console.error('[buildItinerary] generateItinerary failed in background:', err)
       )
 
       console.timeEnd('[buildItinerary] total')
-      navigate(`/trips/${trip.data.id}/map`)
+      navigate(`/trips/${tripId}/map`)
     } catch (e: any) {
       console.error('[buildItinerary] failed:', e)
       setBuildError(e?.response?.data?.message || e?.message || 'Something went wrong. Please try again.')
@@ -348,11 +425,9 @@ export default function NewTripPage() {
     .replace(/<itinerary>[\s\S]*/g, '')
     .trim()
 
-  // Trigger label: show live range while calendar is open (so user sees partial selection)
   const displayRange  = calendarOpen ? liveRange : dateRange
   const dateRangeLabel = fmtDateRange(displayRange)
 
-  // Calendar footer hint — tells user which step they're on
   const calendarFooter = (
     <p className="text-xs text-center text-gray-400 py-2 border-t border-gray-100 mt-1">
       {liveRange?.from && !liveRange?.to
@@ -360,6 +435,25 @@ export default function NewTripPage() {
         : '📅 Pick your departure date'}
     </p>
   )
+
+  if (hydrationError) {
+    return (
+      <div className="max-w-md mx-auto mt-12 text-center">
+        <p className="text-sm text-gray-700 mb-4">{hydrationError}</p>
+        <button onClick={() => navigate('/sessions/new')} className="btn-primary">
+          Plan a new trip
+        </button>
+      </div>
+    )
+  }
+
+  if (hydrating) {
+    return (
+      <div className="flex items-center justify-center py-20 text-gray-400">
+        <Loader size={20} className="animate-spin" />
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col min-h-[calc(100dvh-8rem)] md:h-[calc(100dvh-8rem)]">
@@ -478,7 +572,6 @@ export default function NewTripPage() {
                     className="absolute left-0 top-full z-50 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden"
                     style={{ borderWidth: '0.5px' }}
                   >
-                    {/* Brand color overrides for react-day-picker */}
                     <div style={{ '--rdp-accent-color': '#1F6F8B', '--rdp-accent-background-color': '#E0F0F4' } as React.CSSProperties}>
                       <DayPicker
                         mode="range"
