@@ -5,6 +5,7 @@ import { aiApi, sessionsApi, tripsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import { ChatMessage, User as UserType, TravelProfile } from '../types'
 import BottomSheet from '../components/ui/BottomSheet'
+import SessionTipCard from '../components/sessions/SessionTipCard'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
 
 declare global {
@@ -326,6 +327,12 @@ export default function SessionPage() {
 
   return (
     <div className="flex flex-col min-h-[calc(100dvh-8rem)] md:h-[calc(100dvh-8rem)]">
+      {/* Welcome banner */}
+      <div className="flex items-center gap-3 border-l-4 border-[#1F6F8B] bg-[#E0F0F4] rounded-r-xl px-4 py-3 mb-3 flex-shrink-0">
+        <span className="text-2xl leading-none flex-shrink-0">🏕️</span>
+        <p className="text-base font-medium text-gray-900">{buildWelcomeLine(user)}</p>
+      </div>
+
       {/* Profile context bar */}
       <div className="flex items-center gap-3 px-4 py-2 bg-[#E0F0F4] rounded-xl mb-3 text-xs text-[#1F6F8B] flex-shrink-0">
         {rig && (
@@ -350,21 +357,16 @@ export default function SessionPage() {
         )}
       </div>
 
-      {/* Welcome banner */}
-      <div className="flex items-center gap-3 border-l-4 border-[#1F6F8B] bg-[#E0F0F4] rounded-r-xl px-4 py-3 mb-3 flex-shrink-0">
-        <span className="text-2xl leading-none flex-shrink-0">🏕️</span>
-        <p className="text-base font-medium text-gray-900">{buildWelcomeLine(user)}</p>
-      </div>
-
       {/* Main area: chat column + optional itinerary sidebar */}
       <div className="flex flex-1 gap-4 overflow-hidden min-h-0">
 
         <div className="flex-1 flex flex-col overflow-hidden min-h-0">
 
           {isEmptyState ? (
-            // ── Pre-conversation: centered input + chips + hint ───────────────
+            // ── Pre-conversation: tip card + centered input + chips + hint ────
             <div className="flex-1 flex items-center justify-center px-2">
               <div className="w-full max-w-[600px]">
+                <SessionTipCard />
                 <div
                   className="flex items-center gap-2 bg-white"
                   style={{
