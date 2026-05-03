@@ -65,6 +65,7 @@ import PaywallModal from './components/feedback/PaywallModal'
 // A runtime error or bad HMR state in these pages cannot crash the login/dashboard.
 const TripMapPage     = lazy(() => import('./pages/trips/TripMapPage'))
 const TripSummaryPage = lazy(() => import('./pages/trips/TripSummaryPage'))
+const HelpPage        = lazy(() => import('./pages/HelpPage'))
 
 function TripDetailRedirect() {
   const { id } = useParams<{ id: string }>()
@@ -139,6 +140,7 @@ export default function App() {
           <Route path="/van-destinations" element={<VanDestinationsPage />} />
           <Route path="/car-camping" element={<CarCampingPage />} />
           <Route path="/feedback" element={<FeedbackPage />} />
+          <Route path="/help" element={<HelpPage />} />
           <Route path="/admin" element={<OwnerRoute><AdminDashboardPage /></OwnerRoute>} />
           <Route path="/admin/feedback" element={<OwnerRoute><AdminFeedbackPage /></OwnerRoute>} />
           <Route path="/admin/revenue" element={<OwnerRoute><AdminRevenuePage /></OwnerRoute>} />

@@ -1,10 +1,8 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { Home, Map, MessageSquare, Tent, User, Bell, Menu, X, LogOut, ChevronDown, Clock } from 'lucide-react'
+import { Home, Map, MessageSquare, Tent, User, Bell, Menu, X, LogOut, ChevronDown, Clock, HelpCircle } from 'lucide-react'
 import { useState } from 'react'
 import { useAuthStore } from '../../store/authStore'
-import { useUIStore } from '../../store/uiStore'
 import { authApi } from '../../services/api'
-import FeedbackButton from '../feedback/FeedbackButton'
 import SessionsPanel from '../sessions/SessionsPanel'
 
 export default function AppLayout() {
@@ -12,7 +10,6 @@ export default function AppLayout() {
   const [profileOpen, setProfileOpen] = useState(false)
   const [sessionsPanelOpen, setSessionsPanelOpen] = useState(false)
   const { user, logout } = useAuthStore()
-  const { openFeedbackModal } = useUIStore()
   const navigate = useNavigate()
 
   async function handleLogout() {
@@ -27,6 +24,12 @@ export default function AppLayout() {
     { to: '/sessions/new', icon: MessageSquare, label: 'Plan' },
     { to: '/reservations', icon: Tent, label: 'Bookings' },
     { to: '/profile', icon: User, label: 'Profile' },
+  ]
+
+  // Desktop-only — keeps the 5-item mobile bottom tab bar from getting crowded.
+  // Mobile users still reach Help via the slide-out sidebar (which renders this list).
+  const desktopExtraLinks = [
+    { to: '/help', icon: HelpCircle, label: 'Help' },
   ]
 
   return (
@@ -52,6 +55,19 @@ export default function AppLayout() {
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-1">
             {navLinks.map(({ to, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  `px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                    isActive ? 'bg-[#E0F0F4] text-[#1F6F8B] font-medium' : 'text-gray-600 hover:bg-gray-100'
+                  }`
+                }
+              >
+                {label}
+              </NavLink>
+            ))}
+            {desktopExtraLinks.map(({ to, label }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -140,7 +156,7 @@ export default function AppLayout() {
         <div className="md:hidden fixed inset-0 z-30 bg-black/30" onClick={() => setSidebarOpen(false)}>
           <div className="w-64 h-full bg-white border-r border-gray-200 pt-4 px-3" onClick={e => e.stopPropagation()}>
             <nav className="flex flex-col gap-1 mt-2">
-              {navLinks.map(({ to, icon: Icon, label }) => (
+              {[...navLinks, ...desktopExtraLinks].map(({ to, icon: Icon, label }) => (
                 <NavLink
                   key={to}
                   to={to}
@@ -184,8 +200,6 @@ export default function AppLayout() {
           ))}
         </div>
       </nav>
-
-      <FeedbackButton onClick={openFeedbackModal} />
 
       <SessionsPanel open={sessionsPanelOpen} onClose={() => setSessionsPanelOpen(false)} />
     </div>

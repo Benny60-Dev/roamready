@@ -1,46 +1,19 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Send, MapPin, Tent, User, Loader, Mic, MicOff } from 'lucide-react'
+import { Send, MapPin, Tent, Users, Loader, Mic, MicOff } from 'lucide-react'
 import { aiApi, sessionsApi, tripsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
-import { ChatMessage, User as UserType, TravelProfile } from '../types'
+import { ChatMessage } from '../types'
 import BottomSheet from '../components/ui/BottomSheet'
 import SessionTipCard from '../components/sessions/SessionTipCard'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
+import { selectGreeting } from '../utils/greeting'
 
 declare global {
   interface Window {
     SpeechRecognition: typeof SpeechRecognition
     webkitSpeechRecognition: typeof SpeechRecognition
   }
-}
-
-// ─── Welcome line ─────────────────────────────────────────────────────────────
-
-// petDetails is `any` in the schema; onboarding only writes `hasPets`. Detect
-// dog-only travelers by string-matching "dog"/"pup" — anything else with pets
-// resolves to "your crew's packed".
-function detectPetClause(profile: TravelProfile | undefined): string | null {
-  if (!profile?.hasPets) return null
-  const blob = JSON.stringify(profile.petDetails ?? '').toLowerCase()
-  const hasDog = /\b(dog|pup|puppy)/.test(blob)
-  const hasOther = /\b(cat|bird|rabbit|ferret|reptile|hamster|fish|lizard|snake)/.test(blob)
-  if (hasDog && !hasOther) return "your pup's packed"
-  return "your crew's packed"
-}
-
-function buildWelcomeLine(user: UserType | null): string {
-  const firstName = user?.firstName || 'there'
-  const rig = user?.rigs?.[0]
-  const rigName = rig
-    ? [rig.year, rig.make, rig.model].filter(Boolean).join(' ').trim()
-    : ''
-  if (!rigName) return `Hey ${firstName} — where are we headed?`
-  const petClause = detectPetClause(user?.travelProfile)
-  const lead = petClause
-    ? `your ${rigName} is RoamReady and ${petClause}`
-    : `your ${rigName} is RoamReady`
-  return `Hey ${firstName} — ${lead}. Where are we headed?`
 }
 
 // Take the first 40 chars of a user message, cut at the last word boundary if reasonable.
@@ -100,6 +73,7 @@ export default function SessionPage() {
   const [listening, setListening] = useState(false)
   const [speechSupported, setSpeechSupported] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [greeting, setGreeting] = useState<string | null>(null)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -114,9 +88,13 @@ export default function SessionPage() {
     setHydrating(true)
     setHydrationError(null)
 
-    sessionsApi
-      .get(sessionId)
-      .then(res => {
+    Promise.all([
+      sessionsApi.get(sessionId),
+      // Used to decide first-time / returning / time-of-day greeting pool.
+      // Failure here is non-fatal — we fall back to a time-aware greeting.
+      sessionsApi.list().catch(() => ({ data: [] as Awaited<ReturnType<typeof sessionsApi.list>>['data'] })),
+    ])
+      .then(([res, listRes]) => {
         if (cancelled) return
         const s = res.data
         setSessionTitle(s.title)
@@ -137,6 +115,23 @@ export default function SessionPage() {
             if (parsed) setItinerary(parsed)
           }
         }
+
+        // Pick the greeting once per hydration. Excludes the current session
+        // from the prior-session calculation so a brand-new session doesn't
+        // count itself as proof the user's been here before.
+        const otherSessions = listRes.data.filter(o => o.id !== sessionId)
+        const hasAnyPriorSessions = otherSessions.length > 0
+        const lastUpdated = otherSessions[0]?.updatedAt
+        const daysSinceLastSession = lastUpdated
+          ? Math.floor((Date.now() - new Date(lastUpdated).getTime()) / 86_400_000)
+          : null
+        const { greeting: chosen } = selectGreeting({
+          firstName: user?.firstName,
+          hasAnyPriorSessions,
+          daysSinceLastSession,
+          currentDate: new Date(),
+        })
+        setGreeting(chosen)
       })
       .catch(err => {
         if (cancelled) return
@@ -325,48 +320,89 @@ export default function SessionPage() {
   // an assistant-only message lingers from older builds.
   const isEmptyState = !messages.some(m => m.role === 'user')
 
+  // ── Rig context chip strip pieces (only rendered in empty state) ───────────
+  const rigName = rig
+    ? [rig.year, rig.make, rig.model].filter(Boolean).join(' ').trim()
+    : ''
+  const rigChipText = rigName
+    ? rig?.length
+      ? `${rigName} (${rig.length}ft)`
+      : rigName
+    : ''
+  const partyChipText = profile
+    ? `${profile.adults} adult${profile.adults !== 1 ? 's' : ''}${profile.hasPets ? ', pets' : ''}`
+    : ''
+  const styleChipText = profile?.hookupPreference
+    ? profile.hookupPreference.replace(/_/g, ' ').toLowerCase()
+    : ''
+  const showRigStrip = !!(rigChipText || partyChipText || styleChipText)
+
   return (
     <div className="flex flex-col min-h-[calc(100dvh-8rem)] md:h-[calc(100dvh-8rem)]">
-      {/* Welcome banner */}
-      <div className="flex items-center gap-3 border-l-4 border-[#1F6F8B] bg-[#E0F0F4] rounded-r-xl px-4 py-3 mb-3 flex-shrink-0">
-        <span className="text-2xl leading-none flex-shrink-0">🏕️</span>
-        <p className="text-base font-medium text-gray-900">{buildWelcomeLine(user)}</p>
-      </div>
-
-      {/* Profile context bar */}
-      <div className="flex items-center gap-3 px-4 py-2 bg-[#E0F0F4] rounded-xl mb-3 text-xs text-[#1F6F8B] flex-shrink-0">
-        {rig && (
-          <span className="flex items-center gap-1">
-            <MapPin size={12} />
-            {rig.year} {rig.make} {rig.model} ({rig.length}ft)
-          </span>
-        )}
-        {profile && (
-          <span className="flex items-center gap-1">
-            <User size={12} />
-            {profile.adults} adult{profile.adults !== 1 ? 's' : ''}
-            {profile.children > 0 ? `, ${profile.children} kids` : ''}
-            {profile.hasPets ? ', pets' : ''}
-          </span>
-        )}
-        {profile && (
-          <span className="flex items-center gap-1">
-            <Tent size={12} />
-            {profile.hookupPreference?.replace('_', ' ').toLowerCase() || 'any hookup'}
-          </span>
-        )}
-      </div>
-
       {/* Main area: chat column + optional itinerary sidebar */}
       <div className="flex flex-1 gap-4 overflow-hidden min-h-0">
 
         <div className="flex-1 flex flex-col overflow-hidden min-h-0">
 
           {isEmptyState ? (
-            // ── Pre-conversation: tip card + centered input + chips + hint ────
+            // ── Pre-conversation: hero greeting + chips + input + tip + watermark
             <div className="flex-1 flex flex-col items-center justify-center px-2">
+              {/* Hero greeting */}
+              {greeting && (
+                <h1
+                  className="text-center mx-auto pt-6 md:pt-12"
+                  style={{
+                    maxWidth: 720,
+                    fontSize: 'clamp(22px, 4vw, 28px)',
+                    fontWeight: 500,
+                    color: '#2C2C2A',
+                    letterSpacing: '-0.01em',
+                    lineHeight: 1.3,
+                  }}
+                >
+                  {greeting}
+                </h1>
+              )}
+
+              {/* Rig context chip strip */}
+              {showRigStrip && (
+                <div
+                  role="group"
+                  aria-label="Trip context"
+                  className="inline-flex flex-wrap items-center justify-center bg-white"
+                  style={{
+                    border: '0.5px solid #E8E4DA',
+                    borderRadius: 8,
+                    padding: '7px 14px',
+                    gap: 14,
+                    marginTop: 14,
+                    marginBottom: 32,
+                    fontSize: 12,
+                    color: '#134756',
+                  }}
+                >
+                  {rigChipText && (
+                    <span className="inline-flex items-center" style={{ gap: 6 }}>
+                      <MapPin size={14} aria-hidden="true" color="#1F6F8B" />
+                      {rigChipText}
+                    </span>
+                  )}
+                  {partyChipText && (
+                    <span className="inline-flex items-center" style={{ gap: 6 }}>
+                      <Users size={14} aria-hidden="true" color="#1F6F8B" />
+                      {partyChipText}
+                    </span>
+                  )}
+                  {styleChipText && (
+                    <span className="inline-flex items-center" style={{ gap: 6 }}>
+                      <Tent size={14} aria-hidden="true" color="#1F6F8B" />
+                      {styleChipText}
+                    </span>
+                  )}
+                </div>
+              )}
+
               <div className="w-full max-w-[600px]">
-                <SessionTipCard />
                 <div
                   className="flex items-center gap-2 bg-white"
                   style={{
@@ -419,7 +455,7 @@ export default function SessionPage() {
                 </div>
 
                 {/* Starter chips */}
-                <div className="flex flex-wrap gap-2 justify-center mt-4">
+                <div className="flex flex-wrap gap-2 justify-center mt-3">
                   {STARTER_CHIPS.map(chip => (
                     <button
                       key={chip}
@@ -441,6 +477,11 @@ export default function SessionPage() {
                       {chip}
                     </button>
                   ))}
+                </div>
+
+                {/* Tip card */}
+                <div style={{ marginTop: 24 }}>
+                  <SessionTipCard />
                 </div>
 
                 {/* Example fallback line */}
