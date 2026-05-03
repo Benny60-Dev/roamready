@@ -364,8 +364,24 @@ export default function SessionPage() {
 
           {isEmptyState ? (
             // ── Pre-conversation: tip card + centered input + chips + hint ────
-            <div className="flex-1 flex items-center justify-center px-2">
-              <div className="w-full max-w-[600px]">
+            <div className="flex-1 flex items-center justify-center px-2 relative">
+              {/* Watermark — decorative, mix-blend-mode handles the logo's white bg */}
+              <img
+                src="/roamready-logo.png"
+                alt=""
+                aria-hidden="true"
+                className="pointer-events-none select-none w-[420px] md:w-[570px]"
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  opacity: 0.08,
+                  mixBlendMode: 'multiply',
+                  zIndex: 0,
+                }}
+              />
+              <div className="w-full max-w-[600px] relative" style={{ zIndex: 1 }}>
                 <SessionTipCard />
                 <div
                   className="flex items-center gap-2 bg-white"
