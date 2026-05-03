@@ -7,8 +7,6 @@ import {
   Pencil, Check, BookOpen, Package, Share2, Download, CheckCircle, Clock, XCircle, CloudRain, Wand2,
   Maximize2, Minimize2, Play,
 } from 'lucide-react'
-import { pdf } from '@react-pdf/renderer'
-import { TripPDF } from '../../components/pdf/TripPDF'
 import { format } from 'date-fns'
 import { tripsApi } from '../../services/api'
 import { Trip, Stop, StopWeather, LiveForecast } from '../../types'
@@ -938,6 +936,11 @@ export default function TripMapPage() {
         // Map image is optional — proceed without it
       }
 
+      // Dynamic import so the ~1.5MB @react-pdf/renderer chunk only loads on click.
+      const [{ pdf }, { TripPDF }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('../../components/pdf/TripPDF'),
+      ])
       const blob = await pdf(<TripPDF trip={trip} mapImageBase64={mapBlobUrl} />).toBlob()
       if (mapBlobUrl) URL.revokeObjectURL(mapBlobUrl)
       const url = URL.createObjectURL(blob)

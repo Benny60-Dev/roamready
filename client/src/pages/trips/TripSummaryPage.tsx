@@ -7,13 +7,11 @@ import {
   Pencil, Trash2, Wand2,
 } from 'lucide-react'
 const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel'))
-import { pdf } from '@react-pdf/renderer'
 import { tripsApi, aiApi } from '../../services/api'
 import { Trip, Stop, ItineraryDay, ItineraryActivity, StopWeather, POI } from '../../types'
 import { useAuthStore } from '../../store/authStore'
 import { buildStopBadges } from '../../utils/stopBadge'
 import { format, addDays } from 'date-fns'
-import { TripPDF } from '../../components/pdf/TripPDF'
 import { StopWeatherCard } from '../../components/weather/StopWeatherCard'
 
 // ─── Format helpers ───────────────────────────────────────────────────────────
@@ -567,6 +565,11 @@ export default function TripSummaryPage() {
         // Map image is optional — proceed without it
       }
 
+      // Dynamic import so the ~1.5MB @react-pdf/renderer chunk only loads on click.
+      const [{ pdf }, { TripPDF }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('../../components/pdf/TripPDF'),
+      ])
       const blob = await pdf(<TripPDF trip={tripWithEntries} mapImageBase64={mapBlobUrl} />).toBlob()
       if (mapBlobUrl) URL.revokeObjectURL(mapBlobUrl)
       const url = URL.createObjectURL(blob)
