@@ -2,7 +2,6 @@ import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { useState } from 'react'
 import { authApi } from '../../services/api'
-import logoIcon from '../../assets/logo-icon.png'
 
 export default function ForgotPasswordPage() {
   const [sent, setSent] = useState(false)
@@ -21,7 +20,7 @@ export default function ForgotPasswordPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <Link to="/" className="inline-block mb-6">
-            <img src={logoIcon} alt="RoamReady" className="h-16 w-auto object-contain mx-auto" />
+            <img src="/roamready-icon.png" alt="RoamReady" className="h-16 w-auto object-contain mx-auto" />
           </Link>
           <h1 className="text-xl font-medium text-gray-900">Reset password</h1>
         </div>

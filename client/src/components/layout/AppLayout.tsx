@@ -1,7 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { Home, Map, MessageSquare, Tent, User, Bell, Menu, X, LogOut, ChevronDown, Clock } from 'lucide-react'
 import { useState } from 'react'
-import logoIcon from '../../assets/logo-icon.png'
 import { useAuthStore } from '../../store/authStore'
 import { useUIStore } from '../../store/uiStore'
 import { authApi } from '../../services/api'
@@ -43,9 +42,9 @@ export default function AppLayout() {
               {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
             <NavLink to="/dashboard" className="flex items-center gap-2">
-              <img src={logoIcon} alt="RoamReady" className="h-8 w-auto object-contain" />
+              <img src="/roamready-icon.png" alt="RoamReady" className="h-8 w-auto object-contain" />
               <span className="font-medium hidden sm:block">
-                <span style={{ color: '#1F6F8B' }}>Roam</span><span style={{ color: '#F7A829' }}>ready</span><span style={{ color: '#1F6F8B' }}>.ai</span>
+                <span style={{ color: '#1F6F8B' }}>Roam</span><span style={{ color: '#F7A829' }}>Ready</span><span style={{ color: '#1F6F8B' }}>.ai</span>
               </span>
             </NavLink>
           </div>

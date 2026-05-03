@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom'
-import logoIcon from '../assets/logo-icon.png'
 
 export default function PrivacyPolicyPage() {
   return (
@@ -7,9 +6,9 @@ export default function PrivacyPolicyPage() {
       <div className="max-w-4xl mx-auto py-12 px-6">
         <div className="mb-8">
           <Link to="/" className="inline-flex items-center gap-2 mb-6">
-            <img src={logoIcon} alt="RoamReady" className="h-8 w-auto object-contain" />
+            <img src="/roamready-icon.png" alt="RoamReady" className="h-8 w-auto object-contain" />
             <span className="font-medium">
-              <span style={{ color: '#1F6F8B' }}>Roam</span><span style={{ color: '#F7A829' }}>ready</span><span style={{ color: '#1F6F8B' }}>.ai</span>
+              <span style={{ color: '#1F6F8B' }}>Roam</span><span style={{ color: '#F7A829' }}>Ready</span><span style={{ color: '#1F6F8B' }}>.ai</span>
             </span>
           </Link>
           <h1 className="text-3xl font-semibold text-gray-900">Privacy Policy</h1>

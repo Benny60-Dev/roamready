@@ -2,7 +2,6 @@ import {
   Document, Page, View, Text, StyleSheet, Image,
 } from '@react-pdf/renderer'
 import { Trip, Stop, ItineraryDay, ItineraryActivity, POI } from '../../types/index'
-import logoIconUrl from '../../assets/logo-icon.png'
 import { format, addDays } from 'date-fns'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -485,7 +484,7 @@ export function TripPDF({ trip, mapImageBase64 }: Props) {
         {/* ── Header ── */}
         <View style={s.headerRow}>
           <View style={s.logoBox}>
-            <Image src={logoIconUrl} style={s.logoImg} />
+            <Image src="/roamready-icon.png" style={s.logoImg} />
             <View>
               <Text style={s.brandName}>RoamReady</Text>
               <Text style={s.brandTag}>Trip Itinerary</Text>

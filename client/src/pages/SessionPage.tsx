@@ -38,8 +38,8 @@ function buildWelcomeLine(user: UserType | null): string {
   if (!rigName) return `Hey ${firstName} — where are we headed?`
   const petClause = detectPetClause(user?.travelProfile)
   const lead = petClause
-    ? `your ${rigName} is Roamready and ${petClause}`
-    : `your ${rigName} is Roamready`
+    ? `your ${rigName} is RoamReady and ${petClause}`
+    : `your ${rigName} is RoamReady`
   return `Hey ${firstName} — ${lead}. Where are we headed?`
 }
 
@@ -364,24 +364,8 @@ export default function SessionPage() {
 
           {isEmptyState ? (
             // ── Pre-conversation: tip card + centered input + chips + hint ────
-            <div className="flex-1 flex items-center justify-center px-2 relative">
-              {/* Watermark — decorative, mix-blend-mode handles the logo's white bg */}
-              <img
-                src="/roamready-logo.png"
-                alt=""
-                aria-hidden="true"
-                className="pointer-events-none select-none w-[420px] md:w-[570px]"
-                style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  opacity: 0.08,
-                  mixBlendMode: 'multiply',
-                  zIndex: 0,
-                }}
-              />
-              <div className="w-full max-w-[600px] relative" style={{ zIndex: 1 }}>
+            <div className="flex-1 flex flex-col items-center justify-center px-2">
+              <div className="w-full max-w-[600px]">
                 <SessionTipCard />
                 <div
                   className="flex items-center gap-2 bg-white"
@@ -466,6 +450,24 @@ export default function SessionPage() {
                 >
                   or try: "Plan a 5-night trip to Moab starting next Saturday"
                 </p>
+              </div>
+              {/* Watermark — flow-positioned below the empty-state content */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none select-none whitespace-nowrap overflow-hidden text-center"
+                style={{
+                  width: '100%',
+                  marginTop: 48,
+                  opacity: 0.12,
+                  fontWeight: 600,
+                  letterSpacing: '-0.02em',
+                  lineHeight: 1,
+                  fontSize: 'clamp(48px, 12vw, 120px)',
+                }}
+              >
+                <span style={{ color: '#1F6F8B' }}>Roam</span>
+                <span style={{ color: '#F7A829' }}>Ready</span>
+                <span style={{ color: '#1F6F8B' }}>.ai</span>
               </div>
             </div>
           ) : (

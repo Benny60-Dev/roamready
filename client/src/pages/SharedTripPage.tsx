@@ -5,7 +5,6 @@ import { tripsApi } from '../services/api'
 import { Trip } from '../types'
 import { format } from 'date-fns'
 import { buildStopBadges } from '../utils/stopBadge'
-import logoIcon from '../assets/logo-icon.png'
 
 export default function SharedTripPage() {
   const { token } = useParams<{ token: string }>()
@@ -39,9 +38,9 @@ export default function SharedTripPage() {
       <header className="bg-white border-b border-gray-100 py-3 px-4 sticky top-0 z-10">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <img src={logoIcon} alt="RoamReady" className="h-8 w-auto object-contain" />
+            <img src="/roamready-icon.png" alt="RoamReady" className="h-8 w-auto object-contain" />
             <span className="font-medium text-sm">
-              <span style={{ color: '#1F6F8B' }}>Roam</span><span style={{ color: '#F7A829' }}>ready</span><span style={{ color: '#1F6F8B' }}>.ai</span>
+              <span style={{ color: '#1F6F8B' }}>Roam</span><span style={{ color: '#F7A829' }}>Ready</span><span style={{ color: '#1F6F8B' }}>.ai</span>
             </span>
           </Link>
           <Link to="/signup" className="btn-primary text-sm">Plan your own trip</Link>

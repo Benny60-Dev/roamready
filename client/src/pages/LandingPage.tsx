@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom'
 import { MapPin, Zap, Shield, Users, Truck, Wind, Compass, Check, ChevronRight } from 'lucide-react'
-import logoIcon from '../assets/logo-icon.png'
 import SplashScreen from '../components/SplashScreen'
 
 const VEHICLE_TYPES = [
@@ -45,9 +44,9 @@ export default function LandingPage() {
       <header className="sticky top-0 z-40 bg-white border-b border-gray-100" style={{ borderBottomWidth: '0.5px' }}>
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <img src={logoIcon} alt="RoamReady" className="h-8 w-auto object-contain" />
+            <img src="/roamready-icon.png" alt="RoamReady" className="h-8 w-auto object-contain" />
             <span className="font-medium">
-              <span style={{ color: '#1F6F8B' }}>Roam</span><span style={{ color: '#F7A829' }}>ready</span><span style={{ color: '#1F6F8B' }}>.ai</span>
+              <span style={{ color: '#1F6F8B' }}>Roam</span><span style={{ color: '#F7A829' }}>Ready</span><span style={{ color: '#1F6F8B' }}>.ai</span>
             </span>
           </div>
           <div className="flex items-center gap-3">

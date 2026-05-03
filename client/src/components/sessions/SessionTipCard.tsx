@@ -9,12 +9,12 @@ const TIPS: ReadonlyArray<{ kind: Kind; text: string }> = [
   { kind: 'try', text: 'Try this: "Plan a long weekend somewhere I can swim with my dog."' },
   { kind: 'try', text: 'Try this: "Find me a 4-night trip with no rough roads and full hookups."' },
   { kind: 'try', text: 'Try this: "I want to see the stars — pick a dark-sky destination."' },
-  { kind: 'capability', text: 'Roamready knows your rig — we route around low bridges and tight switchbacks automatically.' },
+  { kind: 'capability', text: 'RoamReady knows your rig — we route around low bridges and tight switchbacks automatically.' },
   { kind: 'knowledge', text: 'Heads up: most national park campgrounds book 6 months out. Ask me about timing.' },
   { kind: 'knowledge', text: "Boondocking? Tell me your solar setup and I'll find sites without hookups." },
   { kind: 'knowledge', text: 'Tip: rest stops and Walmarts vary by state — ask before relying on them for overnights.' },
   { kind: 'brand', text: 'Built by RVers, for RVers. If something feels off, hit the feedback button — I read every one.' },
-  { kind: 'brand', text: 'Roamready is not a booking site — we point you to the real reservation pages and you book direct.' },
+  { kind: 'brand', text: 'RoamReady is not a booking site — we point you to the real reservation pages and you book direct.' },
   { kind: 'capability', text: 'Travel with kids? Tell me their ages and I will bias toward parks with playgrounds and kid-friendly trails.' },
 ]
 
