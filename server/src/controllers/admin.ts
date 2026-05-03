@@ -75,13 +75,13 @@ export async function getAdminFeedback(_req: AuthRequest, res: Response, next: N
   } catch (err) { next(err) }
 }
 
-export async function analyzeFeedback(_req: AuthRequest, res: Response, next: NextFunction) {
+export async function analyzeFeedback(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const feedbackItems = await prisma.feedback.findMany({
       orderBy: { createdAt: 'desc' },
       take: 100,
     })
-    const analysis = await analyzeFeedbackAI(feedbackItems)
+    const analysis = await analyzeFeedbackAI(feedbackItems, { userId: req.user!.id })
     res.json({ analysis })
   } catch (err) { next(err) }
 }

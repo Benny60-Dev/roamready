@@ -765,7 +765,7 @@ export async function generateItinerary(req: AuthRequest, res: Response, next: N
 
     // Run itinerary AI and real Google Maps route fetching in parallel
     const [itinerary, routes] = await Promise.all([
-      generateTripItineraryAI(trip, user),
+      generateTripItineraryAI(trip, user, { userId: req.user!.id, tripId: trip.id }),
       fetchAllSegmentRoutes(trip),
     ])
 
@@ -826,7 +826,7 @@ export async function generateActivities(req: AuthRequest, res: Response, next: 
 
     if (destStops.length === 0) return res.json([])
 
-    const results = await generateStopActivitiesAI(destStops)
+    const results = await generateStopActivitiesAI(destStops, { userId: req.user!.id, tripId: trip.id })
 
     // Return { stopId, activities }[] so client can match by stop id
     const withIds = results.map(r => ({
@@ -851,7 +851,7 @@ export async function generatePackingList(req: AuthRequest, res: Response, next:
       include: { rigs: { where: { isDefault: true } }, travelProfile: true },
     })
 
-    const packingList = await generatePackingListAI(trip, user)
+    const packingList = await generatePackingListAI(trip, user, { userId: req.user!.id, tripId: trip.id })
 
     await prisma.trip.update({ where: { id: trip.id }, data: { packingList } })
 
@@ -884,7 +884,7 @@ export async function generateRouteHighlights(req: AuthRequest, res: Response, n
       : trip.startLocation
     const destination = `${stop.locationName}${(stop as any).locationState ? ', ' + (stop as any).locationState : ''}`
 
-    const highlights = await generateRouteHighlightsAI(origin, destination, (stop as any).highwayRoute)
+    const highlights = await generateRouteHighlightsAI(origin, destination, (stop as any).highwayRoute, { userId: req.user!.id, tripId: trip.id })
 
     // Persist so it only generates once.
     // Use raw SQL because the Prisma client may not yet know about routeHighlights

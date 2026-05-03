@@ -5,7 +5,11 @@ import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
 import { chatWithAI, generatePackingListAI, analyzeFeedbackAI } from '../services/ai'
 
-const TURN_LIMIT = 20 // max message entries (user + assistant combined) per planning session
+// Soft cap: inject a "wrap up" system message and let Claude actually respond
+// (so it has a chance to emit the <itinerary> JSON block).
+// Hard cap: short-circuit purely for cost protection.
+const SOFT_CAP = 35
+const HARD_CAP = 60
 
 const VIBES = [
   'a quiet alpine lake setting',
@@ -18,9 +22,16 @@ const VIBES = [
   'boreal lakes and birch forest',
 ]
 
-const TURN_LIMIT_RESPONSE =
-  "We've covered a lot of ground in this planning session! 🗺️ Your itinerary is ready to build. " +
-  "Click **Build Full Itinerary** to save your trip, or start a **New Trip** if you'd like to plan a different adventure. Happy travels! 🚐"
+const HARD_CAP_RESPONSE =
+  "This planning session has gotten really long! 🗺️ To keep things snappy, " +
+  "let's wrap this one up and start fresh. Your conversation is saved — " +
+  "you can start a new trip and reference what we discussed."
+
+const SOFT_CAP_NUDGE =
+  '\n\nIMPORTANT: This conversation has gotten long. If you have enough information ' +
+  'to build a trip itinerary, please wrap up your response and emit the ' +
+  '<itinerary>...</itinerary> JSON block now. Do not ask further clarifying ' +
+  'questions unless absolutely necessary.'
 
 function fmtDate(d: string | Date | null | undefined): string {
   if (!d) return 'not set'
@@ -91,12 +102,28 @@ function buildLiveTripState(trip: any): string {
 
 export async function chat(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { messages, tripId, context } = req.body
+    const { messages, tripId, sessionId, context } = req.body
     if (!messages || !Array.isArray(messages)) throw new AppError('Messages required', 400)
 
-    // Enforce conversation turn limit to control costs and guide users toward completing their trip
-    if (messages.length >= TURN_LIMIT) {
-      return res.json({ message: TURN_LIMIT_RESPONSE, turnLimitReached: true })
+    const userId = req.user!.id
+
+    // Hard cap: cost protection. We never call Claude past this point.
+    if (messages.length >= HARD_CAP) {
+      console.warn(
+        `[AI chat] Hard cap hit on session ${sessionId ?? '(none)'}, ` +
+        `messages=${messages.length}, userId=${userId}`
+      )
+      return res.json({ message: HARD_CAP_RESPONSE, hardCapReached: true })
+    }
+
+    // Soft cap: nudge Claude to wrap up by appending an instruction to its system
+    // prompt — but DO let it respond, so it can emit the <itinerary> JSON block.
+    const softCapHit = messages.length >= SOFT_CAP
+    if (softCapHit) {
+      console.warn(
+        `[AI chat] Soft cap hit on session ${sessionId ?? '(none)'}, ` +
+        `messages=${messages.length}, injecting wrap-up nudge`
+      )
     }
 
     // For modify flows, fetch the live trip state from the DB before calling the AI.
@@ -137,9 +164,12 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
         tripId, liveTrip.stops?.length ?? 0, nonSystemMessages.length)
       console.log('[AI modify] ground-truth injected:\n', liveStateMsg)
     }
+    // The wrap-up nudge is sent as a system message; chatWithAI prepends all
+    // system messages to its base system prompt (see services/ai.ts).
+    const softCapMsg = softCapHit ? [{ role: 'system' as const, content: SOFT_CAP_NUDGE }] : []
     const messagesForAI = liveStateMsg
-      ? [{ role: 'system', content: liveStateMsg }, ...cleanedMessages]
-      : cleanedMessages
+      ? [{ role: 'system' as const, content: liveStateMsg }, ...softCapMsg, ...cleanedMessages]
+      : [...softCapMsg, ...cleanedMessages]
 
     const [user] = await Promise.all([
       prisma.user.findUnique({
@@ -199,7 +229,8 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       console.log('[AI surprise] excluding=%j vibe=%s', recentSurpriseDestinations, surpriseVibe)
     }
 
-    let response = await chatWithAI(messagesForAI, userProfile, recentSurpriseDestinations, surpriseVibe)
+    const aiCtx = { userId, sessionId: sessionId ?? null, tripId: tripId ?? null }
+    let response = await chatWithAI(messagesForAI, userProfile, recentSurpriseDestinations, surpriseVibe, aiCtx)
     if (liveStateMsg) {
       const hasTag = /<modify>/.test(response)
       console.log('[AI modify] response hasModifyTag=%s preview=%s', hasTag, response.slice(0, 200))
@@ -219,7 +250,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
               'Please repeat your response and include the <modify> JSON block exactly as specified in the instructions above.]',
           },
         ]
-        const retryResponse = await chatWithAI(retryMessages, userProfile, recentSurpriseDestinations, surpriseVibe)
+        const retryResponse = await chatWithAI(retryMessages, userProfile, recentSurpriseDestinations, surpriseVibe, aiCtx)
         const retryHasTag = /<modify>/.test(retryResponse)
         console.log('[AI modify] retry hasModifyTag=%s preview=%s', retryHasTag, retryResponse.slice(0, 200))
         if (retryHasTag) {
@@ -295,11 +326,17 @@ export async function generateItinerary(req: AuthRequest, res: Response, next: N
       include: { rigs: { where: { isDefault: true } }, travelProfile: true },
     })
 
-    const response = await chatWithAI(messages, {
-      rigs: user?.rigs,
-      travelProfile: user?.travelProfile,
-      homeLocation: user?.homeLocation,
-    })
+    const response = await chatWithAI(
+      messages,
+      {
+        rigs: user?.rigs,
+        travelProfile: user?.travelProfile,
+        homeLocation: user?.homeLocation,
+      },
+      undefined,
+      undefined,
+      { userId: req.user!.id },
+    )
 
     res.json({ response })
   } catch (err) { next(err) }
@@ -319,19 +356,19 @@ export async function generatePackingList(req: AuthRequest, res: Response, next:
       include: { rigs: { where: { isDefault: true } }, travelProfile: true },
     })
 
-    const packingList = await generatePackingListAI(trip, user)
+    const packingList = await generatePackingListAI(trip, user, { userId: req.user!.id, tripId })
     res.json(packingList)
   } catch (err) { next(err) }
 }
 
-export async function analyzeFeedback(_req: AuthRequest, res: Response, next: NextFunction) {
+export async function analyzeFeedback(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const feedbackItems = await prisma.feedback.findMany({
       orderBy: { createdAt: 'desc' },
       take: 100,
     })
 
-    const analysis = await analyzeFeedbackAI(feedbackItems)
+    const analysis = await analyzeFeedbackAI(feedbackItems, { userId: req.user!.id })
     res.json({ analysis })
   } catch (err) { next(err) }
 }

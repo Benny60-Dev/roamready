@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { prisma } from '../utils/prisma'
 
 const apiKey = process.env.ANTHROPIC_API_KEY
 
@@ -8,11 +9,67 @@ if (!apiKey) {
 
 const client = new Anthropic({ apiKey })
 
+// Anthropic pricing as of May 2026 — UPDATE WHEN PRICING CHANGES
+// Source: https://www.anthropic.com/pricing
+const PRICING = {
+  'claude-sonnet-4-5':           { input: 3.00, output: 15.00 }, // per 1M tokens
+  'claude-haiku-4-5':            { input: 1.00, output:  5.00 },
+  'claude-haiku-4-5-20251001':   { input: 1.00, output:  5.00 },
+} as const
+
+type AICallType =
+  | 'CHAT' | 'ITINERARY' | 'ROUTES' | 'ACTIVITIES'
+  | 'PACKING' | 'HIGHLIGHTS' | 'FEEDBACK'
+
+export interface AICallCtx {
+  userId: string
+  sessionId?: string | null
+  tripId?: string | null
+}
+
+async function logAIUsage(params: {
+  userId: string
+  sessionId?: string | null
+  tripId?: string | null
+  callType: AICallType
+  model: string
+  inputTokens: number
+  outputTokens: number
+}) {
+  try {
+    const pricing = PRICING[params.model as keyof typeof PRICING]
+    if (!pricing) {
+      console.warn(`[AI usage] Unknown model for pricing: ${params.model}`)
+      return
+    }
+    const costUsd =
+      (params.inputTokens  / 1_000_000) * pricing.input +
+      (params.outputTokens / 1_000_000) * pricing.output
+
+    await prisma.aIUsageLog.create({
+      data: {
+        userId: params.userId,
+        sessionId: params.sessionId ?? null,
+        tripId: params.tripId ?? null,
+        callType: params.callType,
+        model: params.model,
+        inputTokens: params.inputTokens,
+        outputTokens: params.outputTokens,
+        estimatedCostUsd: costUsd,
+      },
+    })
+  } catch (err) {
+    // Fire-and-forget — never break a user's chat because logging failed.
+    console.error('[AI usage] Log write failed:', err)
+  }
+}
+
 export async function chatWithAI(
   messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
   userProfile: any,
   recentSurpriseDestinations?: string[],
   surpriseVibe?: string,
+  ctx?: AICallCtx,
 ) {
   const systemPrompt = `You are RoamReady's AI trip planner. You ONLY help users plan outdoor trips — RV routes, van life journeys, car camping adventures, campground recommendations, OHV destinations, weather along routes, fuel costs, packing lists, and travel logistics.
 
@@ -142,17 +199,30 @@ Itinerary JSON format:
       : systemPrompt
   )
 
+  const model = 'claude-sonnet-4-5'
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-5',
+    model,
     max_tokens: 4096,
     system: combinedSystem,
     messages: cleanMessages,
   })
 
+  if (ctx?.userId) {
+    logAIUsage({
+      userId: ctx.userId,
+      sessionId: ctx.sessionId ?? null,
+      tripId: ctx.tripId ?? null,
+      callType: 'CHAT',
+      model,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    }).catch(() => {})
+  }
+
   return response.content[0].type === 'text' ? response.content[0].text : ''
 }
 
-export async function generatePackingListAI(trip: any, user: any): Promise<any[]> {
+export async function generatePackingListAI(trip: any, user: any, ctx?: AICallCtx): Promise<any[]> {
   const rig = user?.rigs?.[0]
   const profile = user?.travelProfile
 
@@ -179,11 +249,24 @@ Return a JSON array of categories with items. Format:
   }
 ]`
 
+  const model = 'claude-sonnet-4-5'
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-5',
+    model,
     max_tokens: 4096,
     messages: [{ role: 'user', content: prompt }],
   })
+
+  if (ctx?.userId) {
+    logAIUsage({
+      userId: ctx.userId,
+      sessionId: ctx.sessionId ?? null,
+      tripId: ctx.tripId ?? trip?.id ?? null,
+      callType: 'PACKING',
+      model,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    }).catch(() => {})
+  }
 
   const text = response.content[0].type === 'text' ? response.content[0].text : '[]'
 
@@ -195,7 +278,7 @@ Return a JSON array of categories with items. Format:
   }
 }
 
-export async function generateTripItineraryAI(trip: any, user: any): Promise<any[]> {
+export async function generateTripItineraryAI(trip: any, user: any, ctx?: AICallCtx): Promise<any[]> {
   const rig = user?.rigs?.[0]
   const profile = user?.travelProfile
   const stops = (trip.stops || []).sort((a: any, b: any) => a.order - b.order)
@@ -269,11 +352,24 @@ Return this exact JSON structure (array of objects):
   }
 ]`
 
+  const model = 'claude-sonnet-4-5'
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-5',
+    model,
     max_tokens: 4096,
     messages: [{ role: 'user', content: prompt }],
   })
+
+  if (ctx?.userId) {
+    logAIUsage({
+      userId: ctx.userId,
+      sessionId: ctx.sessionId ?? null,
+      tripId: ctx.tripId ?? trip?.id ?? null,
+      callType: 'ITINERARY',
+      model,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    }).catch(() => {})
+  }
 
   const text = response.content[0].type === 'text' ? response.content[0].text : '[]'
 
@@ -297,7 +393,7 @@ Return this exact JSON structure (array of objects):
   }
 }
 
-export async function generateRouteStringsAI(trip: any): Promise<{ segmentIdx: number; route: string }[]> {
+export async function generateRouteStringsAI(trip: any, ctx?: AICallCtx): Promise<{ segmentIdx: number; route: string }[]> {
   const stops = (trip.stops || []).sort((a: any, b: any) => a.order - b.order)
 
   // Build the list of drive segments (consecutive stop pairs)
@@ -328,11 +424,24 @@ Rules:
 - List in travel order, separated by →
 - No city names, exits, mile markers, or narrative — highway numbers and directions only`
 
+  const model = 'claude-sonnet-4-5'
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-5',
+    model,
     max_tokens: 2048,
     messages: [{ role: 'user', content: prompt }],
   })
+
+  if (ctx?.userId) {
+    logAIUsage({
+      userId: ctx.userId,
+      sessionId: ctx.sessionId ?? null,
+      tripId: ctx.tripId ?? trip?.id ?? null,
+      callType: 'ROUTES',
+      model,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    }).catch(() => {})
+  }
 
   const text = response.content[0].type === 'text' ? response.content[0].text : '[]'
   try {
@@ -344,7 +453,8 @@ Rules:
 }
 
 export async function generateStopActivitiesAI(
-  stops: Array<{ stopIdx: number; locationName: string; locationState?: string; nights: number }>
+  stops: Array<{ stopIdx: number; locationName: string; locationState?: string; nights: number }>,
+  ctx?: AICallCtx,
 ): Promise<{ stopIdx: number; activities: string[] }[]> {
   if (stops.length === 0) return []
 
@@ -368,11 +478,24 @@ Rules:
 - Keep each activity name concise (5–8 words max)
 - 3 activities minimum, 5 maximum per stop`
 
+  const model = 'claude-sonnet-4-5'
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-5',
+    model,
     max_tokens: 2048,
     messages: [{ role: 'user', content: prompt }],
   })
+
+  if (ctx?.userId) {
+    logAIUsage({
+      userId: ctx.userId,
+      sessionId: ctx.sessionId ?? null,
+      tripId: ctx.tripId ?? null,
+      callType: 'ACTIVITIES',
+      model,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    }).catch(() => {})
+  }
 
   const text = response.content[0].type === 'text' ? response.content[0].text : '[]'
   try {
@@ -383,7 +506,7 @@ Rules:
   }
 }
 
-export async function analyzeFeedbackAI(feedbackItems: any[]): Promise<string> {
+export async function analyzeFeedbackAI(feedbackItems: any[], ctx?: AICallCtx): Promise<string> {
   const prompt = `Analyze these user feedback submissions for RoamReady, an RV/van/camping trip planning app.
 
 Feedback items:
@@ -397,11 +520,24 @@ Please:
 
 Format your response in clear sections with headers.`
 
+  const model = 'claude-sonnet-4-5'
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-5',
+    model,
     max_tokens: 4096,
     messages: [{ role: 'user', content: prompt }],
   })
+
+  if (ctx?.userId) {
+    logAIUsage({
+      userId: ctx.userId,
+      sessionId: ctx.sessionId ?? null,
+      tripId: ctx.tripId ?? null,
+      callType: 'FEEDBACK',
+      model,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    }).catch(() => {})
+  }
 
   return response.content[0].type === 'text' ? response.content[0].text : ''
 }
@@ -410,15 +546,29 @@ export async function generateRouteHighlightsAI(
   origin: string,
   destination: string,
   highwayRoute: string | null | undefined,
+  ctx?: AICallCtx,
 ): Promise<string> {
   const viaText = highwayRoute ? ` traveling via ${highwayRoute}` : ''
   const prompt = `List 5 to 8 interesting points of interest, scenic stops, or notable landmarks along the drive from ${origin} to ${destination}${viaText}. Include things like national monuments, scenic overlooks, quirky roadside attractions, historic sites, state border crossings, or anything worth slowing down for. For each one give the name and a one sentence description of why it is worth noting. Format as a simple list with one item per line. Start each line with the place name followed by a dash and the description. Do not include numbered prefixes or bullet characters.`
 
+  const model = 'claude-haiku-4-5-20251001'
   const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model,
     max_tokens: 800,
     messages: [{ role: 'user', content: prompt }],
   })
+
+  if (ctx?.userId) {
+    logAIUsage({
+      userId: ctx.userId,
+      sessionId: ctx.sessionId ?? null,
+      tripId: ctx.tripId ?? null,
+      callType: 'HIGHLIGHTS',
+      model,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    }).catch(() => {})
+  }
 
   return response.content[0].type === 'text' ? response.content[0].text.trim() : ''
 }

@@ -109,10 +109,18 @@ export default function SessionPage() {
           : raw
         setMessages(persistedMessages)
         if (persistedMessages.length > 0) {
-          const lastAssistant = [...persistedMessages].reverse().find(m => m.role === 'assistant')
-          if (lastAssistant) {
-            const parsed = parseItinerary(lastAssistant.content)
-            if (parsed) setItinerary(parsed)
+          // Scan ALL assistant messages newest → oldest. If the most recent
+          // assistant message is a non-itinerary reply (e.g. a soft-cap nudge
+          // turn or a hard-cap canned message), an earlier emitted itinerary
+          // block is still recoverable on reload.
+          for (let i = persistedMessages.length - 1; i >= 0; i--) {
+            const m = persistedMessages[i]
+            if (m.role !== 'assistant') continue
+            const parsed = parseItinerary(m.content)
+            if (parsed) {
+              setItinerary(parsed)
+              break
+            }
           }
         }
 
@@ -214,7 +222,7 @@ export default function SessionPage() {
     }
 
     try {
-      const res = await aiApi.chat(next)
+      const res = await aiApi.chat(next, undefined, undefined, sessionId)
       const aiText = res.data.message
       setMessages([...next, { role: 'assistant', content: aiText }])
       const parsed = parseItinerary(aiText)

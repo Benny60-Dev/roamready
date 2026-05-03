@@ -46,6 +46,7 @@ model User {
   feedback            Feedback[]
   travelProfile       TravelProfile?
   planningSessions    PlanningSession[]
+  aiUsageLogs         AIUsageLog[]
 }
 
 enum SubscriptionTier {
@@ -365,4 +366,32 @@ enum PlanningSessionStatus {
   PLANNING
   COMPLETED
   ARCHIVED
+}
+
+model AIUsageLog {
+  id                String     @id @default(cuid())
+  userId            String
+  sessionId         String?
+  tripId            String?
+  callType          AICallType
+  model             String
+  inputTokens       Int
+  outputTokens      Int
+  estimatedCostUsd  Decimal    @db.Decimal(10, 6)
+  createdAt         DateTime   @default(now())
+
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([callType, createdAt])
+}
+
+enum AICallType {
+  CHAT
+  ITINERARY
+  ROUTES
+  ACTIVITIES
+  PACKING
+  HIGHLIGHTS
+  FEEDBACK
 }

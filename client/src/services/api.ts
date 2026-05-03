@@ -134,7 +134,7 @@ export const sessionsApi = {
 
 // AI
 export const aiApi = {
-  chat: (messages: any[], tripId?: string, context?: string) => api.post('/ai/chat', { messages, tripId, context }),
+  chat: (messages: any[], tripId?: string, context?: string, sessionId?: string) => api.post('/ai/chat', { messages, tripId, context, sessionId }),
   getChatHistory: (tripId: string) => api.get(`/ai/chat/${tripId}/history`),
   getModifyHistory: (tripId: string) => api.get(`/ai/chat/${tripId}/modify-history`),
   generatePackingList: (tripId: string) => api.post('/ai/generate-packing-list', { tripId }),
