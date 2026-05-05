@@ -521,7 +521,7 @@ export default function TripMapPage() {
         })
       })
       .finally(() => setWeatherLoading(false))
-  }, [trip?.id])
+  }, [trip?.stops])
 
   // ── Geocode stops missing lat/lng, save to DB ─────────────────────────────────
   useEffect(() => {
@@ -605,7 +605,7 @@ export default function TripMapPage() {
       } : prev)
       setGeocoding(false)
     })
-  }, [isLoaded, trip?.id, user?.homeLat, user?.homeLng])
+  }, [isLoaded, trip?.stops, user?.homeLat, user?.homeLng])
 
   // ── Pin HOME stops to exact home coordinates ───────────────────────────────────
   // Runs independently of the geocode effect so it also corrects stops that were
@@ -640,7 +640,7 @@ export default function TripMapPage() {
           : s
       ),
     } : prev)
-  }, [trip?.id, user?.homeLat, user?.homeLng])
+  }, [trip?.stops, user?.homeLat, user?.homeLng])
 
   // ── Routes API (replaces deprecated DirectionsService) ────────────────────────
   useEffect(() => {

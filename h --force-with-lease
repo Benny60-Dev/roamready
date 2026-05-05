@@ -1,0 +1,66 @@
+[33mcommit 81236a3a553890ddc92dc254bf18300f790ba6bb[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m
+Author: Benny60-Dev <dev@roamready.ai>
+Date:   Mon May 4 22:53:42 2026 -0700
+
+    Fix home-stop coordinates for return-home loop trips
+    
+    Bug: When the AI emitted the final return-home stop as type=DESTINATION
+    (per the load-bearing first=HOME / last=DESTINATION invariant), the
+    homeCoords backfill in createStop never fired because it only
+    triggered on type === 'HOME'. Result: the final Mesa stop got
+    latitude=null/longitude=null, and the trip map plotted the F (Finish)
+    marker at generic Mesa city centroid instead of the user's actual
+    home address (3145 N 76th Way, northeast Mesa).
+    
+    Audit-flagged on May 4: "StopType.HOME exists in the schema but the
+    startup-migration block never writes it; possible drift between AI
+    prompt emissions and DB state."
+    
+    Fix (server/src/controllers/trips.ts):
+    - Extract normalizeCity from getTripMapImage's nested scope to module
+      scope so it can be shared
+    - createStop now also fetches homeCity and homeState from the user
+    - Broaden homeCoords backfill condition: triggers on
+      (type === 'HOME' || looksLikeHome) where looksLikeHome is true when
+      normalizeCity(locationName) === user.homeCity (case-insensitive trim)
+    - New distinct log line for the city-match path:
+      [createStop:homeCoords] backfill via city match - locationName="..."
+      matches homeCity="..." -> using home coords (...)
+    
+    Why not change the AI prompt instead:
+    - The first=HOME / last=DESTINATION invariant is load-bearing.
+      generateActivities and other downstream code filters on
+      s.type === 'DESTINATION' && s.nights > 0. Letting the AI emit
+      type: "HOME" for the return stop would silently change activity
+      generation behavior. Coordinate backfill is the safer surface to
+      patch.
+    
+    Why not extend the startup migration:
+    - Same reason -- type is queried in many places, flipping
+      return-home DESTINATIONs to HOME would have ripple effects.
+    
+    Edge case (theoretical, not blocking): if a user genuinely visits
+    their home city for non-home reasons (e.g. lives in Phoenix and plans
+    a stop "in Phoenix" meaning a campground in Phoenix), the backfill
+    would override their desired location with home coords. In practice
+    the AI doesn't emit stops at home city for non-home reasons, and any
+    explicit lat/lng provided in the request body still wins (only fires
+    when latitude is null/undefined).
+    
+    Verified end-to-end: planned a fresh "Phoenix to Flagstaff Loop"
+    trip; new [createStop:homeCoords] backfill via city match log line
+    fired for the final Mesa stop; trip map's F marker now lands at the
+    user's actual home address (Las Sendas / NE Mesa) instead of city
+    centroid.
+    
+    Known cosmetic inconsistency for next iteration:
+    - Stops list shows asymmetric labels: first Mesa stop labeled "Start"
+      but final Mesa stop labeled "Home / Finish". Both are the same
+      physical location (user's home). Should be symmetric -- either both
+      show "Home" framing or neither does. Filed for next session.
+    
+    Existing trip data: trips planned before this fix that have
+    type=DESTINATION + null coordinates on a return-home final stop
+    remain affected. Lowest-friction cleanup: delete-and-replan affected
+    trips manually; only one currently identified (Phoenix Red Rock Loop,
+    already deleted during testing).
