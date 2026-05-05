@@ -547,8 +547,39 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
 
 export async function deleteStop(req: AuthRequest, res: Response, next: NextFunction) {
   try {
+    // Guard 1: trip ownership.
     const trip = await prisma.trip.findFirst({ where: { id: req.params.id, userId: req.user!.id } })
     if (!trip) throw new AppError('Trip not found', 404)
+
+    // Guard 2: the stopId in the URL must actually belong to this trip. Without
+    // this, a user could DELETE someone else's stop by composing a URL with one
+    // of their own tripIds plus an arbitrary stopId.
+    const stop = await prisma.stop.findFirst({
+      where: { id: req.params.stopId, tripId: req.params.id },
+    })
+    if (!stop) throw new AppError('Stop not found on this trip', 404)
+
+    // Guard 3: HOME stops are structurally required (start of trip, sometimes
+    // also the closing return-home entry). Refuse rather than allow a corrupt
+    // trip shape — the AI modify-mode path can otherwise reach this codepath.
+    if (stop.type === 'HOME') {
+      throw new AppError('Cannot delete the home departure stop', 400, {
+        code: 'HOME_STOP_PROTECTED',
+      })
+    }
+
+    // Guard 4: a trip needs at least 2 stops (HOME + at least one destination).
+    // Block the delete if it would drop below that floor. Mirrors the Summary
+    // page's existing canDelete = sortedStops.length > 2 gate.
+    const stopCount = await prisma.stop.count({ where: { tripId: req.params.id } })
+    if (stopCount <= 2) {
+      throw new AppError(
+        'Cannot delete — a trip needs at least one destination after the home departure',
+        400,
+        { code: 'MIN_STOPS_VIOLATION' },
+      )
+    }
+
     await prisma.stop.delete({ where: { id: req.params.stopId } })
     await resequenceStops(req.params.id)
     res.json({ message: 'Stop deleted' })
