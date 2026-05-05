@@ -47,6 +47,7 @@ model User {
   travelProfile       TravelProfile?
   planningSessions    PlanningSession[]
   aiUsageLogs         AIUsageLog[]
+  parties             TravelParty[]
 }
 
 enum SubscriptionTier {
@@ -127,6 +128,74 @@ model TravelProfile {
   updatedAt          DateTime @updatedAt
 }
 
+enum PersonRole {
+  ADULT
+  TEEN
+  CHILD
+  INFANT
+}
+
+enum PetType {
+  DOG
+  CAT
+  OTHER
+}
+
+model TravelParty {
+  id        String   @id @default(cuid())
+  userId    String?
+  tripId    String?  @unique
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trip      Trip?    @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  isDefault Boolean  @default(false)
+  notes     String?
+  people    Person[]
+  pets      Pet[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, isDefault])
+  @@index([userId])
+}
+
+model Person {
+  id                  String      @id @default(cuid())
+  partyId             String
+  party               TravelParty @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  role                PersonRole  @default(ADULT)
+  name                String?
+  age                 Int?
+  isTraveling         Boolean     @default(true)
+  isEmergencyContact  Boolean     @default(false)
+  emergencyPhone      String?
+  accessibilityNeeds  Json?
+  dietaryNotes        String?
+  militaryStatus      String?
+  firstResponder      String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  @@index([partyId])
+}
+
+model Pet {
+  id                   String      @id @default(cuid())
+  partyId              String
+  party                TravelParty @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  type                 PetType
+  name                 String?
+  breed                String?
+  weightLbs            Int?
+  leashTrained         Boolean     @default(true)
+  comfortableInCrowds  Boolean     @default(true)
+  comfortableAtNight   Boolean     @default(true)
+  notes                String?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  @@index([partyId])
+}
+
 model Membership {
   id           String    @id @default(cuid())
   userId       String
@@ -167,6 +236,7 @@ model Trip {
   updatedAt      DateTime   @updatedAt
   stops          Stop[]
   planningSession PlanningSession?
+  party          TravelParty?
 }
 
 enum TripStatus {
