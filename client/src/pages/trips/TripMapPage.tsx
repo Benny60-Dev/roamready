@@ -15,7 +15,7 @@ const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel
 import ConfirmModal from '../../components/ui/ConfirmModal'
 import ShareModal from '../../components/trip/ShareModal'
 import { useAuthStore } from '../../store/authStore'
-import { buildStopBadges, formatStopBadgeLabel, isHomeBadge } from '../../utils/stopBadge'
+import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge } from '../../utils/stopBadge'
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' }
 const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 'geometry', 'places']
@@ -852,7 +852,10 @@ export default function TripMapPage() {
       if (combinedSH && isLast && !isFirst) return
 
       const kind  = classifyStop(stop)
-      const badge = combinedSH && isFirst ? 'S/H' : stopBadges[stop.id]
+      // Combined-marker case keeps the 'S/H' shape but renders as 'S/F' to
+      // match the "Start · Finish" label and the H→F transform applied to
+      // every other endpoint marker.
+      const badge = combinedSH && isFirst ? 'S/F' : formatStopBadgeMarker(stopBadges[stop.id])
 
       // Layer visibility — HOME (start) always shows
       if (kind !== 'home') {
@@ -1293,7 +1296,7 @@ export default function TripMapPage() {
                           className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
                           style={{ backgroundColor: isHomeMarker ? MC.home : colorForStop(stop) }}
                         >
-                          {String(badge)}
+                          {formatStopBadgeMarker(badge)}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium text-gray-900 truncate">{stop.locationName}</p>

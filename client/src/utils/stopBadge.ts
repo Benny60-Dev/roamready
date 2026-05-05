@@ -119,6 +119,16 @@ export function formatStopBadgeLabel(badge: StopBadge): string {
   return `Stop ${badge}`
 }
 
+// What goes inside the small circle/pill marker. The internal badge code 'H'
+// stays 'H' (used for marker color and isHomeBadge filtering) but users see
+// 'F' so the visible character matches the "Finish" label. Numbers and 'S'
+// pass through unchanged.
+export function formatStopBadgeMarker(badge: StopBadge): string {
+  if (badge === 'H') return 'F'
+  if (typeof badge === 'number') return String(badge)
+  return badge // 'S' or 'F'
+}
+
 // Returns true if this badge represents a home stop (start or end of a loop trip).
 // Use this instead of `stop.type === 'HOME'` for filter/gate logic, because
 // return-home loop trips type the final stop as DESTINATION (load-bearing

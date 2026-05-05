@@ -8,7 +8,7 @@ import {
 import { tripsApi, campgroundsApi, bookingsApi } from '../../services/api'
 import { Trip, Stop, Campground } from '../../types'
 import { useAuthStore } from '../../store/authStore'
-import { buildStopBadges, formatStopBadgeLabel, isHomeBadge } from '../../utils/stopBadge'
+import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge } from '../../utils/stopBadge'
 import { useUIStore } from '../../store/uiStore'
 import ConfirmModal from '../../components/ui/ConfirmModal'
 
@@ -897,7 +897,7 @@ export default function TripBookingPage() {
     return (
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-400 text-white text-sm font-bold flex-shrink-0 shadow-sm">
-          {String(badge ?? '')}
+          {formatStopBadgeMarker(badge)}
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -949,7 +949,7 @@ export default function TripBookingPage() {
             stop.type === 'HOME' ? 'bg-gray-400' :
             stop.type === 'OVERNIGHT_ONLY' ? 'bg-[#7F77DD]' : 'bg-[#1F6F8B]'
           }`}>
-            {String(stopDisplayNumbers[stop.id] ?? '')}
+            {formatStopBadgeMarker(stopDisplayNumbers[stop.id])}
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="text-base font-semibold text-gray-900 leading-tight">
@@ -1125,7 +1125,7 @@ export default function TripBookingPage() {
                 <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-semibold ${
                   activeStop === stop.id ? 'bg-white/20' : 'bg-gray-100 text-gray-600'
                 }`}>
-                  {String(badge ?? '')}
+                  {formatStopBadgeMarker(badge)}
                 </span>
                 <span className="max-w-[90px] truncate">
                   {isHome ? formatStopBadgeLabel(badge) : stop.locationName}
@@ -1170,7 +1170,7 @@ export default function TripBookingPage() {
                     isHome ? 'bg-gray-400' :
                     stop.type === 'OVERNIGHT_ONLY' ? 'bg-[#7F77DD]' : 'bg-[#1F6F8B]'
                   }`}>
-                    {String(stopBadge ?? '')}
+                    {formatStopBadgeMarker(stopBadge)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className={`text-xs font-medium truncate ${isActive ? 'text-[#1F6F8B]' : isHome ? 'text-gray-500' : 'text-gray-800'}`}>

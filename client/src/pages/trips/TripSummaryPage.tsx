@@ -10,7 +10,7 @@ const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel
 import { tripsApi, aiApi } from '../../services/api'
 import { Trip, Stop, ItineraryDay, ItineraryActivity, StopWeather, POI } from '../../types'
 import { useAuthStore } from '../../store/authStore'
-import { buildStopBadges, formatStopBadgeLabel, isHomeBadge, StopBadge } from '../../utils/stopBadge'
+import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge, StopBadge } from '../../utils/stopBadge'
 import { format, addDays } from 'date-fns'
 import { StopWeatherCard } from '../../components/weather/StopWeatherCard'
 
@@ -1015,7 +1015,7 @@ export default function TripSummaryPage() {
             <div key={stop.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
               <div className="flex items-center gap-2">
                 <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${isHomeBadge(stopDisplayNumbers[stop.id]) ? 'bg-gray-100 text-gray-500' : 'bg-[#E0F0F4] text-[#1F6F8B]'}`}>
-                  {String(stopDisplayNumbers[stop.id] ?? '')}
+                  {formatStopBadgeMarker(stopDisplayNumbers[stop.id])}
                 </div>
                 <span className="text-sm text-gray-700">{stop.locationName}</span>
               </div>

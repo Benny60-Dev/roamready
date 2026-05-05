@@ -4,7 +4,7 @@ import { MapPin, Calendar, DollarSign, Tent } from 'lucide-react'
 import { tripsApi } from '../services/api'
 import { Trip } from '../types'
 import { format } from 'date-fns'
-import { buildStopBadges, formatStopBadgeLabel, isHomeBadge } from '../utils/stopBadge'
+import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge } from '../utils/stopBadge'
 
 export default function SharedTripPage() {
   const { token } = useParams<{ token: string }>()
@@ -76,7 +76,7 @@ export default function SharedTripPage() {
               <div key={stop.id} className="flex gap-3">
                 <div className="flex flex-col items-center">
                   <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-medium ${isHomeBadge(badge) ? 'bg-gray-400' : 'bg-[#1F6F8B]'}`}>
-                    {String(badge ?? '')}
+                    {formatStopBadgeMarker(badge)}
                   </div>
                   {i < sortedStops.length - 1 && <div className="w-px flex-1 bg-gray-200 mt-1 min-h-6" />}
                 </div>
