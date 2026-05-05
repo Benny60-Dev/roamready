@@ -45,9 +45,40 @@ function buildLiveTripState(trip: any): string {
   const stops: any[] = trip.stops ?? []
   const stopNames = stops.map((s: any) => s.locationName.toLowerCase())
 
+  // User-facing vocabulary, computed from the data model.
+  // - HOME entry (data: order 1, type HOME) is the "Starting point" — NOT "Stop 1"
+  // - On loop trips, the closing return-home entry (last stop, type DESTINATION,
+  //   nights 0, locationName matches HOME) is the "Return home" — NOT "Stop N"
+  // - Destinations between are renumbered "Stop 1..N" for the user, where Stop 1
+  //   is the first destination AFTER home.
+  // The internal `order` field is preserved on every line so the AI still has the
+  // 1-indexed data reference it needs for <modify> action's afterStopOrder field.
+  const homeStop = stops.find((s: any) => s.type === 'HOME')
+  const lastStop = stops.length > 0 ? stops[stops.length - 1] : null
+  const isReturnHome = (s: any) =>
+    homeStop &&
+    s !== homeStop &&
+    s === lastStop &&
+    s.locationName?.toLowerCase().trim() === homeStop.locationName?.toLowerCase().trim()
+
+  let userFacingIdx = 0
   const stopLines = stops.map((s: any) => {
     const name = s.locationState ? `${s.locationName}, ${s.locationState}` : s.locationName
-    const parts = [`${s.order}. ${name}`, s.type, `${s.nights} night${s.nights !== 1 ? 's' : ''}`, s.bookingStatus]
+    let userLabel: string
+    if (s.type === 'HOME') {
+      userLabel = 'Starting point'
+    } else if (isReturnHome(s)) {
+      userLabel = 'Return home'
+    } else {
+      userFacingIdx += 1
+      userLabel = `Stop ${userFacingIdx}`
+    }
+    const parts = [
+      `[${userLabel} — internal order ${s.order}] ${name}`,
+      s.type,
+      `${s.nights} night${s.nights !== 1 ? 's' : ''}`,
+      s.bookingStatus,
+    ]
     if (s.campgroundName) parts.push(`campground: ${s.campgroundName}`)
     return parts.join(' | ')
   })
@@ -62,11 +93,18 @@ function buildLiveTripState(trip: any): string {
     'Never say "Applied to trip", "Done!", "Added!", or any confirmation phrase without also emitting the <modify> tag.',
     'If you cannot determine all required parameters, ask the user — do not claim to have done it.',
     '',
+    'USER VOCABULARY — read carefully:',
+    'Each line in the stop list below has BOTH a user-facing label ("Starting point" / "Stop N" / "Return home") AND the internal data order ("internal order N"). Use the right one in the right place:',
+    '- When TALKING TO THE USER in prose, refer to stops by their user-facing label and locationName (e.g. "I\'ll remove Williams" or "before your starting point" or "after Stop 2"). NEVER say "stop 1" to mean the home departure.',
+    '- When EMITTING <modify> JSON, the locationName field uses the actual location name (Williams, Sedona, etc.); the afterStopOrder field uses the INTERNAL order integer from the stop list below.',
+    '- When the user says "first stop" / "stop 1" / "the second stop" / "the last stop", they almost always mean a NUMBERED DESTINATION — not the home departure and not the return-home entry. If the request is ambiguous, ASK BEFORE EMITTING a <modify> tag: "Just to confirm — you mean [first destination], not your home departure?"',
+    '- Concrete example: trip is "Starting point: Mesa | Stop 1: Williams | Stop 2: Sedona | Return home: Mesa". User says "remove the first stop" → that means Williams, not Mesa. Confirm with the user, then emit <modify>{"action":"remove_stop","locationName":"Williams"}</modify>.',
+    '',
     'SUPPORTED ACTIONS AND JSON FORMAT:',
     '',
     'Add a stop:',
     '<modify>{"action":"add_stop","locationName":"Sedona","locationState":"AZ","type":"DESTINATION","nights":1,"afterStopOrder":1}</modify>',
-    '  afterStopOrder: the order number of the stop AFTER which to insert. Omit or set to null to append at end.',
+    '  afterStopOrder: the INTERNAL order integer of the stop AFTER which to insert (see "internal order N" in the stop list below). Omit or set to null to append at end.',
     '  nights parsing rules: "one night" = 1 | "two nights" or "a couple nights" = 2 | "three nights" = 3 | "a few nights" = 2 | "the weekend" = 2 | "three days" = 2 (days minus 1) | default to 1 if ambiguous. Parse nights EXACTLY as stated — do not infer or round up.',
     '',
     'Remove a stop:',
