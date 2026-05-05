@@ -15,7 +15,7 @@ const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel
 import ConfirmModal from '../../components/ui/ConfirmModal'
 import ShareModal from '../../components/trip/ShareModal'
 import { useAuthStore } from '../../store/authStore'
-import { buildStopBadges } from '../../utils/stopBadge'
+import { buildStopBadges, formatStopBadgeLabel, isHomeBadge } from '../../utils/stopBadge'
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' }
 const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 'geometry', 'places']
@@ -144,16 +144,22 @@ const ALERT_COLORS: Record<string, string> = {
 }
 
 // ─── Map legend ──────────────────────────────────────────────────────────────────
-function MapLegend() {
+function MapLegend({ combinedSH }: { combinedSH: boolean }) {
+  // When the trip is a 2-stop home→home loop, both endpoints share a single
+  // marker labeled 'S/H' — surface that as one combined legend row instead of
+  // two redundant Start/Finish entries that would point at the same point.
+  const endpointEntries = combinedSH
+    ? [{ letter: 'S/H', color: MC.home, label: 'Start · Finish' }]
+    : [
+        { letter: 'S', color: MC.home,     label: formatStopBadgeLabel('S') },
+        { letter: 'H', color: MC.home,     label: formatStopBadgeLabel('H') },
+        { letter: 'F', color: MC.unbooked, label: formatStopBadgeLabel('F') },
+      ]
   return (
     <div className="absolute bottom-6 left-4 bg-white rounded-xl border border-gray-200 px-3 py-2.5 shadow-md z-10" style={{ borderWidth: '0.5px' }}>
       <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5">Legend</p>
       <div className="space-y-1.5">
-        {[
-          { letter: 'S', color: MC.home,     label: 'Start' },
-          { letter: 'H', color: MC.home,     label: 'Home / Finish' },
-          { letter: 'F', color: MC.unbooked, label: 'Finish' },
-        ].map(({ letter, color, label }) => (
+        {endpointEntries.map(({ letter, color, label }) => (
           <div key={letter} className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full flex items-center justify-center text-white text-[8px] font-bold flex-shrink-0" style={{ backgroundColor: color }}>{letter}</div>
             <span className="text-[11px] text-gray-600 leading-none">{label}</span>
@@ -229,7 +235,7 @@ function StopPopup({
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-            {displayNum === 'S/H' ? 'Start · Home' : displayNum === 'S' ? 'Start' : displayNum === 'H' ? 'Home · Finish' : displayNum === 'F' ? 'Finish' : `Stop ${displayNum}`}
+            {displayNum === 'S/H' ? 'Start · Finish' : displayNum !== undefined ? formatStopBadgeLabel(displayNum) : ''}
           </span>
           <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${badge.cls}`}>{badge.label}</span>
         </div>
@@ -294,7 +300,11 @@ function StopPopup({
         {stop.isPetFriendly && <span className="text-[#0F766E]">🐾 Pet-friendly</span>}
       </div>
 
-      {stop.bookingStatus !== 'CONFIRMED' && stop.type !== 'HOME' && (
+      {/* Badge-based gate: only real bookable destinations get the button.
+          'S' / 'H' / 'F' / 'S/H' are endpoints (no campground card on the
+          booking page), so a return-home destination typed DESTINATION but
+          badged 'H' correctly skips the button now. */}
+      {stop.bookingStatus !== 'CONFIRMED' && typeof displayNum === 'number' && (
         <a href={`/trips/${stop.tripId}/booking`} className="btn-primary w-full mt-3 text-center text-xs block">
           Book this stop!
         </a>
@@ -798,14 +808,17 @@ export default function TripMapPage() {
   const { totalCost, nonHomeStops, bookedStops } = useMemo(() => {
     const stops = trip?.stops || []
     const camp = stops.reduce((sum, s) => sum + ((s as any).siteRate || 0) * s.nights, 0)
-    const nonHome = stops.filter((s: Stop) => s.type !== 'HOME')
+    // Badge-based: catches return-home loops where the closing stop is typed
+    // DESTINATION but badged 'H'. Mirrors TripBookingPage's bookableStops so
+    // the two pages report the same "X of Y" on the same trip.
+    const nonHome = stops.filter((s: Stop) => !isHomeBadge(stopBadges[s.id]))
     const booked = nonHome.filter(s => s.bookingStatus === 'CONFIRMED').length
     return {
       totalCost: camp + (trip?.estimatedFuel || 0),
       nonHomeStops: nonHome,
       bookedStops: booked,
     }
-  }, [trip?.stops, trip?.estimatedFuel])
+  }, [trip?.stops, trip?.estimatedFuel, stopBadges])
 
   // Total unique weather alerts across all stops — for the Weather tab badge
   const totalAlerts = useMemo(() => {
@@ -1244,17 +1257,16 @@ export default function TripMapPage() {
               {sidebarTab === 'stops' && (
                 <div className="space-y-0.5">
                   {trip?.stops?.slice().sort((a, b) => a.order - b.order).map(stop => {
-                    const isHome   = stop.type === 'HOME'
-                    const badge    = stopBadges[stop.id]
+                    const badge      = stopBadges[stop.id]
+                    const isEndpoint = badge === 'S' || badge === 'H' || badge === 'F'
+                    // Marker color uses badge-based detection so a return-home
+                    // loop's final stop (typed DESTINATION) still gets home color.
+                    const isHomeMarker = badge === 'S' || badge === 'H'
                     const hasAlert = stopHasAlerts(weatherData[stop.id])
                     const alerts   = stopAlerts(weatherData[stop.id])
 
-                    const bookingEl = badge === 'S' ? (
-                      <span className="text-[9px] text-gray-400">Start</span>
-                    ) : badge === 'H' ? (
-                      <span className="text-[9px] text-gray-400">Home</span>
-                    ) : badge === 'F' && isHome ? (
-                      <span className="text-[9px] text-gray-400">Finish</span>
+                    const bookingEl = isEndpoint ? (
+                      <span className="text-[9px] text-gray-400">{formatStopBadgeLabel(badge)}</span>
                     ) : stop.bookingStatus === 'CONFIRMED' ? (
                       <span className="flex items-center gap-0.5 text-[9px] text-[#2F4030] font-medium">
                         <CheckCircle size={9} /> Booked
@@ -1279,14 +1291,14 @@ export default function TripMapPage() {
                       >
                         <div
                           className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
-                          style={{ backgroundColor: isHome ? MC.home : colorForStop(stop) }}
+                          style={{ backgroundColor: isHomeMarker ? MC.home : colorForStop(stop) }}
                         >
                           {String(badge)}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium text-gray-900 truncate">{stop.locationName}</p>
                           <p className="text-[10px] text-gray-400">
-                            {badge === 'S' ? 'Start' : badge === 'H' ? 'Home · Finish' : badge === 'F' && isHome ? 'Finish' : `${stop.nights}n${stop.type === 'OVERNIGHT_ONLY' ? ' · overnight' : ''}`}
+                            {isEndpoint ? formatStopBadgeLabel(badge) : `${stop.nights}n${stop.type === 'OVERNIGHT_ONLY' ? ' · overnight' : ''}`}
                           </p>
                         </div>
                         <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
@@ -1417,7 +1429,7 @@ export default function TripMapPage() {
           )}
 
           {/* Legend */}
-          {isLoaded && trip && <MapLegend />}
+          {isLoaded && trip && <MapLegend combinedSH={combinedSH} />}
 
           {/* Geocoding indicator */}
           {geocoding && (

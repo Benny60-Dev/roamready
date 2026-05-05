@@ -128,6 +128,11 @@ export default function TripJournalPage() {
         {(() => {
           const sorted = [...(trip.stops || [])].sort((a, b) => a.order - b.order)
           const badges = buildStopBadges(sorted, user)
+          // Journal entries are for travel experiences, not home time.
+          // Home stops are intentionally excluded here even though other pages
+          // (Map, Bookings, Summary, Shared) show them as "Start" / "Finish".
+          // If we ever want home journal entries (e.g. "made it back!"), this
+          // is the only place to flip.
           return sorted
             .filter(s => s.type !== 'HOME')
             .map(stop => (

@@ -8,7 +8,7 @@ import {
 import { tripsApi, campgroundsApi, bookingsApi } from '../../services/api'
 import { Trip, Stop, Campground } from '../../types'
 import { useAuthStore } from '../../store/authStore'
-import { buildStopBadges } from '../../utils/stopBadge'
+import { buildStopBadges, formatStopBadgeLabel, isHomeBadge } from '../../utils/stopBadge'
 import { useUIStore } from '../../store/uiStore'
 import ConfirmModal from '../../components/ui/ConfirmModal'
 
@@ -695,18 +695,31 @@ export default function TripBookingPage() {
     const targetStopId = searchParams.get('stopId')
     tripsApi.get(id).then(res => {
       setTrip(res.data)
-      setActiveStop(targetStopId ?? res.data.stops?.find((s: any) => s.type !== 'HOME')?.id ?? null)
+      // Default the active stop to the first BOOKABLE entry — both home endpoints
+      // are now visible in the list but neither shows a campground card, so
+      // landing on one would feel empty. Use the badge helper instead of
+      // s.type === 'HOME' so return-home loops (last stop typed DESTINATION)
+      // still skip past the finish home stop here.
+      const sortedForPicker = [...(res.data.stops ?? [])].sort((a: Stop, b: Stop) => a.order - b.order)
+      const pickerBadges = buildStopBadges(sortedForPicker, user)
+      const firstBookable = sortedForPicker.find(s => !isHomeBadge(pickerBadges[s.id]))?.id ?? null
+      setActiveStop(targetStopId ?? firstBookable)
       setLoading(false)
       // Scroll to the target stop after React renders the sections
       if (targetStopId) setTimeout(() => scrollToStop(targetStopId), 80)
     })
-  }, [id])
+  }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load campgrounds for ALL stops in parallel when trip loads
   useEffect(() => {
     if (!trip?.stops?.length) return
+    // Skip both home endpoints — return-home loops type the last stop as
+    // DESTINATION, so the badge helper is the reliable signal here, not
+    // stop.type === 'HOME' alone.
+    const sortedForFetch = [...trip.stops].sort((a, b) => a.order - b.order)
+    const fetchBadges = buildStopBadges(sortedForFetch, user)
     trip.stops.forEach(stop => {
-      if (stop.type === 'HOME') return
+      if (isHomeBadge(fetchBadges[stop.id])) return
       campgroundsApi.search({
         q: stop.locationName,
         lat: stop.latitude,
@@ -869,10 +882,34 @@ export default function TripBookingPage() {
 
   const sortedStops        = [...(trip.stops ?? [])].sort((a, b) => a.order - b.order)
   const stopDisplayNumbers = buildStopBadges(sortedStops, user)
-  const bookableStops = sortedStops.filter(s => s.type !== 'HOME')
+  // Badge-based: catches return-home loops where the last stop is typed
+  // DESTINATION but the helper flags it 'H' via homeCity match.
+  const bookableStops = sortedStops.filter(s => !isHomeBadge(stopDisplayNumbers[s.id]))
   const bookedCount   = sortedStops.filter(s => s.bookingStatus === 'CONFIRMED').length
   const incompatCount = sortedStops.filter(s => !s.isCompatible).length
   const totalCampCost = sortedStops.reduce((sum, s) => s.siteRate ? sum + s.siteRate * s.nights : sum, 0)
+
+  // ── Home endpoint row: Start / Finish header, no campground card ──
+  // Home stops are now visible on this page for symmetry with the Map and
+  // Summary views. Booking doesn't apply here — render a subdued header so
+  // users see the trip's structural endpoints without being prompted to book.
+  function renderHomeRow(stop: Stop, badge: ReturnType<typeof buildStopBadges>[string]) {
+    return (
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-400 text-white text-sm font-bold flex-shrink-0 shadow-sm">
+          {String(badge ?? '')}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            {formatStopBadgeLabel(badge)}
+          </p>
+          <p className="text-sm text-gray-700 truncate">
+            {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   // ── Per-stop content: destination header + recommended card + expandable alts ──
   function renderStopContent(stop: Stop, prevStop?: Stop) {
@@ -1069,28 +1106,36 @@ export default function TripBookingPage() {
       {/* ── MOBILE: horizontal tab bar (hidden on md+) ── */}
       <div className="md:hidden flex-shrink-0 bg-white border-b border-gray-100 overflow-x-auto">
         <div className="flex gap-1.5 p-3">
-          {sortedStops.filter(s => s.type !== 'HOME').map(stop => (
-            <button
-              key={stop.id}
-              onClick={() => setActiveStop(stop.id)}
-              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs border transition-colors ${
-                activeStop === stop.id
-                  ? 'bg-[#1F6F8B] text-white border-[#1F6F8B]'
-                  : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}
-              style={{ borderWidth: '0.5px' }}
-            >
-              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-semibold ${
-                activeStop === stop.id ? 'bg-white/20' : 'bg-gray-100 text-gray-600'
-              }`}>
-                {String(stopDisplayNumbers[stop.id] ?? '')}
-              </span>
-              <span className="max-w-[90px] truncate">{stop.locationName}</span>
-              {stop.bookingStatus === 'CONFIRMED' && (
-                <CheckCircle size={10} className={activeStop === stop.id ? 'text-white' : 'text-[#3E5540]'} />
-              )}
-            </button>
-          ))}
+          {sortedStops.map(stop => {
+            const badge = stopDisplayNumbers[stop.id]
+            const isHome = isHomeBadge(badge)
+            return (
+              <button
+                key={stop.id}
+                onClick={() => setActiveStop(stop.id)}
+                className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs border transition-colors ${
+                  activeStop === stop.id
+                    ? 'bg-[#1F6F8B] text-white border-[#1F6F8B]'
+                    : isHome
+                      ? 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
+                      : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                }`}
+                style={{ borderWidth: '0.5px' }}
+              >
+                <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-semibold ${
+                  activeStop === stop.id ? 'bg-white/20' : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {String(badge ?? '')}
+                </span>
+                <span className="max-w-[90px] truncate">
+                  {isHome ? formatStopBadgeLabel(badge) : stop.locationName}
+                </span>
+                {!isHome && stop.bookingStatus === 'CONFIRMED' && (
+                  <CheckCircle size={10} className={activeStop === stop.id ? 'text-white' : 'text-[#3E5540]'} />
+                )}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -1106,9 +1151,11 @@ export default function TripBookingPage() {
           </div>
           {/* Stop nav list */}
           <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
-            {sortedStops.filter(s => s.type !== 'HOME').map(stop => {
-              const badge    = statusBadge(stop.bookingStatus)
-              const isActive = activeStop === stop.id
+            {sortedStops.map(stop => {
+              const stopBadge = stopDisplayNumbers[stop.id]
+              const isHome    = isHomeBadge(stopBadge)
+              const badge     = statusBadge(stop.bookingStatus)
+              const isActive  = activeStop === stop.id
               return (
                 <button
                   key={stop.id}
@@ -1120,19 +1167,19 @@ export default function TripBookingPage() {
                   }`}
                 >
                   <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 mt-0.5 ${
-                    stop.type === 'HOME' ? 'bg-gray-400' :
+                    isHome ? 'bg-gray-400' :
                     stop.type === 'OVERNIGHT_ONLY' ? 'bg-[#7F77DD]' : 'bg-[#1F6F8B]'
                   }`}>
-                    {String(stopDisplayNumbers[stop.id] ?? '')}
+                    {String(stopBadge ?? '')}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className={`text-xs font-medium truncate ${isActive ? 'text-[#1F6F8B]' : 'text-gray-800'}`}>
+                    <p className={`text-xs font-medium truncate ${isActive ? 'text-[#1F6F8B]' : isHome ? 'text-gray-500' : 'text-gray-800'}`}>
                       {stop.locationName}
                     </p>
                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                      {stop.type === 'HOME' ? (
+                      {isHome ? (
                         <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
-                          Starting point
+                          {formatStopBadgeLabel(stopBadge)}
                         </span>
                       ) : (
                         <>
@@ -1144,7 +1191,7 @@ export default function TripBookingPage() {
                       )}
                     </div>
                   </div>
-                  {!stop.isCompatible && <AlertTriangle size={12} className="text-red-400 flex-shrink-0 mt-1" />}
+                  {!isHome && !stop.isCompatible && <AlertTriangle size={12} className="text-red-400 flex-shrink-0 mt-1" />}
                 </button>
               )
             })}
@@ -1179,16 +1226,21 @@ export default function TripBookingPage() {
           >
             {/* DESKTOP: all stops as sections */}
             <div className="hidden md:block">
-              {sortedStops.filter(s => s.type !== 'HOME').map((stop) => {
+              {sortedStops.map((stop) => {
                 const stopIdx = sortedStops.findIndex(s => s.id === stop.id)
+                const badge   = stopDisplayNumbers[stop.id]
                 return (
                 <section
                   key={stop.id}
                   id={`stop-section-${stop.id}`}
                   data-stop-section={stop.id}
-                  className="px-6 py-6 border-b border-gray-100 last:border-0"
+                  className={isHomeBadge(badge)
+                    ? 'px-6 py-3 border-b border-gray-100 last:border-0 bg-gray-50/50'
+                    : 'px-6 py-6 border-b border-gray-100 last:border-0'}
                 >
-                  {renderStopContent(stop, sortedStops[stopIdx - 1])}
+                  {isHomeBadge(badge)
+                    ? renderHomeRow(stop, badge)
+                    : renderStopContent(stop, sortedStops[stopIdx - 1])}
                 </section>
                 )
               })}
@@ -1200,7 +1252,14 @@ export default function TripBookingPage() {
                 .filter(s => s.id === activeStop)
                 .map(stop => {
                   const stopIdx = sortedStops.findIndex(s => s.id === stop.id)
-                  return <div key={stop.id}>{renderStopContent(stop, sortedStops[stopIdx - 1])}</div>
+                  const badge   = stopDisplayNumbers[stop.id]
+                  return (
+                    <div key={stop.id}>
+                      {isHomeBadge(badge)
+                        ? renderHomeRow(stop, badge)
+                        : renderStopContent(stop, sortedStops[stopIdx - 1])}
+                    </div>
+                  )
                 })}
             </div>
           </div>

@@ -10,7 +10,7 @@ const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel
 import { tripsApi, aiApi } from '../../services/api'
 import { Trip, Stop, ItineraryDay, ItineraryActivity, StopWeather, POI } from '../../types'
 import { useAuthStore } from '../../store/authStore'
-import { buildStopBadges } from '../../utils/stopBadge'
+import { buildStopBadges, formatStopBadgeLabel, isHomeBadge, StopBadge } from '../../utils/stopBadge'
 import { format, addDays } from 'date-fns'
 import { StopWeatherCard } from '../../components/weather/StopWeatherCard'
 
@@ -227,7 +227,10 @@ interface DayGroup {
   stopOrder: number
 }
 
-function buildGroups(entries: TimelineEntry[]): DayGroup[] {
+function buildGroups(
+  entries: TimelineEntry[],
+  badges?: Record<string, StopBadge>,
+): DayGroup[] {
   const groups: DayGroup[] = []
   let i = 0
   while (i < entries.length) {
@@ -294,6 +297,23 @@ function buildGroups(entries: TimelineEntry[]): DayGroup[] {
     }
     i++
   }
+
+  // Append a closing "Finish" group when the last entry is a home stop. Return-home
+  // loops type the final stop as DESTINATION (not HOME), so the standalone HOME
+  // group above only fires for the departure side. The badge helper is the
+  // reliable signal for "is this a home stop" — 'H' means last-stop-matches-home.
+  const lastEntry = entries[entries.length - 1]
+  const lastStopId = lastEntry?.stop?.id
+  if (badges && lastStopId && badges[lastStopId] === 'H') {
+    groups.push({
+      type: 'HOME',
+      entries: [lastEntry],
+      indices: [entries.length - 1],
+      stopId: lastStopId,
+      stopOrder: lastEntry.stop?.order ?? 0,
+    })
+  }
+
   return groups
 }
 
@@ -892,7 +912,7 @@ export default function TripSummaryPage() {
 
         <div className="space-y-3">
           {(() => {
-            const dayGroups = buildGroups(entries)
+            const dayGroups = buildGroups(entries, stopDisplayNumbers)
             const rendered: JSX.Element[] = []
             let currentDay = 1
 
@@ -924,6 +944,7 @@ export default function TripSummaryPage() {
                   key={`group-${gi}`}
                   group={group}
                   startDay={startDay}
+                  badges={stopDisplayNumbers}
                   generatingActivities={generatingActivities}
                   weatherData={weatherData}
                   addingActivity={addingActivity}
@@ -993,7 +1014,7 @@ export default function TripSummaryPage() {
           {sortedStops.filter(s => s.siteRate || s.estimatedFuel).map(stop => (
             <div key={stop.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
               <div className="flex items-center gap-2">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${stop.type === 'HOME' ? 'bg-gray-100 text-gray-500' : 'bg-[#E0F0F4] text-[#1F6F8B]'}`}>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${isHomeBadge(stopDisplayNumbers[stop.id]) ? 'bg-gray-100 text-gray-500' : 'bg-[#E0F0F4] text-[#1F6F8B]'}`}>
                   {String(stopDisplayNumbers[stop.id] ?? '')}
                 </div>
                 <span className="text-sm text-gray-700">{stop.locationName}</span>
@@ -1097,6 +1118,7 @@ function StatCell({ value, label, shortLabel }: { value: string; label: string; 
 interface DayCardProps {
   group: DayGroup
   startDay: number
+  badges: Record<string, StopBadge>
   generatingActivities: boolean
   weatherData: Record<string, StopWeather | null | undefined>
   addingActivity: Record<number, string>
@@ -1116,7 +1138,7 @@ interface DayCardProps {
 }
 
 function DayCard({
-  group, startDay, generatingActivities, weatherData,
+  group, startDay, badges, generatingActivities, weatherData,
   addingActivity, addingPOI, addingPOIDuration,
   onDriveDepart,
   onToggleActivity, onDeleteActivity, onAddingActivityChange, onAddActivity,
@@ -1138,15 +1160,21 @@ function DayCard({
     </div>
   )
 
-  // ── HOME standalone (edge case — no drive follows) ──────────────────────────
+  // ── HOME standalone (no drive in/out) ───────────────────────────────────────
+  // Fires for the trip's bookend home rows: the departure point (rare — only
+  // when no drive immediately follows) AND the closing Finish row (appended
+  // by buildGroups when the last stop is badged 'H'). Label is driven by the
+  // badge: Start for 'S', Finish for 'H' / 'F'.
   if (group.type === 'HOME') {
     const entry = group.entries[0]
+    const badge = entry.stop?.id ? badges[entry.stop.id] : undefined
+    const label = badge !== undefined ? formatStopBadgeLabel(badge) : 'Home'
     return (
       <div className="rounded-lg border border-gray-200 bg-gray-50 overflow-hidden">
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <MapPin size={13} className="text-gray-400" />
-            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Departure Point</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</span>
             <span className="text-sm text-gray-700">
               {entry.stop?.locationName}{entry.stop?.locationState ? `, ${entry.stop.locationState}` : ''}
             </span>
@@ -1187,18 +1215,22 @@ function DayCard({
         </div>
 
         {/* Depart row — HOME or prior stop — with inline time selector */}
-        {homeEntry ? (
-          <div className="px-4 py-3">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <MapPin size={12} className="text-[#1F6F8B]" />
-              <span className="text-xs font-semibold uppercase tracking-wide text-[#1F6F8B]">Depart</span>
-              <span className="text-sm text-gray-700">
-                {homeEntry.stop?.locationName}{homeEntry.stop?.locationState ? `, ${homeEntry.stop.locationState}` : ''}
-              </span>
-              <TimePicker value={driveEntry.departureTime} onChange={onDriveDepart} />
+        {homeEntry ? (() => {
+          const homeBadge = homeEntry.stop?.id ? badges[homeEntry.stop.id] : undefined
+          const departLabel = homeBadge !== undefined ? formatStopBadgeLabel(homeBadge) : 'Depart'
+          return (
+            <div className="px-4 py-3">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <MapPin size={12} className="text-[#1F6F8B]" />
+                <span className="text-xs font-semibold uppercase tracking-wide text-[#1F6F8B]">{departLabel}</span>
+                <span className="text-sm text-gray-700">
+                  {homeEntry.stop?.locationName}{homeEntry.stop?.locationState ? `, ${homeEntry.stop.locationState}` : ''}
+                </span>
+                <TimePicker value={driveEntry.departureTime} onChange={onDriveDepart} />
+              </div>
             </div>
-          </div>
-        ) : driveEntry.prevStop ? (
+          )
+        })() : driveEntry.prevStop ? (
           <div className="px-4 py-3">
             <div className="flex items-center gap-1.5 flex-wrap">
               <MapPin size={12} className="text-[#1F6F8B]" />

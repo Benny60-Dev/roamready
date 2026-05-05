@@ -39,6 +39,8 @@ function normalizeLocation(s: string): string {
   return r
 }
 
+export type StopBadge = 'S' | 'H' | 'F' | number
+
 /**
  * Returns the display badge value for a single stop:
  *   'S'      — first stop (departure point)
@@ -55,7 +57,7 @@ export function getStopBadge(
   stop: Stop,
   sortedStops: Stop[],
   user?: Pick<User, 'homeCity' | 'homeState' | 'homeLocation'> | null,
-): 'S' | 'H' | 'F' | number {
+): StopBadge {
   if (sortedStops.length === 0) return 1
   const firstId = sortedStops[0].id
   const lastId  = sortedStops[sortedStops.length - 1].id
@@ -100,8 +102,28 @@ export function getStopBadge(
 export function buildStopBadges(
   sortedStops: Stop[],
   user?: Pick<User, 'homeCity' | 'homeState' | 'homeLocation'> | null,
-): Record<string, 'S' | 'H' | 'F' | number> {
-  const result: Record<string, 'S' | 'H' | 'F' | number> = {}
+): Record<string, StopBadge> {
+  const result: Record<string, StopBadge> = {}
   sortedStops.forEach(s => { result[s.id] = getStopBadge(s, sortedStops, user) })
   return result
+}
+
+// Both 'H' and 'F' map to "Finish" intentionally:
+//   'H' = last stop is the user's home (loop trip)
+//   'F' = last stop is somewhere else (one-way trip)
+// The distinction only matters for marker color/icon, not the user-facing
+// label — which is "Finish" in both cases.
+export function formatStopBadgeLabel(badge: StopBadge): string {
+  if (badge === 'S') return 'Start'
+  if (badge === 'H' || badge === 'F') return 'Finish'
+  return `Stop ${badge}`
+}
+
+// Returns true if this badge represents a home stop (start or end of a loop trip).
+// Use this instead of `stop.type === 'HOME'` for filter/gate logic, because
+// return-home loop trips type the final stop as DESTINATION (load-bearing
+// invariant for generateActivities et al.) — only the badge helper knows it's
+// actually home via the homeCity match.
+export function isHomeBadge(badge: StopBadge | undefined): boolean {
+  return badge === 'S' || badge === 'H'
 }

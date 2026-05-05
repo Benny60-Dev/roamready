@@ -4,7 +4,7 @@ import { MapPin, Calendar, DollarSign, Tent } from 'lucide-react'
 import { tripsApi } from '../services/api'
 import { Trip } from '../types'
 import { format } from 'date-fns'
-import { buildStopBadges } from '../utils/stopBadge'
+import { buildStopBadges, formatStopBadgeLabel, isHomeBadge } from '../utils/stopBadge'
 
 export default function SharedTripPage() {
   const { token } = useParams<{ token: string }>()
@@ -69,30 +69,34 @@ export default function SharedTripPage() {
         </div>
 
         <div className="space-y-3">
-          {sortedStops.map((stop, i) => (
-            <div key={stop.id} className="flex gap-3">
-              <div className="flex flex-col items-center">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-medium ${stop.type === 'HOME' ? 'bg-gray-400' : 'bg-[#1F6F8B]'}`}>
-                  {String(stopDisplayNumbers[stop.id] ?? '')}
-                </div>
-                {i < sortedStops.length - 1 && <div className="w-px flex-1 bg-gray-200 mt-1 min-h-6" />}
-              </div>
-              <div className="flex-1 pb-3">
-                <p className="font-medium text-gray-900">{stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}</p>
-                {stop.type === 'HOME'
-                  ? <p className="text-xs text-gray-400">Starting point</p>
-                  : stop.campgroundName && <p className="text-sm text-gray-500">{stop.campgroundName}</p>
-                }
-                {stop.type !== 'HOME' && (
-                  <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-400">
-                    {stop.arrivalDate && <span><Calendar size={11} className="inline mr-0.5" />{format(new Date(stop.arrivalDate), 'EEE, MMM d')}</span>}
-                    <span><Tent size={11} className="inline mr-0.5" />{stop.nights} night{stop.nights !== 1 ? 's' : ''}</span>
-                    {stop.hookupType && <span className="badge-green">{stop.hookupType}</span>}
+          {sortedStops.map((stop, i) => {
+            const badge = stopDisplayNumbers[stop.id]
+            const isEndpoint = isHomeBadge(badge) || badge === 'F'
+            return (
+              <div key={stop.id} className="flex gap-3">
+                <div className="flex flex-col items-center">
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-medium ${isHomeBadge(badge) ? 'bg-gray-400' : 'bg-[#1F6F8B]'}`}>
+                    {String(badge ?? '')}
                   </div>
-                )}
+                  {i < sortedStops.length - 1 && <div className="w-px flex-1 bg-gray-200 mt-1 min-h-6" />}
+                </div>
+                <div className="flex-1 pb-3">
+                  <p className="font-medium text-gray-900">{stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}</p>
+                  {isEndpoint
+                    ? <p className="text-xs text-gray-400">{formatStopBadgeLabel(badge)}</p>
+                    : stop.campgroundName && <p className="text-sm text-gray-500">{stop.campgroundName}</p>
+                  }
+                  {!isEndpoint && (
+                    <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-400">
+                      {stop.arrivalDate && <span><Calendar size={11} className="inline mr-0.5" />{format(new Date(stop.arrivalDate), 'EEE, MMM d')}</span>}
+                      <span><Tent size={11} className="inline mr-0.5" />{stop.nights} night{stop.nights !== 1 ? 's' : ''}</span>
+                      {stop.hookupType && <span className="badge-green">{stop.hookupType}</span>}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
         <div className="card text-center py-6">
