@@ -96,6 +96,27 @@ Trip planning rules:
     - If both are null, default to 350 miles per leg.
   Override conditions: if the user explicitly says in this conversation that they want to drive straight through, do a long day, or skip overnight stops, that overrides this rule for that trip only. Otherwise, NEVER emit a leg you believe will exceed the limit.
   This applies to BOTH initial trip generation and to <modify> actions: if removing a stop would create an over-long leg, propose inserting a transit stop instead, or warn the user before emitting the modify.
+- TRAVEL PARTY — HARD RULE: The user's \`defaultParty\` (or this trip's \`party\`, if set — trip-level overrides user-level) describes who is traveling. You MUST consult party data when making recommendations. Treat the trip-scoped party as authoritative when it exists; otherwise use defaultParty.
+  PEOPLE
+  - For each Person with isTraveling=true: count them in the party size. Use this for campground capacity ("sleeps N"), site recommendations, and activity suggestions.
+  - Persons with isTraveling=false (typically with isEmergencyContact=true) are NOT on the trip — never count them in party size or include them in trip-context narration.
+  - If any Person has accessibilityNeeds set (a JSON object with flags like wheelchair, paved_path, accessible_restroom, near_facility, level_site, low_elevation), filter campground recommendations to ADA/accessible sites and avoid steep or rough-terrain stops.
+  - If any Person has dietaryNotes (e.g. "gluten-free", "kosher"), prefer stops near grocery stores or restaurants that can accommodate.
+  - If any Person has role=CHILD or INFANT, prefer family-friendly campgrounds, suggest age-appropriate activities, and avoid adult-only RV resorts.
+  - militaryStatus and firstResponder on a Person are informational; do NOT use them to gate suggestions (the campground access endpoint handles that separately at the account-holder level).
+  PETS
+  - If pets array is non-empty: ONLY suggest pet-friendly campgrounds. Mention that you've filtered for pet-friendly options.
+  - Pet weightLbs > 50: avoid campgrounds that have small-dog-only or weight-limit policies; mention "large-dog-friendly" explicitly when relevant.
+  - leashTrained=false on any pet: prefer campgrounds with fenced sites or dog runs; avoid sites that strictly require leashing.
+  - comfortableInCrowds=false on any pet: avoid busy resorts, prefer quieter / state-park-style campgrounds.
+  - comfortableAtNight=false on any pet: prefer sites with low ambient noise, not near generators or main roads.
+  - Pet \`notes\` (free-form) may contain medical or behavioral info — read it, factor it in, but DO NOT regurgitate sensitive info back to the user unless they bring it up first.
+  EMERGENCY CONTACTS
+  - Persons with isEmergencyContact=true are stored for emergencies. Do NOT include them in trip planning suggestions or party-size counts.
+  FALLBACK BEHAVIOR
+  - If defaultParty (and trip.party) is null AND the legacy travelProfile fields (\`adults\`, \`children\`, \`hasPets\`) are populated, fall back to those for party size and pet status. This is the transition state until Phase C removes the legacy fields.
+  - If both party and legacy fields are null/zero, ask the user "who's coming on this trip?" before generating an itinerary.
+  NEVER LEAK SCHEMA — when narrating to the user, say "your dog" or "your two adults and a kid", not "your party has 1 pet of type DOG with leashTrained=true." The schema fields are inputs to your reasoning; the output is plain conversational English.
 - ROUND TRIP / RETURN HOME RULE — NEVER add a return-home stop unless the user EXPLICITLY uses one of these exact phrases: "round trip", "round-trip", "coming back home", "returning home", "back home", "end at home", "back to [home city]", "heading home after". If the user provides a destination and dates without any of those phrases, the trip is ONE-WAY — do NOT add a return stop. Example of correct one-way behavior: "Plan a one-way trip from Mesa to Del Rio, leaving May 15, 3 nights" → stops: HOME(Mesa), any transit stops, DESTINATION(Del Rio). NO Mesa return stop. Example of correct round-trip behavior: "leaving Mesa, going to Flagstaff for 2 nights, then coming back home" → stops: HOME(Mesa), DESTINATION(Flagstaff, 2 nights), DESTINATION(Mesa, 0 nights). Dates alone ("leaving May 15, arriving around May 18") do NOT imply round-trip. The phrase "arriving at destination" does NOT imply returning home. One-way is the default — round-trip requires an explicit request.
 - USER VOCABULARY — how to talk about stops in plain English (separate from the data model):
   - The HOME entry (data: order 1, type HOME) is the user's "starting point" or "departure" — NEVER call it "stop 1" or "the first stop" when speaking to the user
@@ -245,18 +266,47 @@ export async function generatePackingListAI(trip: any, user: any, ctx?: AICallCt
   const rig = user?.rigs?.[0]
   const profile = user?.travelProfile
 
+  // Travel Party (Phase A): trip-scoped party > user.defaultParty > legacy fields.
+  // For packing-list purposes we need counts (people / kids / pets) and any
+  // dietary or accessibility flags that affect what to bring.
+  const tripParty = trip?.party ?? null
+  const defaultParty = user?.parties?.[0] ?? null
+  const party = tripParty ?? defaultParty
+  const travelingPeople = (party?.people ?? []).filter((p: any) => p.isTraveling)
+  const partySummary = party
+    ? {
+        adults: travelingPeople.filter((p: any) => p.role === 'ADULT' || p.role === 'TEEN').length,
+        children: travelingPeople.filter((p: any) => p.role === 'CHILD' || p.role === 'INFANT').length,
+        accessibilityNeeds: travelingPeople.map((p: any) => p.accessibilityNeeds).filter(Boolean),
+        dietaryNotes: travelingPeople.map((p: any) => p.dietaryNotes).filter(Boolean),
+        pets: (party.pets ?? []).map((pet: any) => ({
+          type: pet.type,
+          breed: pet.breed,
+          weightLbs: pet.weightLbs,
+          notes: pet.notes,
+        })),
+      }
+    : null
+
   const prompt = `Generate a comprehensive packing list for this trip:
 
 Trip: ${trip.name}
 Nights: ${trip.totalNights || trip.stops?.reduce((sum: number, s: any) => sum + (s.nights || 1), 0) || 'Unknown'}
 Vehicle: ${rig?.vehicleType || 'Unknown'}
 Hookup preference: ${profile?.hookupPreference || 'Unknown'}
-Adults: ${profile?.adults || 1}, Children: ${profile?.children || 0}
-Has pets: ${profile?.hasPets || false}
-Pet details: ${JSON.stringify(profile?.petDetails || {})}
+${partySummary
+  ? `Travel party: ${JSON.stringify(partySummary)}`
+  : `Adults: ${profile?.adults || 1}, Children: ${profile?.children || 0}\nHas pets: ${profile?.hasPets || false}\nPet details: ${JSON.stringify(profile?.petDetails || {})}  (party not set — using legacy fields)`}
 Interests: ${JSON.stringify(profile?.interests || [])}
 Toy hauler: ${rig?.isToyHauler || false}
 Toys: ${JSON.stringify(rig?.toys || [])}
+
+Travel party rules — when generating the packing list:
+- Quantity-sensitive items (towels, plates, sleeping bags) scale with traveling people count, NOT including emergency contacts.
+- For each Person with dietaryNotes, include relevant kitchen / pantry items (gluten-free pasta, kosher snacks, etc.).
+- For each Person with accessibilityNeeds (wheelchair, mobility, etc.), include relevant gear (transfer board, portable ramp, shower chair if applicable).
+- For each pet, include species-appropriate items (food bowl, leash for dogs, litter for cats); scale food quantity by weightLbs and trip nights; if leashTrained=false add "long line / tie-out cable" and "portable fence panels"; if comfortableInCrowds=false add "calming aids / familiar bedding".
+- Output category and item names in plain English. Never use schema field names ("leashTrained=false") in item names.
 
 Return a JSON array of categories with items. Format:
 [
@@ -302,6 +352,34 @@ export async function generateTripItineraryAI(trip: any, user: any, ctx?: AICall
   const profile = user?.travelProfile
   const stops = (trip.stops || []).sort((a: any, b: any) => a.order - b.order)
 
+  // Travel Party (Phase A): trip-scoped party overrides user's defaultParty,
+  // both override legacy TravelProfile fields. Compose a compact party summary
+  // for the day-by-day itinerary prompt — itineraries should reflect who is
+  // actually on the trip (kids, accessibility needs, pet behavior).
+  const tripParty = trip?.party ?? null
+  const defaultParty = (user?.parties?.[0] ?? null)
+  const party = tripParty ?? defaultParty
+  const travelingPeople = (party?.people ?? []).filter((p: any) => p.isTraveling)
+  const partySummary = party
+    ? {
+        peopleCount: travelingPeople.length,
+        roles: travelingPeople.map((p: any) => p.role),
+        hasKids: travelingPeople.some((p: any) => p.role === 'CHILD' || p.role === 'INFANT'),
+        accessibilityNeeds: travelingPeople
+          .map((p: any) => p.accessibilityNeeds)
+          .filter(Boolean),
+        dietaryNotes: travelingPeople.map((p: any) => p.dietaryNotes).filter(Boolean),
+        petCount: (party.pets ?? []).length,
+        pets: (party.pets ?? []).map((pet: any) => ({
+          type: pet.type,
+          weightLbs: pet.weightLbs,
+          leashTrained: pet.leashTrained,
+          comfortableInCrowds: pet.comfortableInCrowds,
+          comfortableAtNight: pet.comfortableAtNight,
+        })),
+      }
+    : null
+
   const stopSummaries = stops.map((s: any, i: number) => ({
     order: i + 1,
     type: s.type,
@@ -321,8 +399,15 @@ Trip: ${trip.name}
 Total miles: ${trip.totalMiles || 'unknown'}
 Vehicle: ${rig?.vehicleType || 'RV'}
 Interests: ${JSON.stringify(profile?.interests || [])}
-Has pets: ${profile?.hasPets || false}
 Toy hauler: ${rig?.isToyHauler || false}
+${partySummary
+  ? `Travel party: ${JSON.stringify(partySummary)}`
+  : `Has pets: ${profile?.hasPets || false}  (party not set — using legacy fields)`}
+
+Travel party rules — when generating activities, route descriptions, and transit notes:
+- Reflect the people actually traveling (peopleCount, roles, hasKids). Family-friendly tone for trips with kids; quieter / less-crowded suggestions when accessibility needs are present.
+- For drive-day descriptions: consider pet behavior (e.g. comfortableAtNight=false → mention quiet overnight stops; leashTrained=false → suggest fenced rest areas).
+- Output narration in plain English ("your two adults and a kid", "your dog") — never schema field names ("leashTrained=false", "type=DOG").
 
 Stops (in order):
 ${JSON.stringify(stopSummaries, null, 2)}
