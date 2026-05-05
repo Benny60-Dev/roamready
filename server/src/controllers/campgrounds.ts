@@ -49,95 +49,14 @@ function checkCompatibility(campground: CampgroundResult, rig: any) {
   }
 }
 
-function getMockCampgrounds(query: string, lat?: number, lng?: number): CampgroundResult[] {
-  console.warn('[RecGov] RECGOV_API_KEY not set — returning mock campground data')
-  return [
-    {
-      id: 'mock-1',
-      name: `Pine Ridge RV Resort (near ${query})`,
-      address: '1234 Forest Road, Sample City, CA 95000',
-      phone: '(555) 867-5309',
-      website: 'https://www.recreation.gov',
-      reservationUrl: 'https://www.recreation.gov',
-      latitude: lat ? lat + 0.05 : 37.5,
-      longitude: lng ? lng + 0.05 : -119.5,
-      hookupTypes: ['Electric', 'Water'],
-      isPetFriendly: true,
-      isMilitaryOnly: false,
-      maxRigLength: 45,
-      rating: 4.3,
-      siteRate: 42,
-      source: 'mock',
-      isCompatible: true,
-      incompatibilityReasons: [],
-    },
-    {
-      id: 'mock-2',
-      name: `Riverside RV Park (near ${query})`,
-      address: '5678 River Drive, Sample City, CA 95001',
-      phone: '(555) 555-0100',
-      website: 'https://www.recreation.gov',
-      reservationUrl: 'https://www.recreation.gov',
-      latitude: lat ? lat - 0.05 : 37.45,
-      longitude: lng ? lng - 0.05 : -119.55,
-      hookupTypes: ['Electric', 'Water', 'Sewer'],
-      isPetFriendly: true,
-      isMilitaryOnly: false,
-      maxRigLength: 55,
-      rating: 4.7,
-      siteRate: 58,
-      source: 'mock',
-      isCompatible: true,
-      incompatibilityReasons: [],
-    },
-    {
-      id: 'mock-3',
-      name: `Oak Flat Campground (near ${query})`,
-      address: '9012 Mountain View Rd, Sample City, CA 95002',
-      phone: undefined,
-      website: 'https://www.recreation.gov',
-      reservationUrl: undefined,
-      latitude: lat ? lat + 0.1 : 37.6,
-      longitude: lng ? lng - 0.1 : -119.6,
-      hookupTypes: [],
-      isPetFriendly: false,
-      isMilitaryOnly: false,
-      maxRigLength: 20,
-      rating: 3.8,
-      siteRate: 22,
-      source: 'mock',
-      isCompatible: true,
-      incompatibilityReasons: [],
-    },
-    {
-      id: 'mock-4',
-      name: `Ponderosa Pines Campground (near ${query})`,
-      address: '3400 Ponderosa Way, Sample City, CA 95003',
-      phone: '(555) 444-9876',
-      website: 'https://www.recreation.gov',
-      reservationUrl: 'https://www.recreation.gov',
-      latitude: lat ? lat - 0.08 : 37.42,
-      longitude: lng ? lng + 0.08 : -119.42,
-      hookupTypes: ['Electric'],
-      isPetFriendly: true,
-      isMilitaryOnly: false,
-      maxRigLength: 40,
-      rating: 4.1,
-      siteRate: 35,
-      source: 'mock',
-      isCompatible: true,
-      incompatibilityReasons: [],
-    },
-  ]
-}
-
-async function fetchRecGovCampgrounds(query: string, lat?: number, lng?: number, radius = 25) {
+async function fetchRecGovCampgrounds(query: string, lat?: number, lng?: number, radius = 25): Promise<CampgroundResult[]> {
   const cacheKey = `recgov:${query}:${lat}:${lng}`
   const cached = await getCache<any[]>(cacheKey)
   if (cached) return cached
 
   if (!process.env.RECGOV_API_KEY) {
-    return getMockCampgrounds(query, lat, lng)
+    console.warn('[campgrounds] RECGOV_API_KEY not set — returning empty campground list. Set this in .env to enable real RIDB data.')
+    return []
   }
 
   try {
@@ -150,7 +69,13 @@ async function fetchRecGovCampgrounds(query: string, lat?: number, lng?: number,
       timeout: 8000,
     })
 
-    const campgrounds = (res.data.RECDATA || []).map((f: any) => {
+    const recdata = res.data.RECDATA || []
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[RIDB] Returned ${recdata.length} facilities for query=${query}`)
+      console.log('[RIDB] First 2 results raw shape:', JSON.stringify(recdata.slice(0, 2), null, 2))
+    }
+
+    const campgrounds = recdata.map((f: any) => {
       const addr = f.FACILITYADDRESS?.[0]
       const addressParts = addr
         ? [addr.AddressLine1, addr.City, addr.AddressStateCode, addr.PostalCode].filter(Boolean)
@@ -213,11 +138,11 @@ async function fetchRecGovCampgrounds(query: string, lat?: number, lng?: number,
   } catch (e: any) {
     const status = e?.response?.status
     if (status === 401 || status === 403) {
-      console.error('[RecGov] API key invalid or unauthorized (HTTP %d) — falling back to mock data', status)
-      return getMockCampgrounds(query, lat, lng)
+      console.error('[RecGov] API key invalid or unauthorized (HTTP %d) — returning empty list', status)
+      return []
     }
     console.error('RecGov API error:', e)
-    return getMockCampgrounds(query, lat, lng)
+    return []
   }
 }
 

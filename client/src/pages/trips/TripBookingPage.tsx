@@ -30,6 +30,10 @@ function formatDate(iso?: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+function truncateName(name: string): string {
+  return name.length > 35 ? name.slice(0, 30) + '...' : name
+}
+
 // ─── Reservation & Notes collapsible section ─────────────────────────────────
 
 interface ReservationForm {
@@ -173,6 +177,10 @@ function ReservationSection({
 
       {open && (
         <div className="mt-3 space-y-3">
+          <p className="text-xs italic text-gray-500 leading-relaxed">
+            RoamReady doesn't make reservations for you. Use this to record your own
+            confirmation # after you book directly with the campground.
+          </p>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="block text-xs text-gray-500 mb-1">Confirmation #</label>
@@ -456,20 +464,29 @@ function RecommendedCampgroundCard({
         {cg.isMilitaryOnly && <span className="badge text-xs bg-blue-50 text-blue-700">🎖️ Military</span>}
       </div>
 
-      {/* Gold button — opens Recreation.gov and signals draft mode (no DB write). Hidden
-          once the stop is confirmed (already booked) or in draft (form is open below).
-          ReservationSection mounts unconditionally so its useEffect can see the draftMode
-          flip; it returns null internally when neither confirmed nor in draft. */}
+      {/* Reservation Honesty: split into two distinct actions so users see the truth —
+          (1) the gold button opens Recreation.gov in a new tab and does NOT touch local
+          state; the actual booking happens on Recreation.gov, not here. (2) the subtle
+          link below it opens the local form so users can record a confirmation # AFTER
+          they've booked elsewhere. Both hidden when already booked or while the form is
+          already open. */}
       {!isConfirmed && !draftMode && (
-        <button
-          onClick={() => {
-            if (cg.reservationUrl) window.open(cg.reservationUrl, '_blank', 'noopener,noreferrer')
-            onSelectCampground()
-          }}
-          className="bg-rr-gold hover:bg-rr-gold-dark text-white rounded-lg font-medium transition-colors text-sm w-full flex items-center justify-center gap-1.5 py-2.5"
-        >
-          Add reservation details here
-        </button>
+        <div className="space-y-2">
+          {cg.reservationUrl && (
+            <button
+              onClick={() => window.open(cg.reservationUrl, '_blank', 'noopener,noreferrer')}
+              className="bg-rr-gold hover:bg-rr-gold-dark text-white rounded-lg font-medium transition-colors text-sm w-full flex items-center justify-center gap-1.5 py-2.5"
+            >
+              <ExternalLink size={13} /> Book at {truncateName(cg.name)}
+            </button>
+          )}
+          <button
+            onClick={onSelectCampground}
+            className="text-xs text-[#1F6F8B] hover:text-[#134756] underline underline-offset-2 transition-colors w-full text-center py-1"
+          >
+            Already booked? Record your confirmation #
+          </button>
+        </div>
       )}
       <ReservationSection
         key={stop.id}
@@ -940,11 +957,31 @@ export default function TripBookingPage() {
             onStopUpdated={handleStopUpdated}
             onUnbook={(stop) => setUnbookTarget(stop)}
           />
+        ) : cgs?.length === 0 ? (
+          // Reservation Honesty: when RIDB returns nothing for this location, surface
+          // the gap honestly and link the user to Google Maps so they can keep moving.
+          // Same card chrome as a populated card to avoid layout shift.
+          <div className="card mb-3 border-[#1F6F8B]/20 bg-[#E0F0F4]/10">
+            <h4 className="text-sm font-semibold text-gray-900 leading-snug">
+              No campgrounds found near {stop.locationName}
+            </h4>
+            <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+              Recreation.gov didn't return results for this location. Try searching
+              Google Maps to find private RV parks, BLM dispersed camping, or other
+              options near this stop.
+            </p>
+            <a
+              href={`https://www.google.com/maps/search/${encodeURIComponent(`campgrounds near ${stop.locationName}${stop.locationState ? ', ' + stop.locationState : ''}`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-rr-gold hover:bg-rr-gold-dark text-white rounded-lg font-medium transition-colors text-sm w-full flex items-center justify-center gap-1.5 py-2.5 mt-3"
+            >
+              <MapPin size={13} /> Search Google Maps for campgrounds near {stop.locationName}
+            </a>
+          </div>
         ) : (
           <div className="card py-6 text-center text-xs text-gray-400 mb-3">
-            {cgs?.length === 0
-              ? 'No campgrounds found near this stop. Try Recreation.gov directly.'
-              : 'No campgrounds compatible with your rig were found near this stop.'}
+            No campgrounds compatible with your rig were found near this stop.
           </div>
         )}
 
