@@ -38,6 +38,37 @@ function fmtDate(d: string | Date | null | undefined): string {
   return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+/** Reduces a TravelParty (with people + pets included) to the supplementary
+ *  shape the AI prompts will see in their JSON context. Phase A only plumbs
+ *  the read path — old TravelProfile fields stay primary until Phase C. */
+function serializeParty(party: any | null) {
+  if (!party) return null
+  return {
+    notes: party.notes ?? null,
+    people: (party.people ?? []).map((p: any) => ({
+      role: p.role,
+      name: p.name,
+      age: p.age,
+      isTraveling: p.isTraveling,
+      isEmergencyContact: p.isEmergencyContact,
+      accessibilityNeeds: p.accessibilityNeeds,
+      dietaryNotes: p.dietaryNotes,
+      militaryStatus: p.militaryStatus,
+      firstResponder: p.firstResponder,
+    })),
+    pets: (party.pets ?? []).map((p: any) => ({
+      type: p.type,
+      name: p.name,
+      breed: p.breed,
+      weightLbs: p.weightLbs,
+      leashTrained: p.leashTrained,
+      comfortableInCrowds: p.comfortableInCrowds,
+      comfortableAtNight: p.comfortableAtNight,
+      notes: p.notes,
+    })),
+  }
+}
+
 /** Builds a compact live-state system message for the modify flow.
  *  Injected before every Claude call so the AI always sees the actual stop list,
  *  not just what it remembers from conversation history. */
@@ -143,6 +174,13 @@ function buildLiveTripState(trip: any): string {
     '',
     'Current stops in order:',
     stopLines.length ? stopLines.join('\n') : '(no stops yet)',
+    // Phase A: trip-scoped Travel Party plumbed into modify-mode prompt as
+    // supplementary JSON context. No new instructions yet — those land after
+    // the UI is built. trip.party is null for legacy trips and will populate
+    // once trip-creation cloning lands.
+    ...(trip.party
+      ? ['', 'Trip travel party (JSON):', JSON.stringify(serializeParty(trip.party))]
+      : []),
     '=== END MODIFY MODE INSTRUCTIONS ===',
   ].join('\n')
 }
@@ -180,7 +218,10 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     if (context === 'modify' && tripId) {
       liveTrip = await prisma.trip.findFirst({
         where: { id: tripId, userId: req.user!.id },
-        include: { stops: { orderBy: { order: 'asc' } } },
+        include: {
+          stops: { orderBy: { order: 'asc' } },
+          party: { include: { people: true, pets: true } },
+        },
       })
     }
 
@@ -225,6 +266,11 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
           rigs: { where: { isDefault: true } },
           travelProfile: true,
           memberships: { where: { isActive: true } },
+          parties: {
+            where: { isDefault: true },
+            include: { people: true, pets: true },
+            take: 1,
+          },
         },
       }),
     ])
@@ -236,6 +282,10 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       rigs:         user?.rigs,
       travelProfile: user?.travelProfile,
       memberships:  user?.memberships?.map(m => m.type),
+      // Phase A: default party plumbed through. Old TravelProfile fields
+      // (adults / children / hasPets / petDetails) remain primary until the
+      // Phase C cutover; the AI sees both in its JSON context.
+      defaultParty: serializeParty(user?.parties?.[0] ?? null),
     }
 
     // Surprise-trip variety: detect "surprise trip" in the latest user message,
@@ -370,7 +420,15 @@ export async function generateItinerary(req: AuthRequest, res: Response, next: N
     const { messages } = req.body
     const user = await prisma.user.findUnique({
       where: { id: req.user!.id },
-      include: { rigs: { where: { isDefault: true } }, travelProfile: true },
+      include: {
+        rigs: { where: { isDefault: true } },
+        travelProfile: true,
+        parties: {
+          where: { isDefault: true },
+          include: { people: true, pets: true },
+          take: 1,
+        },
+      },
     })
 
     const response = await chatWithAI(
@@ -379,6 +437,7 @@ export async function generateItinerary(req: AuthRequest, res: Response, next: N
         rigs: user?.rigs,
         travelProfile: user?.travelProfile,
         homeLocation: user?.homeLocation,
+        defaultParty: serializeParty(user?.parties?.[0] ?? null),
       },
       undefined,
       undefined,
@@ -400,7 +459,15 @@ export async function generatePackingList(req: AuthRequest, res: Response, next:
 
     const user = await prisma.user.findUnique({
       where: { id: req.user!.id },
-      include: { rigs: { where: { isDefault: true } }, travelProfile: true },
+      include: {
+        rigs: { where: { isDefault: true } },
+        travelProfile: true,
+        parties: {
+          where: { isDefault: true },
+          include: { people: true, pets: true },
+          take: 1,
+        },
+      },
     })
 
     const packingList = await generatePackingListAI(trip, user, { userId: req.user!.id, tripId })
