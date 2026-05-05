@@ -9,6 +9,20 @@ import type { StopUpdateInput, TripUpdateInput } from '../schemas'
 import { generatePackingListAI, generateTripItineraryAI, generateStopActivitiesAI, generateRouteHighlightsAI } from '../services/ai'
 import { fetchLiveForecast, fetchHistoricalWeather, isoDate } from '../services/weatherFetch'
 
+// ─── City name normalization ─────────────────────────────────────────────────
+// Strip ZIP, country, full state name, and trailing 2-letter state code so a
+// stop's locationName ("Mesa, AZ") can be compared against a user's homeCity
+// ("Mesa") for the home-coords backfill in createStop and the H/F label
+// decision in getTripMapImage.
+function normalizeCity(s: string): string {
+  return s.toLowerCase()
+    .replace(/,?\s*\d{5}(-\d{4})?$/, '')
+    .replace(/,?\s*(usa|united states)$/, '')
+    .replace(/,?\s*(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming)$/, '')
+    .replace(/,?\s+[a-z]{2}$/, '')
+    .trim()
+}
+
 // ─── Stop order helpers ───────────────────────────────────────────────────────
 
 /** Re-number all stops for a trip to 1, 2, 3, … in their current relative order.
@@ -403,7 +417,7 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
     // of geocoding the city name (which resolves to city center, not the street address).
     const homeOwner = await prisma.user.findUnique({
       where: { id: req.user!.id },
-      select: { homeLat: true, homeLng: true },
+      select: { homeLat: true, homeLng: true, homeCity: true, homeState: true },
     })
     const exactHomeLat = homeOwner?.homeLat ?? null
     const exactHomeLng = homeOwner?.homeLng ?? null
@@ -444,8 +458,19 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
 
     // For HOME stops, always use the user's exact home coordinates (if available) so the
     // marker lands on the street address rather than the city center returned by geocoding.
-    const resolvedLat = (type === 'HOME' && exactHomeLat != null) ? exactHomeLat : (latitude ?? null)
-    const resolvedLng = (type === 'HOME' && exactHomeLng != null) ? exactHomeLng : (longitude ?? null)
+    // Also catch the AI-emitted return-home stop on round trips: the prompt requires the
+    // last stop to be DESTINATION, so a Mesa→Flagstaff→Mesa loop ends with type=DESTINATION
+    // for the home Mesa stop. Match by homeCity so that stop still gets the precise home pin.
+    const looksLikeHome =
+      !!homeOwner?.homeCity &&
+      !!locationName &&
+      normalizeCity(locationName) === homeOwner.homeCity.toLowerCase().trim()
+    const useHomeCoords = (type === 'HOME' || looksLikeHome) && exactHomeLat != null && exactHomeLng != null
+    const resolvedLat = useHomeCoords ? exactHomeLat : (latitude ?? null)
+    const resolvedLng = useHomeCoords ? exactHomeLng : (longitude ?? null)
+    if (looksLikeHome && type !== 'HOME' && useHomeCoords) {
+      console.log(`[createStop:homeCoords] backfill via city match — locationName="${locationName}" matches homeCity="${homeOwner!.homeCity}" → using home coords (${exactHomeLat}, ${exactHomeLng})`)
+    }
 
     console.log('[createStop] tripId=%s locationName=%s type=%s order=%d incomingLat=%s incomingLng=%s resolvedLat=%s resolvedLng=%s',
       req.params.id, locationName, type, order, latitude, longitude, resolvedLat, resolvedLng)
@@ -707,15 +732,6 @@ export async function getTripMapImage(req: AuthRequest, res: Response, next: Nex
     const pathPoints: string[] = []
     const lastStop = stops[stops.length - 1]
     let stopNum = 1
-
-    function normalizeCity(s: string): string {
-      return s.toLowerCase()
-        .replace(/,?\s*\d{5}(-\d{4})?$/, '')
-        .replace(/,?\s*(usa|united states)$/, '')
-        .replace(/,?\s*(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming)$/, '')
-        .replace(/,?\s+[a-z]{2}$/, '')
-        .trim()
-    }
 
     for (const stop of stops) {
       if (!stop.latitude || !stop.longitude) continue
