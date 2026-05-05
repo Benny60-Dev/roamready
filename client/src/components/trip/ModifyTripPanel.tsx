@@ -285,11 +285,16 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
       ])
     } catch (err: any) {
       console.error('[applyMod] CAUGHT ERROR:', err?.message, err?.response?.status, err?.response?.data)
+      // Prefer the server's structured error message when present (e.g.
+      // HOME_STOP_PROTECTED / MIN_STOPS_VIOLATION from the deleteStop guards).
+      // Falls back to the axios message for transport-level errors.
+      const serverMsg = err?.response?.data?.error
+      const reason = serverMsg || err?.message || 'unknown error'
       setMessages(prev => [
         ...prev,
         {
           role: 'assistant',
-          content: `Sorry, I couldn't apply that change: ${err?.message ?? 'unknown error'}. Want to try a different approach?`,
+          content: `Sorry, I couldn't apply that change: ${reason}. Want to try a different approach?`,
         },
       ])
     } finally {

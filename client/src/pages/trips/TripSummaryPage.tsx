@@ -7,6 +7,8 @@ import {
   Pencil, Trash2, Wand2,
 } from 'lucide-react'
 const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel'))
+import EditStopModal from '../../components/trip/EditStopModal'
+import ConfirmModal from '../../components/ui/ConfirmModal'
 import { tripsApi, aiApi } from '../../services/api'
 import { Trip, Stop, ItineraryDay, ItineraryActivity, StopWeather, POI } from '../../types'
 import { useAuthStore } from '../../store/authStore'
@@ -410,6 +412,9 @@ export default function TripSummaryPage() {
   const [addingPOIDuration, setAddingPOIDuration] = useState<Record<number, number>>({})
   const [weatherData, setWeatherData] = useState<Record<string, StopWeather | null | undefined>>({})
   const [editingStop, setEditingStop] = useState<Stop | null>(null)
+  const [pendingDeleteStop, setPendingDeleteStop] = useState<Stop | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [addAfterOrder, setAddAfterOrder] = useState<number | null>(null)
   const [mutating, setMutating] = useState(false)
   const [modifyPanelOpen, setModifyPanelOpen] = useState(false)
@@ -668,25 +673,62 @@ export default function TripSummaryPage() {
 
   // ── Stop mutation handlers ──────────────────────────────────────────────────
 
-  const handleDeleteStop = async (stop: Stop) => {
-    if (!id || !trip) return
-    if (!window.confirm(`Remove this stop from your trip? This cannot be undone.`)) return
-    setMutating(true)
+  // Step 1 of the manual-delete flow: close the edit modal (if open) and queue
+  // the stop for confirmation. Don't fire the request yet — ConfirmModal asks
+  // first and surfaces any cascading-delete warnings (e.g. confirmed booking).
+  const requestDeleteStop = (stop: Stop) => {
+    setEditingStop(null)
+    setDeleteError(null)
+    setPendingDeleteStop(stop)
+  }
+
+  // Step 2: user clicked Confirm in the ConfirmModal. Fire the actual delete,
+  // surface any server-side guard errors (HOME_STOP_PROTECTED / MIN_STOPS_VIOLATION
+  // — UI guards prevent these in normal use, but the AI modify-mode path can
+  // still hit them; downstream callers of this method may also reach the codepath).
+  const confirmDeleteStop = async () => {
+    if (!id || !trip || !pendingDeleteStop) return
+    setDeleting(true)
+    setDeleteError(null)
     try {
-      await tripsApi.deleteStop(id, stop.id)
+      await tripsApi.deleteStop(id, pendingDeleteStop.id)
       // Renumber remaining stops 1…N in order
       const remaining = (trip.stops || [])
-        .filter(s => s.id !== stop.id)
+        .filter(s => s.id !== pendingDeleteStop.id)
         .sort((a, b) => a.order - b.order)
         .map((s, i) => ({ ...s, order: i + 1 }))
       await Promise.all(remaining.map(s => tripsApi.updateStop(id, s.id, { order: s.order })))
       // Recascade all dates with the updated stop list
       await cascadeAndSaveDates(remaining as Stop[])
       await reloadTrip()
+      setPendingDeleteStop(null)
+    } catch (err: any) {
+      // Surface the structured server error message when present (errorHandler
+      // emits { error, code? }) — the modal stays open so the user sees why.
+      const message = err?.response?.data?.error || err?.message || 'Could not delete the stop. Please try again.'
+      setDeleteError(message)
     } finally {
-      setMutating(false)
+      setDeleting(false)
     }
   }
+
+  // Build the ConfirmModal body, including any cascading-delete warnings the
+  // user should be aware of before confirming.
+  const buildDeleteConfirmMessage = (stop: Stop): string => {
+    const parts = [`Remove ${stop.locationName} from your trip? This cannot be undone.`]
+    if (stop.bookingStatus === 'CONFIRMED') {
+      const cgName = stop.campgroundName ? ` at ${stop.campgroundName}` : ''
+      parts.push(`This stop has a confirmed booking${cgName}. Deleting will remove the booking from your trip.`)
+    }
+    if (deleteError) parts.push(`\n${deleteError}`)
+    return parts.join('\n\n')
+  }
+
+  // Whether the Delete button on the Edit modal should be visible. Mirrors the
+  // server-side guards (commit 1ab72ad) so the option only appears when the
+  // server would actually allow it.
+  const canDeleteStop = (stop: Stop): boolean =>
+    stop.type !== 'HOME' && (trip?.stops?.length ?? 0) > 2
 
   const handleInsertStop = async (data: { locationName: string; type: string; nights: number; notes?: string }) => {
     if (!id || !trip || addAfterOrder === null) return
@@ -960,7 +1002,7 @@ export default function TripSummaryPage() {
                   onAddingPOIDurationChange={(m) => setAddingPOIDuration(prev => ({ ...prev, [poiIdx]: m }))}
                   onAddPOI={() => addPOI(poiIdx)}
                   onEdit={canEdit ? () => setEditingStop(editableStop!) : undefined}
-                  onDelete={canDelete ? () => handleDeleteStop(editableStop!) : undefined}
+                  onDelete={canDelete ? () => requestDeleteStop(editableStop!) : undefined}
                 />
               )
 
@@ -1039,6 +1081,22 @@ export default function TripSummaryPage() {
           onSave={data => handleSaveEditStop(editingStop, data)}
           onClose={() => setEditingStop(null)}
           saving={mutating}
+          onDelete={() => requestDeleteStop(editingStop)}
+          canDelete={canDeleteStop(editingStop)}
+          isDeleting={deleting}
+        />
+      )}
+      {pendingDeleteStop && (
+        <ConfirmModal
+          isOpen={true}
+          title="Delete this stop?"
+          message={buildDeleteConfirmMessage(pendingDeleteStop)}
+          confirmLabel="Delete stop"
+          cancelLabel="Keep it"
+          onConfirm={confirmDeleteStop}
+          onCancel={() => { if (!deleting) { setPendingDeleteStop(null); setDeleteError(null) } }}
+          danger
+          isConfirming={deleting}
         />
       )}
       {addAfterOrder !== null && (
@@ -1148,13 +1206,13 @@ function DayCard({
   const EditDeleteButtons = () => (
     <div className="flex items-center gap-1 flex-shrink-0">
       {onEdit && (
-        <button onClick={onEdit} title="Edit stop" className="p-1 text-gray-300 hover:text-gray-600 transition-colors rounded">
-          <Pencil size={12} />
+        <button onClick={onEdit} title="Edit stop" className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors rounded">
+          <Pencil size={14} />
         </button>
       )}
       {onDelete && (
-        <button onClick={onDelete} title="Remove stop" className="p-1 text-gray-300 hover:text-red-500 transition-colors rounded">
-          <Trash2 size={12} />
+        <button onClick={onDelete} title="Remove stop" className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors rounded">
+          <Trash2 size={14} />
         </button>
       )}
     </div>
@@ -1896,117 +1954,9 @@ function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClos
   )
 }
 
-// ─── EditStopModal ─────────────────────────────────────────────────────────────
-
-function EditStopModal({ stop, onSave, onClose, saving }: {
-  stop: Stop
-  onSave: (data: Partial<Stop>) => void
-  onClose: () => void
-  saving: boolean
-}) {
-  const [locationName, setLocationName] = useState(stop.locationName)
-  const [campgroundName, setCampgroundName] = useState(stop.campgroundName ?? '')
-  const [nights, setNights] = useState(stop.nights)
-  const [type, setType] = useState<string>(stop.type)
-  const [hookupType, setHookupType] = useState(stop.hookupType ?? '')
-  const [notes, setNotes] = useState(stop.notes ?? '')
-
-  const isHome = stop.type === 'HOME'
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    onSave({
-      locationName: locationName.trim(),
-      campgroundName: campgroundName.trim() || undefined,
-      nights: Number(nights),
-      type: type as Stop['type'],
-      hookupType: hookupType || undefined,
-      notes: notes.trim() || undefined,
-    })
-  }
-
-  return (
-    <ModalOverlay onClose={onClose}>
-      <h2 className="text-base font-semibold text-gray-900 mb-4">Edit Stop</h2>
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <div>
-          <label className="label">Location name</label>
-          <input
-            className="input"
-            value={locationName}
-            onChange={e => setLocationName(e.target.value)}
-            required
-          />
-        </div>
-        <div>
-          <label className="label">Campground name</label>
-          <input
-            className="input"
-            value={campgroundName}
-            onChange={e => setCampgroundName(e.target.value)}
-            placeholder="Optional"
-          />
-        </div>
-        {!isHome && (
-          <>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">Stop type</label>
-                <select className="input" value={type} onChange={e => setType(e.target.value)}>
-                  <option value="DESTINATION">Destination</option>
-                  <option value="OVERNIGHT_ONLY">Overnight only</option>
-                </select>
-              </div>
-              <div>
-                <label className="label">Nights</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={30}
-                  className="input"
-                  value={nights}
-                  onChange={e => setNights(Number(e.target.value))}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="label">Hookup preference</label>
-              <select className="input" value={hookupType} onChange={e => setHookupType(e.target.value)}>
-                <option value="">Any / not specified</option>
-                <option value="Full hookup">Full hookup</option>
-                <option value="Water & Electric">Water &amp; Electric</option>
-                <option value="Electric only">Electric only</option>
-                <option value="Dry camping">Dry camping</option>
-              </select>
-            </div>
-          </>
-        )}
-        <div>
-          <label className="label">Notes</label>
-          <textarea
-            className="input resize-none"
-            rows={3}
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            placeholder="Gate codes, instructions, reminders…"
-          />
-        </div>
-        <div className="flex gap-2 pt-1">
-          <button
-            type="submit"
-            disabled={saving || !locationName.trim()}
-            className="btn-primary flex-1 disabled:opacity-60"
-          >
-            {saving ? 'Saving…' : 'Save changes'}
-          </button>
-          <button type="button" onClick={onClose} className="btn-outline flex-1">
-            Cancel
-          </button>
-        </div>
-      </form>
-    </ModalOverlay>
-  )
-}
+// EditStopModal lives in client/src/components/trip/EditStopModal.tsx now —
+// extracted so the Map page (and any future surface) can reuse the same edit
+// affordance. It also picked up an optional Delete button via the lift.
 
 // ─── AddStopModal ──────────────────────────────────────────────────────────────
 
