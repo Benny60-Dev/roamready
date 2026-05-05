@@ -110,7 +110,7 @@ model TravelProfile {
   userId             String   @unique
   user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   travelStyle        String?
-  maxDriveHours      Float?
+  maxDriveHours      Float?   @default(6)
   maxMilesPerDay     Int?
   nightlyBudget      Float?
   hookupPreference   String?
