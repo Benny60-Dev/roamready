@@ -142,11 +142,11 @@ Itinerary JSON format:
     {
       "order": 2,
       "type": "OVERNIGHT_ONLY",
-      "locationName": "Van Horn",
+      "locationName": "Springfield",
       "locationState": "TX",
       "nights": 1,
       "campgroundName": null,
-      "campgroundCandidates": ["Mountain View RV Park", "Van Horn RV Park", "Eagles Nest RV Resort"],
+      "campgroundCandidates": ["Mountain View RV Park", "Springfield RV Park", "Eagles Nest RV Resort"],
       "siteRate": 45,
       "estimatedFuel": 0,
       "hookupType": "full",
