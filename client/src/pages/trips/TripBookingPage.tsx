@@ -34,6 +34,17 @@ function truncateName(name: string): string {
   return name.length > 35 ? name.slice(0, 30) + '...' : name
 }
 
+// AI-only fallback entries set reservationUrl to a Google Maps search link, while
+// RIDB-sourced entries point at recreation.gov, and Places-verified entries usually
+// link to the campground's own website. Pick a label that matches where the click
+// actually lands so users aren't told "Recreation.gov" and dropped on Google Maps.
+function reservationLinkLabel(url: string): string {
+  const lower = url.toLowerCase()
+  if (lower.includes('recreation.gov')) return 'Recreation.gov'
+  if (lower.includes('google.com/maps')) return 'Find on Google Maps'
+  return 'Website'
+}
+
 // ─── Reservation & Notes collapsible section ─────────────────────────────────
 
 interface ReservationForm {
@@ -510,7 +521,7 @@ function RecommendedCampgroundCard({
         )}
         {cg.reservationUrl && (
           <a href={cg.reservationUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-[#1F6F8B] hover:text-[#134756] transition-colors">
-            <ExternalLink size={11} /> Recreation.gov
+            <ExternalLink size={11} /> {reservationLinkLabel(cg.reservationUrl)}
           </a>
         )}
         <a href={mapUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#1F6F8B] transition-colors ml-auto">
@@ -615,7 +626,7 @@ function AlternateCampgroundCard({
         )}
         {cg.reservationUrl && (
           <a href={cg.reservationUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-[#1F6F8B] hover:text-[#134756] transition-colors">
-            <ExternalLink size={11} /> Recreation.gov
+            <ExternalLink size={11} /> {reservationLinkLabel(cg.reservationUrl)}
           </a>
         )}
         <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#1F6F8B] transition-colors ml-auto">

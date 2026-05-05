@@ -33,6 +33,23 @@ interface CampgroundResult {
   isPrimary?: boolean
 }
 
+function haversineMeters(
+  lat1?: number | null,
+  lng1?: number | null,
+  lat2?: number | null,
+  lng2?: number | null,
+): number {
+  if (lat1 == null || lng1 == null || lat2 == null || lng2 == null) return Infinity
+  const R = 6371000
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
 function checkCompatibility(campground: CampgroundResult, rig: any) {
   const issues: string[] = []
 
@@ -78,7 +95,21 @@ async function fetchRecGovCampgrounds(query: string, lat?: number, lng?: number,
       console.log('[RIDB] First 2 results raw shape:', JSON.stringify(recdata.slice(0, 2), null, 2))
     }
 
-    const campgrounds = recdata.map((f: any) => {
+    // RIDB returns lookout towers, picnic areas, day-use sites, ranger stations, fire towers,
+    // boat ramps — none of which serve RV camping. Keep only facilities that are actually
+    // a campground, list CAMPING in their activities, or have at least one campsite.
+    const campingRelevant = recdata.filter((f: any) => {
+      if (f.FacilityTypeDescription === 'Campground') return true
+      const activities: { ActivityName?: string }[] = f.ACTIVITY || []
+      if (activities.some(a => a.ActivityName === 'CAMPING')) return true
+      const campsites: any[] = f.CAMPSITE || []
+      if (campsites.length > 0) return true
+      return false
+    })
+    const dropped = recdata.length - campingRelevant.length
+    console.log(`[RIDB] Filtered ${dropped} non-camping facilities, kept ${campingRelevant.length} camping-relevant ones for query="${query}"`)
+
+    const campgrounds = campingRelevant.map((f: any) => {
       const addr = f.FACILITYADDRESS?.[0]
       const addressParts = addr
         ? [addr.AddressLine1, addr.City, addr.AddressStateCode, addr.PostalCode].filter(Boolean)
@@ -206,16 +237,16 @@ export async function searchCampgrounds(req: AuthRequest, res: Response, next: N
         { userId },
       )
 
+      // Places' text search is fuzzy: different AI-suggested names can resolve to the same
+      // canonical place ("Sedona RV Resort" + "Rancho Sedona RV Park" → same placeId).
+      // Track placeIds so the merged response only surfaces each verified place once.
+      const seenPlaceIds = new Set<string>()
+
       verifications.forEach((verified, idx) => {
         const originalName = candidateNames[idx]
         if (verified) {
-          // Skip Places duplicates of RIDB entries — don't surface the same place twice
-          // just because Google indexed it AND it lives in RIDB. Match on placeId-stripped
-          // displayName since Google's canonical name is the strongest dedupe key we have.
-          const isDuplicateOfRidb = ridbCampgrounds.some(r =>
-            r.name && verified.name && r.name.toLowerCase().trim() === verified.name.toLowerCase().trim(),
-          )
-          if (isDuplicateOfRidb) return
+          if (seenPlaceIds.has(verified.placeId)) return
+          seenPlaceIds.add(verified.placeId)
 
           placesResults.push({
             id: `places-${verified.placeId}`,
@@ -251,11 +282,27 @@ export async function searchCampgrounds(req: AuthRequest, res: Response, next: N
       })
     }
 
-    // Tier ordering: RIDB → Places-verified → AI-only.
+    // Drop any RIDB facility that the Places batch already covers — Places has richer
+    // data (rating, phone, website) so it's the canonical entry when both find the same
+    // campground. Match by name (case-insensitive) OR by ≤100m proximity, since the same
+    // campground can show up under different names in the two systems.
+    const dedupedRidb = ridbCampgrounds.filter(r => {
+      return !placesResults.some(p => {
+        if (p.name && r.name && p.name.toLowerCase().trim() === r.name.toLowerCase().trim()) {
+          return true
+        }
+        return haversineMeters(p.latitude, p.longitude, r.latitude, r.longitude) <= 100
+      })
+    })
+
+    // Tier ordering: Places-verified → RIDB → AI-only.
+    // Places-verified are AI-curated, RV-relevant campgrounds (KOAs, RV resorts, real
+    // parks) and should headline. RIDB is mostly federal cabin rentals and day-use sites
+    // that aren't typically what RVers want, so it sits below the curated picks.
     // First entry across the merged list becomes the "primary" card on the booking page.
     const merged: CampgroundResult[] = [
-      ...ridbCampgrounds,
       ...placesResults,
+      ...dedupedRidb,
       ...aiOnlyResults,
     ]
     if (merged.length > 0) {
