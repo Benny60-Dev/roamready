@@ -1,7 +1,7 @@
 import { Router } from 'express'
-import { requireAuth } from '../middleware/auth'
+import { requireAuth, requireFeature } from '../middleware/auth'
 import { getResources } from '../controllers/resources'
 
 export const resourcesRouter = Router()
 resourcesRouter.use(requireAuth)
-resourcesRouter.get('/', getResources as any)
+resourcesRouter.get('/', requireFeature('resourcesAlongRoute'), getResources as any)

@@ -9,6 +9,7 @@ export interface AuthRequest extends Request {
     email: string
     subscriptionTier: string
     trialEndsAt: Date | null
+    subscriptionEndsAt: Date | null
     isOwner: boolean
   }
 }
@@ -30,6 +31,7 @@ export async function requireAuth(req: AuthRequest, _res: Response, next: NextFu
         email: true,
         subscriptionTier: true,
         trialEndsAt: true,
+        subscriptionEndsAt: true,
         isOwner: true,
       },
     })
@@ -51,7 +53,27 @@ export function requireOwner(req: AuthRequest, _res: Response, next: NextFunctio
   next()
 }
 
-export function hasAccess(user: { subscriptionTier: string; trialEndsAt: Date | null; isOwner?: boolean }, feature: string): boolean {
+// Middleware factory: gates a route on a Pro feature. Use after requireAuth.
+//   router.post('/foo', requireFeature('tripJournal'), createFoo)
+// Errors as 403 with { error, code: 'FEATURE_GATED', feature } so the client
+// can route to the paywall modal without parsing the message string.
+export function requireFeature(feature: string) {
+  return (req: AuthRequest, _res: Response, next: NextFunction) => {
+    if (!req.user) return next(new AppError('Unauthenticated', 401))
+    if (!hasAccess(req.user, feature)) {
+      return next(new AppError(`This feature requires Pro: ${feature}`, 403, {
+        code: 'FEATURE_GATED',
+        feature,
+      }))
+    }
+    next()
+  }
+}
+
+export function hasAccess(
+  user: { subscriptionTier: string; trialEndsAt: Date | null; subscriptionEndsAt?: Date | null; isOwner?: boolean },
+  feature: string,
+): boolean {
   const FEATURE_GATES: Record<string, string[]> = {
     campgroundBooking: ['PRO', 'PRO_PLUS'],
     rigCompatibilityFilter: ['PRO', 'PRO_PLUS'],
@@ -78,6 +100,9 @@ export function hasAccess(user: { subscriptionTier: string; trialEndsAt: Date | 
 
   if (user.isOwner) return true
   if (user.trialEndsAt && new Date() < new Date(user.trialEndsAt)) return true
+  // Cancellation grace period: user paid through subscriptionEndsAt, even if
+  // their tier was flipped to FREE by the cancellation webhook.
+  if (user.subscriptionEndsAt && new Date() < new Date(user.subscriptionEndsAt)) return true
   const gates = FEATURE_GATES[feature]
   if (!gates) return true
   return gates.includes(user.subscriptionTier)

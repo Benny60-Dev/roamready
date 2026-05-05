@@ -1,11 +1,15 @@
 import { Router } from 'express'
-import { requireAuth } from '../middleware/auth'
+import { requireAuth, requireFeature } from '../middleware/auth'
 import { validateBody } from '../middleware/validate'
 import { StopUpdateSchema } from '../schemas'
 import { getBookings, createBooking, getBooking, updateBooking, cancelBooking } from '../controllers/bookings'
 
 export const bookingsRouter = Router()
 bookingsRouter.use(requireAuth)
+// Compute feature: gate the entire router. Bookings is reservation activity,
+// not user-authored data — downgraded users lose access to making/editing
+// reservations but no personal records get locked away.
+bookingsRouter.use(requireFeature('campgroundBooking'))
 
 bookingsRouter.get('/', getBookings as any)
 bookingsRouter.post('/', createBooking as any)

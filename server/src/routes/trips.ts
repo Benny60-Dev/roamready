@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireAuth, AuthRequest } from '../middleware/auth'
+import { requireAuth, requireFeature, AuthRequest } from '../middleware/auth'
 import { validateBody } from '../middleware/validate'
 import { StopUpdateSchema, TripUpdateSchema } from '../schemas'
 import {
@@ -13,6 +13,9 @@ import {
 
 export const tripsRouter = Router()
 
+// Public — intentionally pre-requireAuth so anyone with a valid share token
+// can view the itinerary. The Pro gate happens on token *creation* below,
+// not on consumption.
 tripsRouter.get('/share/:token', getSharedTrip)
 
 tripsRouter.use(requireAuth)
@@ -28,14 +31,14 @@ tripsRouter.post('/:id/stops', createStop as any)
 tripsRouter.put('/:id/stops/:stopId', validateBody(StopUpdateSchema), updateStop as any)
 tripsRouter.delete('/:id/stops/:stopId', deleteStop as any)
 
-tripsRouter.post('/:id/share', createShareToken as any)
-tripsRouter.post('/:id/share/regenerate', regenerateShareToken as any)
-tripsRouter.delete('/:id/share', revokeShareToken as any)
+tripsRouter.post('/:id/share', requireFeature('tripSharing'), createShareToken as any)
+tripsRouter.post('/:id/share/regenerate', requireFeature('tripSharing'), regenerateShareToken as any)
+tripsRouter.delete('/:id/share', requireFeature('tripSharing'), revokeShareToken as any)
 
-tripsRouter.post('/:id/export/pdf', exportPdf as any)
+tripsRouter.post('/:id/export/pdf', requireFeature('pdfExport'), exportPdf as any)
 tripsRouter.get('/:id/map-image', getTripMapImage as any)
-tripsRouter.get('/:id/weather', getTripWeather as any)
-tripsRouter.post('/:id/packing-list', generatePackingList as any)
+tripsRouter.get('/:id/weather', requireFeature('weatherAlerts'), getTripWeather as any)
+tripsRouter.post('/:id/packing-list', requireFeature('packingListGenerator'), generatePackingList as any)
 tripsRouter.post('/:id/stops/reassign-pois', reassignPOIs as any)
 tripsRouter.post('/:id/itinerary/generate', generateItinerary as any)
 tripsRouter.put('/:id/itinerary', saveItinerary as any)
