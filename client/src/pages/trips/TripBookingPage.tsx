@@ -14,7 +14,7 @@ import ConfirmModal from '../../components/ui/ConfirmModal'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function calcDistance(lat1?: number, lng1?: number, lat2?: number, lng2?: number): string | null {
+function calcDistance(lat1?: number | null, lng1?: number | null, lat2?: number | null, lng2?: number | null): string | null {
   if (!lat1 || !lng1 || !lat2 || !lng2) return null
   const R = 3959
   const dLat = (lat2 - lat1) * Math.PI / 180
@@ -474,7 +474,7 @@ function RecommendedCampgroundCard({
         <div className="space-y-2">
           {cg.reservationUrl && (
             <button
-              onClick={() => window.open(cg.reservationUrl, '_blank', 'noopener,noreferrer')}
+              onClick={() => window.open(cg.reservationUrl!, '_blank', 'noopener,noreferrer')}
               className="bg-rr-gold hover:bg-rr-gold-dark text-white rounded-lg font-medium transition-colors text-sm w-full flex items-center justify-center gap-1.5 py-2.5"
             >
               <ExternalLink size={13} /> Book at {truncateName(cg.name)}
@@ -700,6 +700,10 @@ export default function TripBookingPage() {
         q: stop.locationName,
         lat: stop.latitude,
         lng: stop.longitude,
+        // Phase 1B orchestration trigger: backend uses this to load the stop's
+        // campgroundCandidates and verify them via Google Places before merging
+        // results. Without it the response is RIDB-only.
+        stopId: stop.id,
       }).then(res => {
         setCampgrounds(prev => {
           if (prev[stop.id] !== undefined) return prev

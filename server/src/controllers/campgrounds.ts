@@ -3,20 +3,21 @@ import axios from 'axios'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { getCache, setCache } from '../utils/redis'
+import { verifyCampgroundBatch } from '../services/googlePlaces'
 
 interface CampgroundResult {
   id: string
   name: string
-  latitude?: number
-  longitude?: number
+  latitude?: number | null
+  longitude?: number | null
   description?: string
-  reservationUrl?: string
-  website?: string
-  address?: string
-  phone?: string
+  reservationUrl?: string | null
+  website?: string | null
+  address?: string | null
+  phone?: string | null
   attributes?: any
-  maxRigLength?: number
-  maxRigHeight?: number
+  maxRigLength?: number | null
+  maxRigHeight?: number | null
   rvProhibited?: boolean
   isPetFriendly?: boolean
   isMilitaryOnly?: boolean
@@ -26,8 +27,10 @@ interface CampgroundResult {
   source?: string
   isCompatible?: boolean
   incompatibilityReasons?: string[]
-  rating?: number
+  rating?: number | null
+  userRatingCount?: number | null
   siteRate?: number
+  isPrimary?: boolean
 }
 
 function checkCompatibility(campground: CampgroundResult, rig: any) {
@@ -110,6 +113,15 @@ async function fetchRecGovCampgrounds(query: string, lat?: number, lng?: number,
         f.FacilityMapURL ||
         (f.FacilityID ? `https://www.recreation.gov/camping/campgrounds/${f.FacilityID}` : null)
 
+      // Phase 1B URL-bug fix: only emit a reservationUrl when the facility is actually
+      // reservable AND we have a real URL to send the user to. Many RIDB facilities are
+      // marked Reservable=false (no online booking) — constructing the canonical
+      // /camping/campgrounds/{id} URL for them lands on the dancing-bear 404 page.
+      // When unreservable or URL-less, leave it null and let the frontend render the
+      // "Search Google Maps" fallback instead.
+      const isReservable = f.Reservable === true || f.Reservable === 'true'
+      const reservationUrl = (isReservable && f.FacilityReservationURL) ? f.FacilityReservationURL : null
+
       const lat_ = parseFloat(String(f.FacilityLatitude))
       const lng_ = parseFloat(String(f.FacilityLongitude))
 
@@ -119,13 +131,13 @@ async function fetchRecGovCampgrounds(query: string, lat?: number, lng?: number,
         latitude: isNaN(lat_) ? undefined : lat_,
         longitude: isNaN(lng_) ? undefined : lng_,
         description: f.FacilityDescription,
-        reservationUrl: f.FacilityReservationURL || null,
+        reservationUrl,
         website,
         address: addressParts.length > 0 ? addressParts.join(', ') : null,
         phone: f.FacilityPhone || null,
         isPetFriendly,
         source: 'recreation.gov',
-        reservable: f.Reservable,
+        reservable: isReservable,
         hookupTypes: hookupTypes.length > 0 ? hookupTypes : undefined,
         maxRigLength,
         maxRigHeight,
@@ -148,19 +160,112 @@ async function fetchRecGovCampgrounds(query: string, lat?: number, lng?: number,
 
 export async function searchCampgrounds(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { q, lat, lng, radius, military } = req.query
+    const { q, lat, lng, radius, stopId } = req.query
 
-    const campgrounds = await fetchRecGovCampgrounds(
+    const userId = req.user!.id
+
+    // Phase 1B: when a stopId is provided, orchestrate three tiers of campground data.
+    //   Tier 1 (RIDB)        — federal/state, free, verified
+    //   Tier 2 (Places-verified AI suggestions) — verified by Google Places
+    //   Tier 3 (AI-only)     — AI suggested but Places couldn't find it; surfaced
+    //                          with an "AI suggestion" badge + Google Maps search link
+    // Without a stopId we keep the legacy RIDB-only behavior so the destinations
+    // pages (military, OHV, van, car-camping) and any other callers don't change.
+    let stop: { locationName: string; locationState: string | null; campgroundCandidates: any } | null = null
+    if (stopId && typeof stopId === 'string') {
+      stop = await prisma.stop.findFirst({
+        where: { id: stopId, trip: { userId } },
+        select: { locationName: true, locationState: true, campgroundCandidates: true },
+      })
+      console.log(
+        `[campgrounds] Orchestration triggered for stopId=${stopId}, candidates=${JSON.stringify(stop?.campgroundCandidates ?? null)}`,
+      )
+    }
+
+    // Tier 1 — RIDB (always runs, with or without stopId)
+    const ridbCampgrounds = await fetchRecGovCampgrounds(
       (q as string) || 'campground',
       lat ? parseFloat(lat as string) : undefined,
       lng ? parseFloat(lng as string) : undefined,
       radius ? parseInt(radius as string) : 25
     )
 
-    // Get user's default rig for compatibility check
-    const rig = await prisma.rig.findFirst({ where: { userId: req.user!.id, isDefault: true } })
+    // Tier 2 + 3 — only when we have a stop with AI candidates
+    const placesResults: CampgroundResult[] = []
+    const aiOnlyResults: CampgroundResult[] = []
 
-    const results = campgrounds.map(cg => {
+    if (stop && Array.isArray(stop.campgroundCandidates) && stop.campgroundCandidates.length > 0) {
+      const candidateNames: string[] = (stop.campgroundCandidates as any[])
+        .filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
+      const locationLabel = stop.locationState
+        ? `${stop.locationName}, ${stop.locationState}`
+        : stop.locationName
+
+      const verifications = await verifyCampgroundBatch(
+        candidateNames.map(name => ({ name, location: locationLabel })),
+        { userId },
+      )
+
+      verifications.forEach((verified, idx) => {
+        const originalName = candidateNames[idx]
+        if (verified) {
+          // Skip Places duplicates of RIDB entries — don't surface the same place twice
+          // just because Google indexed it AND it lives in RIDB. Match on placeId-stripped
+          // displayName since Google's canonical name is the strongest dedupe key we have.
+          const isDuplicateOfRidb = ridbCampgrounds.some(r =>
+            r.name && verified.name && r.name.toLowerCase().trim() === verified.name.toLowerCase().trim(),
+          )
+          if (isDuplicateOfRidb) return
+
+          placesResults.push({
+            id: `places-${verified.placeId}`,
+            name: verified.name,
+            address: verified.address,
+            phone: verified.phone,
+            website: verified.website,
+            // Places' googleMapsUri is the user's "Book at" target — opens the listing
+            // where they can click through to the real campground site or call directly.
+            reservationUrl: verified.website || verified.googleMapsUrl,
+            latitude: verified.latitude,
+            longitude: verified.longitude,
+            rating: verified.rating,
+            userRatingCount: verified.userRatingCount,
+            source: 'google_places',
+          })
+        } else {
+          // Tier 3 — AI suggested but Places couldn't verify. Surface structurally
+          // identical to verified entries: the reservationUrl points at a Google Maps
+          // search so the frontend's single "Book at [name]" button still works without
+          // branching on a verified flag. Honesty lives in where the URL lands, not in
+          // visible UI labels. source stays for backend telemetry/logging.
+          aiOnlyResults.push({
+            id: `ai-${idx}-${originalName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)}`,
+            name: originalName,
+            address: null,
+            phone: null,
+            rating: null,
+            reservationUrl: `https://www.google.com/maps/search/${encodeURIComponent(originalName + ' ' + locationLabel)}`,
+            source: 'ai_only',
+          })
+        }
+      })
+    }
+
+    // Tier ordering: RIDB → Places-verified → AI-only.
+    // First entry across the merged list becomes the "primary" card on the booking page.
+    const merged: CampgroundResult[] = [
+      ...ridbCampgrounds,
+      ...placesResults,
+      ...aiOnlyResults,
+    ]
+    if (merged.length > 0) {
+      merged[0].isPrimary = true
+    }
+
+    // Get user's default rig for compatibility check
+    const rig = await prisma.rig.findFirst({ where: { userId, isDefault: true } })
+
+    const results = merged.map(cg => {
       if (rig) {
         const compat = checkCompatibility(cg, rig)
         return { ...cg, isCompatible: compat.isCompatible, incompatibilityReasons: compat.reasons }

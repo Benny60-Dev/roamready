@@ -19,7 +19,7 @@ const PRICING = {
 
 type AICallType =
   | 'CHAT' | 'ITINERARY' | 'ROUTES' | 'ACTIVITIES'
-  | 'PACKING' | 'HIGHLIGHTS' | 'FEEDBACK'
+  | 'PACKING' | 'HIGHLIGHTS' | 'FEEDBACK' | 'PLACES_LOOKUP'
 
 export interface AICallCtx {
   userId: string
@@ -101,6 +101,7 @@ Trip planning rules:
   - If the user provides a specific city as their starting point (e.g. "I'm leaving from Austin"), confirm it back before asking anything else: "Got it — starting from [City, State]. Where are we headed?"
   - Always confirm the starting location as the very first response before asking any other questions about the trip.
 - Be warm, knowledgeable, and conversational — like a well-traveled friend
+- Campground candidates: For every stop with nights > 0 (so EXCLUDING the HOME stop and any 0-night final-destination return), include a "campgroundCandidates" array of 3-4 plausible REAL campground names near that stop. Examples: "Polson/Flathead Lake KOA", "Westwood RV Park", "Big Arm State Park". Names ONLY — do NOT include addresses, phone numbers, websites, or descriptions. Order by your best guess of fit/quality (top of list = most likely match for this user's rig and travel style). These names will be verified against Google Places before being shown to the user, so accuracy matters more than creativity. For HOME stops and 0-night stops, omit campgroundCandidates entirely or set it to []. Keep the existing campgroundName field as null on each stop — campgroundName is reserved for the user's actual booked choice and is set later, not by you.
 
 Itinerary JSON format:
 {
@@ -117,6 +118,7 @@ Itinerary JSON format:
       "locationState": "TX",
       "nights": 0,
       "campgroundName": null,
+      "campgroundCandidates": [],
       "siteRate": 0,
       "estimatedFuel": 0,
       "hookupType": "",
@@ -129,7 +131,8 @@ Itinerary JSON format:
       "locationName": "Van Horn",
       "locationState": "TX",
       "nights": 1,
-      "campgroundName": "Mountain View RV Park",
+      "campgroundName": null,
+      "campgroundCandidates": ["Mountain View RV Park", "Van Horn RV Park", "Eagles Nest RV Resort"],
       "siteRate": 45,
       "estimatedFuel": 0,
       "hookupType": "full",
@@ -143,7 +146,8 @@ Itinerary JSON format:
       "locationName": "",
       "locationState": "",
       "nights": 3,
-      "campgroundName": "",
+      "campgroundName": null,
+      "campgroundCandidates": ["Example KOA", "Example State Park Campground", "Example RV Resort"],
       "siteRate": 0,
       "estimatedFuel": 0,
       "hookupType": "",
@@ -157,6 +161,7 @@ Itinerary JSON format:
       "locationState": "TX",
       "nights": 0,
       "campgroundName": null,
+      "campgroundCandidates": [],
       "siteRate": 0,
       "estimatedFuel": 0,
       "hookupType": "",

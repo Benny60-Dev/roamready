@@ -161,6 +161,7 @@ export interface Stop {
   driveDistanceMiles?: number | null
   routeHighlights?: string | null
   pointsOfInterest?: POI[]
+  campgroundCandidates?: string[]
   journalEntry?: JournalEntry
 }
 
@@ -326,24 +327,26 @@ export interface PackingItem {
 export interface Campground {
   id: string
   name: string
-  latitude?: number
-  longitude?: number
+  latitude?: number | null
+  longitude?: number | null
   description?: string
-  reservationUrl?: string
-  website?: string
-  address?: string
-  phone?: string
-  maxRigLength?: number
-  maxRigHeight?: number
+  reservationUrl?: string | null
+  website?: string | null
+  address?: string | null
+  phone?: string | null
+  maxRigLength?: number | null
+  maxRigHeight?: number | null
   rvProhibited?: boolean
   isPetFriendly?: boolean
   isMilitaryOnly?: boolean
   hookupTypes?: string[]
-  source?: string
+  source?: 'recreation.gov' | 'google_places' | 'ai_only' | string
   isCompatible?: boolean
   incompatibilityReasons?: string[]
-  rating?: number
+  rating?: number | null
+  userRatingCount?: number | null
   siteRate?: number
+  isPrimary?: boolean
 }
 
 export interface Notification {

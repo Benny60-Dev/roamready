@@ -1,5 +1,5 @@
 @echo off
-title RoamReady — SHUTDOWN
+title RoamReady - SHUTDOWN
 color 4F
 
 echo.
@@ -10,25 +10,26 @@ echo    Status : Shutting down all services...
 echo  ============================================
 echo.
 
-REM ── 1. Close named terminal windows ──
+REM -- 1. Close named terminal windows --
 echo [1/3] Closing terminal windows...
-taskkill /fi "WindowTitle eq RoamReady — BACKEND (Port 3001)*" /f >nul 2>&1
-taskkill /fi "WindowTitle eq RoamReady — FRONTEND (Port 3000)*" /f >nul 2>&1
-taskkill /fi "WindowTitle eq RoamReady — CLAUDE CODE*" /f >nul 2>&1
-REM Also catch old-style titles in case any are still open
-taskkill /fi "WindowTitle eq RoamReady — Backend*" /f >nul 2>&1
-taskkill /fi "WindowTitle eq RoamReady — Frontend*" /f >nul 2>&1
-taskkill /fi "WindowTitle eq RoamReady — Claude Code*" /f >nul 2>&1
-echo       Done — terminal windows closed.
+taskkill /fi "WindowTitle eq RoamReady - BACKEND*" /f >nul 2>&1
+taskkill /fi "WindowTitle eq RoamReady - FRONTEND*" /f >nul 2>&1
+taskkill /fi "WindowTitle eq RoamReady - CLAUDE CODE*" /f >nul 2>&1
+echo       Done - terminal windows closed.
 
-REM ── 2. Stop Docker containers ──
+REM -- 1b. Kill any remaining Node processes (releases Prisma engine DLL) --
+echo [1b/3] Killing any remaining Node processes...
+taskkill /F /IM node.exe >nul 2>&1
+echo       Done - leftover Node processes terminated.
+
+REM -- 2. Stop Docker containers --
 echo [2/3] Stopping Docker containers...
 cd /d "C:\Users\aylie\roamready"
 docker-compose down
 if errorlevel 1 (
     echo       WARNING: docker-compose down encountered an error. Containers may still be running.
 ) else (
-    echo       Done — Docker containers stopped.
+    echo       Done - Docker containers stopped.
 )
 
 echo [3/3] Cleanup complete.

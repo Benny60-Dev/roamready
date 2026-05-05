@@ -211,6 +211,7 @@ model Stop {
   driveDistanceMiles     Float?
   routeHighlights        String?
   pointsOfInterest       Json                  @default("[]")
+  campgroundCandidates   Json?
   createdAt              DateTime      @default(now())
   updatedAt              DateTime      @updatedAt
   journalEntry           JournalEntry?
@@ -394,4 +395,28 @@ enum AICallType {
   PACKING
   HIGHLIGHTS
   FEEDBACK
+  PLACES_LOOKUP
+}
+
+model CampgroundCache {
+  id              String   @id @default(cuid())
+  queryName       String
+  queryLocation   String
+  cacheKey        String   @unique
+  found           Boolean
+  placeId         String?
+  name            String?
+  address         String?
+  phone           String?
+  website         String?
+  googleMapsUrl   String?
+  rating          Float?
+  userRatingCount Int?
+  latitude        Float?
+  longitude       Float?
+  createdAt       DateTime @default(now())
+  expiresAt       DateTime
+
+  @@index([cacheKey])
+  @@index([expiresAt])
 }

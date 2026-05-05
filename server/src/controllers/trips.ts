@@ -380,6 +380,7 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
       isPetFriendly, isMilitaryOnly, isCompatible: rawIsCompatible,
       incompatibilityReasons, alternates, weatherForecast,
       notes, checkInTime, checkOutTime, siteNumber, pointsOfInterest,
+      campgroundCandidates,
     } = req.body
 
     // Map any invalid stop type to a valid enum value
@@ -464,6 +465,10 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
         isPetFriendly, isMilitaryOnly, isCompatible,
         incompatibilityReasons, alternates, weatherForecast,
         notes, checkInTime, checkOutTime, siteNumber, pointsOfInterest,
+        // Phase 1B: AI-suggested names for Google Places verification at booking-page render
+        // time. Persisted on Stop so candidates survive across sessions and trips don't have
+        // to re-call the AI for the same itinerary.
+        campgroundCandidates: campgroundCandidates ?? undefined,
         tripId: req.params.id,
         order,
       },
