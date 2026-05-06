@@ -802,17 +802,18 @@ export default function TripMapPage() {
     )
   }, [stopsWithCoords, stopBadges])
 
-  // Drive segments with per-segment miles (Routes API actual or Haversine fallback)
-  const { driveSegments, liveTotalMiles } = useMemo(() => {
+  // Total drive miles for the sidebar footer + Stats card. Computed from each
+  // leg's driveDistanceMiles where available, falling back to Haversine when
+  // the Routes API hasn't populated that leg yet. Prefer this over
+  // trip.totalMiles since it stays accurate during incremental route computes.
+  const liveTotalMiles = useMemo(() => {
     const sorted = [...(trip?.stops || [])].sort((a, b) => a.order - b.order)
-    const segments = sorted.slice(1).map((stop, i) => {
+    return sorted.slice(1).reduce((sum, stop, i) => {
       const prev = sorted[i]
       const miles = stop.driveDistanceMiles
         ?? haversineMiles(prev.latitude, prev.longitude, stop.latitude, stop.longitude)
-      return { stop, miles }
-    })
-    const total = segments.reduce((sum, s) => sum + s.miles, 0)
-    return { driveSegments: segments, liveTotalMiles: total }
+      return sum + miles
+    }, 0)
   }, [trip?.stops])
 
   // Cost and booking stats
@@ -1257,30 +1258,6 @@ export default function TripMapPage() {
               </div>
             </div>
 
-            {/* Miles by segment */}
-            {driveSegments.length > 0 && (
-              <div className="px-3 py-2.5 border-b border-gray-100 flex-shrink-0" style={{ borderBottomWidth: '0.5px' }}>
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Miles by segment</p>
-                <div className="space-y-0.5">
-                  {driveSegments.map(({ stop, miles }) => (
-                    <div key={stop.id} className="flex justify-between text-xs">
-                      <span className="text-gray-600 truncate mr-2">{stop.locationName}</span>
-                      <span className={`font-medium flex-shrink-0 ${stop.driveDistanceMiles ? 'text-gray-900' : 'text-gray-400'}`}>
-                        {miles > 0 ? `${miles.toLocaleString()} mi` : '–'}
-                        {!stop.driveDistanceMiles && miles > 0 && (
-                          <span className="text-[9px] ml-0.5 opacity-60">est.</span>
-                        )}
-                      </span>
-                    </div>
-                  ))}
-                  <div className="flex justify-between text-xs font-semibold border-t border-gray-100 pt-1 mt-0.5">
-                    <span className="text-gray-700">Total</span>
-                    <span className="text-gray-900">{liveTotalMiles > 0 ? `${liveTotalMiles.toLocaleString()} mi` : '–'}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Layer toggles */}
             <div className="px-3 py-2.5 border-b border-gray-100 flex-shrink-0" style={{ borderBottomWidth: '0.5px' }}>
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5 flex items-center gap-1">
@@ -1336,7 +1313,7 @@ export default function TripMapPage() {
                 <div className="space-y-0.5">
                   {(() => {
                     const sortedStops = trip?.stops?.slice().sort((a, b) => a.order - b.order) ?? []
-                    return sortedStops.map(stop => {
+                    return sortedStops.map((stop, i) => {
                     const badge      = stopBadges[stop.id]
                     const isEndpoint = badge === 'S' || badge === 'H' || badge === 'F'
                     // Marker color uses badge-based detection so a return-home
@@ -1350,6 +1327,19 @@ export default function TripMapPage() {
                     // trip below the 2-stop floor (matches server guard 4).
                     const showEdit = stop.type !== 'HOME'
                     const showDelete = showEdit && sortedStops.length > 2
+
+                    // Subtitle: endpoint rows ("Start" / "Finish") stay as-is.
+                    // Destination rows append the leg distance from the prior stop
+                    // when driveDistanceMiles is available — null/undefined just
+                    // omits the segment (no "0 mi" or "undefined mi" leakage).
+                    const prevStop = i > 0 ? sortedStops[i - 1] : undefined
+                    const baseSubtitle = `${stop.nights}n${stop.type === 'OVERNIGHT_ONLY' ? ' · overnight' : ''}`
+                    const distMiles = stop.driveDistanceMiles
+                    const subtitle = isEndpoint
+                      ? formatStopBadgeLabel(badge)
+                      : (distMiles && prevStop)
+                        ? `${baseSubtitle} · ${distMiles} mi from ${prevStop.locationName}`
+                        : baseSubtitle
 
                     const bookingEl = isEndpoint ? (
                       <span className="text-[9px] text-gray-400">{formatStopBadgeLabel(badge)}</span>
@@ -1390,8 +1380,8 @@ export default function TripMapPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium text-gray-900 truncate">{stop.locationName}</p>
-                          <p className="text-[10px] text-gray-400">
-                            {isEndpoint ? formatStopBadgeLabel(badge) : `${stop.nights}n${stop.type === 'OVERNIGHT_ONLY' ? ' · overnight' : ''}`}
+                          <p className="text-[10px] text-gray-400 truncate">
+                            {subtitle}
                           </p>
                         </div>
                         <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
@@ -1434,6 +1424,23 @@ export default function TripMapPage() {
                     )
                   })
                   })()}
+                  {/* Total drive footer — replaces the standalone "Miles by segment"
+                      panel. Prefers liveTotalMiles (computed locally with Haversine
+                      fallback for legs missing driveDistanceMiles) so the value
+                      matches the Stats card's totalMiles render at line 1242. Falls
+                      back to the persisted trip.totalMiles when the local sum is 0
+                      (e.g. before any routes have been computed). */}
+                  {(liveTotalMiles > 0 || (trip?.totalMiles ?? 0) > 0) && (
+                    <div
+                      className="flex items-center justify-between px-2 pt-2 mt-1 border-t border-gray-100 text-xs"
+                      style={{ borderTopWidth: '0.5px' }}
+                    >
+                      <span className="font-medium text-gray-700">Total drive</span>
+                      <span className="font-semibold text-gray-900">
+                        {(liveTotalMiles > 0 ? liveTotalMiles : (trip?.totalMiles ?? 0)).toLocaleString()} mi
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
