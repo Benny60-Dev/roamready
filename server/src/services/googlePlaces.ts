@@ -59,6 +59,50 @@ async function logPlacesUsage(userId: string) {
   }
 }
 
+// Shared primitive: POST to Places `searchText` and return the raw `places`
+// array. Returns [] on transport error, missing API key, or empty results so
+// callers can run their own caching / filtering / mapping without duplicating
+// the HTTP boilerplate. Logs the billable call only on HTTP success.
+async function placesTextSearch(
+  textQuery: string,
+  fieldMask: string,
+  ctx: { userId: string },
+): Promise<any[]> {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY
+  if (!apiKey) {
+    console.warn(
+      '[Places] GOOGLE_MAPS_API_KEY not set — skipping text search, returning []',
+    )
+    return []
+  }
+
+  try {
+    const response = await axios.post(
+      'https://places.googleapis.com/v1/places:searchText',
+      { textQuery },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': fieldMask,
+        },
+        timeout: 8000,
+      },
+    )
+    // Log every billable HTTP-success request, regardless of result count.
+    logPlacesUsage(ctx.userId)
+    return response.data?.places ?? []
+  } catch (err: any) {
+    const status = err?.response?.status
+    const data = err?.response?.data
+    console.error(
+      `[Places] Text search failed for "${textQuery}" (HTTP ${status ?? 'unknown'}):`,
+      data ?? err?.message,
+    )
+    return []
+  }
+}
+
 export async function verifyCampground(
   name: string,
   location: string,
@@ -95,45 +139,15 @@ export async function verifyCampground(
     }
   }
 
-  // 2. Live Places lookup — guarded so a missing key or transport error
-  //    falls back to "not found" (caller already treats null as unverified).
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY
-  if (!apiKey) {
-    console.warn(
-      '[Places] GOOGLE_MAPS_API_KEY not set — skipping verification, returning null',
-    )
-    return null
-  }
-
-  let firstPlace: any = null
-  try {
-    const response = await axios.post(
-      'https://places.googleapis.com/v1/places:searchText',
-      { textQuery: `${name} ${location}` },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': apiKey,
-          'X-Goog-FieldMask':
-            'places.id,places.displayName,places.formattedAddress,places.internationalPhoneNumber,places.websiteUri,places.googleMapsUri,places.rating,places.userRatingCount,places.location',
-        },
-        timeout: 8000,
-      },
-    )
-    const places = response.data?.places ?? []
-    firstPlace = places[0] ?? null
-  } catch (err: any) {
-    const status = err?.response?.status
-    const data = err?.response?.data
-    console.error(
-      `[Places] Text search failed for "${name}" near "${location}" (HTTP ${status ?? 'unknown'}):`,
-      data ?? err?.message,
-    )
-    return null
-  }
-
-  // Log the call regardless of result — every billable Places request counts.
-  logPlacesUsage(ctx.userId)
+  // 2. Live Places lookup via the shared text-search primitive. The helper
+  //    returns [] on missing API key or HTTP error, which falls through to
+  //    the negative-cache write below.
+  const places = await placesTextSearch(
+    `${name} ${location}`,
+    'places.id,places.displayName,places.formattedAddress,places.internationalPhoneNumber,places.websiteUri,places.googleMapsUri,places.rating,places.userRatingCount,places.location',
+    ctx,
+  )
+  const firstPlace: any = places[0] ?? null
 
   const expiresAt = new Date(now.getTime() + CACHE_TTL_DAYS * 24 * 60 * 60 * 1000)
 
@@ -224,4 +238,65 @@ export async function verifyCampgroundBatch(
     results.push(await verifyCampground(candidate.name, candidate.location, ctx))
   }
   return results
+}
+
+// Generic Places area search — fallback for stops without AI-suggested
+// candidates (modify-mode adds, manual UI inserts). Filters Google's results
+// to actual RV-relevant campgrounds and rejects hotel/parking/gas hits even
+// when Google over-tags a place. Capped at 5 results. Does NOT touch
+// CampgroundCache (that table is keyed on name+location for candidate lookups
+// — area searches are a different shape).
+const KEEP_KEYWORDS = [
+  'campground',
+  'rv park',
+  'rv resort',
+  'koa',
+  'campsite',
+  'caravan park',
+  'campgrounds',
+]
+const REJECT_TYPES = ['lodging', 'parking', 'gas_station', 'restaurant', 'store', 'supermarket']
+
+export async function searchCampgroundsByArea(
+  locationName: string,
+  locationState: string | null,
+  ctx: { userId: string },
+): Promise<VerifiedCampground[]> {
+  const textQuery = `campgrounds and RV parks near ${locationName}${locationState ? ', ' + locationState : ''}`
+  const fieldMask =
+    'places.id,places.displayName,places.formattedAddress,places.internationalPhoneNumber,places.websiteUri,places.googleMapsUri,places.rating,places.userRatingCount,places.location,places.types'
+
+  const places = await placesTextSearch(textQuery, fieldMask, ctx)
+  if (places.length === 0) return []
+
+  const filtered = places.filter((place: any) => {
+    const types: string[] = Array.isArray(place.types) ? place.types.map((t: string) => t.toLowerCase()) : []
+    // Reject takes precedence — a place tagged campground AND lodging is a
+    // hotel-with-RV-spots; skip it rather than surface a Walmart-style hit.
+    if (types.some(t => REJECT_TYPES.includes(t))) return false
+
+    const displayName = String(place.displayName?.text ?? '').toLowerCase()
+    const nameMatches = KEEP_KEYWORDS.some(kw => displayName.includes(kw))
+    // Google types are snake_case (e.g. `rv_park`); compare against keywords
+    // in both space and underscore forms.
+    const typeMatches = KEEP_KEYWORDS.some(kw => {
+      const underscore = kw.replace(/ /g, '_')
+      return types.some(t => t === kw || t === underscore || t.includes(underscore))
+    })
+    return nameMatches || typeMatches
+  })
+
+  return filtered.slice(0, 5).map((place: any) => ({
+    placeId: place.id,
+    name: place.displayName?.text ?? locationName,
+    address: place.formattedAddress ?? null,
+    phone: place.internationalPhoneNumber ?? null,
+    website: place.websiteUri ?? null,
+    googleMapsUrl: place.googleMapsUri ?? null,
+    rating: typeof place.rating === 'number' ? place.rating : null,
+    userRatingCount: typeof place.userRatingCount === 'number' ? place.userRatingCount : null,
+    latitude: place.location?.latitude ?? null,
+    longitude: place.location?.longitude ?? null,
+    source: 'google_places',
+  }))
 }

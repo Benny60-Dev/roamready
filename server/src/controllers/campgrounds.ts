@@ -3,7 +3,7 @@ import axios from 'axios'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { getCache, setCache } from '../utils/redis'
-import { verifyCampgroundBatch } from '../services/googlePlaces'
+import { verifyCampgroundBatch, searchCampgroundsByArea } from '../services/googlePlaces'
 
 interface CampgroundResult {
   id: string
@@ -280,6 +280,42 @@ export async function searchCampgrounds(req: AuthRequest, res: Response, next: N
           })
         }
       })
+    }
+
+    // Tier 2 fallback: stop exists but has no AI candidates (e.g. modified-mode
+    // adds, manual UI inserts). Run a generic Places area search so users still
+    // get verified campgrounds instead of a "Recreation.gov returned nothing"
+    // dead end. Mirror the existing Places branch shape exactly so dedup +
+    // ordering downstream don't have to special-case fallback hits.
+    if (
+      stop &&
+      placesResults.length === 0 &&
+      aiOnlyResults.length === 0 &&
+      (!Array.isArray(stop.campgroundCandidates) || stop.campgroundCandidates.length === 0) &&
+      stop.locationName
+    ) {
+      const areaResults = await searchCampgroundsByArea(
+        stop.locationName,
+        stop.locationState,
+        { userId },
+      )
+      for (const r of areaResults) {
+        if (placesResults.some(p => p.id === `places-${r.placeId}`)) continue
+        placesResults.push({
+          id: `places-${r.placeId}`,
+          name: r.name,
+          address: r.address,
+          phone: r.phone,
+          website: r.website,
+          reservationUrl: r.website || r.googleMapsUrl,
+          latitude: r.latitude,
+          longitude: r.longitude,
+          rating: r.rating,
+          userRatingCount: r.userRatingCount,
+          source: 'google_places',
+        })
+      }
+      console.log(`[campgrounds] Area-fallback ran for stopId=${stopId}, returned=${areaResults.length}`)
     }
 
     // Drop any RIDB facility that the Places batch already covers — Places has richer

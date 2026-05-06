@@ -1018,9 +1018,8 @@ export default function TripBookingPage() {
               No campgrounds found near {stop.locationName}
             </h4>
             <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-              Recreation.gov didn't return results for this location. Try searching
-              Google Maps to find private RV parks, BLM dispersed camping, or other
-              options near this stop.
+              We couldn't find verified campgrounds near this stop. Try Google
+              Maps for private RV parks, BLM dispersed camping, or other options.
             </p>
             <a
               href={`https://www.google.com/maps/search/${encodeURIComponent(`campgrounds near ${stop.locationName}${stop.locationState ? ', ' + stop.locationState : ''}`)}`}
