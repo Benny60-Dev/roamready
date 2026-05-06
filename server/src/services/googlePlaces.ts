@@ -259,7 +259,21 @@ const KEEP_KEYWORDS = [
   'caravan park',
   'campgrounds',
 ]
-const REJECT_TYPES = ['lodging', 'parking', 'gas_station', 'restaurant', 'store', 'supermarket']
+// `lodging` is Google's umbrella category for any place-you-sleep-at, so it
+// also covers legitimate campgrounds and RV parks — using it as a reject
+// gate excluded everything. The narrower hotel siblings below catch real
+// hotels-that-also-take-RVs without false-rejecting actual campgrounds.
+const REJECT_TYPES = [
+  'hotel',
+  'motel',
+  'resort_hotel',
+  'bed_and_breakfast',
+  'parking',
+  'gas_station',
+  'restaurant',
+  'store',
+  'supermarket',
+]
 
 export async function searchCampgroundsByArea(
   locationName: string,
