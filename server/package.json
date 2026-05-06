@@ -15,6 +15,7 @@
     "db:seed": "tsx --env-file=../.env ../prisma/seed.ts",
     "db:studio": "prisma studio --schema=../prisma/schema.prisma",
     "db:backfill-party": "tsx --env-file=../.env src/scripts/backfillTravelParty.ts",
+    "db:backfill-candidates": "tsx --env-file=../.env src/scripts/backfillCampgroundCandidates.ts",
     "diagnose:area-search": "tsx --env-file=../.env src/scripts/diagnoseAreaSearch.ts"
   },
   "dependencies": {

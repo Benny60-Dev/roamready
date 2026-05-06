@@ -27,7 +27,7 @@ export interface AICallCtx {
   tripId?: string | null
 }
 
-async function logAIUsage(params: {
+export async function logAIUsage(params: {
   userId: string
   sessionId?: string | null
   tripId?: string | null
