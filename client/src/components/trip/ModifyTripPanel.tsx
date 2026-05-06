@@ -244,14 +244,31 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
           return
         }
 
-        // Resolve insertion position: new schema uses afterStopOrder (number), legacy uses after_stop (name).
-        // Server uses integer shift-up, so we send afterOrder + 1 (no fractional midpoints needed).
-        const afterStop = action.afterStopOrder != null
-          ? sortedStops.find((s: any) => s.order === action.afterStopOrder)
-          : (findStop(action.after_stop) ?? sortedStops[sortedStops.length - 2])
-        const afterOrder = afterStop?.order ?? (sortedStops[sortedStops.length - 1]?.order ?? 0)
+        // Position resolution:
+        // 1. Return-home adds (type=HOME on a trip that already has a HOME start) ALWAYS land at the end.
+        //    The AI cannot reliably compute "the end" when stop orders are non-contiguous, so the client forces it.
+        // 2. Otherwise, if afterStopOrder is provided, honor it.
+        // 3. Otherwise, if legacy after_stop name is provided, use that.
+        // 4. Otherwise, append after the last stop.
+        const lastStop = sortedStops[sortedStops.length - 1]
+        const forceAppendAsReturnHome =
+          action.type === 'HOME' &&
+          sortedStops.some((s: any) => s.type === 'HOME')
+
+        let afterStop: any
+        if (forceAppendAsReturnHome) {
+          afterStop = lastStop
+        } else if (action.afterStopOrder != null) {
+          afterStop = sortedStops.find((s: any) => s.order === action.afterStopOrder)
+        } else if (action.after_stop) {
+          afterStop = findStop(action.after_stop)
+        } else {
+          afterStop = lastStop
+        }
+
+        const afterOrder = afterStop?.order ?? (lastStop?.order ?? 0)
         const newOrder = afterOrder + 1
-        console.log('[applyMod] position — afterStop:', afterStop?.locationName, '| afterOrder:', afterOrder, '| newOrder:', newOrder)
+        console.log('[applyMod] position — forceAppendAsReturnHome:', forceAppendAsReturnHome, '| afterStop:', afterStop?.locationName, '| afterOrder:', afterOrder, '| newOrder:', newOrder)
 
         const payload = {
           locationName: cleanName,
