@@ -14,7 +14,8 @@
     "db:generate": "prisma generate --schema=../prisma/schema.prisma",
     "db:seed": "tsx --env-file=../.env ../prisma/seed.ts",
     "db:studio": "prisma studio --schema=../prisma/schema.prisma",
-    "db:backfill-party": "tsx --env-file=../.env src/scripts/backfillTravelParty.ts"
+    "db:backfill-party": "tsx --env-file=../.env src/scripts/backfillTravelParty.ts",
+    "diagnose:area-search": "tsx --env-file=../.env src/scripts/diagnoseAreaSearch.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.27.0",
