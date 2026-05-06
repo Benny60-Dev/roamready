@@ -1328,18 +1328,31 @@ export default function TripMapPage() {
                     const showEdit = stop.type !== 'HOME'
                     const showDelete = showEdit && sortedStops.length > 2
 
-                    // Subtitle: endpoint rows ("Start" / "Finish") stay as-is.
-                    // Destination rows append the leg distance from the prior stop
-                    // when driveDistanceMiles is available — null/undefined just
-                    // omits the segment (no "0 mi" or "undefined mi" leakage).
+                    // Subtitle layout:
+                    //   Start (badge 'S'):       single line "Start" — no previous stop, no mileage
+                    //   Finish (badge 'H'/'F'):  two lines — "Finish" on top, "N mi from Z" below.
+                    //                            The closing leg is often the longest of the trip,
+                    //                            so showing it is load-bearing. Second line omitted
+                    //                            when driveDistanceMiles is null (same null-handling
+                    //                            discipline as destination rows).
+                    //   Destination:             single line, mileage appended inline.
                     const prevStop = i > 0 ? sortedStops[i - 1] : undefined
-                    const baseSubtitle = `${stop.nights}n${stop.type === 'OVERNIGHT_ONLY' ? ' · overnight' : ''}`
                     const distMiles = stop.driveDistanceMiles
-                    const subtitle = isEndpoint
-                      ? formatStopBadgeLabel(badge)
-                      : (distMiles && prevStop)
+                    let subtitleLine1: string
+                    let subtitleLine2: string | null = null
+                    if (badge === 'S') {
+                      subtitleLine1 = formatStopBadgeLabel(badge) // "Start"
+                    } else if (badge === 'H' || badge === 'F') {
+                      subtitleLine1 = formatStopBadgeLabel(badge) // "Finish"
+                      if (distMiles && prevStop) {
+                        subtitleLine2 = `${distMiles} mi from ${prevStop.locationName}`
+                      }
+                    } else {
+                      const baseSubtitle = `${stop.nights}n${stop.type === 'OVERNIGHT_ONLY' ? ' · overnight' : ''}`
+                      subtitleLine1 = (distMiles && prevStop)
                         ? `${baseSubtitle} · ${distMiles} mi from ${prevStop.locationName}`
                         : baseSubtitle
+                    }
 
                     const bookingEl = isEndpoint ? (
                       <span className="text-[9px] text-gray-400">{formatStopBadgeLabel(badge)}</span>
@@ -1380,9 +1393,10 @@ export default function TripMapPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium text-gray-900 truncate">{stop.locationName}</p>
-                          <p className="text-[10px] text-gray-400 truncate">
-                            {subtitle}
-                          </p>
+                          <p className="text-[10px] text-gray-400 truncate">{subtitleLine1}</p>
+                          {subtitleLine2 && (
+                            <p className="text-[10px] text-gray-400 truncate">{subtitleLine2}</p>
+                          )}
                         </div>
                         <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
                           {bookingEl}
