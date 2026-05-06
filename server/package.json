@@ -16,6 +16,7 @@
     "db:studio": "prisma studio --schema=../prisma/schema.prisma",
     "db:backfill-party": "tsx --env-file=../.env src/scripts/backfillTravelParty.ts",
     "db:backfill-candidates": "tsx --env-file=../.env src/scripts/backfillCampgroundCandidates.ts",
+    "db:sync-endpoints": "tsx --env-file=../.env src/scripts/syncTripEndpoints.ts",
     "diagnose:area-search": "tsx --env-file=../.env src/scripts/diagnoseAreaSearch.ts"
   },
   "dependencies": {

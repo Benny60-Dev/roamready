@@ -92,6 +92,41 @@ function buildLiveTripState(trip: any): string {
     s === lastStop &&
     s.locationName?.toLowerCase().trim() === homeStop.locationName?.toLowerCase().trim()
 
+  // Trip shape — frames the stop list for the AI so it never hallucinates a
+  // return-to-home leg that does not exist in the data. Loop = closing return-
+  // home stop present; one-way = no return-home; neither = no home stop at all
+  // or the trip has only the home entry.
+  const isLoopTrip = !!(
+    homeStop &&
+    lastStop &&
+    lastStop !== homeStop &&
+    isReturnHome(lastStop)
+  )
+  const isOneWayTrip = !!(
+    homeStop &&
+    lastStop &&
+    lastStop !== homeStop &&
+    !isReturnHome(lastStop)
+  )
+
+  let tripShapeBlock: string | null = null
+  if (isLoopTrip) {
+    const homeName = homeStop.locationName
+    tripShapeBlock =
+      `**Trip shape**: This is a ROUND TRIP. The user departs from ${homeName} ` +
+      `and returns to ${homeName} at the end. The "Return home" stop is the ` +
+      `trip's closing stop.`
+  } else if (isOneWayTrip) {
+    const homeName = homeStop.locationName
+    tripShapeBlock =
+      `**Trip shape**: This is a ONE-WAY TRIP. The user departs from ${homeName} ` +
+      `and the trip ENDS at ${lastStop.locationName}. There is NO return-home leg. ` +
+      `Do NOT assume the user drives back to ${homeName} after the last stop. ` +
+      `If the user wants to convert this into a round trip, they must explicitly ` +
+      `ask you to add a return-home stop — see the \`add_stop\` examples below ` +
+      `for the correct shape.`
+  }
+
   let userFacingIdx = 0
   const stopLines = stops.map((s: any) => {
     const name = s.locationState ? `${s.locationName}, ${s.locationState}` : s.locationName
@@ -138,7 +173,7 @@ function buildLiveTripState(trip: any): string {
     '    - If `maxDriveHours` is null but `maxMilesPerDay` is set, use `maxMilesPerDay` directly as the per-leg limit.',
     '    - If both are null, default to 350 miles per leg.',
     '  Override conditions: if the user explicitly says in this conversation that they want to drive straight through, do a long day, or skip overnight stops, that overrides this rule for that trip only. Otherwise, NEVER emit a <modify> that creates a leg you believe will exceed the limit.',
-    '  Specifically for modify actions: if removing a stop would create an over-long leg between the two surrounding stops, propose inserting a transit stop instead, or warn the user before emitting the modify. If adding a stop creates an over-long leg into or out of the new stop, suggest a transit stop along the way.',
+    '  Specifically for modify actions: if removing a stop would create an over-long leg between the two surrounding stops, propose inserting a transit stop instead, or warn the user before emitting the modify. If adding a stop creates an over-long leg into or out of the new stop, suggest a transit stop along the way. Adding a return-home stop is a special case of this: it creates a final leg from the current last stop back to the user\'s home — verify that leg fits within maxDriveHours and propose an OVERNIGHT_ONLY transit stop along the route if not.',
     '',
     'TRAVEL PARTY — HARD RULE: The trip-scoped `party` (in the JSON context below, when present) or the user\'s `defaultParty` describes who is traveling. Trip-scoped overrides user-level. You MUST consult party data when proposing modifications.',
     '  PEOPLE',
@@ -169,6 +204,12 @@ function buildLiveTripState(trip: any): string {
     '  afterStopOrder: the INTERNAL order integer of the stop AFTER which to insert (see "internal order N" in the stop list below). Omit or set to null to append at end.',
     '  nights parsing rules: "one night" = 1 | "two nights" or "a couple nights" = 2 | "three nights" = 3 | "a few nights" = 2 | "the weekend" = 2 | "three days" = 2 (days minus 1) | default to 1 if ambiguous. Parse nights EXACTLY as stated — do not infer or round up.',
     '',
+    'Add a return-home stop (converts a one-way trip into a round trip):',
+    '<modify>{"action":"add_stop","locationName":"Mesa","locationState":"AZ","type":"HOME","nights":0}</modify>',
+    '  Use type "HOME" and nights 0 only when adding a closing return-home leg.',
+    '  locationName MUST match the user\'s home city (homeName in the trip context).',
+    '  Omit afterStopOrder so it appends at the end.',
+    '',
     'Remove a stop:',
     '<modify>{"action":"remove_stop","locationName":"Sedona"}</modify>',
     '',
@@ -194,6 +235,7 @@ function buildLiveTripState(trip: any): string {
     `Dates: ${fmtDate(trip.startDate)} – ${fmtDate(trip.endDate)}`,
     `Total nights: ${trip.totalNights ?? 'not set'}`,
     '',
+    ...(tripShapeBlock ? [tripShapeBlock, ''] : []),
     'Current stops in order:',
     stopLines.length ? stopLines.join('\n') : '(no stops yet)',
     // Phase A: trip-scoped Travel Party plumbed into modify-mode prompt as

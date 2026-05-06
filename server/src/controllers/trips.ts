@@ -38,6 +38,27 @@ async function resequenceStops(tripId: string): Promise<void> {
   )
 }
 
+/** Recompute Trip.startLocation / endLocation from the current first/last stop.
+ *  Trip endpoints were originally set at creation time and not refreshed on stop
+ *  mutations, so removing a return-home (round trip → one-way) used to leave
+ *  endLocation pointing at the old return city. Modify-mode prompts that surface
+ *  Route then misframe the trip shape for the AI. */
+async function syncTripEndpoints(tripId: string): Promise<void> {
+  const stops = await prisma.stop.findMany({
+    where: { tripId },
+    orderBy: { order: 'asc' },
+    select: { locationName: true },
+  })
+  if (stops.length === 0) return
+  await prisma.trip.update({
+    where: { id: tripId },
+    data: {
+      startLocation: stops[0].locationName,
+      endLocation: stops[stops.length - 1].locationName,
+    },
+  })
+}
+
 // ─── Google Maps Directions helpers ──────────────────────────────────────────
 
 const DIR_MAP: Record<string, string> = { N: 'North', S: 'South', E: 'East', W: 'West' }
@@ -499,6 +520,11 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
       },
     })
     await resequenceStops(req.params.id)
+    try {
+      await syncTripEndpoints(req.params.id)
+    } catch (e: any) {
+      console.warn('[syncTripEndpoints] createStop tripId=%s failed: %s', req.params.id, e?.message)
+    }
     res.status(201).json(stop)
   } catch (err: any) {
     console.error('[createStop] FAILED tripId=%s:', req.params.id, err?.message)
@@ -541,6 +567,11 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
     }
 
     await resequenceStops(req.params.id)
+    try {
+      await syncTripEndpoints(req.params.id)
+    } catch (e: any) {
+      console.warn('[syncTripEndpoints] updateStop tripId=%s failed: %s', req.params.id, e?.message)
+    }
     res.json(updated)
   } catch (err) { next(err) }
 }
@@ -582,6 +613,11 @@ export async function deleteStop(req: AuthRequest, res: Response, next: NextFunc
 
     await prisma.stop.delete({ where: { id: req.params.stopId } })
     await resequenceStops(req.params.id)
+    try {
+      await syncTripEndpoints(req.params.id)
+    } catch (e: any) {
+      console.warn('[syncTripEndpoints] deleteStop tripId=%s failed: %s', req.params.id, e?.message)
+    }
     res.json({ message: 'Stop deleted' })
   } catch (err) { next(err) }
 }
