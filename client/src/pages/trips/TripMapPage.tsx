@@ -1080,14 +1080,13 @@ export default function TripMapPage() {
         <span className="text-xs text-gray-700 font-medium truncate max-w-[200px]">{trip?.name ?? '…'}</span>
       </div>
 
-      {/* Action tab bar — Itinerary, Journal, Packing list, Share, PDF */}
+      {/* Action tab bar — Journal, Packing list, Share, PDF.
+          Itinerary tab intentionally absent: the yellow "View itinerary ›"
+          button in the Map sidebar (commit 899cb4e) is the canonical way to
+          reach the Itinerary route from this page, so the tab would be
+          redundant. Tab bar lives only on this page; other trip pages
+          render their own layouts. */}
       <div className="flex-shrink-0 bg-white border-b border-gray-100 px-2 flex flex-wrap lg:flex-nowrap items-center gap-0.5">
-        <Link
-          to={`/trips/${id}/itinerary`}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1F6F8B] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
-        >
-          <Calendar size={13} /> Itinerary
-        </Link>
         <Link
           to={`/trips/${id}/journal`}
           className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1F6F8B] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
