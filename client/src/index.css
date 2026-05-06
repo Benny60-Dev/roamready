@@ -98,37 +98,19 @@
 }
 
 /* ─── Google Maps InfoWindow tail override ──────────────────────────────────
-   Replace Google's default InfoWindow tail with a clean downward-pointing
-   triangle. The default rendering is a rotated white square (older API uses
-   `.gm-style-iw-t::after`, newer API uses an SVG inside `.gm-style-iw-tc`)
-   — its diagonal corners visually form an X-shape that gets read as a close
-   button when it overlaps content like the orange "Book this stop!" CTA.
-   We hide both flavors of the default and attach a custom triangle SVG to
-   the InfoWindow card. !important is required because Google injects its
-   styles inline at the element level. */
-
-/* Hide the default tail (both API versions) */
-.gm-style .gm-style-iw-t::after,
-.gm-style .gm-style-iw-tc {
+   The default tail is a rotated white square whose diagonal corners visually
+   form an X-shape, mistaken for a close button when it overlaps the popup's
+   "Book this stop!" CTA. Hide it. We deliberately do NOT touch
+   `.gm-style-iw-c` (positioning math), `.gm-style-iw-tc` (content wrapper in
+   recent API versions), or `.gm-style-iw-d` (content area). Google's chrome
+   layout depends on those staying untouched — commit 60cc431 tried to and
+   broke the popup; this is the minimal-blast-radius revert.
+   The trade-off: no custom tail. The popup is just a clean rounded card with
+   no pointer to the marker. Acceptable v1 — the original bug was "X-shape
+   over Book button," and removing it without breaking content is the
+   priority. A cleaner custom triangle can be added later via a different
+   mechanism (e.g. rendered inside StopPopup with margin-bottom: -8px on a
+   wrapper that escapes the card, or a custom OverlayView). */
+.gm-style .gm-style-iw-t::after {
   display: none !important;
-}
-
-/* Attach our own triangle to the InfoWindow card. The SVG embeds two paths:
-   one for the triangle (white fill + faint border) and one short white line
-   across the top edge so the triangle merges seamlessly with the popup's
-   bottom border instead of showing a hairline seam. */
-.gm-style .gm-style-iw-c {
-  position: relative;
-}
-.gm-style .gm-style-iw-c::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: -8px;
-  margin-left: -7px;
-  width: 14px;
-  height: 8px;
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 8' width='14' height='8'%3E%3Cpath d='M0 0 L7 8 L14 0 Z' fill='white' stroke='rgba(0,0,0,0.15)' stroke-width='0.5'/%3E%3Cpath d='M0.5 0 L13.5 0' stroke='white' stroke-width='1'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  pointer-events: none;
 }
