@@ -1107,7 +1107,10 @@ export default function TripMapPage() {
 
               {/* Action buttons stack */}
               <div className="flex flex-col gap-2 mt-3">
-                {/* Booking CTA — hidden if no bookable stops, pine "Booked" if all confirmed, gold "Let's book it!" otherwise */}
+                {/* Primary CTA from the map — sends the user to the day-by-day plan,
+                    NOT bookings. Bookings stays reachable via the secondary nav. The
+                    "all booked" state still shows the pine confirmation pill since
+                    that's a completion signal, not a navigation prompt. */}
                 {nonHomeStops.length > 0 && (
                   bookedStops === nonHomeStops.length ? (
                     <div className="bg-[#DCE5D5] text-[#2F4030] text-sm font-medium px-4 py-2.5 rounded-md text-center flex items-center justify-center gap-1.5">
@@ -1115,10 +1118,10 @@ export default function TripMapPage() {
                     </div>
                   ) : (
                     <Link
-                      to={`/trips/${id}/booking`}
+                      to={`/trips/${id}/itinerary`}
                       className="bg-[#F7A829] text-white hover:bg-[#C9851A] active:bg-[#8A5A0E] text-sm font-medium px-4 py-2.5 rounded-md text-center transition-colors"
                     >
-                      Let's book it! ›
+                      View itinerary ›
                     </Link>
                   )
                 )}
