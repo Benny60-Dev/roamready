@@ -59,21 +59,23 @@ async function logPlacesUsage(userId: string) {
   }
 }
 
-// Shared primitive: POST to Places `searchText` and return the raw `places`
-// array. Returns [] on transport error, missing API key, or empty results so
-// callers can run their own caching / filtering / mapping without duplicating
-// the HTTP boilerplate. Logs the billable call only on HTTP success.
+// Shared primitive: POST to Places `searchText`. Tri-state return so callers
+// can distinguish a transport failure from a genuine empty result:
+//   null  → missing API key, axios throw, timeout, non-2xx — DO NOT cache
+//   []    → HTTP 2xx with zero hits — safe to negative-cache
+//   [...] → HTTP 2xx with hits
+// `logPlacesUsage` only fires on HTTP success (the only billable case).
 async function placesTextSearch(
   textQuery: string,
   fieldMask: string,
   ctx: { userId: string },
-): Promise<any[]> {
+): Promise<any[] | null> {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY
   if (!apiKey) {
     console.warn(
-      '[Places] GOOGLE_MAPS_API_KEY not set — skipping text search, returning []',
+      '[Places] GOOGLE_MAPS_API_KEY not set — skipping text search, returning null',
     )
-    return []
+    return null
   }
 
   try {
@@ -99,7 +101,7 @@ async function placesTextSearch(
       `[Places] Text search failed for "${textQuery}" (HTTP ${status ?? 'unknown'}):`,
       data ?? err?.message,
     )
-    return []
+    return null
   }
 }
 
@@ -139,14 +141,16 @@ export async function verifyCampground(
     }
   }
 
-  // 2. Live Places lookup via the shared text-search primitive. The helper
-  //    returns [] on missing API key or HTTP error, which falls through to
-  //    the negative-cache write below.
+  // 2. Live Places lookup via the shared text-search primitive.
+  //    null = transport failure → bail without caching (don't poison the
+  //    30-day negative cache for a transient error).
+  //    [] = HTTP 2xx with zero hits → write negative cache below.
   const places = await placesTextSearch(
     `${name} ${location}`,
     'places.id,places.displayName,places.formattedAddress,places.internationalPhoneNumber,places.websiteUri,places.googleMapsUri,places.rating,places.userRatingCount,places.location',
     ctx,
   )
+  if (places === null) return null
   const firstPlace: any = places[0] ?? null
 
   const expiresAt = new Date(now.getTime() + CACHE_TTL_DAYS * 24 * 60 * 60 * 1000)
@@ -267,7 +271,10 @@ export async function searchCampgroundsByArea(
     'places.id,places.displayName,places.formattedAddress,places.internationalPhoneNumber,places.websiteUri,places.googleMapsUri,places.rating,places.userRatingCount,places.location,places.types'
 
   const places = await placesTextSearch(textQuery, fieldMask, ctx)
-  if (places.length === 0) return []
+  // Coalesce null (transport error) and [] (no hits) — orchestrator just
+  // needs an empty array either way. The cache distinction matters in
+  // verifyCampground; here we don't cache, so collapse them.
+  if (places === null || places.length === 0) return []
 
   const filtered = places.filter((place: any) => {
     const types: string[] = Array.isArray(place.types) ? place.types.map((t: string) => t.toLowerCase()) : []
