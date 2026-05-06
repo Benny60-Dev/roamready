@@ -221,7 +221,21 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
             locationNeedle.includes(s.locationName.toLowerCase())
         ) : undefined
         console.log('[applyMod] duplicate check — needle:', locationNeedle, '| duplicate:', duplicate ? duplicate.locationName : 'none')
-        if (duplicate) {
+
+        // Round-trip exception: a return-home add_stop legitimately re-uses
+        // the home city. Allow when the incoming stop is type=HOME, the matched
+        // duplicate is the trip's STARTING HOME (first HOME in sortedStops),
+        // and there is not already a closing HOME on the trip.
+        const homeStops = sortedStops.filter((s: any) => s.type === 'HOME')
+        const startingHome = homeStops[0]
+        const isReturnHomeAdd =
+          !!duplicate &&
+          action.type === 'HOME' &&
+          duplicate.type === 'HOME' &&
+          duplicate === startingHome &&
+          homeStops.length === 1
+
+        if (duplicate && !isReturnHomeAdd) {
           setMessages(prev => [
             ...prev,
             { role: 'assistant', content: `${duplicate.locationName} is already on your trip (stop #${duplicate.order}). No change was made.` },
