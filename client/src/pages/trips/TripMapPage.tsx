@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { GoogleMap, useJsApiLoader, InfoWindow, Circle, Polyline } from '@react-google-maps/api'
+import { GoogleMap, useJsApiLoader, OverlayViewF, Circle, Polyline } from '@react-google-maps/api'
 import {
   Layers, X, Plus, Minus, DollarSign, Calendar, AlertTriangle,
   Wind, Droplets, Snowflake, Thermometer, ExternalLink,
@@ -232,7 +232,8 @@ function StopPopup({
   }
 
   return (
-    <div className="bg-white p-4 w-72">
+    <div className="flex flex-col items-center">
+    <div className="bg-white rounded-xl shadow-xl p-4 w-72">
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
@@ -310,6 +311,20 @@ function StopPopup({
           Book this stop!
         </a>
       )}
+    </div>
+    {/* Triangle pointer — sibling of the card, pointing down at the marker.
+        margin-top: -1px overlaps the card's bottom edge by 1px to hide the
+        seam between card and triangle. The drop-shadow continues the
+        card's shadow naturally onto the triangle. */}
+    <svg
+      width="20"
+      height="8"
+      viewBox="0 0 20 8"
+      className="block"
+      style={{ marginTop: '-1px', filter: 'drop-shadow(0 4px 4px rgba(0,0,0,0.06))' }}
+    >
+      <path d="M0 0 L10 8 L20 0 Z" fill="white" />
+    </svg>
     </div>
   )
 }
@@ -1542,12 +1557,20 @@ export default function TripMapPage() {
                 ) : null
               )}
 
-              {/* Info window — rendered inside GoogleMap so it gets map context */}
+              {/* Custom popup via OverlayView — replaces Google's InfoWindow to avoid
+                  the X-shape tail bleed and ghost-popup-on-stop-switch bugs documented
+                  in commits 60cc431 → 0552289. The popup, its triangle pointer, and the
+                  close button are all rendered as our own React components. No Google
+                  chrome involved. */}
               {selectedStop?.latitude && selectedStop?.longitude && (
-                <InfoWindow
+                <OverlayViewF
                   position={{ lat: selectedStop.latitude, lng: selectedStop.longitude }}
-                  onCloseClick={() => setSelectedStop(null)}
-                  options={{ pixelOffset: new window.google.maps.Size(0, -16) }}
+                  mapPaneName="floatPane"
+                  getPixelPositionOffset={(width, height) => ({
+                    x: -width / 2,
+                    y: -height - 12,
+                  })}
+                  zIndex={1000}
                 >
                   <StopPopup
                     stop={selectedStop}
@@ -1561,7 +1584,7 @@ export default function TripMapPage() {
                     onClose={() => setSelectedStop(null)}
                     onUpdateNights={handleUpdateNights}
                   />
-                </InfoWindow>
+                </OverlayViewF>
               )}
             </GoogleMap>
           ) : (
