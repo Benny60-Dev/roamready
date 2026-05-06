@@ -1568,7 +1568,7 @@ export default function TripMapPage() {
                   mapPaneName="floatPane"
                   getPixelPositionOffset={(width, height) => ({
                     x: -width / 2,
-                    y: -height - 12,
+                    y: -height - 36,
                   })}
                   zIndex={1000}
                 >
