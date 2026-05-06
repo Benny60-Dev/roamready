@@ -4,7 +4,7 @@ import { GoogleMap, useJsApiLoader, InfoWindow, Circle, Polyline } from '@react-
 import {
   Layers, X, Plus, Minus, DollarSign, Calendar, AlertTriangle,
   Wind, Droplets, Snowflake, Thermometer, ExternalLink,
-  Pencil, Check, BookOpen, Package, Share2, Download, CheckCircle, Clock, XCircle, CloudRain, Wand2,
+  Pencil, Trash2, Check, BookOpen, Package, Share2, Download, CheckCircle, Clock, XCircle, CloudRain, Wand2,
   Maximize2, Minimize2, Play,
 } from 'lucide-react'
 import { format } from 'date-fns'
@@ -13,6 +13,7 @@ import { Trip, Stop, StopWeather, LiveForecast } from '../../types'
 import { StopWeatherCard, ALERT_STYLES } from '../../components/weather/StopWeatherCard'
 const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel'))
 import ConfirmModal from '../../components/ui/ConfirmModal'
+import EditStopModal from '../../components/trip/EditStopModal'
 import ShareModal from '../../components/trip/ShareModal'
 import { useAuthStore } from '../../store/authStore'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge } from '../../utils/stopBadge'
@@ -425,6 +426,16 @@ export default function TripMapPage() {
   const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false)
   const [changingStatus, setChangingStatus] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+
+  // Per-stop edit/delete affordances on the sidebar — parity with the
+  // Itinerary page's day cards (commit df75a17). Modals + handlers follow
+  // the same pattern; server guards (commit 1ab72ad) catch HOME / min-stops
+  // violations on the AI modify path even when the UI hides the option.
+  const [editingStop, setEditingStop] = useState<Stop | null>(null)
+  const [savingStop, setSavingStop] = useState(false)
+  const [pendingDeleteStop, setPendingDeleteStop] = useState<Stop | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const mapRowRef = useRef<HTMLDivElement>(null)
 
@@ -895,6 +906,67 @@ export default function TripMapPage() {
     setSelectedStop(prev => prev?.id === stopId ? { ...prev, nights } : prev)
   }
 
+  // ── Sidebar stop edit/delete (parity with Itinerary) ─────────────────────────
+  async function handleSaveEditStop(stop: Stop, data: Partial<Stop>) {
+    if (!id) return
+    setSavingStop(true)
+    try {
+      await tripsApi.updateStop(id, stop.id, data)
+      const res = await tripsApi.get(id)
+      setTrip(res.data)
+      setEditingStop(null)
+    } finally {
+      setSavingStop(false)
+    }
+  }
+
+  // Step 1 of the manual-delete flow: close the edit modal (if open) and queue
+  // the stop for confirmation. ConfirmModal asks first and surfaces any
+  // cascading-delete warnings (e.g. confirmed booking).
+  function requestDeleteStop(stop: Stop) {
+    setEditingStop(null)
+    setDeleteError(null)
+    setPendingDeleteStop(stop)
+  }
+
+  // Step 2: user clicked Confirm. Fire the actual delete and surface the
+  // server's structured error message (HOME_STOP_PROTECTED / MIN_STOPS_VIOLATION)
+  // when the request is blocked — the modal stays open so the user sees why.
+  async function confirmDeleteStop() {
+    if (!id || !trip || !pendingDeleteStop) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await tripsApi.deleteStop(id, pendingDeleteStop.id)
+      const res = await tripsApi.get(id)
+      setTrip(res.data)
+      setPendingDeleteStop(null)
+    } catch (err: any) {
+      const message = err?.response?.data?.error || err?.message || 'Could not delete the stop. Please try again.'
+      setDeleteError(message)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  // Confirmation copy mirrors the Itinerary page's pattern. Booking warning
+  // when applicable; journal warning skipped (would require an extra fetch).
+  function buildDeleteConfirmMessage(stop: Stop): string {
+    const parts = [`Remove ${stop.locationName} from your trip? This cannot be undone.`]
+    if (stop.bookingStatus === 'CONFIRMED') {
+      const cgName = stop.campgroundName ? ` at ${stop.campgroundName}` : ''
+      parts.push(`This stop has a confirmed booking${cgName}. Deleting will remove the booking from your trip.`)
+    }
+    if (deleteError) parts.push(`\n${deleteError}`)
+    return parts.join('\n\n')
+  }
+
+  // Mirrors the server's min-stops floor (commit 1ab72ad) AND the type guard.
+  // Shown vs. hidden Delete button reflects what the server would actually allow.
+  function canDeleteStopFn(stop: Stop): boolean {
+    return stop.type !== 'HOME' && (trip?.stops?.length ?? 0) > 2
+  }
+
   async function handleRename() {
     const trimmed = tripNameInput.trim()
     if (!id || !trimmed || trimmed === trip?.name) { setRenaming(false); return }
@@ -1262,7 +1334,9 @@ export default function TripMapPage() {
             <div className="p-3 pb-20 lg:pb-3">
               {sidebarTab === 'stops' && (
                 <div className="space-y-0.5">
-                  {trip?.stops?.slice().sort((a, b) => a.order - b.order).map(stop => {
+                  {(() => {
+                    const sortedStops = trip?.stops?.slice().sort((a, b) => a.order - b.order) ?? []
+                    return sortedStops.map(stop => {
                     const badge      = stopBadges[stop.id]
                     const isEndpoint = badge === 'S' || badge === 'H' || badge === 'F'
                     // Marker color uses badge-based detection so a return-home
@@ -1270,6 +1344,12 @@ export default function TripMapPage() {
                     const isHomeMarker = badge === 'S' || badge === 'H'
                     const hasAlert = stopHasAlerts(weatherData[stop.id])
                     const alerts   = stopAlerts(weatherData[stop.id])
+
+                    // Parity with Itinerary: HIDE both icons on HOME stops.
+                    // HIDE only Delete when removing this stop would leave the
+                    // trip below the 2-stop floor (matches server guard 4).
+                    const showEdit = stop.type !== 'HOME'
+                    const showDelete = showEdit && sortedStops.length > 2
 
                     const bookingEl = isEndpoint ? (
                       <span className="text-[9px] text-gray-400">{formatStopBadgeLabel(badge)}</span>
@@ -1289,11 +1369,18 @@ export default function TripMapPage() {
                       <span className="text-[9px] text-gray-400">Not booked</span>
                     )
 
+                    // Outer is a <div role="button"> rather than a <button> so
+                    // the per-row Edit/Delete <button>s can nest inside without
+                    // invalid HTML (button-in-button). Keyboard handlers wired
+                    // for accessibility parity with the original button.
                     return (
-                      <button
+                      <div
                         key={stop.id}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => setSelectedStop(stop)}
-                        className="w-full text-left flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedStop(stop) } }}
+                        className="w-full text-left flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1F6F8B]/30"
                       >
                         <div
                           className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
@@ -1316,9 +1403,37 @@ export default function TripMapPage() {
                           )}
                           {!stop.isCompatible && <AlertTriangle size={11} className="text-red-400" />}
                         </div>
-                      </button>
+                        {/* Edit + Delete affordances. stopPropagation prevents the
+                            row's popup-open click from firing when the user
+                            actually wants to edit or delete. */}
+                        {(showEdit || showDelete) && (
+                          <div className="flex items-center gap-0.5 flex-shrink-0">
+                            {showEdit && (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setEditingStop(stop) }}
+                                title="Edit stop"
+                                className="p-1 text-gray-300 hover:text-gray-600 hover:bg-gray-100 transition-colors rounded"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                            )}
+                            {showDelete && (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); requestDeleteStop(stop) }}
+                                title="Remove stop"
+                                className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors rounded"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     )
-                  })}
+                  })
+                  })()}
                 </div>
               )}
 
@@ -1461,6 +1576,34 @@ export default function TripMapPage() {
             }}
           />
         </Suspense>
+      )}
+
+      {/* Edit stop modal — opened from sidebar Pencil icon */}
+      {editingStop && (
+        <EditStopModal
+          stop={editingStop}
+          onSave={data => handleSaveEditStop(editingStop, data)}
+          onClose={() => setEditingStop(null)}
+          saving={savingStop}
+          onDelete={() => requestDeleteStop(editingStop)}
+          canDelete={canDeleteStopFn(editingStop)}
+          isDeleting={deleting && pendingDeleteStop?.id === editingStop.id}
+        />
+      )}
+
+      {/* Delete confirmation — opened from sidebar Trash icon OR EditStopModal's Delete */}
+      {pendingDeleteStop && (
+        <ConfirmModal
+          isOpen={true}
+          title="Delete this stop?"
+          message={buildDeleteConfirmMessage(pendingDeleteStop)}
+          confirmLabel="Delete stop"
+          cancelLabel="Keep it"
+          onConfirm={confirmDeleteStop}
+          onCancel={() => { if (!deleting) { setPendingDeleteStop(null); setDeleteError(null) } }}
+          danger
+          isConfirming={deleting}
+        />
       )}
 
       {/* Mark-completed confirmation */}
