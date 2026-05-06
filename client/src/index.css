@@ -105,6 +105,12 @@
      - `.gm-style-iw-tc`       (newer API: tail in its own SVG container)
    DevTools diagnostic confirmed `.gm-style-iw-tc` is the actual X-shape
    element on the currently-loaded API version.
+   `visibility: hidden` rather than `display: none`: Google's InfoWindow keeps
+   the tail DOM mounted between popup transitions and uses its layout box for
+   positioning math when the user switches between stops. `display: none`
+   removed the box entirely, leaking a "ghost popup" across stop switches.
+   `visibility: hidden` keeps the box (so layout math works) while making the
+   tail invisible.
    This is the ONLY rule. We deliberately do NOT add `position: relative` on
    `.gm-style-iw-c`, do NOT add an `::after` triangle, and do NOT touch
    `.gm-style-iw-d` — commit 60cc431 tried those and broke the popup
@@ -112,5 +118,5 @@
    custom tail. Popup is a clean rounded card with no marker pointer. */
 .gm-style .gm-style-iw-t::after,
 .gm-style .gm-style-iw-tc {
-  display: none !important;
+  visibility: hidden !important;
 }
