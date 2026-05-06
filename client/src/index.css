@@ -100,17 +100,17 @@
 /* ─── Google Maps InfoWindow tail override ──────────────────────────────────
    The default tail is a rotated white square whose diagonal corners visually
    form an X-shape, mistaken for a close button when it overlaps the popup's
-   "Book this stop!" CTA. Hide it. We deliberately do NOT touch
-   `.gm-style-iw-c` (positioning math), `.gm-style-iw-tc` (content wrapper in
-   recent API versions), or `.gm-style-iw-d` (content area). Google's chrome
-   layout depends on those staying untouched — commit 60cc431 tried to and
-   broke the popup; this is the minimal-blast-radius revert.
-   The trade-off: no custom tail. The popup is just a clean rounded card with
-   no pointer to the marker. Acceptable v1 — the original bug was "X-shape
-   over Book button," and removing it without breaking content is the
-   priority. A cleaner custom triangle can be added later via a different
-   mechanism (e.g. rendered inside StopPopup with margin-bottom: -8px on a
-   wrapper that escapes the card, or a custom OverlayView). */
-.gm-style .gm-style-iw-t::after {
+   "Book this stop!" CTA. Hide both API variants:
+     - `.gm-style-iw-t::after` (older API: tail drawn as a pseudo-element)
+     - `.gm-style-iw-tc`       (newer API: tail in its own SVG container)
+   DevTools diagnostic confirmed `.gm-style-iw-tc` is the actual X-shape
+   element on the currently-loaded API version.
+   This is the ONLY rule. We deliberately do NOT add `position: relative` on
+   `.gm-style-iw-c`, do NOT add an `::after` triangle, and do NOT touch
+   `.gm-style-iw-d` — commit 60cc431 tried those and broke the popup
+   (empty content + detached "Book this stop!" button). Trade-off: no
+   custom tail. Popup is a clean rounded card with no marker pointer. */
+.gm-style .gm-style-iw-t::after,
+.gm-style .gm-style-iw-tc {
   display: none !important;
 }
