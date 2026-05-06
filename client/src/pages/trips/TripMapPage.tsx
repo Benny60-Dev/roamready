@@ -878,11 +878,20 @@ export default function TripMapPage() {
       // and give the first stop the combined 'S/H' badge instead.
       if (combinedSH && isLast && !isFirst) return
 
-      const kind  = classifyStop(stop)
       // Combined-marker case keeps the 'S/H' shape but renders as 'S/F' to
       // match the "Start · Finish" label and the H→F transform applied to
       // every other endpoint marker.
       const badge = combinedSH && isFirst ? 'S/F' : formatStopBadgeMarker(stopBadges[stop.id])
+      // Endpoint stops (start, return-home, or one-way finish) all share the
+      // 'home' orange color so the trip's two anchors are visually distinct
+      // from the destinations between them. classifyStop only knows about
+      // stop.type === 'HOME', so override it here using the badge — which
+      // already encodes endpoint semantics correctly (loop trips end with
+      // type=DESTINATION at the home city, badged 'H'; one-way trips end
+      // with badge 'F').
+      const rawBadge = stopBadges[stop.id]
+      const isEndpoint = rawBadge === 'S' || rawBadge === 'H' || rawBadge === 'F'
+      const kind: MarkerKind = isEndpoint ? 'home' : classifyStop(stop)
 
       // Layer visibility — HOME (start) always shows
       if (kind !== 'home') {
@@ -1332,7 +1341,10 @@ export default function TripMapPage() {
                     const isEndpoint = badge === 'S' || badge === 'H' || badge === 'F'
                     // Marker color uses badge-based detection so a return-home
                     // loop's final stop (typed DESTINATION) still gets home color.
-                    const isHomeMarker = badge === 'S' || badge === 'H'
+                    // 'F' (one-way trip's finish elsewhere) shares the same
+                    // orange treatment as 'S'/'H' — endpoints are anchors,
+                    // not destinations.
+                    const isEndpointMarker = badge === 'S' || badge === 'H' || badge === 'F'
                     const hasAlert = stopHasAlerts(weatherData[stop.id])
                     const alerts   = stopAlerts(weatherData[stop.id])
 
@@ -1401,7 +1413,7 @@ export default function TripMapPage() {
                       >
                         <div
                           className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
-                          style={{ backgroundColor: isHomeMarker ? MC.home : colorForStop(stop) }}
+                          style={{ backgroundColor: isEndpointMarker ? MC.home : colorForStop(stop) }}
                         >
                           {formatStopBadgeMarker(badge)}
                         </div>
