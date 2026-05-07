@@ -199,13 +199,15 @@ export async function getTravelProfile(req: AuthRequest, res: Response, next: Ne
 export async function upsertTravelProfile(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     // Body validated via TravelProfileUpsertSchema in routes/users.ts.
-    // Unknown fields are rejected with .strict(); legacy fields (adults,
-    // children, hasPets, petDetails, accessibilityNeeds, militaryStatus,
-    // firstResponder) accepted only until Travel Party Phase C cuts them.
+    // Strip server-managed fields the client may have round-tripped — Prisma
+    // would error or write stale values if they reached the upsert. The
+    // schema accepts these four keys (so .strict() doesn't 400 the request)
+    // but they're discarded here. userId on create is set from req.user!.id.
+    const { id, userId, createdAt, updatedAt, ...data } = req.body
     const profile = await prisma.travelProfile.upsert({
       where: { userId: req.user!.id },
-      update: req.body,
-      create: { ...req.body, userId: req.user!.id },
+      update: data,
+      create: { ...data, userId: req.user!.id },
     })
     res.json(profile)
   } catch (err) { next(err) }

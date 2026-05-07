@@ -7,9 +7,14 @@ import { z } from 'zod'
  * .strict() at the root rejects unknown keys outright (rather than silently
  * stripping) so a typo or malicious payload surfaces as a 400.
  *
- * OMITTED server-managed fields (rejected by .strict() if the client sends them):
- *   - id, createdAt, updatedAt — never client-writable
- *   - userId — keyed off req.user!.id; would let a user re-parent the row
+ * SERVER-MANAGED fields (id, userId, createdAt, updatedAt) are accepted by
+ * the schema but stripped in the controller before the Prisma upsert. The
+ * client round-trips them when it fetches the existing profile, edits a
+ * field, and PUTs the whole object back — rejecting them at the schema
+ * level would 400 every save from TravelStylePage / AccessibilityPage.
+ * They reach validation, then the controller destructures them out so they
+ * never touch Prisma. userId on the create branch is set from req.user!.id,
+ * not the body, so a client can't re-parent the row even by trying.
  *
  * SECURITY NOTE — militaryStatus / firstResponder are gated enums (not free
  * strings) because campgrounds.ts:409 (getMilitary) uses a truthy check on
@@ -67,6 +72,16 @@ export const TravelProfileUpsertSchema = z
       .enum(['', 'POLICE', 'FIRE', 'EMT', 'HEALTHCARE'])
       .nullable()
       .optional(),
+
+    // ─── Server-managed (accepted from round-trip but stripped before write) ──
+    // These fields exist on the persisted row and the client may include them
+    // in PUT payloads when sending back an edited copy of a fetched profile.
+    // We accept them at the schema level so .strict() doesn't reject the
+    // payload, then the controller strips them before passing to Prisma.
+    id: z.string().optional(),
+    userId: z.string().optional(),
+    createdAt: z.union([z.string(), z.date()]).optional(),
+    updatedAt: z.union([z.string(), z.date()]).optional(),
   })
   .strict()
 
