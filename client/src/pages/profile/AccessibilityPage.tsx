@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Save } from 'lucide-react'
 import { usersApi } from '../../services/api'
@@ -6,7 +6,19 @@ import { usersApi } from '../../services/api'
 export default function AccessibilityPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const { register, handleSubmit } = useForm()
+  const { register, handleSubmit, reset } = useForm()
+
+  // Mirrors TravelStylePage's mount-fetch pattern. accessibilityNeeds is a
+  // JSON column on TravelProfile; we hydrate the form from its inner shape
+  // (boolean flags + a free-form notes string) so saved values render on
+  // refresh. Falls back to {} when the user has no profile / no saved
+  // accessibility data yet, so checkboxes start unchecked instead of
+  // crashing on a null reset.
+  useEffect(() => {
+    usersApi.getTravelProfile().then(res => {
+      if (res.data) reset(res.data.accessibilityNeeds ?? {})
+    })
+  }, [])
 
   async function onSubmit(data: any) {
     setSaving(true)
