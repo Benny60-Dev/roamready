@@ -4,7 +4,11 @@ import { Check } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { usersApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
-import { VehicleType } from '../../types'
+import { VehicleType, TowedType } from '../../types'
+
+// Local UI shape — 'NONE' is the implicit default; serialized into
+// isTowing / towedType when the rig payload is built.
+type TowingChoice = 'NONE' | 'VEHICLE' | 'TRAILER'
 
 const VEHICLE_OPTIONS: { type: VehicleType; emoji: string; label: string; sub: string }[] = [
   { type: 'RV_CLASS_A', emoji: '🚌', label: 'Class A Motorhome', sub: 'Large motorhome, 30-45ft' },
@@ -23,6 +27,7 @@ type Step = 'vehicle' | 'rig' | 'style' | 'done'
 export default function OnboardingPage() {
   const [step, setStep] = useState<Step>('vehicle')
   const [vehicleType, setVehicleType] = useState<VehicleType | null>(null)
+  const [towingChoice, setTowingChoice] = useState<TowingChoice>('NONE')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   useAuthStore()
@@ -45,7 +50,35 @@ export default function OnboardingPage() {
     if (!vehicleType) return
     setLoading(true)
     try {
-      await usersApi.createRig({ ...data, vehicleType, isDefault: true })
+      // Translate the towingChoice radio into the structured backend fields.
+      // TRAILER drops year/make/model since the form doesn't collect them; we
+      // null them out explicitly so a stale value can never sneak through.
+      const isTowing = towingChoice !== 'NONE'
+      const towedType: TowedType | null = isTowing ? (towingChoice as TowedType) : null
+      const towedFields = isTowing
+        ? {
+            towedType,
+            towedYear: towingChoice === 'VEHICLE' ? data.towedYear : null,
+            towedMake: towingChoice === 'VEHICLE' ? data.towedMake : null,
+            towedModel: towingChoice === 'VEHICLE' ? data.towedModel : null,
+            towedLength: data.towedLength ?? null,
+            towedLicensePlate: data.towedLicensePlate ?? null,
+          }
+        : {
+            towedType: null,
+            towedYear: null,
+            towedMake: null,
+            towedModel: null,
+            towedLength: null,
+            towedLicensePlate: null,
+          }
+      await usersApi.createRig({
+        ...data,
+        vehicleType,
+        isDefault: true,
+        isTowing,
+        ...towedFields,
+      })
       setStep('style')
     } catch (e) {
       console.error(e)
@@ -163,6 +196,108 @@ export default function OnboardingPage() {
                   </div>
                 </div>
               )}
+
+              {/* License plate */}
+              <div>
+                <label className="label">License plate</label>
+                <input
+                  className="input uppercase"
+                  style={{ textTransform: 'uppercase' }}
+                  placeholder="ABC-1234"
+                  {...rigForm.register('licensePlate')}
+                />
+                <p className="mt-1 text-xs text-gray-400">Most campgrounds ask for this at check-in.</p>
+              </div>
+
+              {/* Towing question — gated to motorhomes. Travel trailers / fifth
+                  wheels ARE the thing being towed; asking is nonsense for them. */}
+              {(vehicleType === 'RV_CLASS_A' || vehicleType === 'RV_CLASS_B' || vehicleType === 'RV_CLASS_C') && (
+                <>
+                  <div>
+                    <label className="label">Are you towing?</label>
+                    <div className="grid grid-cols-3 gap-2 mt-1">
+                      {([
+                        { val: 'NONE', label: 'Not towing' },
+                        { val: 'VEHICLE', label: 'Towing a vehicle' },
+                        { val: 'TRAILER', label: 'Towing a trailer' },
+                      ] as { val: TowingChoice; label: string }[]).map(opt => (
+                        <button
+                          key={opt.val}
+                          type="button"
+                          onClick={() => setTowingChoice(opt.val)}
+                          className={`px-3 py-2 rounded-xl text-sm border transition-colors ${
+                            towingChoice === opt.val
+                              ? 'border-[#1F6F8B] bg-[#E0F0F4] text-[#1F6F8B] font-medium'
+                              : 'border-gray-200 bg-white text-gray-700 hover:border-[#1F6F8B]/40'
+                          }`}
+                          style={{ borderWidth: '0.5px' }}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {towingChoice !== 'NONE' && (
+                    <div className="rounded-xl bg-gray-50 p-4 space-y-3">
+                      <p className="text-sm font-medium text-gray-700">
+                        {towingChoice === 'VEHICLE' ? 'About your toad' : 'About your trailer'}
+                      </p>
+                      {towingChoice === 'VEHICLE' && (
+                        <>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div>
+                              <label className="label">Year</label>
+                              <input type="number" className="input" placeholder="2019" {...rigForm.register('towedYear', { valueAsNumber: true })} />
+                            </div>
+                            <div>
+                              <label className="label">Make</label>
+                              <input className="input" placeholder="Jeep" {...rigForm.register('towedMake')} />
+                            </div>
+                            <div>
+                              <label className="label">Model</label>
+                              <input className="input" placeholder="Wrangler" {...rigForm.register('towedModel')} />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="label">Length (ft)</label>
+                              <input type="number" step="0.5" className="input" placeholder="14" {...rigForm.register('towedLength', { valueAsNumber: true })} />
+                            </div>
+                            <div>
+                              <label className="label">License plate</label>
+                              <input
+                                className="input uppercase"
+                                style={{ textTransform: 'uppercase' }}
+                                placeholder="XYZ-5678"
+                                {...rigForm.register('towedLicensePlate')}
+                              />
+                            </div>
+                          </div>
+                        </>
+                      )}
+                      {towingChoice === 'TRAILER' && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="label">Length (ft)</label>
+                            <input type="number" step="0.5" className="input" placeholder="14" {...rigForm.register('towedLength', { valueAsNumber: true })} />
+                          </div>
+                          <div>
+                            <label className="label">License plate</label>
+                            <input
+                              className="input uppercase"
+                              style={{ textTransform: 'uppercase' }}
+                              placeholder="XYZ-5678"
+                              {...rigForm.register('towedLicensePlate')}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={skipRig} className="btn-ghost flex-1">Skip for now</button>
                 <button type="submit" disabled={loading} className="btn-primary flex-1">

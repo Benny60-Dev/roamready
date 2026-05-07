@@ -3,14 +3,15 @@ import { useParams, useSearchParams, Link } from 'react-router-dom'
 import {
   CheckCircle, AlertTriangle, ExternalLink,
   Phone, MapPin, Globe, ChevronDown, ChevronUp, Loader, Check,
-  X, Users, PawPrint, Tag, Calendar,
+  X, Users, PawPrint, Tag, Calendar, BadgeInfo,
 } from 'lucide-react'
-import { tripsApi, campgroundsApi, bookingsApi } from '../../services/api'
-import { Trip, Stop, Campground } from '../../types'
+import { tripsApi, campgroundsApi, bookingsApi, usersApi } from '../../services/api'
+import { Trip, Stop, Campground, Rig } from '../../types'
 import { useAuthStore } from '../../store/authStore'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge } from '../../utils/stopBadge'
 import { useUIStore } from '../../store/uiStore'
 import ConfirmModal from '../../components/ui/ConfirmModal'
+import RigInfoModal from '../../components/trip/RigInfoModal'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -403,6 +404,7 @@ function RecommendedCampgroundCard({
   onSelectCampground,
   onStopUpdated,
   onUnbook,
+  onOpenRigInfo,
 }: {
   cg: Campground
   stop: Stop
@@ -414,6 +416,9 @@ function RecommendedCampgroundCard({
   onSelectCampground: () => void
   onStopUpdated: (stopId: string, data: Partial<Stop>) => void
   onUnbook: (stop: Stop) => void
+  // Opens the page-level RigInfoModal. Hosted at the page so a single instance
+  // is shared across all stops' cards rather than duplicated per card.
+  onOpenRigInfo: () => void
 }) {
   const isConfirmed = stop.campgroundId === cg.id && stop.bookingStatus === 'CONFIRMED'
   const mapQuery = [cg.name, cg.address].filter(Boolean).join(' ')
@@ -496,6 +501,16 @@ function RecommendedCampgroundCard({
             className="text-xs text-[#1F6F8B] hover:text-[#134756] underline underline-offset-2 transition-colors w-full text-center py-1"
           >
             Already booked? Record your confirmation #
+          </button>
+          {/* My rig info quick-access — opens the rig modal so users can grab their plate,
+              dimensions, etc. at campground check-in without leaving this page. */}
+          <button
+            onClick={onOpenRigInfo}
+            className="text-xs text-[#1F6F8B] hover:text-[#134756] hover:underline underline-offset-2 transition-colors w-full text-center py-1 inline-flex items-center justify-center gap-1.5"
+          >
+            <BadgeInfo size={12} />
+            My rig info
+            <span className="text-[11px] text-gray-400">(license plate, dimensions)</span>
           </button>
         </div>
       )}
@@ -684,9 +699,25 @@ export default function TripBookingPage() {
   const [draftSelections, setDraftSelections] = useState<Record<string, Campground>>({})
   const [unbookTarget, setUnbookTarget] = useState<Stop | null>(null)
   const [unbooking, setUnbooking] = useState(false)
+  // Rig info modal state. The default rig is fetched once on mount and shared
+  // across all stops' cards so we don't refetch per card open.
+  const [rigInfoOpen, setRigInfoOpen] = useState(false)
+  const [defaultRig, setDefaultRig] = useState<Rig | null>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const { hasAccess, user } = useAuthStore()
   const { openPaywall } = useUIStore()
+
+  // Pull the user's default rig once. If they have no rig (or no default flag
+  // set), we still render the modal but it shows an empty state with a link
+  // to /profile/rig. .catch is a no-op — failing to load the rig should never
+  // block the booking page.
+  useEffect(() => {
+    usersApi.getRigs().then(res => {
+      const rigs = (res.data ?? []) as Rig[]
+      const def = rigs.find(r => r.isDefault) ?? rigs[0] ?? null
+      setDefaultRig(def)
+    }).catch(() => {})
+  }, [])
 
   // Load trip — honor ?stopId param from incoming navigation
   useEffect(() => {
@@ -1008,6 +1039,7 @@ export default function TripBookingPage() {
             onSelectCampground={() => handleSelectCampground(stop, recommended)}
             onStopUpdated={handleStopUpdated}
             onUnbook={(stop) => setUnbookTarget(stop)}
+            onOpenRigInfo={() => setRigInfoOpen(true)}
           />
         ) : cgs?.length === 0 ? (
           // Reservation Honesty: when RIDB returns nothing for this location, surface
@@ -1295,6 +1327,12 @@ export default function TripBookingPage() {
         onConfirm={handleUnbook}
         onCancel={() => !unbooking && setUnbookTarget(null)}
         isConfirming={unbooking}
+      />
+
+      <RigInfoModal
+        rig={defaultRig}
+        isOpen={rigInfoOpen}
+        onClose={() => setRigInfoOpen(false)}
       />
     </div>
   )

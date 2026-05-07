@@ -35,6 +35,7 @@ import ReservationsPage from './pages/ReservationsPage'
 // Profile pages
 import ProfilePage from './pages/profile/ProfilePage'
 import RigPage from './pages/profile/RigPage'
+import EditRigPage from './pages/profile/EditRigPage'
 import TravelStylePage from './pages/profile/TravelStylePage'
 import MembershipsPage from './pages/profile/MembershipsPage'
 import AccessibilityPage from './pages/profile/AccessibilityPage'
@@ -128,6 +129,7 @@ export default function App() {
           <Route path="/reservations" element={<ReservationsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/profile/rig" element={<RigPage />} />
+          <Route path="/profile/rig/:id/edit" element={<EditRigPage />} />
           <Route path="/profile/style" element={<TravelStylePage />} />
           <Route path="/profile/memberships" element={<MembershipsPage />} />
           <Route path="/profile/accessibility" element={<AccessibilityPage />} />

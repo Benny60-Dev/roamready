@@ -102,12 +102,56 @@ export async function getRigs(req: AuthRequest, res: Response, next: NextFunctio
   } catch (err) { next(err) }
 }
 
+// ─── Rig write-allowlist ─────────────────────────────────────────────────────
+// Explicit field allowlist for createRig / updateRig. Replaces the previous
+// req.body passthrough. Anything not listed here is silently dropped — that
+// includes id / userId / createdAt / updatedAt (managed by Prisma) and the
+// legacy free-form `towVehicle` / `towingSetup` columns (deprecated since the
+// rig-towing-and-plate change; structured fields below are the source of truth).
+function pickRigInput(body: any) {
+  const {
+    vehicleType,
+    year, make, model,
+    length, height,
+    fuelType, mpg, tankSize,
+    slideouts, electricalAmps,
+    isToyHauler, garageLength, gvwr, toys, terrainTypes,
+    isVan, vanLength,
+    powerSetup, waterCapacity,
+    hasStarlink, isRemoteWorker,
+    isCamper, sleepSetup, isOffRoad,
+    isDefault, currentMiles,
+    // Plate + structured towing
+    licensePlate,
+    isTowing, towedType,
+    towedYear, towedMake, towedModel, towedLength, towedLicensePlate,
+  } = body ?? {}
+  return {
+    vehicleType,
+    year, make, model,
+    length, height,
+    fuelType, mpg, tankSize,
+    slideouts, electricalAmps,
+    isToyHauler, garageLength, gvwr, toys, terrainTypes,
+    isVan, vanLength,
+    powerSetup, waterCapacity,
+    hasStarlink, isRemoteWorker,
+    isCamper, sleepSetup, isOffRoad,
+    isDefault, currentMiles,
+    licensePlate,
+    isTowing, towedType,
+    towedYear, towedMake, towedModel, towedLength, towedLicensePlate,
+  }
+}
+
 export async function createRig(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.id
-    const data = { ...req.body, userId }
+    const picked = pickRigInput(req.body)
+    const data: any = { ...picked, userId }
 
-    // If first rig, set as default
+    // If first rig, set as default. Honors caller's isDefault if explicitly true,
+    // otherwise auto-sets when count is zero. Same behavior as before the allowlist.
     const count = await prisma.rig.count({ where: { userId } })
     if (count === 0) data.isDefault = true
 
@@ -130,7 +174,8 @@ export async function updateRig(req: AuthRequest, res: Response, next: NextFunct
     const rig = await prisma.rig.findFirst({ where: { id: req.params.id, userId: req.user!.id } })
     if (!rig) throw new AppError('Rig not found', 404)
 
-    const updated = await prisma.rig.update({ where: { id: req.params.id }, data: req.body })
+    const data: any = pickRigInput(req.body)
+    const updated = await prisma.rig.update({ where: { id: req.params.id }, data })
     res.json(updated)
   } catch (err) { next(err) }
 }

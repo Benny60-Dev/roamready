@@ -1,5 +1,6 @@
 export type SubscriptionTier = 'FREE' | 'PRO' | 'PRO_PLUS'
 export type VehicleType = 'RV_CLASS_A' | 'RV_CLASS_B' | 'RV_CLASS_C' | 'FIFTH_WHEEL' | 'TRAVEL_TRAILER' | 'TOY_HAULER' | 'POP_UP' | 'VAN' | 'CAR_CAMPING'
+export type TowedType = 'VEHICLE' | 'TRAILER'
 export type TripStatus = 'PLANNING' | 'ACTIVE' | 'COMPLETED' | 'DRAFT'
 export type StopType = 'DESTINATION' | 'OVERNIGHT_ONLY' | 'HOME'
 export type BookingStatus = 'NOT_BOOKED' | 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'WAITLISTED'
@@ -68,6 +69,17 @@ export interface Rig {
   isOffRoad: boolean
   isDefault: boolean
   currentMiles?: number
+  // Plate + structured towing — see prisma/schema.prisma for semantics. The
+  // legacy free-form towVehicle / towingSetup fields above are deprecated and
+  // no longer written by the client; new code should use the structured fields.
+  licensePlate?: string
+  isTowing?: boolean
+  towedType?: TowedType
+  towedYear?: number
+  towedMake?: string
+  towedModel?: string
+  towedLength?: number
+  towedLicensePlate?: string
   createdAt: string
 }
 

@@ -89,6 +89,25 @@ model Rig {
   isOffRoad      Boolean     @default(false)
   isDefault      Boolean     @default(false)
   currentMiles   Int?
+  // ─── Plate + structured towing (commit: rig towing + plate, May 2026) ───
+  // licensePlate   = the rig's own plate (motorhome OR trailer/fifth-wheel itself)
+  // isTowing       = true only for motorhomes that are flat-towing a vehicle
+  //                  or pulling a trailer behind them. Fifth wheels and travel
+  //                  trailers ARE the thing being towed and should leave this
+  //                  false. The UI gates the "Are you towing?" question.
+  // towedType      = VEHICLE (toad / dinghy) or TRAILER (utility / cargo / boat).
+  // towed* fields  = describe the towed unit. towedYear/Make/Model only meaningful
+  //                  for VEHICLE; TRAILER usually has just length + plate.
+  // The legacy free-form towVehicle / towingSetup columns above are deprecated
+  // and no longer written to — kept around for rollback safety, dropped later.
+  licensePlate       String?
+  isTowing           Boolean      @default(false)
+  towedType          TowedType?
+  towedYear          Int?
+  towedMake          String?
+  towedModel         String?
+  towedLength        Float?
+  towedLicensePlate  String?
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
   maintenanceItems MaintenanceItem[]
@@ -104,6 +123,11 @@ enum VehicleType {
   POP_UP
   VAN
   CAR_CAMPING
+}
+
+enum TowedType {
+  VEHICLE
+  TRAILER
 }
 
 model TravelProfile {
