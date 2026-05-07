@@ -1,20 +1,18 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Send, MapPin, Tent, Users, Loader, Mic, MicOff } from 'lucide-react'
+import { Send, MapPin, Tent, Users, Loader } from 'lucide-react'
 import { aiApi, sessionsApi, tripsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import { ChatMessage } from '../types'
 import BottomSheet from '../components/ui/BottomSheet'
 import SessionTipCard from '../components/sessions/SessionTipCard'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
+import { useVoiceInput } from '../hooks/useVoiceInput'
+import { VoiceInputButton } from '../components/VoiceInputButton'
 import { selectGreeting } from '../utils/greeting'
 
-declare global {
-  interface Window {
-    SpeechRecognition: typeof SpeechRecognition
-    webkitSpeechRecognition: typeof SpeechRecognition
-  }
-}
+// Window augmentation for SpeechRecognition / webkitSpeechRecognition lives
+// in client/src/types/global.d.ts now — see useVoiceInput hook for usage.
 
 // Take the first 40 chars of a user message, cut at the last word boundary if reasonable.
 function deriveTitle(text: string): string {
@@ -70,16 +68,22 @@ export default function SessionPage() {
   const [itinerary, setItinerary] = useState<any>(null)
   const [creating, setCreating] = useState(false)
   const [buildError, setBuildError] = useState<string | null>(null)
-  const [listening, setListening] = useState(false)
-  const [speechSupported, setSpeechSupported] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [greeting, setGreeting] = useState<string | null>(null)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const recognitionRef = useRef<SpeechRecognition | null>(null)
   const { user } = useAuthStore()
   const navigate = useNavigate()
+
+  // Apple-style press-to-start / press-to-stop dictation. The hook captures
+  // whatever the user has already typed before tapping the mic so dictation
+  // extends rather than overwrites. See hooks/useVoiceInput.ts for the
+  // continuous + interimResults config.
+  const { supported: speechSupported, listening, toggleListening } = useVoiceInput({
+    onTranscript: (text) => setInput(text),
+    onStart: () => input,
+  })
 
   // ── Hydrate session from server ──────────────────────────────────────────────
   useEffect(() => {
@@ -165,37 +169,6 @@ export default function SessionPage() {
       ...(sessionTitle ? { title: sessionTitle } : {}),
     }
   )
-
-  useEffect(() => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
-    setSpeechSupported(!!SR)
-  }, [])
-
-  const stopListening = useCallback(() => {
-    if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null }
-    setListening(false)
-  }, [])
-
-  const toggleListening = useCallback(() => {
-    if (listening) { stopListening(); return }
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SR) return
-    const rec = new SR()
-    rec.continuous = false
-    rec.interimResults = false
-    rec.lang = 'en-US'
-    rec.onstart  = () => setListening(true)
-    rec.onresult = (e: SpeechRecognitionEvent) => {
-      const t = e.results[0][0].transcript
-      setInput(prev => prev ? `${prev} ${t}` : t)
-    }
-    rec.onerror = () => { setListening(false); recognitionRef.current = null }
-    rec.onend   = () => { setListening(false); recognitionRef.current = null }
-    recognitionRef.current = rec
-    rec.start()
-  }, [listening, stopListening])
-
-  useEffect(() => () => stopListening(), [stopListening])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -431,27 +404,16 @@ export default function SessionPage() {
                     disabled={typing}
                   />
                   {speechSupported && (
-                    <button
-                      type="button"
+                    <VoiceInputButton
+                      listening={listening}
                       onClick={toggleListening}
                       disabled={typing}
-                      title={listening ? 'Stop listening' : 'Speak your message'}
-                      className={`relative flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${
-                        listening
-                          ? 'bg-red-50 text-red-600 hover:bg-red-100'
-                          : 'text-gray-500 hover:bg-gray-100'
-                      }`}
-                    >
-                      {listening && (
-                        <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                      )}
-                      {listening ? <MicOff size={16} /> : <Mic size={16} />}
-                    </button>
+                    />
                   )}
                   <button
                     type="button"
                     onClick={() => sendMessage()}
-                    disabled={!input.trim() || typing}
+                    disabled={!input.trim() || typing || listening}
                     aria-label="Send message"
                     className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ backgroundColor: '#F7A829' }}
@@ -579,26 +541,15 @@ export default function SessionPage() {
                   disabled={typing}
                 />
                 {speechSupported && (
-                  <button
-                    type="button"
+                  <VoiceInputButton
+                    listening={listening}
                     onClick={toggleListening}
                     disabled={typing}
-                    title={listening ? 'Stop listening' : 'Speak your message'}
-                    className={`relative px-3 rounded-lg border transition-colors flex items-center justify-center ${
-                      listening
-                        ? 'bg-red-50 border-red-300 text-red-600 hover:bg-red-100'
-                        : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                    }`}
-                  >
-                    {listening && (
-                      <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                    )}
-                    {listening ? <MicOff size={16} /> : <Mic size={16} />}
-                  </button>
+                  />
                 )}
                 <button
                   onClick={() => sendMessage()}
-                  disabled={!input.trim() || typing}
+                  disabled={!input.trim() || typing || listening}
                   className="btn-primary px-3 flex items-center gap-1"
                 >
                   {typing ? <Loader size={16} className="animate-spin" /> : <Send size={16} />}

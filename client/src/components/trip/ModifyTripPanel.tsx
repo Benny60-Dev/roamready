@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { X, Send, Wand2 } from 'lucide-react'
 import { aiApi, tripsApi } from '../../services/api'
 import { Trip, StopType } from '../../types'
+import { useVoiceInput } from '../../hooks/useVoiceInput'
+import { VoiceInputButton } from '../VoiceInputButton'
 
 // ─── Quick suggestion chips ───────────────────────────────────────────────────
 
@@ -107,6 +109,14 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
   const [applying, setApplying] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Apple-style press-to-start / press-to-stop dictation. The hook captures
+  // whatever the user has already typed before tapping the mic so dictation
+  // extends rather than overwrites. See hooks/useVoiceInput.ts.
+  const { supported: speechSupported, listening, toggleListening } = useVoiceInput({
+    onTranscript: (text) => setInput(text),
+    onStart: () => input,
+  })
 
   // Load persisted modify conversation when trip changes OR panel is opened.
   // isOpen is included so the history refreshes from DB every time the panel
@@ -493,11 +503,18 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
               onKeyDown={e =>
                 e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), sendMessage())
               }
-              disabled={typing || applying}
+              disabled={typing || applying || listening}
             />
+            {speechSupported && (
+              <VoiceInputButton
+                listening={listening}
+                onClick={toggleListening}
+                disabled={typing || applying}
+              />
+            )}
             <button
               onClick={() => sendMessage()}
-              disabled={!input.trim() || typing || applying}
+              disabled={!input.trim() || typing || applying || listening}
               className="btn-primary px-3 flex items-center disabled:opacity-50"
             >
               <Send size={14} />
