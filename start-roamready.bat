@@ -43,19 +43,16 @@ if errorlevel 1 (
 )
 echo Database containers started.
 
-REM -- 4. Open Backend terminal (Dark Blue background, white text) --
-echo Opening Backend terminal...
-start "RoamReady - BACKEND (Port 3001)" cmd /k "title RoamReady - BACKEND (Port 3001) && color 1F && echo. && echo  ============================================ && echo    === RoamReady BACKEND SERVER === && echo  ============================================ && echo    Start command : npm run dev && echo    Port          : 3001 && echo    Status        : Starting... && echo  ============================================ && echo. && cd /d C:\Users\aylie\roamready\server && npm run dev"
+REM -- 4. Open Backend + Frontend + Shell as three tabs in one Windows Terminal --
+echo Opening Windows Terminal with Backend, Frontend, and Shell tabs...
+start "" wt.exe --window RoamReadyDev --title "BACKEND :3001" --tabColor "#4682B4" cmd /k "color 1F && cd /d C:\Users\aylie\roamready\server && npm run dev" ^; new-tab --title "FRONTEND :3000" --tabColor "#3CB371" cmd /k "color 2F && cd /d C:\Users\aylie\roamready\client && npm run dev" ^; new-tab --title "SHELL" --tabColor "#A9A9A9" powershell.exe -NoExit -Command "cd C:\Users\aylie\roamready"
 
-REM -- 5. Open Frontend terminal (Dark Green background, white text) --
-echo Opening Frontend terminal...
-start "RoamReady - FRONTEND (Port 3000)" cmd /k "title RoamReady - FRONTEND (Port 3000) && color 2F && echo. && echo  ============================================ && echo    === RoamReady FRONTEND (Vite) === && echo  ============================================ && echo    Start command : npm run dev && echo    Port          : 3000 && echo    Status        : Starting... && echo  ============================================ && echo. && cd /d C:\Users\aylie\roamready\client && npm run dev"
+REM -- 4b. Capture the new Windows Terminal host PID for restart-dev.bat to find later --
+echo Capturing Windows Terminal PID...
+timeout /t 2 /nobreak >nul
+powershell -NoProfile -Command "(Get-Process WindowsTerminal -ErrorAction SilentlyContinue | Sort-Object StartTime -Descending | Select-Object -First 1).Id | Out-File -FilePath \"$env:TEMP\roamready-wt.pid\" -Encoding ASCII -NoNewline"
 
-REM -- 6. Open Claude Code terminal (Dark Magenta/Purple background, white text) --
-echo Opening Claude Code terminal...
-start "RoamReady - CLAUDE CODE" cmd /k "title RoamReady - CLAUDE CODE && color 5F && echo. && echo  ============================================ && echo    === RoamReady CLAUDE CODE === && echo  ============================================ && echo    Command       : claude && echo    Directory     : C:\Users\aylie\roamready && echo    Status        : Starting... && echo  ============================================ && echo. && cd /d C:\Users\aylie\roamready && claude"
-
-REM -- 7. Wait 8 seconds then open browser --
+REM -- 5. Wait 8 seconds then open browser --
 echo Waiting 8 seconds for services to start...
 timeout /t 8 /nobreak >nul
 echo Opening http://localhost:3000 in default browser...
@@ -69,10 +66,10 @@ echo   Database : PostgreSQL on port 5432
 echo   Cache    : Redis on port 6379
 echo ============================================
 echo.
-echo  Window colours:
-echo   BLUE   = Backend  (port 3001)
-echo   GREEN  = Frontend (port 3000)
-echo   PURPLE = Claude Code
+echo  Windows Terminal tabs:
+echo    Tab 1 = Backend  (port 3001)
+echo    Tab 2 = Frontend (port 3000)
+echo    Tab 3 = Shell    (project root PowerShell)
 echo ============================================
 echo.
 echo ============================================
