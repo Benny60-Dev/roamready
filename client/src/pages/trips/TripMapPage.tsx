@@ -1131,9 +1131,21 @@ export default function TripMapPage() {
     }
   }
 
-  const center = stopsWithCoords[0]
-    ? { lat: stopsWithCoords[0].latitude!, lng: stopsWithCoords[0].longitude! }
-    : { lat: 39.5, lng: -98.35 }
+  // Memoized so the {lat,lng} object reference stays stable across re-renders
+  // when the underlying coords are unchanged. @react-google-maps/api's <GoogleMap>
+  // calls map.setCenter whenever the `center` prop reference changes, which would
+  // otherwise snap the user back to the first stop's coords on every state update
+  // (popup close, layer toggle, etc.). Deps are the bare lat/lng so we only
+  // produce a new reference when the first stop's coords actually move.
+  const firstStopLat = stopsWithCoords[0]?.latitude
+  const firstStopLng = stopsWithCoords[0]?.longitude
+  const center = useMemo(
+    () =>
+      firstStopLat != null && firstStopLng != null
+        ? { lat: firstStopLat, lng: firstStopLng }
+        : { lat: 39.5, lng: -98.35 },
+    [firstStopLat, firstStopLng],
+  )
 
   const colorForStop = (stop: Stop) => KIND_COLOR[classifyStop(stop)]
 
@@ -1600,6 +1612,13 @@ export default function TripMapPage() {
           )}
 
           {isLoaded ? (
+            // `center` is memoized at line ~1134 so its reference stays stable across
+            // re-renders when the underlying lat/lng don't change. Without that,
+            // @react-google-maps/api treats every new {lat,lng} object literal as a
+            // changed `center` prop and calls map.setCenter internally — which would
+            // snap the user back to the first stop's coords on every state update
+            // (popup close, layer toggle, etc.). The library has no defaultCenter
+            // prop, so reference stability via useMemo is the fix.
             <GoogleMap
               mapContainerStyle={MAP_CONTAINER_STYLE}
               zoom={6}
