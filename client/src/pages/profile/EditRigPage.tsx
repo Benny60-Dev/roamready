@@ -157,11 +157,11 @@ export default function EditRigPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Length (ft)</label>
-              <input type="number" step="0.5" className="input" {...register('length', { valueAsNumber: true })} />
+              <input type="number" step="0.1" min="0" className="input" {...register('length', { valueAsNumber: true })} />
             </div>
             <div>
               <label className="label">Height (ft)</label>
-              <input type="number" step="0.5" className="input" {...register('height', { valueAsNumber: true })} />
+              <input type="number" step="0.1" min="0" className="input" {...register('height', { valueAsNumber: true })} />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
@@ -176,11 +176,11 @@ export default function EditRigPage() {
             </div>
             <div>
               <label className="label">MPG</label>
-              <input type="number" step="0.5" className="input" {...register('mpg', { valueAsNumber: true })} />
+              <input type="number" step="0.1" min="0" className="input" {...register('mpg', { valueAsNumber: true })} />
             </div>
             <div>
               <label className="label">Tank (gal)</label>
-              <input type="number" className="input" {...register('tankSize', { valueAsNumber: true })} />
+              <input type="number" step="0.1" min="0" className="input" {...register('tankSize', { valueAsNumber: true })} />
             </div>
           </div>
           <div>
@@ -197,7 +197,7 @@ export default function EditRigPage() {
               <p className="text-sm font-medium text-amber-800">🏍️ Toy Hauler Details</p>
               <div>
                 <label className="label">Garage length (ft)</label>
-                <input type="number" step="0.5" className="input" {...register('garageLength', { valueAsNumber: true })} />
+                <input type="number" step="0.1" min="0" className="input" {...register('garageLength', { valueAsNumber: true })} />
               </div>
               <div>
                 <label className="label">Toys (check all that apply)</label>
@@ -277,7 +277,7 @@ export default function EditRigPage() {
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="label">Length (ft)</label>
-                          <input type="number" step="0.5" className="input" {...register('towedLength', { valueAsNumber: true })} />
+                          <input type="number" step="0.1" min="0" className="input" {...register('towedLength', { valueAsNumber: true })} />
                         </div>
                         <div>
                           <label className="label">License plate</label>
@@ -294,7 +294,7 @@ export default function EditRigPage() {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="label">Length (ft)</label>
-                        <input type="number" step="0.5" className="input" {...register('towedLength', { valueAsNumber: true })} />
+                        <input type="number" step="0.1" min="0" className="input" {...register('towedLength', { valueAsNumber: true })} />
                       </div>
                       <div>
                         <label className="label">License plate</label>

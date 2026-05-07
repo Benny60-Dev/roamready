@@ -177,22 +177,22 @@ export default function OnboardingPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">Length (ft)</label>
-                  <input type="number" className="input" placeholder="38" {...rigForm.register('length', { valueAsNumber: true })} />
+                  <input type="number" step="0.1" min="0" className="input" placeholder="38" {...rigForm.register('length', { valueAsNumber: true })} />
                 </div>
                 <div>
                   <label className="label">Height (ft)</label>
-                  <input type="number" className="input" placeholder="13" {...rigForm.register('height', { valueAsNumber: true })} />
+                  <input type="number" step="0.1" min="0" className="input" placeholder="13" {...rigForm.register('height', { valueAsNumber: true })} />
                 </div>
               </div>
               {vehicleType !== 'CAR_CAMPING' && vehicleType !== 'VAN' && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="label">MPG</label>
-                    <input type="number" step="0.1" className="input" placeholder="8" {...rigForm.register('mpg', { valueAsNumber: true })} />
+                    <input type="number" step="0.1" min="0" className="input" placeholder="8" {...rigForm.register('mpg', { valueAsNumber: true })} />
                   </div>
                   <div>
                     <label className="label">Tank (gal)</label>
-                    <input type="number" className="input" placeholder="100" {...rigForm.register('tankSize', { valueAsNumber: true })} />
+                    <input type="number" step="0.1" min="0" className="input" placeholder="100" {...rigForm.register('tankSize', { valueAsNumber: true })} />
                   </div>
                 </div>
               )}
@@ -262,7 +262,7 @@ export default function OnboardingPage() {
                           <div className="grid grid-cols-2 gap-3">
                             <div>
                               <label className="label">Length (ft)</label>
-                              <input type="number" step="0.5" className="input" placeholder="14" {...rigForm.register('towedLength', { valueAsNumber: true })} />
+                              <input type="number" step="0.1" min="0" className="input" placeholder="14" {...rigForm.register('towedLength', { valueAsNumber: true })} />
                             </div>
                             <div>
                               <label className="label">License plate</label>
@@ -280,7 +280,7 @@ export default function OnboardingPage() {
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <label className="label">Length (ft)</label>
-                            <input type="number" step="0.5" className="input" placeholder="14" {...rigForm.register('towedLength', { valueAsNumber: true })} />
+                            <input type="number" step="0.1" min="0" className="input" placeholder="14" {...rigForm.register('towedLength', { valueAsNumber: true })} />
                           </div>
                           <div>
                             <label className="label">License plate</label>
