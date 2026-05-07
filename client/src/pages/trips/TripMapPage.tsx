@@ -59,12 +59,24 @@ function coordsMatch(lat1?: number | null, lng1?: number | null, lat2?: number |
   return Math.abs(lat1 - lat2) < COORD_TOLERANCE && Math.abs(lng1 - lng2) < COORD_TOLERANCE
 }
 
-/** Creates the HTML element used as the AdvancedMarkerElement content. */
-function makeMarkerContent(kind: MarkerKind, badge: string | number | undefined): HTMLElement {
+/** Creates the HTML element used as the AdvancedMarkerElement content.
+ *  When `offset` is non-zero the rendered icon is translated in pixel space —
+ *  used by the co-located-stops deconflict pass to fan stacked markers out.
+ *  The marker's underlying lat/lng anchor stays at the stop's true coords so
+ *  the popup (which anchors to selectedStop's lat/lng) lands at the right
+ *  geographic point regardless of how the icon is offset. */
+function makeMarkerContent(
+  kind: MarkerKind,
+  badge: string | number | undefined,
+  offset: { x: number, y: number } = { x: 0, y: 0 },
+): HTMLElement {
   const div = document.createElement('div')
   const text = badge != null ? String(badge) : ''
   const fontSize = text.length > 2 ? '8px' : '11px'
   div.style.cssText = `width:26px;height:26px;border-radius:50%;background:${KIND_COLOR[kind]};border:3px solid white;display:flex;align-items:center;justify-content:center;color:white;font-size:${fontSize};font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.3);cursor:pointer;letter-spacing:-0.5px`
+  if (offset.x !== 0 || offset.y !== 0) {
+    div.style.transform = `translate(${offset.x}px, ${offset.y}px)`
+  }
   div.textContent = text
   return div
 }
@@ -870,6 +882,48 @@ export default function TripMapPage() {
     const firstStop = stopsWithCoords[0]
     const lastStop  = stopsWithCoords[stopsWithCoords.length - 1]
 
+    // Pre-pass: cluster stops that share coordinates and assign each a
+    // pixel-offset from a fixed spiral pattern. Index 0 (the first stop in
+    // trip order at a given point) stays at the true coords; index 1+ get
+    // visible offsets so they aren't buried under the index-0 marker. The
+    // offset is applied only to the marker's content div via CSS transform —
+    // the AdvancedMarkerElement's `position` stays at the true lat/lng so
+    // the popup anchor logic at the OverlayViewF render is unaffected.
+    //
+    // combinedSH already merges the round-trip start/home pair as a
+    // deliberate UX decision; the would-be-skipped last stop is excluded
+    // from the cluster scan so we don't waste an offset slot on a marker
+    // that will never render.
+    const SPIRAL_OFFSETS: Array<{ x: number, y: number }> = [
+      { x: 0,   y: 0   }, // index 0 — true coords
+      { x: 18,  y: 0   }, // right
+      { x: 0,   y: 18  }, // down
+      { x: -18, y: 0   }, // left
+      { x: 0,   y: -18 }, // up
+      { x: 18,  y: 18  }, // diag
+    ]
+    const stopOffsets = new Map<string, { x: number, y: number }>()
+    type Cluster = { lat: number, lng: number, members: string[] }
+    const clusters: Cluster[] = []
+    for (const s of stopsWithCoords) {
+      const isFirstStop = s.id === firstStop?.id
+      const isLastStop  = s.id === lastStop?.id
+      if (combinedSH && isLastStop && !isFirstStop) continue
+      const lat = s.latitude!, lng = s.longitude!
+      const existing = clusters.find(c => coordsMatch(c.lat, c.lng, lat, lng))
+      if (existing) {
+        existing.members.push(s.id)
+      } else {
+        clusters.push({ lat, lng, members: [s.id] })
+      }
+    }
+    for (const c of clusters) {
+      if (c.members.length < 2) continue
+      c.members.forEach((id, i) => {
+        stopOffsets.set(id, SPIRAL_OFFSETS[i] ?? { x: 0, y: 0 })
+      })
+    }
+
     stopsWithCoords.forEach(stop => {
       const isFirst = stop.id === firstStop?.id
       const isLast  = stop.id === lastStop?.id
@@ -905,12 +959,17 @@ export default function TripMapPage() {
         `lat=${stop.latitude} lng=${stop.longitude}`,
       )
 
+      // Pixel offset from the cluster pre-pass above. Solo stops get { 0, 0 }.
+      // Offset markers get a tiny zIndex bump so when their 26px icons clip
+      // their co-located neighbors (offset is 18px), they paint cleanly on top.
+      const offset = stopOffsets.get(stop.id) ?? { x: 0, y: 0 }
+      const isOffset = offset.x !== 0 || offset.y !== 0
       const marker = new window.google.maps.marker.AdvancedMarkerElement({
         position: { lat: stop.latitude!, lng: stop.longitude! },
         map:      mapInstance,
-        content:  makeMarkerContent(kind, badge),
+        content:  makeMarkerContent(kind, badge, offset),
         title:    stop.locationName,
-        zIndex:   KIND_Z[kind],
+        zIndex:   KIND_Z[kind] + (isOffset ? 1 : 0),
       })
       marker.addListener('click', () => setSelectedStop(stop))
       markersRef.current.push(marker)
