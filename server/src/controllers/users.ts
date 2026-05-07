@@ -198,6 +198,10 @@ export async function getTravelProfile(req: AuthRequest, res: Response, next: Ne
 
 export async function upsertTravelProfile(req: AuthRequest, res: Response, next: NextFunction) {
   try {
+    // Body validated via TravelProfileUpsertSchema in routes/users.ts.
+    // Unknown fields are rejected with .strict(); legacy fields (adults,
+    // children, hasPets, petDetails, accessibilityNeeds, militaryStatus,
+    // firstResponder) accepted only until Travel Party Phase C cuts them.
     const profile = await prisma.travelProfile.upsert({
       where: { userId: req.user!.id },
       update: req.body,

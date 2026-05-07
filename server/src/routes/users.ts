@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 import { validateBody } from '../middleware/validate'
-import { MembershipUpdateSchema } from '../schemas'
+import { MembershipUpdateSchema, TravelProfileUpsertSchema } from '../schemas'
 import {
   getMe,
   updateMe,
@@ -31,7 +31,7 @@ usersRouter.put('/me/rigs/:id', updateRig as any)
 usersRouter.delete('/me/rigs/:id', deleteRig as any)
 
 usersRouter.get('/me/travel-profile', getTravelProfile as any)
-usersRouter.put('/me/travel-profile', upsertTravelProfile as any)
+usersRouter.put('/me/travel-profile', validateBody(TravelProfileUpsertSchema), upsertTravelProfile as any)
 
 usersRouter.get('/me/memberships', getMemberships as any)
 usersRouter.post('/me/memberships', createMembership as any)
