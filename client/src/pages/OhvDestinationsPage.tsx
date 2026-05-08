@@ -13,7 +13,14 @@ export default function OhvDestinationsPage() {
   const rig = user?.rigs?.[0]
 
   useEffect(() => {
-    if (!hasAccess('ohvDestinations')) { openPaywall('ohvDestinations'); return }
+    if (!hasAccess('ohvDestinations')) {
+      openPaywall('ohvDestinations')
+      // Clear loading so the page renders an empty state behind the paywall
+      // instead of an infinite spinner. setLoading(false) only fires inside
+      // the .then() below, which the early-return skips.
+      setLoading(false)
+      return
+    }
     campgroundsApi.getOhv().then(res => { setDestinations(res.data); setLoading(false) })
   }, [])
 

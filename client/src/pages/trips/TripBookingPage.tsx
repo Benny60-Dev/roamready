@@ -739,7 +739,14 @@ export default function TripBookingPage() {
 
   // Load trip — honor ?stopId param from incoming navigation
   useEffect(() => {
-    if (!hasAccess('campgroundBooking')) { openPaywall('campgroundBooking'); return }
+    if (!hasAccess('campgroundBooking')) {
+      openPaywall('campgroundBooking')
+      // Critical: clear loading so the page renders an empty state behind the
+      // paywall instead of an infinite spinner. Without this, setLoading(false)
+      // only fires inside the .then() of the trip fetch, which never runs.
+      setLoading(false)
+      return
+    }
     if (!id) return
     const targetStopId = searchParams.get('stopId')
     tripsApi.get(id).then(res => {

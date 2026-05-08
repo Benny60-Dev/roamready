@@ -10,7 +10,14 @@ export default function VanDestinationsPage() {
   const { openPaywall } = useUIStore()
 
   useEffect(() => {
-    if (!hasAccess('vanDestinations')) { openPaywall('vanDestinations'); return }
+    if (!hasAccess('vanDestinations')) {
+      openPaywall('vanDestinations')
+      // Clear loading so the page renders an empty state behind the paywall
+      // instead of an infinite spinner. setLoading(false) only fires inside
+      // the .then() below, which the early-return skips.
+      setLoading(false)
+      return
+    }
     campgroundsApi.getVan().then(res => { setDestinations(res.data); setLoading(false) })
   }, [])
 
