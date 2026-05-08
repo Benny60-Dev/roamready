@@ -100,6 +100,10 @@ interface TimelineEntry {
   miles?: number
   driveHours?: number
   nightNum?: number
+  // Marks a STAY entry whose stop is a 0-night DESTINATION at the trip's home
+  // city — i.e. the round-trip return-home arrival. StayContent uses this to
+  // render "Arrived home in {city}" instead of the bare city label.
+  isReturnHome?: boolean
   departureTime: string  // HH:MM — DRIVE / OVERNIGHT next-morning depart
   checkInTime: string    // HH:MM — STAY default 15:00, OVERNIGHT default 18:00
   checkOutTime: string   // HH:MM — STAY default 11:00
@@ -190,29 +194,59 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
     // ── Destination ───────────────────────────────────────────────────────────
     } else {
       const nights = stop.nights ?? 0
-      for (let n = 0; n < nights; n++) {
-        // Prefer stop.arrivalDate + offset (authoritative after a cascade save).
-        // Fall back to currentDate when no DB date exists yet.
-        let entryDate: Date | undefined
-        if (stop.arrivalDate) {
-          entryDate = addDays(new Date(stop.arrivalDate), n)
-        } else if (currentDate) {
-          entryDate = n === 0 ? new Date(currentDate) : addDays(new Date(currentDate), n)
-        }
+      if (nights === 0) {
+        // Final-destination / return-home stop. The nights >= 1 loop below
+        // never fires when nights=0, which left a 0-night DESTINATION (the
+        // round-trip return-home convention) with a DRIVE-in entry but no
+        // arrival STAY card afterward — the timeline appeared to end mid-route.
+        // Push a single STAY entry so the arrival is visible. currentDate is
+        // intentionally NOT advanced since 0 nights contributes 0 days.
+        const homeStop = stops.find(s => s.type === 'HOME')
+        const isReturnHome =
+          !!homeStop &&
+          homeStop.locationName.trim().toLowerCase() ===
+            stop.locationName.trim().toLowerCase()
+        const entryDate = stop.arrivalDate
+          ? new Date(stop.arrivalDate)
+          : currentDate ? new Date(currentDate) : undefined
         entries.push({
           dayNum,
           date: entryDate,
-          type: n === 0 ? 'STAY' : 'ACTIVITY',
+          type: 'STAY',
           stop,
-          nightNum: n + 1,
+          nightNum: 1,
+          isReturnHome,
           departureTime: '08:00',
           checkInTime: '15:00',
           checkOutTime: '11:00',
           activities: [],
         })
         dayNum++
+      } else {
+        for (let n = 0; n < nights; n++) {
+          // Prefer stop.arrivalDate + offset (authoritative after a cascade save).
+          // Fall back to currentDate when no DB date exists yet.
+          let entryDate: Date | undefined
+          if (stop.arrivalDate) {
+            entryDate = addDays(new Date(stop.arrivalDate), n)
+          } else if (currentDate) {
+            entryDate = n === 0 ? new Date(currentDate) : addDays(new Date(currentDate), n)
+          }
+          entries.push({
+            dayNum,
+            date: entryDate,
+            type: n === 0 ? 'STAY' : 'ACTIVITY',
+            stop,
+            nightNum: n + 1,
+            departureTime: '08:00',
+            checkInTime: '15:00',
+            checkOutTime: '11:00',
+            activities: [],
+          })
+          dayNum++
+        }
+        if (currentDate) currentDate = addDays(currentDate, nights)
       }
-      if (currentDate && nights > 0) currentDate = addDays(currentDate, nights)
     }
   }
 
@@ -670,6 +704,26 @@ export default function TripSummaryPage() {
     await tripsApi.update(id, { totalNights, endDate })
     console.log(`[cascade] Updated trip totalNights=${totalNights} endDate=${endDate}`)
   }, [id, trip?.startDate])
+
+  // First-time auto-cascade for trips just promoted from a session.
+  // SessionPage.buildItinerary creates stops from the AI's itinerary JSON
+  // without any arrival/departure dates — those used to stay null until the
+  // user manually edited a stop, which caused the FINISH stop to show no
+  // arrival info on first view. Detect the all-null state once on mount and
+  // run cascade to fill them in. The ref guard prevents re-entry on the
+  // re-fetch we trigger after cascade settles.
+  const initialCascadeAttempted = useRef(false)
+  useEffect(() => {
+    if (!trip || initialCascadeAttempted.current) return
+    const tripStops = trip.stops as Stop[] | undefined
+    if (!tripStops || tripStops.length === 0) return
+    const allNullArrival = tripStops.every(s => !s.arrivalDate)
+    initialCascadeAttempted.current = true
+    if (!allNullArrival) return
+    cascadeAndSaveDates(tripStops)
+      .then(() => reloadTrip())
+      .catch(err => console.warn('[TripSummaryPage] auto-cascade failed:', err))
+  }, [trip, cascadeAndSaveDates, reloadTrip])
 
   // ── Stop mutation handlers ──────────────────────────────────────────────────
 
@@ -1647,7 +1701,9 @@ function StayContent({ entry, weather, arrival, poiMinutes }: {
         <div className="flex items-center gap-1.5 flex-wrap">
           <Tent size={12} className="text-gray-500 flex-shrink-0" />
           <span className="text-sm font-semibold text-gray-800">
-            {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
+            {entry.isReturnHome
+              ? `Arrived home in ${stop.locationName}${stop.locationState ? `, ${stop.locationState}` : ''}`
+              : `${stop.locationName}${stop.locationState ? `, ${stop.locationState}` : ''}`}
           </span>
           {arrival && (
             <>

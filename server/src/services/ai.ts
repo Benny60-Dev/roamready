@@ -138,7 +138,7 @@ Trip planning rules:
 - Be warm, knowledgeable, and conversational — like a well-traveled friend
 - Campground candidates: For every stop with nights > 0 (so EXCLUDING the HOME stop and any 0-night final-destination return), include a "campgroundCandidates" array of 3-4 plausible REAL campground names near that stop. Examples: "Polson/Flathead Lake KOA", "Westwood RV Park", "Big Arm State Park". Names ONLY — do NOT include addresses, phone numbers, websites, or descriptions. Order by your best guess of fit/quality (top of list = most likely match for this user's rig and travel style). These names will be verified against Google Places before being shown to the user, so accuracy matters more than creativity. For HOME stops and 0-night stops, omit campgroundCandidates entirely or set it to []. Keep the existing campgroundName field as null on each stop — campgroundName is reserved for the user's actual booked choice and is set later, not by you.
 
-Itinerary JSON format:
+Itinerary JSON format (Austin → Santa Fe round trip, demonstrating transit stops on BOTH outbound and return legs):
 {
   "name": "Trip name",
   "totalMiles": 0,
@@ -163,34 +163,48 @@ Itinerary JSON format:
     {
       "order": 2,
       "type": "OVERNIGHT_ONLY",
-      "locationName": "Springfield",
+      "locationName": "Lubbock",
       "locationState": "TX",
       "nights": 1,
       "campgroundName": null,
-      "campgroundCandidates": ["Mountain View RV Park", "Springfield RV Park", "Eagles Nest RV Resort"],
+      "campgroundCandidates": ["Lubbock KOA", "Loop 289 RV Park", "Buffalo Springs Lake RV Park"],
       "siteRate": 45,
       "estimatedFuel": 0,
       "hookupType": "full",
       "isPetFriendly": true,
       "isMilitaryOnly": false,
-      "pointsOfInterest": [{"name": "Prada Marfa", "durationMinutes": 15}, {"name": "Marfa Lights viewing area", "durationMinutes": 30}]
+      "pointsOfInterest": [{"name": "Buddy Holly Center", "durationMinutes": 30}]
     },
     {
       "order": 3,
       "type": "DESTINATION",
-      "locationName": "",
-      "locationState": "",
+      "locationName": "Santa Fe",
+      "locationState": "NM",
       "nights": 3,
       "campgroundName": null,
-      "campgroundCandidates": ["Example KOA", "Example State Park Campground", "Example RV Resort"],
-      "siteRate": 0,
+      "campgroundCandidates": ["Santa Fe Skies RV Park", "Hyde Memorial State Park", "Trailer Ranch RV Resort"],
+      "siteRate": 60,
       "estimatedFuel": 0,
-      "hookupType": "",
+      "hookupType": "full",
       "isPetFriendly": true,
       "isMilitaryOnly": false
     },
     {
       "order": 4,
+      "type": "OVERNIGHT_ONLY",
+      "locationName": "Lubbock",
+      "locationState": "TX",
+      "nights": 1,
+      "campgroundName": null,
+      "campgroundCandidates": ["Lubbock KOA", "Loop 289 RV Park", "Buffalo Springs Lake RV Park"],
+      "siteRate": 45,
+      "estimatedFuel": 0,
+      "hookupType": "full",
+      "isPetFriendly": true,
+      "isMilitaryOnly": false
+    },
+    {
+      "order": 5,
       "type": "DESTINATION",
       "locationName": "Austin",
       "locationState": "TX",
@@ -204,7 +218,9 @@ Itinerary JSON format:
       "isMilitaryOnly": false
     }
   ]
-}`
+}
+
+Note: the return leg (final destination → home) follows the same DRIVE-TIME CONSTRAINT as outbound legs. The example above shows transit stops on BOTH sides because the round trip exceeds maxDriveHours in either direction (Austin↔Santa Fe is ~700 mi each way, well over a single 6-hour drive). For shorter round trips that fit within maxDriveHours one-way, no transit stops are needed — go HOME → DESTINATION → HOME directly. Match the actual driving distance to the user's preference; do not add or omit transit stops mechanically.`
 
   // Filter out any role:'system' messages before sending to Anthropic.
   // The Messages API only accepts 'user' and 'assistant' roles in the messages array;
