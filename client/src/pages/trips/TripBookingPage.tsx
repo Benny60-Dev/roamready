@@ -3,7 +3,7 @@ import { useParams, useSearchParams, Link } from 'react-router-dom'
 import {
   CheckCircle, AlertTriangle, ExternalLink,
   Phone, MapPin, Globe, ChevronDown, ChevronUp, Loader, Check,
-  X, Users, PawPrint, Tag, Calendar, BadgeInfo,
+  X, Users, PawPrint, Tag, Calendar, BadgeInfo, Info,
 } from 'lucide-react'
 import { tripsApi, campgroundsApi, bookingsApi, usersApi } from '../../services/api'
 import { Trip, Stop, Campground, Rig } from '../../types'
@@ -405,6 +405,7 @@ function RecommendedCampgroundCard({
   onStopUpdated,
   onUnbook,
   onOpenRigInfo,
+  isTowing,
 }: {
   cg: Campground
   stop: Stop
@@ -419,6 +420,11 @@ function RecommendedCampgroundCard({
   // Opens the page-level RigInfoModal. Hosted at the page so a single instance
   // is shared across all stops' cards rather than duplicated per card.
   onOpenRigInfo: () => void
+  // True when the user's default rig has rig.isTowing=true. Drives the
+  // "Towing? Some campgrounds count towed vehicles…" advisory below the
+  // My-rig-info link. Passed in (vs read from auth) so the campground card
+  // doesn't need its own data dependency on the rig fetch.
+  isTowing: boolean
 }) {
   const isConfirmed = stop.campgroundId === cg.id && stop.bookingStatus === 'CONFIRMED'
   const mapQuery = [cg.name, cg.address].filter(Boolean).join(' ')
@@ -512,6 +518,18 @@ function RecommendedCampgroundCard({
             My rig info
             <span className="text-[11px] text-gray-400">(license plate, dimensions)</span>
           </button>
+          {/* Towing advisory — visible only for users whose rig has isTowing=true.
+              Some campgrounds (often national parks) count towed vehicles toward
+              site-length limits while others (often private parks) only count the
+              RV; we don't have a per-campground convention field, so the advisory
+              points users at the right question to ask rather than gating the
+              card. Not dismissable — short enough to glance past. */}
+          {isTowing && (
+            <div className="text-[11px] text-gray-500 inline-flex items-center justify-center gap-1.5 w-full text-center py-1 leading-snug">
+              <Info size={11} className="flex-shrink-0 text-gray-400" />
+              <span>Towing? Some campgrounds count towed vehicles toward site length limits — ask when you call.</span>
+            </div>
+          )}
         </div>
       )}
       <ReservationSection
@@ -1040,6 +1058,7 @@ export default function TripBookingPage() {
             onStopUpdated={handleStopUpdated}
             onUnbook={(stop) => setUnbookTarget(stop)}
             onOpenRigInfo={() => setRigInfoOpen(true)}
+            isTowing={defaultRig?.isTowing === true}
           />
         ) : cgs?.length === 0 ? (
           // Reservation Honesty: when RIDB returns nothing for this location, surface
