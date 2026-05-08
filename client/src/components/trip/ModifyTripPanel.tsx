@@ -363,9 +363,13 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
         onClick={onClose}
       />
 
-      {/* Slide-in panel */}
+      {/* Slide-in panel — h-[100dvh] (dynamic viewport height) accounts for
+          mobile browser chrome (URL bar, bottom toolbar). Strict h-full /
+          h-screen / 100vh would put ChatInput behind the chrome on mobile.
+          Older browsers without dvh support fall back gracefully via the
+          parent containing block. */}
       <div
-        className={`fixed top-0 right-0 h-full w-full sm:w-[22rem] bg-white border-l border-gray-200 flex flex-col z-40 shadow-2xl transition-transform duration-300 ease-in-out ${
+        className={`fixed top-0 right-0 h-[100dvh] w-full sm:w-[22rem] bg-white border-l border-gray-200 flex flex-col z-40 shadow-2xl transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
         style={{ borderLeftWidth: '0.5px' }}
@@ -408,8 +412,12 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
           </div>
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
+        {/* Messages — flex-1 absorbs available vertical space, min-h-0 lets
+            this child shrink below its content's intrinsic height (without it
+            a tall message list would push the ChatInput sibling offscreen).
+            Messages stack from the top via normal block flow; bottomRef +
+            scrollIntoView keep the latest message visible on new arrivals. */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2.5">
           {!historyLoaded && (
             <div className="flex justify-center pt-8">
               <div className="w-4 h-4 border-2 border-[#1F6F8B] border-t-transparent rounded-full animate-spin" />
