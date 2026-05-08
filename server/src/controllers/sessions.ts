@@ -58,13 +58,37 @@ export async function listSessions(req: AuthRequest, res: Response, next: NextFu
 
 export async function getLatestActiveSession(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const session = await prisma.planningSession.findFirst({
+    // Resume-candidate selection skips orphan empty sessions so they don't
+    // keep triggering the "Resume your last session?" prompt forever. An
+    // orphan = PLANNING + no messages + last touched > 10 min ago. These
+    // accumulate when a user taps "Start fresh" without first cancelling
+    // the previous session, since createSession leaves the prior PLANNING
+    // row untouched.
+    //
+    // Sessions that have ANY messages are always returnable (real work).
+    // Sessions with no messages but updated within 10 min are also returnable
+    // (just-created, the user might still be deciding what to type).
+    //
+    // findMany with take:5 instead of findFirst because we need a small
+    // lookahead to skip orphans and try the next-most-recent. In practice
+    // almost every user has 1-2 candidates; 5 is generous headroom.
+    const candidates = await prisma.planningSession.findMany({
       where: { userId: req.user!.id, status: 'PLANNING', tripId: null },
       orderBy: { updatedAt: 'desc' },
+      take: 5,
       select: SESSION_SELECT,
     })
-    if (!session) throw new AppError('No active session', 404)
-    res.json(session)
+
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
+    const usable = candidates.find(s => {
+      const messages = Array.isArray(s.messages) ? s.messages : []
+      if (messages.length > 0) return true
+      if (new Date(s.updatedAt) > tenMinutesAgo) return true
+      return false
+    })
+
+    if (!usable) throw new AppError('No active session', 404)
+    res.json(usable)
   } catch (err) { next(err) }
 }
 

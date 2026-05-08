@@ -43,6 +43,32 @@ export default function SessionNewPage() {
       .then(latest => {
         if (cancelled) return
         if (latest) {
+          // Skip the resume prompt for in-session navigation. Two checks:
+          //
+          // A — sessionStorage flag (explicit signal). SessionPage writes
+          //   `lastVisitedSessionId` on mount. If the user just came back from
+          //   /profile or another internal route, this id matches and we
+          //   silently route them back to the session.
+          //
+          // B — recent updatedAt window (fallback). Within 5 minutes of the
+          //   last autosave we treat the visit as in-session navigation even
+          //   if the sessionStorage flag is missing (e.g. private window
+          //   that nuked storage, or new tab that lost the flag).
+          //
+          // Only fall through to the prompt when both fail — that's the
+          // "stale return next day" case where the user genuinely needs to
+          // choose between resume and start fresh.
+          const lastVisited = sessionStorage.getItem('lastVisitedSessionId')
+          if (lastVisited === latest.id) {
+            navigate(`/sessions/${latest.id}`, { replace: true })
+            return
+          }
+          const updatedAt = new Date(latest.updatedAt).getTime()
+          const fiveMinutesAgo = Date.now() - 5 * 60 * 1000
+          if (updatedAt > fiveMinutesAgo) {
+            navigate(`/sessions/${latest.id}`, { replace: true })
+            return
+          }
           setResumeCandidate(latest)
           setChecking(false)
         } else {

@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect } from 'react'
+import { useCallback, useState, useRef, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Send, MapPin, Tent, Users, Loader } from 'lucide-react'
+import { Send, MapPin, Tent, Users, Loader, Plus, X } from 'lucide-react'
 import { aiApi, sessionsApi, tripsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import { ChatMessage } from '../types'
 import BottomSheet from '../components/ui/BottomSheet'
+import ConfirmModal from '../components/ui/ConfirmModal'
 import SessionTipCard from '../components/sessions/SessionTipCard'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
 import { useVoiceInput } from '../hooks/useVoiceInput'
@@ -13,6 +14,33 @@ import { selectGreeting } from '../utils/greeting'
 
 // Window augmentation for SpeechRecognition / webkitSpeechRecognition lives
 // in client/src/types/global.d.ts now — see useVoiceInput hook for usage.
+
+// Compact "5 minutes ago" / "yesterday" / "May 6" formatter for the header's
+// last-edited line. Same shape as SessionNewPage / SessionsPanel each have
+// inline; not worth extracting to a util for a third instance yet.
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime()
+  const now = Date.now()
+  const diff = Math.max(0, now - then)
+  const minute = 60_000
+  const hour = 60 * minute
+  const day = 24 * hour
+  if (diff < minute) return 'just now'
+  if (diff < hour) {
+    const m = Math.floor(diff / minute)
+    return `${m} minute${m === 1 ? '' : 's'} ago`
+  }
+  if (diff < day) {
+    const h = Math.floor(diff / hour)
+    return `${h} hour${h === 1 ? '' : 's'} ago`
+  }
+  if (diff < 2 * day) return 'yesterday'
+  if (diff < 7 * day) {
+    const d = Math.floor(diff / day)
+    return `${d} days ago`
+  }
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
 
 // Take the first 40 chars of a user message, cut at the last word boundary if reasonable.
 function deriveTitle(text: string): string {
@@ -70,6 +98,14 @@ export default function SessionPage() {
   const [buildError, setBuildError] = useState<string | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [greeting, setGreeting] = useState<string | null>(null)
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  // Disables the header buttons during the async create/delete dance so a
+  // double-tap can't fire two requests or navigate twice.
+  const [isProcessing, setIsProcessing] = useState(false)
+  // sessionUpdatedAt is bumped on hydration and after autosave settles —
+  // shown in the header as "Last edited 5 minutes ago" so the user knows
+  // where they left off.
+  const [sessionUpdatedAt, setSessionUpdatedAt] = useState<string | null>(null)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -84,6 +120,52 @@ export default function SessionPage() {
     onTranscript: (text) => setInput(text),
     onStart: () => input,
   })
+
+  // Mark this session as the last one the user actively visited. SessionNewPage's
+  // resume-detection uses this to skip the "Resume your last session?" prompt for
+  // in-app navigation (e.g. user taps Profile then Plan). Tab close clears
+  // sessionStorage automatically so this naturally expires per browser session.
+  // Cleared explicitly on cancel + on promote (see handleCancel + the promote
+  // success path).
+  useEffect(() => {
+    if (sessionId) {
+      sessionStorage.setItem('lastVisitedSessionId', sessionId)
+    }
+  }, [sessionId])
+
+  // "New trip" — creates a fresh session and routes to it. The current session
+  // STAYS in PLANNING status (not archived) so the user can find it via the
+  // Clock-icon SessionsPanel dropdown. Pre-writing lastVisitedSessionId for
+  // the NEW session id ensures SessionNewPage's Check A skips the prompt on
+  // the next visit if the user bounces through /sessions/new for any reason.
+  const handleNewTrip = useCallback(async () => {
+    if (isProcessing) return
+    setIsProcessing(true)
+    try {
+      const res = await sessionsApi.create({})
+      sessionStorage.setItem('lastVisitedSessionId', res.data.id)
+      navigate(`/sessions/${res.data.id}`, { replace: true })
+    } catch (err) {
+      console.error('[SessionPage] handleNewTrip failed:', err)
+      setIsProcessing(false)
+    }
+  }, [isProcessing, navigate])
+
+  // "Cancel this plan" — soft-deletes (status=ARCHIVED via DELETE) the current
+  // session, clears the visit flag, and routes to /sessions/new where
+  // SessionNewPage will see no PLANNING candidate and createFresh.
+  const handleCancel = useCallback(async () => {
+    if (!sessionId || isProcessing) return
+    setIsProcessing(true)
+    try {
+      await sessionsApi.delete(sessionId)
+      sessionStorage.removeItem('lastVisitedSessionId')
+      navigate('/sessions/new', { replace: true })
+    } catch (err) {
+      console.error('[SessionPage] handleCancel failed:', err)
+      setIsProcessing(false)
+    }
+  }, [sessionId, isProcessing, navigate])
 
   // ── Hydrate session from server ──────────────────────────────────────────────
   useEffect(() => {
@@ -102,6 +184,7 @@ export default function SessionPage() {
         if (cancelled) return
         const s = res.data
         setSessionTitle(s.title)
+        setSessionUpdatedAt(s.updatedAt)
         const raw = Array.isArray(s.messages) ? (s.messages as ChatMessage[]) : []
         // Legacy sessions persisted a seeded assistant "Fill out the form below…"
         // welcome as messages[0]. The chat-first refactor doesn't seed anymore;
@@ -264,6 +347,10 @@ export default function SessionPage() {
       )
 
       console.timeEnd('[buildItinerary] total')
+      // Session has been promoted; the user is no longer in a planning context.
+      // Clear the visit flag so SessionNewPage doesn't try to silent-route them
+      // back to a session that's now COMPLETED.
+      sessionStorage.removeItem('lastVisitedSessionId')
       navigate(`/trips/${tripId}/map`)
     } catch (e: any) {
       console.error('[buildItinerary] failed:', e)
@@ -320,6 +407,45 @@ export default function SessionPage() {
 
   return (
     <div className="flex flex-col min-h-[calc(100dvh-8rem)] md:h-[calc(100dvh-8rem)]">
+      {/* Header row — title + last-edited timestamp on the left, "New trip" /
+          "Cancel this plan" actions on the right. Sits above both branches
+          (empty state and active conversation) so it's always reachable. */}
+      <div
+        className="flex justify-between items-center px-4 py-2 border-b border-gray-100"
+        style={{ borderBottomWidth: '0.5px' }}
+      >
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-gray-900 truncate">
+            {sessionTitle || 'Planning your trip'}
+          </div>
+          {sessionUpdatedAt && (
+            <div className="text-xs text-gray-500 mt-0.5">
+              Last edited {relativeTime(sessionUpdatedAt)}
+            </div>
+          )}
+        </div>
+        <div className="flex gap-2 flex-shrink-0">
+          <button
+            type="button"
+            onClick={handleNewTrip}
+            disabled={isProcessing}
+            className="px-3 py-1.5 text-xs border border-gray-200 rounded-md hover:bg-gray-50 flex items-center gap-1 disabled:opacity-50"
+          >
+            <Plus size={13} />
+            New trip
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowCancelConfirm(true)}
+            disabled={isProcessing}
+            className="px-3 py-1.5 text-xs border border-red-200 text-red-700 rounded-md hover:bg-red-50 flex items-center gap-1 disabled:opacity-50"
+          >
+            <X size={13} />
+            Cancel this plan
+          </button>
+        </div>
+      </div>
+
       {/* Main area: chat column + optional itinerary sidebar */}
       <div className="flex flex-1 gap-4 overflow-hidden min-h-0">
 
@@ -637,6 +763,17 @@ export default function SessionPage() {
         )}
       </div>
 
+      <ConfirmModal
+        isOpen={showCancelConfirm}
+        title="Discard this plan?"
+        message="You'll lose your in-progress conversation. This can't be undone."
+        confirmLabel="Discard plan"
+        cancelLabel="Keep planning"
+        onConfirm={handleCancel}
+        onCancel={() => setShowCancelConfirm(false)}
+        danger
+        isConfirming={isProcessing}
+      />
     </div>
   )
 }
