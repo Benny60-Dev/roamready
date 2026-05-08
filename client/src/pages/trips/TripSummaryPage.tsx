@@ -139,7 +139,16 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
         ?? calcDistanceMiles(prevStop.latitude, prevStop.longitude, stop.latitude, stop.longitude)
       entries.push({
         dayNum,
-        date: currentDate ? new Date(currentDate) : undefined,
+        // Prefer stop.arrivalDate (cascade keeps it in sync) so DRIVE day shares
+        // the same date as the STAY/OVERNIGHT entry that buildGroups merges in
+        // at the bottom of the same TRAVEL_DAY card. When DRIVE.date and
+        // STAY.date diverge, buildGroups' .toDateString() equality check fails
+        // and the arrival entry orphans into its own card — no "Arrive {time}"
+        // pill, no date in the day header. Falls back to currentDate when no
+        // DB arrivalDate exists yet (matches the OVERNIGHT branch below).
+        date: stop.arrivalDate
+          ? new Date(stop.arrivalDate)
+          : currentDate ? new Date(currentDate) : undefined,
         type: 'DRIVE',
         stop, prevStop,
         miles: miles || undefined,
@@ -179,7 +188,13 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
     } else if (stop.type === 'HOME') {
       entries.push({
         dayNum,
-        date: currentDate ? new Date(currentDate) : undefined,
+        // Prefer stop.arrivalDate (cascade-populated) so the Day 1 header has a
+        // date even when trip.startDate is null. Same fallback shape as the
+        // DRIVE branch above and the OVERNIGHT branch below — keeping all
+        // entries on a consistent date source preserves buildGroups' merge.
+        date: stop.arrivalDate
+          ? new Date(stop.arrivalDate)
+          : currentDate ? new Date(currentDate) : undefined,
         type: 'STAY',
         stop,
         nightNum: 1,
