@@ -30,6 +30,7 @@ import helmet from 'helmet'
 import compression from 'compression'
 import cookieParser from 'cookie-parser'
 import rateLimit from 'express-rate-limit'
+import jwt from 'jsonwebtoken'
 import { errorHandler } from './middleware/errorHandler'
 import { prisma } from './utils/prisma'
 import { authRouter } from './routes/auth'
@@ -66,9 +67,36 @@ app.post('/api/v1/subscriptions/webhook', express.raw({ type: 'application/json'
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 
+// Per-user rate limit. The previous max=200 / 15 min / IP was too tight for an
+// authenticated SPA: a single first-mount of TripSummaryPage on a 7-stop trip
+// already burns ~9 requests via the auto-cascade, plus ~3 more for trip / weather
+// / activity-gen, plus the rig + booking-page fetches. Households behind one NAT
+// shared the budget, which compounded the issue.
+//
+// Now: 1000 / 15 min / authenticated user (decoded from the JWT directly here
+// since this middleware runs BEFORE per-router requireAuth). Unauthenticated
+// requests fall back to per-IP. JWT verification matches middleware/auth.ts —
+// same JWT_SECRET env var, same `userId` claim name. standardHeaders=true so the
+// client (and DevTools) can read RateLimit-Remaining headers and recover from
+// 429s gracefully.
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 200,
+  max: 1000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    try {
+      const authHeader = req.headers.authorization
+      if (authHeader?.startsWith('Bearer ')) {
+        const token = authHeader.slice(7)
+        const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId?: string }
+        if (decoded.userId) return `user:${decoded.userId}`
+      }
+    } catch {
+      // Invalid / expired / missing token — fall through to IP-based limiting
+    }
+    return `ip:${req.ip}`
+  },
 })
 app.use('/api/', limiter)
 

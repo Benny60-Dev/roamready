@@ -16,6 +16,8 @@ api.interceptors.response.use(
   res => res,
   async error => {
     const original = error.config
+
+    // 401 → try silent token refresh, then retry once
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true
       try {
@@ -29,6 +31,23 @@ api.interceptors.response.use(
         window.location.href = '/login'
       }
     }
+
+    // 429 → wait and retry once. The server's rate-limit middleware emits
+    // RateLimit-* headers (standardHeaders: true) including Retry-After when
+    // the budget is exhausted; we honor it but cap at 5s so a misconfigured
+    // huge value doesn't freeze the UI. Default to 2s when no header is sent.
+    // The _retried429 flag is separate from _retry so a 401→refresh→retry that
+    // happens to also 429 still gets one rate-limit recovery shot.
+    if (error.response?.status === 429 && original && !original._retried429) {
+      const retryAfterRaw = error.response.headers?.['retry-after'] ?? '2'
+      const retryAfterSec = parseInt(retryAfterRaw, 10)
+      const safeSec = Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? retryAfterSec : 2
+      const delayMs = Math.min(safeSec * 1000, 5000)
+      original._retried429 = true
+      await new Promise(resolve => setTimeout(resolve, delayMs))
+      return api(original)
+    }
+
     return Promise.reject(error)
   }
 )
