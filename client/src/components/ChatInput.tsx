@@ -1,0 +1,155 @@
+import { forwardRef, KeyboardEvent } from 'react'
+import { Loader, Send } from 'lucide-react'
+import { VoiceInputButton } from './VoiceInputButton'
+
+/**
+ * Shared chat input — textarea (NOT input) so long messages wrap to new lines
+ * instead of overflowing horizontally. Three sites in the app render this:
+ *
+ *   1. SessionPage empty-state hero      → variant='hero' (gold Send, pill wrapper)
+ *   2. SessionPage active conversation   → variant='compact' (btn-primary Send)
+ *   3. ModifyTripPanel                   → variant='compact'
+ *
+ * The two variants share textarea behavior and keyboard handling; only the
+ * visual chrome (wrapper, Send button color/shape) differs.
+ *
+ * Auto-grow uses CSS `field-sizing: content` (modern Chrome 123+, Safari 18+,
+ * Firefox 137+). On older browsers it gracefully degrades to a fixed-row
+ * textarea — text still wraps, just no auto-grow. maxHeight caps growth at
+ * ~6 lines so a long message can't push the page off-screen; overflow-y-auto
+ * gives an internal scrollbar past that.
+ *
+ * Enter submits, Shift+Enter inserts a newline. Mic button (VoiceInputButton)
+ * is rendered only when onToggleListening is provided. maxLength=4000 prevents
+ * accidental megabyte pastes from locking the UI; well above any real prompt.
+ */
+interface ChatInputProps {
+  value: string
+  onChange: (v: string) => void
+  onSubmit: () => void
+  placeholder: string
+  /** Combined "can't type / submit" flag — covers typing, applying, etc. */
+  disabled?: boolean
+  /** AI is generating a response — Send button shows a spinner. */
+  loading?: boolean
+  /** Voice-input wiring. Mic button only renders when onToggleListening is set. */
+  speechSupported?: boolean
+  listening?: boolean
+  onToggleListening?: () => void
+  /** 'hero' = pill wrapper + gold square Send (empty-state CTA);
+   *  'compact' = bare flex row + btn-primary Send (in-conversation). */
+  variant?: 'hero' | 'compact'
+}
+
+export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(function ChatInput(
+  {
+    value,
+    onChange,
+    onSubmit,
+    placeholder,
+    disabled = false,
+    loading = false,
+    speechSupported = false,
+    listening = false,
+    onToggleListening,
+    variant = 'compact',
+  },
+  ref,
+) {
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      if (!disabled && !listening && value.trim()) onSubmit()
+    }
+  }
+
+  const sendDisabled = !value.trim() || disabled || listening
+  const showMic = speechSupported && !!onToggleListening
+
+  // Use `items-end` (NOT items-center) so when the textarea grows multi-line,
+  // Mic + Send stick to the BOTTOM of the row rather than vertically centering
+  // against a tall textarea — which looks awkward at 3+ lines.
+  if (variant === 'hero') {
+    return (
+      <div
+        className="flex items-end gap-2 bg-white"
+        style={{ border: '0.5px solid #E8E4DA', borderRadius: 8, padding: '6px 6px 6px 16px' }}
+      >
+        <textarea
+          ref={ref}
+          rows={1}
+          aria-label="Message RoamReady AI"
+          className="flex-1 bg-transparent outline-none text-sm py-2 resize-none overflow-y-auto"
+          // fieldSizing isn't yet in TS lib types, so cast through CSSProperties.
+          // The runtime CSS property is `field-sizing: content`; React/JSX accepts
+          // it as the camelCased key via inline style. Falls back silently on
+          // older browsers — text still wraps, just no auto-grow.
+          style={{ fieldSizing: 'content', maxHeight: '8rem', paddingTop: 8, paddingBottom: 8 } as React.CSSProperties}
+          placeholder={placeholder}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          disabled={disabled}
+          maxLength={4000}
+        />
+        {showMic && (
+          <VoiceInputButton
+            listening={listening}
+            onClick={onToggleListening!}
+            disabled={disabled}
+          />
+        )}
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={sendDisabled}
+          aria-label="Send message"
+          className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ backgroundColor: '#F7A829' }}
+          onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = '#C9851A' }}
+          onMouseLeave={e => { if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = '#F7A829' }}
+        >
+          {loading ? <Loader size={16} className="animate-spin" /> : <Send size={16} />}
+        </button>
+      </div>
+    )
+  }
+
+  // 'compact' variant — used inside SessionPage active-conversation and
+  // ModifyTripPanel. .input class provides the same border/padding the legacy
+  // <input className="input"> rendered, so the field is visually identical
+  // until the user types past one line and the textarea grows.
+  return (
+    <div className="flex items-end gap-2">
+      <textarea
+        ref={ref}
+        rows={1}
+        aria-label="Message RoamReady AI"
+        className="input flex-1 text-sm resize-none overflow-y-auto"
+        style={{ fieldSizing: 'content', maxHeight: '8rem' } as React.CSSProperties}
+        placeholder={placeholder}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onKeyDown={handleKeyDown}
+        disabled={disabled}
+        maxLength={4000}
+      />
+      {showMic && (
+        <VoiceInputButton
+          listening={listening}
+          onClick={onToggleListening!}
+          disabled={disabled}
+        />
+      )}
+      <button
+        type="button"
+        onClick={onSubmit}
+        disabled={sendDisabled}
+        aria-label="Send message"
+        className="btn-primary px-3 flex items-center gap-1 disabled:opacity-50"
+      >
+        {loading ? <Loader size={16} className="animate-spin" /> : <Send size={16} />}
+      </button>
+    </div>
+  )
+})

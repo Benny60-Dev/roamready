@@ -1,6 +1,6 @@
 import { useCallback, useState, useRef, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Send, MapPin, Tent, Users, Loader, Plus, X } from 'lucide-react'
+import { MapPin, Tent, Users, Loader, Plus, X } from 'lucide-react'
 import { aiApi, sessionsApi, tripsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import { ChatMessage } from '../types'
@@ -9,7 +9,7 @@ import ConfirmModal from '../components/ui/ConfirmModal'
 import SessionTipCard from '../components/sessions/SessionTipCard'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
 import { useVoiceInput } from '../hooks/useVoiceInput'
-import { VoiceInputButton } from '../components/VoiceInputButton'
+import { ChatInput } from '../components/ChatInput'
 import { selectGreeting } from '../utils/greeting'
 
 // Window augmentation for SpeechRecognition / webkitSpeechRecognition lives
@@ -108,7 +108,7 @@ export default function SessionPage() {
   const [sessionUpdatedAt, setSessionUpdatedAt] = useState<string | null>(null)
 
   const bottomRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const { user } = useAuthStore()
   const navigate = useNavigate()
 
@@ -510,45 +510,19 @@ export default function SessionPage() {
               )}
 
               <div className="w-full max-w-[600px]">
-                <div
-                  className="flex items-center gap-2 bg-white"
-                  style={{
-                    border: '0.5px solid #E8E4DA',
-                    borderRadius: 8,
-                    padding: '6px 6px 6px 16px',
-                  }}
-                >
-                  <input
-                    ref={inputRef}
-                    aria-label="Message RoamReady AI"
-                    className="flex-1 bg-transparent outline-none text-sm py-2"
-                    style={{ paddingTop: 8, paddingBottom: 8 }}
-                    placeholder="Tell me about your trip — where, when, who's coming, anything special..."
-                    value={input}
-                    onChange={e => setInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), sendMessage())}
-                    disabled={typing}
-                  />
-                  {speechSupported && (
-                    <VoiceInputButton
-                      listening={listening}
-                      onClick={toggleListening}
-                      disabled={typing}
-                    />
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => sendMessage()}
-                    disabled={!input.trim() || typing || listening}
-                    aria-label="Send message"
-                    className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ backgroundColor: '#F7A829' }}
-                    onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = '#C9851A' }}
-                    onMouseLeave={e => { if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = '#F7A829' }}
-                  >
-                    {typing ? <Loader size={16} className="animate-spin" /> : <Send size={16} />}
-                  </button>
-                </div>
+                <ChatInput
+                  ref={inputRef}
+                  value={input}
+                  onChange={setInput}
+                  onSubmit={sendMessage}
+                  placeholder="Tell me about your trip — where, when, who's coming, anything special..."
+                  disabled={typing}
+                  loading={typing}
+                  speechSupported={speechSupported}
+                  listening={listening}
+                  onToggleListening={toggleListening}
+                  variant="hero"
+                />
 
                 {/* Starter chips */}
                 <div className="flex flex-wrap gap-2 justify-center mt-3">
@@ -655,31 +629,19 @@ export default function SessionPage() {
               )}
 
               {/* Chat input — pinned to bottom */}
-              <div className="flex gap-2 mt-3">
-                <input
+              <div className="mt-3">
+                <ChatInput
                   ref={inputRef}
-                  aria-label="Message RoamReady AI"
-                  className="input flex-1"
-                  placeholder="Message RoamReady AI..."
                   value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), sendMessage())}
+                  onChange={setInput}
+                  onSubmit={sendMessage}
+                  placeholder="Message RoamReady AI..."
                   disabled={typing}
+                  loading={typing}
+                  speechSupported={speechSupported}
+                  listening={listening}
+                  onToggleListening={toggleListening}
                 />
-                {speechSupported && (
-                  <VoiceInputButton
-                    listening={listening}
-                    onClick={toggleListening}
-                    disabled={typing}
-                  />
-                )}
-                <button
-                  onClick={() => sendMessage()}
-                  disabled={!input.trim() || typing || listening}
-                  className="btn-primary px-3 flex items-center gap-1"
-                >
-                  {typing ? <Loader size={16} className="animate-spin" /> : <Send size={16} />}
-                </button>
               </div>
             </>
           )}

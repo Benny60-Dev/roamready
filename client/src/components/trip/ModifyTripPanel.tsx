@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { X, Send, Wand2 } from 'lucide-react'
+import { X, Wand2 } from 'lucide-react'
 import { aiApi, tripsApi } from '../../services/api'
 import { Trip, StopType } from '../../types'
 import { useVoiceInput } from '../../hooks/useVoiceInput'
-import { VoiceInputButton } from '../VoiceInputButton'
+import { ChatInput } from '../ChatInput'
 
 // ─── Quick suggestion chips ───────────────────────────────────────────────────
 
@@ -108,7 +108,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
   const [typing, setTyping] = useState(false)
   const [applying, setApplying] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   // Apple-style press-to-start / press-to-stop dictation. The hook captures
   // whatever the user has already typed before tapping the mic so dictation
@@ -493,33 +493,18 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
           className="p-3 border-t border-gray-100 flex-shrink-0"
           style={{ borderTopWidth: '0.5px' }}
         >
-          <div className="flex gap-2">
-            <input
-              ref={inputRef}
-              className="input flex-1 text-sm"
-              placeholder="Ask AI to modify your trip…"
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e =>
-                e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), sendMessage())
-              }
-              disabled={typing || applying || listening}
-            />
-            {speechSupported && (
-              <VoiceInputButton
-                listening={listening}
-                onClick={toggleListening}
-                disabled={typing || applying}
-              />
-            )}
-            <button
-              onClick={() => sendMessage()}
-              disabled={!input.trim() || typing || applying || listening}
-              className="btn-primary px-3 flex items-center disabled:opacity-50"
-            >
-              <Send size={14} />
-            </button>
-          </div>
+          <ChatInput
+            ref={inputRef}
+            value={input}
+            onChange={setInput}
+            onSubmit={sendMessage}
+            placeholder="Ask AI to modify your trip…"
+            disabled={typing || applying}
+            loading={typing}
+            speechSupported={speechSupported}
+            listening={listening}
+            onToggleListening={toggleListening}
+          />
         </div>
       </div>
     </>
