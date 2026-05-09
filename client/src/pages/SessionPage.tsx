@@ -261,7 +261,14 @@ export default function SessionPage() {
   const profile  = user?.travelProfile
 
   async function sendMessage(overrideText?: string) {
-    const text = (overrideText ?? input).trim()
+    // ChatInput wires the Send button as `onClick={onSubmit}`, which means
+    // React passes the MouseEvent as the first arg when the user clicks.
+    // Suggestion-chip callers (e.g. applyChip) DO pass real string overrides
+    // and must continue to work — so coerce non-strings (the event) to
+    // undefined and fall through to `input` instead of calling .trim() on
+    // a SyntheticEvent.
+    const safeOverride = typeof overrideText === 'string' ? overrideText : undefined
+    const text = (safeOverride ?? input).trim()
     if (!text || typing) return
     const userMsg: ChatMessage = { role: 'user', content: text }
     const next = [...messages, userMsg]

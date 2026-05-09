@@ -155,7 +155,14 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
   }, [isOpen])
 
   async function sendMessage(overrideText?: string) {
-    const text = (overrideText ?? input).trim()
+    // ChatInput wires the Send button as `onClick={onSubmit}`, which means
+    // React passes the MouseEvent as the first arg when the user clicks. We
+    // need `overrideText` to remain a real string-or-undefined contract so
+    // suggestion-chip callers (which DO pass real string overrides) keep
+    // working. Coerce non-strings (i.e. the event) to undefined so they fall
+    // through to `input` instead of crashing on .trim().
+    const safeOverride = typeof overrideText === 'string' ? overrideText : undefined
+    const text = (safeOverride ?? input).trim()
     if (!text || typing || applying) return
 
     const userMsg: ChatMsg = { role: 'user', content: text }
