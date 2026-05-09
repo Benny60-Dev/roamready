@@ -3,7 +3,7 @@ import axios from 'axios'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
-import type { MembershipUpdateInput } from '../schemas'
+import type { MembershipCreateInput, MembershipUpdateInput } from '../schemas'
 
 const DEFAULT_RV_MAINTENANCE = [
   { name: 'Engine oil & filter', intervalMiles: 5000 },
@@ -222,7 +222,15 @@ export async function getMemberships(req: AuthRequest, res: Response, next: Next
 
 export async function createMembership(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const membership = await prisma.membership.create({ data: { ...req.body, userId: req.user!.id } })
+    // req.body is guaranteed to be a parsed MembershipCreateInput by
+    // validateBody on the route. userId comes from req.user (auth
+    // middleware), NEVER from the request body — even if a malicious
+    // client tried to inject one, .strict() on the schema would have
+    // already rejected the request with a 400.
+    const data: MembershipCreateInput = req.body
+    const membership = await prisma.membership.create({
+      data: { ...data, userId: req.user!.id },
+    })
     res.status(201).json(membership)
   } catch (err) { next(err) }
 }
