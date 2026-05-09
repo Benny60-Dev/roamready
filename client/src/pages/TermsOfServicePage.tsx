@@ -102,7 +102,7 @@ export default function TermsOfServicePage() {
             <p>
               New subscribers are eligible for a <strong>7-day money-back guarantee</strong> on their first subscription
               payment. To request a refund, email{' '}
-              <a href="mailto:dev@roamready.ai" className="text-[#1F6F8B] hover:underline">dev@roamready.ai</a>{' '}
+              <a href="mailto:billing@roamready.ai" className="text-[#1F6F8B] hover:underline">billing@roamready.ai</a>{' '}
               within 7 days of your initial payment. This guarantee applies to first-time subscribers only and may
               not be applied to subsequent renewals or to accounts that have previously received a refund.
             </p>
@@ -192,7 +192,7 @@ export default function TermsOfServicePage() {
             <p>
               RoamReady respects intellectual property rights. If you believe that content on our platform infringes
               your copyright, please send a notice to{' '}
-              <a href="mailto:dev@roamready.ai" className="text-[#1F6F8B] hover:underline">dev@roamready.ai</a>{' '}
+              <a href="mailto:support@roamready.ai" className="text-[#1F6F8B] hover:underline">support@roamready.ai</a>{' '}
               with the following: a description of the copyrighted work, a description of the infringing material and
               its location on our platform, your contact information, a statement of good faith belief, and your
               signature (electronic or physical). We will respond to valid DMCA notices promptly.
@@ -281,7 +281,7 @@ export default function TermsOfServicePage() {
             <div className="mt-3 space-y-1">
               <p><strong>Martini AI Media LLC (RoamReady)</strong></p>
               <p>Arizona</p>
-              <p>Email: <a href="mailto:dev@roamready.ai" className="text-[#1F6F8B] hover:underline">dev@roamready.ai</a></p>
+              <p>Email: <a href="mailto:support@roamready.ai" className="text-[#1F6F8B] hover:underline">support@roamready.ai</a></p>
               <p>Website: <a href="https://roamready.ai" className="text-[#1F6F8B] hover:underline">roamready.ai</a></p>
             </div>
           </section>

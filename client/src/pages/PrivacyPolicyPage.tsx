@@ -171,7 +171,7 @@ export default function PrivacyPolicyPage() {
 
             <p className="mt-4">
               To exercise any of these rights, email us at{' '}
-              <a href="mailto:dev@roamready.ai" className="text-[#1F6F8B] hover:underline">dev@roamready.ai</a>.
+              <a href="mailto:support@roamready.ai" className="text-[#1F6F8B] hover:underline">support@roamready.ai</a>.
               We will respond within 30 days.
             </p>
           </section>
@@ -195,7 +195,7 @@ export default function PrivacyPolicyPage() {
               RoamReady is intended for users aged 13 and older. Users must be 18 or older to purchase a paid
               subscription. We do not knowingly collect personal information from children under 13. If you believe
               a child under 13 has provided us with personal information, please contact us at{' '}
-              <a href="mailto:dev@roamready.ai" className="text-[#1F6F8B] hover:underline">dev@roamready.ai</a>{' '}
+              <a href="mailto:support@roamready.ai" className="text-[#1F6F8B] hover:underline">support@roamready.ai</a>{' '}
               and we will promptly delete it.
             </p>
           </section>
@@ -229,7 +229,7 @@ export default function PrivacyPolicyPage() {
             <div className="mt-3 space-y-1">
               <p><strong>Martini AI Media LLC (RoamReady)</strong></p>
               <p>Arizona</p>
-              <p>Email: <a href="mailto:dev@roamready.ai" className="text-[#1F6F8B] hover:underline">dev@roamready.ai</a></p>
+              <p>Email: <a href="mailto:support@roamready.ai" className="text-[#1F6F8B] hover:underline">support@roamready.ai</a></p>
               <p>Website: <a href="https://roamready.ai" className="text-[#1F6F8B] hover:underline">roamready.ai</a></p>
             </div>
           </section>

@@ -1,8 +1,27 @@
 import { Request, Response, NextFunction } from 'express'
+import { Resend } from 'resend'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
 import { stripe, createStripeCustomer, createCheckoutSession, createPortalSession } from '../services/stripe'
+
+// Same client + env-var setup as auth.ts:10 (forgotPassword email). Kept as
+// a per-controller singleton rather than extracted to a shared helper because
+// the existing convention in this codebase is inline HTML per call site —
+// see auth.ts:161-173. If we add a third email, extract a sendEmail() helper
+// then.
+const resend = new Resend(process.env.RESEND_API_KEY)
+
+// Reply / contact addresses. FROM_EMAIL stays the Resend-verified sending
+// subdomain (e.g. noreply@send.roamready.ai), but customers who hit Reply on
+// these mails should land in support, not the no-reply mailbox — that's what
+// `replyTo` does. SUPPORT_EMAIL / BILLING_EMAIL are surfaced in-body as
+// explicit contact lines (general questions vs payment issues, respectively).
+// Defaults keep the prod values inline so a missing env var degrades to
+// correct-looking output rather than `undefined` in a customer-facing email.
+const replyToEmail = process.env.REPLY_TO_EMAIL ?? 'support@roamready.ai'
+const supportEmail = process.env.SUPPORT_EMAIL ?? 'support@roamready.ai'
+const billingEmail = process.env.BILLING_EMAIL ?? 'billing@roamready.ai'
 
 function getClientOrigin(req: AuthRequest): string {
   const fwdHost = req.headers['x-forwarded-host']
@@ -147,13 +166,52 @@ export async function handleWebhook(req: Request, res: Response, next: NextFunct
           const sub = await stripe.subscriptions.retrieve(session.subscription as string)
           const priceId = sub.items.data[0]?.price?.id
           const tier = tierFromPriceId(priceId)
-          await prisma.user.update({
+          // .update returns the updated row — capture it instead of a separate
+          // findUnique so we have email + firstName for the confirmation email
+          // without a second round trip.
+          const updatedUser = await prisma.user.update({
             where: { id: userId },
             data: {
               subscriptionId: session.subscription,
               subscriptionTier: tier,
             },
           })
+
+          // Confirmation email. Fire-and-log: webhook MUST return 200 even if
+          // Resend is down, otherwise Stripe retries and we'd re-process the
+          // tier update (idempotent, but still wasteful) — and we'd never
+          // hand control back to Stripe at all if Resend hangs. Catch keeps
+          // the response path clean.
+          const tierLabel = tier === 'PRO_PLUS' ? 'Pro+' : 'Pro'
+          const billingUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/profile/billing`
+          try {
+            await resend.emails.send({
+              from: process.env.FROM_EMAIL!,
+              reply_to: replyToEmail,
+              to: updatedUser.email,
+              subject: `Welcome to RoamReady ${tierLabel}!`,
+              html: `
+                <p>Hi ${updatedUser.firstName},</p>
+                <p>Your RoamReady <strong>${tierLabel}</strong> subscription is now active — thanks for upgrading!</p>
+                <p>You've unlocked:</p>
+                <ul>
+                  <li>Unlimited AI trip planning &amp; modifications</li>
+                  <li>Campground booking with real-time availability</li>
+                  <li>Weather alerts &amp; route-aware forecasts along your trip</li>
+                </ul>
+                <p>Manage your subscription anytime from your <a href="${billingUrl}">Profile billing page</a>.</p>
+                <p>Questions? Reach us at <a href="mailto:${supportEmail}">${supportEmail}</a>.</p>
+                <p>Happy travels,<br/>The RoamReady team</p>
+              `,
+              text: `Hi ${updatedUser.firstName},\n\nYour RoamReady ${tierLabel} subscription is now active — thanks for upgrading!\n\nYou've unlocked:\n  • Unlimited AI trip planning & modifications\n  • Campground booking with real-time availability\n  • Weather alerts & route-aware forecasts along your trip\n\nManage your subscription anytime from your Profile billing page: ${billingUrl}\n\nQuestions? Reach us at ${supportEmail}.\n\nHappy travels,\nThe RoamReady team`,
+            })
+            console.log('[email] subscription confirmation sent to', updatedUser.email, `(${tierLabel})`)
+          } catch (emailErr: any) {
+            console.error(
+              `[email] subscription confirmation FAILED for userId=${updatedUser.id} email=${updatedUser.email}:`,
+              emailErr?.message,
+            )
+          }
         }
         break
       }
@@ -187,7 +245,42 @@ export async function handleWebhook(req: Request, res: Response, next: NextFunct
       case 'invoice.payment_failed': {
         const invoice = event.data.object as any
         console.error('Payment failed for customer:', invoice.customer)
-        // TODO: send email via Resend
+
+        // Look up the user by Stripe customerId so we can email them. Skip
+        // silently if there's no match (orphaned customer record, or the
+        // invoice predates the user's account in this DB) — better to drop
+        // the email than 500 the webhook.
+        if (invoice.customer) {
+          const user = await prisma.user.findFirst({
+            where: { customerId: invoice.customer as string },
+          })
+          if (user) {
+            const billingUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/profile/billing`
+            try {
+              await resend.emails.send({
+                from: process.env.FROM_EMAIL!,
+                reply_to: replyToEmail,
+                to: user.email,
+                subject: "We couldn't process your RoamReady payment",
+                html: `
+                  <p>Hi ${user.firstName},</p>
+                  <p>We tried to charge the card on file for your most recent RoamReady subscription payment, but the charge didn't go through.</p>
+                  <p>Your access continues during a short grace period (typically about three weeks) while Stripe automatically retries the charge. To avoid any interruption, please update your payment method on your <a href="${billingUrl}">Profile billing page</a>.</p>
+                  <p>Don't worry — your trips, rigs, and travel data are all safe. Nothing has been deleted, and your saved plans will be waiting for you when payment is restored.</p>
+                  <p>Need help? Contact us at <a href="mailto:${billingEmail}">${billingEmail}</a> or update your payment method from your <a href="${billingUrl}">Profile</a>.</p>
+                  <p>The RoamReady team</p>
+                `,
+                text: `Hi ${user.firstName},\n\nWe tried to charge the card on file for your most recent RoamReady subscription payment, but the charge didn't go through.\n\nYour access continues during a short grace period (typically about three weeks) while Stripe automatically retries the charge. To avoid any interruption, please update your payment method here: ${billingUrl}\n\nDon't worry — your trips, rigs, and travel data are all safe. Nothing has been deleted, and your saved plans will be waiting for you when payment is restored.\n\nNeed help? Contact us at ${billingEmail} or update your payment method at ${billingUrl}.\n\nThe RoamReady team`,
+              })
+              console.log('[email] payment-failed notice sent to', user.email)
+            } catch (emailErr: any) {
+              console.error(
+                `[email] payment-failed notice FAILED for userId=${user.id} email=${user.email}:`,
+                emailErr?.message,
+              )
+            }
+          }
+        }
         break
       }
     }

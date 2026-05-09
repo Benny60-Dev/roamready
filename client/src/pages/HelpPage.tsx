@@ -20,7 +20,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: 'I found a bug or have a feature request — what should I do?',
-    a: "Email me at dev@roamready.ai. Bug reports and feature requests are equally welcome — I genuinely want to know what's not working or what's missing. RoamReady gets better because of feedback like yours.",
+    a: "Email me at support@roamready.ai. Bug reports and feature requests are equally welcome — I genuinely want to know what's not working or what's missing. RoamReady gets better because of feedback like yours.",
   },
 ]
 
@@ -48,10 +48,10 @@ export default function HelpPage() {
         <p className="text-sm text-gray-700">
           Email me at{' '}
           <a
-            href="mailto:dev@roamready.ai"
+            href="mailto:support@roamready.ai"
             className="text-[#1F6F8B] hover:underline font-medium"
           >
-            dev@roamready.ai
+            support@roamready.ai
           </a>
         </p>
         <p className="text-xs italic text-gray-500 mt-2">
