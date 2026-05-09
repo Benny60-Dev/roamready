@@ -3,6 +3,12 @@ import './config/env'
 // ─── Required environment variable check ──────────────────────────────────────
 // Runs immediately at startup before any routes or DB connections are opened.
 // Add any key here that will cause silent failures if absent.
+//
+// Stripe vars are split into their own list because they have stricter
+// semantics: a 'placeholder' literal in any of them silently mis-bills users
+// (wrong tier, wrong price, broken webhooks). In production we exit(1) rather
+// than boot a server that will sell the wrong tier; in development we warn
+// only so contributors without Stripe access can still run the app.
 ;(function checkEnv() {
   const REQUIRED: Array<{ key: string; feature: string }> = [
     { key: 'ANTHROPIC_API_KEY',  feature: 'AI features will not work' },
@@ -10,8 +16,18 @@ import './config/env'
     { key: 'JWT_SECRET',         feature: 'authentication will be broken' },
     { key: 'JWT_REFRESH_SECRET', feature: 'token refresh will be broken' },
   ]
-  const RED   = '\x1b[31m'
-  const RESET = '\x1b[0m'
+  const STRIPE_REQUIRED: Array<{ key: string; feature: string }> = [
+    { key: 'STRIPE_SECRET_KEY',              feature: 'Stripe API calls will fail' },
+    { key: 'STRIPE_WEBHOOK_SECRET',          feature: 'webhook signature verification will fail' },
+    { key: 'STRIPE_PRO_MONTHLY_PRICE_ID',    feature: 'Pro monthly checkout/tier detection will mis-bill' },
+    { key: 'STRIPE_PRO_ANNUAL_PRICE_ID',     feature: 'Pro annual checkout/tier detection will mis-bill' },
+    { key: 'STRIPE_PROPLUS_MONTHLY_PRICE_ID',feature: 'Pro+ monthly checkout/tier detection will mis-bill' },
+    { key: 'STRIPE_PROPLUS_ANNUAL_PRICE_ID', feature: 'Pro+ annual checkout/tier detection will mis-bill' },
+  ]
+  const RED    = '\x1b[31m'
+  const YELLOW = '\x1b[33m'
+  const RESET  = '\x1b[0m'
+
   let anyMissing = false
   for (const { key, feature } of REQUIRED) {
     if (!process.env[key]) {
@@ -21,6 +37,32 @@ import './config/env'
   }
   if (anyMissing) {
     console.error(`${RED}[ENV] Fix missing vars in roamready/.env then restart the server.${RESET}`)
+  }
+
+  // Stripe-specific check: missing OR contains the literal word 'placeholder'
+  // (case-insensitive) — both indicate an unconfigured env. The .env.example
+  // ships with values like 'sk_test_placeholder', so a sloppy copy-paste leaves
+  // the keys "set" but useless.
+  const isProd = process.env.NODE_ENV === 'production'
+  const stripeIssues: string[] = []
+  for (const { key, feature } of STRIPE_REQUIRED) {
+    const val = process.env[key]
+    if (!val) {
+      stripeIssues.push(`${key} is missing — ${feature}`)
+    } else if (/placeholder/i.test(val)) {
+      stripeIssues.push(`${key} contains 'placeholder' — ${feature}`)
+    }
+  }
+  if (stripeIssues.length > 0) {
+    if (isProd) {
+      console.error(`${RED}[ENV] Stripe configuration invalid — refusing to boot in production:${RESET}`)
+      for (const msg of stripeIssues) console.error(`${RED}  • ${msg}${RESET}`)
+      console.error(`${RED}[ENV] Fix the above in your production env then redeploy. Booting now would risk billing users at the wrong tier.${RESET}`)
+      process.exit(1)
+    } else {
+      console.warn(`${YELLOW}[ENV] Stripe configuration warnings (dev only — would exit(1) in production):${RESET}`)
+      for (const msg of stripeIssues) console.warn(`${YELLOW}  • ${msg}${RESET}`)
+    }
   }
 })()
 

@@ -72,6 +72,40 @@ export async function createPortal(req: AuthRequest, res: Response, next: NextFu
   } catch (err) { next(err) }
 }
 
+/** Map a Stripe priceId to our internal tier by matching against the four
+ *  STRIPE_*_PRICE_ID env vars. Used by the two tier-detection paths in the
+ *  webhook handler — keeping them on a single helper means a future tier
+ *  rename or new tier addition only edits one place.
+ *
+ *  Falls back to PRO with a warn log when the priceId doesn't match any
+ *  configured env var. We deliberately don't crash the webhook on misses:
+ *  Stripe retries 5xx responses, and an unknown priceId is more likely a
+ *  config gap than a transient failure — failing loud in logs but returning
+ *  200 prevents a retry storm. Startup validation in index.ts is the
+ *  upstream guard that catches missing/placeholder env vars before they
+ *  reach this function.
+ */
+function tierFromPriceId(priceId: string | null | undefined): 'PRO' | 'PRO_PLUS' {
+  if (
+    priceId === process.env.STRIPE_PROPLUS_MONTHLY_PRICE_ID ||
+    priceId === process.env.STRIPE_PROPLUS_ANNUAL_PRICE_ID
+  ) {
+    return 'PRO_PLUS'
+  }
+  if (
+    priceId === process.env.STRIPE_PRO_MONTHLY_PRICE_ID ||
+    priceId === process.env.STRIPE_PRO_ANNUAL_PRICE_ID
+  ) {
+    return 'PRO'
+  }
+  console.error(
+    `[StripeWebhook] tierFromPriceId: unrecognized priceId=${priceId} — ` +
+    `defaulting to PRO. Check STRIPE_PRO_MONTHLY_PRICE_ID / STRIPE_PRO_ANNUAL_PRICE_ID / ` +
+    `STRIPE_PROPLUS_MONTHLY_PRICE_ID / STRIPE_PROPLUS_ANNUAL_PRICE_ID env vars match the Stripe dashboard.`
+  )
+  return 'PRO'
+}
+
 export async function getStatus(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const user = await prisma.user.findUnique({
@@ -102,12 +136,22 @@ export async function handleWebhook(req: Request, res: Response, next: NextFunct
       case 'checkout.session.completed': {
         const session = event.data.object as any
         const userId = session.metadata?.userId
-        if (userId) {
+        if (userId && session.subscription) {
+          // Retrieve the subscription so we can derive the actual tier from
+          // its priceId. The previous version hardcoded PRO here, which left
+          // PRO_PLUS purchases briefly mis-tiered (and permanently mis-tiered
+          // if customer.subscription.updated never fired). Stripe usually
+          // fires subscription.updated shortly after this event, but the
+          // ordering is not guaranteed and the in-between window is enough
+          // to ship the user the wrong feature gates.
+          const sub = await stripe.subscriptions.retrieve(session.subscription as string)
+          const priceId = sub.items.data[0]?.price?.id
+          const tier = tierFromPriceId(priceId)
           await prisma.user.update({
             where: { id: userId },
             data: {
               subscriptionId: session.subscription,
-              subscriptionTier: 'PRO',
+              subscriptionTier: tier,
             },
           })
         }
@@ -119,11 +163,7 @@ export async function handleWebhook(req: Request, res: Response, next: NextFunct
         const user = await prisma.user.findFirst({ where: { subscriptionId: sub.id } })
         if (user) {
           const priceId = sub.items.data[0]?.price?.id
-          let tier: 'FREE' | 'PRO' | 'PRO_PLUS' = 'PRO'
-          if (priceId === process.env.STRIPE_PROPLUS_MONTHLY_PRICE_ID ||
-              priceId === process.env.STRIPE_PROPLUS_ANNUAL_PRICE_ID) {
-            tier = 'PRO_PLUS'
-          }
+          const tier = tierFromPriceId(priceId)
           await prisma.user.update({
             where: { id: user.id },
             data: { subscriptionTier: tier, subscriptionEndsAt: new Date(sub.current_period_end * 1000) },
