@@ -57,6 +57,17 @@ export default function HelpPage() {
         <p className="text-xs italic text-gray-500 mt-2">
           I read every email — usually reply within a day.
         </p>
+
+        {/* TODO: remove before launch — Sentry frontend pipeline test button. */}
+        <button
+          type="button"
+          onClick={() => {
+            throw new Error('Sentry frontend test — visible in Sentry!')
+          }}
+          className="mt-4 text-xs text-gray-400 hover:text-red-600 underline"
+        >
+          [DEBUG] Trigger Sentry test
+        </button>
       </section>
 
       {/* FAQ */}

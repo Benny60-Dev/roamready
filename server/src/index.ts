@@ -1,3 +1,8 @@
+// Sentry instrumentation MUST be the very first import — see instrument.ts
+// for the full reasoning. It also calls dotenv.config() so process.env is
+// populated before anything else runs (the original './config/env' import
+// below remains as a no-op redundancy / status log; safe to keep).
+import './instrument'
 import './config/env'
 
 // ─── Required environment variable check ──────────────────────────────────────
@@ -66,6 +71,7 @@ import './config/env'
   }
 })()
 
+import * as Sentry from '@sentry/node'
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
@@ -91,6 +97,7 @@ import { notificationsRouter } from './routes/notifications'
 import { adminRouter } from './routes/admin'
 import { bookingsRouter } from './routes/bookings'
 import { sessionsRouter } from './routes/sessions'
+import { debugRouter } from './routes/debug'
 
 const app = express()
 
@@ -157,8 +164,15 @@ app.use('/api/v1/notifications', notificationsRouter)
 app.use('/api/v1/admin', adminRouter)
 app.use('/api/v1/bookings', bookingsRouter)
 app.use('/api/v1/sessions', sessionsRouter)
+app.use('/api/v1/debug', debugRouter)  // TODO: remove before launch — see routes/debug.ts
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
+
+// Sentry's Express error handler — must be registered AFTER all routes and
+// BEFORE our custom errorHandler. It captures the error, ships it to Sentry,
+// and then calls next(err) so our existing errorHandler can still produce
+// the JSON 500 response. No changes to errorHandler or any controller needed.
+Sentry.setupExpressErrorHandler(app)
 
 app.use(errorHandler)
 
