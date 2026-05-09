@@ -256,6 +256,13 @@ model Trip {
   aiConversation     Json?
   modifyConversation Json?
   itinerary          Json?
+  /// Concise summary of the original PlanningSession transcript, distilled
+  /// at promote time (or lazily on first Modify-with-AI open for legacy
+  /// trips). Injected into the modify-mode system prompt so the assistant
+  /// has continuity with what the user shared while planning. Nullable
+  /// because (a) old trips precede this field, (b) summarization is
+  /// best-effort and may be skipped if the AI call fails.
+  planningContextSummary String? @db.Text
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
   stops          Stop[]
@@ -490,6 +497,7 @@ enum AICallType {
   HIGHLIGHTS
   FEEDBACK
   PLACES_LOOKUP
+  PLANNING_SUMMARY
 }
 
 model CampgroundCache {

@@ -20,6 +20,7 @@ const PRICING = {
 type AICallType =
   | 'CHAT' | 'ITINERARY' | 'ROUTES' | 'ACTIVITIES'
   | 'PACKING' | 'HIGHLIGHTS' | 'FEEDBACK' | 'PLACES_LOOKUP'
+  | 'PLANNING_SUMMARY'
 
 export interface AICallCtx {
   userId: string
@@ -699,4 +700,101 @@ export async function generateRouteHighlightsAI(
   }
 
   return response.content[0].type === 'text' ? response.content[0].text.trim() : ''
+}
+
+/** Distill a PlanningSession transcript into a short prose summary that the
+ *  modify-mode system prompt can consume. Run once per trip — at promote time
+ *  for new trips, lazily on first modify-with-AI open for legacy trips.
+ *
+ *  Cheapest available model (haiku) — this is private system-prompt context,
+ *  never user-visible, and an over-summarized result is far less harmful than
+ *  losing the conversation continuity entirely. Returns null on any failure
+ *  so the caller can fall back gracefully (modify still works without it).
+ *
+ *  Cost envelope: with a typical 5–15 turn planning chat (~1.5–4k input
+ *  tokens) and ~200–400 output tokens, this lands around $0.003–$0.006 per
+ *  summary at current haiku-4-5 pricing ($1/M input, $5/M output). One-shot
+ *  per trip, so the lifetime cost is negligible. */
+export async function generatePlanningContextSummary(
+  messages: Array<{ role: string; content: string }>,
+  ctx?: AICallCtx,
+): Promise<string | null> {
+  // Empty / null guard — nothing to summarize.
+  if (!Array.isArray(messages) || messages.length === 0) return null
+
+  // Truncate at the boundary, not in the middle of a turn — we keep the most
+  // recent ~30 turns. Anthropic accepts much more, but planning chats rarely
+  // run long enough to bump this; the cap is a defensive guard against
+  // pathological cases that would inflate the haiku call cost.
+  const trimmed = messages.slice(-30).map(m => ({
+    role: String(m.role ?? '').trim() || 'user',
+    content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? ''),
+  })).filter(m => m.content.length > 0)
+
+  if (trimmed.length === 0) return null
+
+  // Render the transcript as plain text for the summarizer. We pass it as a
+  // single user message rather than as Anthropic-shape role-tagged turns
+  // because we want haiku to *summarize* the conversation, not continue it.
+  const transcript = trimmed
+    .map(m => `${m.role.toUpperCase()}: ${m.content}`)
+    .join('\n\n---\n\n')
+
+  const systemPrompt =
+    "You are extracting context from a trip-planning conversation between a user and a travel-planning AI. " +
+    "The trip itself has already been built — your job is to capture WHO this user is and WHAT they care about, " +
+    "so a future AI helping them modify the trip doesn't have to ask them again.\n\n" +
+    "Write a concise summary (under 300 words) capturing:\n" +
+    "- The user's original ask in their own words (paraphrase ok)\n" +
+    "- Their constraints, preferences, and concerns expressed conversationally\n" +
+    "- Reasoning behind specific choices made during planning\n" +
+    "- Anything the user explicitly excluded or rejected, and why\n" +
+    "- Their tone and travel style (laid-back vs ambitious, family-focused vs solo, etc.) if discernible\n\n" +
+    "DO NOT include:\n" +
+    "- The trip itinerary itself (stops, dates, drive times — those are in trip data)\n" +
+    "- Generic AI replies or filler\n" +
+    "- Anything that's already on the user's profile (rig, party size, etc. — assume those are available separately)\n\n" +
+    "Output: plain text, no headers, no markdown. Direct prose suitable for system-prompt injection."
+
+  const model = 'claude-haiku-4-5-20251001'
+
+  try {
+    const response = await client.messages.create({
+      model,
+      max_tokens: 400,
+      system: systemPrompt,
+      messages: [
+        {
+          role: 'user',
+          content:
+            "Here is the planning conversation transcript. Produce the summary as instructed.\n\n" +
+            transcript,
+        },
+      ],
+    })
+
+    if (ctx?.userId) {
+      logAIUsage({
+        userId: ctx.userId,
+        sessionId: ctx.sessionId ?? null,
+        tripId: ctx.tripId ?? null,
+        callType: 'PLANNING_SUMMARY',
+        model,
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+      }).catch(() => {})
+    }
+
+    const text = response.content[0]?.type === 'text' ? response.content[0].text.trim() : ''
+    return text.length > 0 ? text : null
+  } catch (err: any) {
+    // Best-effort: never throw. Caller decides whether to retry, fall back,
+    // or just skip the summary section in the system prompt.
+    console.error(
+      `[AI planning-summary] generation failed for tripId=${ctx?.tripId ?? 'n/a'} ` +
+      `userId=${ctx?.userId ?? 'n/a'}:`,
+      err?.message ?? err,
+    )
+    return null
+  }
 }

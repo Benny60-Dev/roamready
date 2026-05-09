@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
-import { chatWithAI, generatePackingListAI, analyzeFeedbackAI } from '../services/ai'
+import { chatWithAI, generatePackingListAI, analyzeFeedbackAI, generatePlanningContextSummary } from '../services/ai'
 
 // Soft cap: inject a "wrap up" system message and let Claude actually respond
 // (so it has a chance to emit the <itinerary> JSON block).
@@ -245,6 +245,20 @@ function buildLiveTripState(trip: any): string {
     ...(trip.party
       ? ['', 'Trip travel party (JSON):', JSON.stringify(serializeParty(trip.party))]
       : []),
+    // Planning-context continuity: the original PlanningSession transcript
+    // distilled to ~250 words of prose. Generated once at promote time
+    // (lazily backfilled in chat() for legacy trips before this string is
+    // built) so the modify assistant doesn't ask the user to re-explain
+    // preferences they already shared during planning.
+    ...(trip.planningContextSummary
+      ? [
+          '',
+          'PLANNING CONTEXT (from the user\'s original planning conversation):',
+          trip.planningContextSummary,
+          '',
+          'Use this context to understand the user\'s preferences and avoid asking them to re-explain things they\'ve already shared. If their modify request conflicts with something they said during planning (e.g. they originally avoided mountain passes but now ask to add a stop that requires one), gently flag the conflict.',
+        ]
+      : []),
     '=== END MODIFY MODE INSTRUCTIONS ===',
   ].join('\n')
 }
@@ -285,8 +299,54 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
         include: {
           stops: { orderBy: { order: 'asc' } },
           party: { include: { people: true, pets: true } },
+          // planningSession is the back-relation from Trip → PlanningSession.
+          // Pulling messages here enables the lazy-backfill block below for
+          // legacy trips that were promoted before this feature shipped.
+          // Tiny payload (the conversation is already small enough to summarize).
+          planningSession: { select: { id: true, messages: true } },
         },
       })
+
+      // Lazy backfill: trip predates this feature (or its summary call failed
+      // at promote time). If we have a linked PlanningSession with messages,
+      // generate the summary now, persist it, and inject it into THIS
+      // request so the user gets the benefit immediately. Best-effort —
+      // failure leaves the field null and the modify chat proceeds without
+      // the planning-context block.
+      if (liveTrip && !liveTrip.planningContextSummary && liveTrip.planningSession) {
+        const sessionMessages = Array.isArray(liveTrip.planningSession.messages)
+          ? (liveTrip.planningSession.messages as any[])
+          : []
+        if (sessionMessages.length > 0) {
+          console.log(
+            `[AI modify] lazy-backfilling planningContextSummary for tripId=${liveTrip.id} ` +
+            `sessionId=${liveTrip.planningSession.id} (${sessionMessages.length} messages)`
+          )
+          const summary = await generatePlanningContextSummary(sessionMessages, {
+            userId: req.user!.id,
+            sessionId: liveTrip.planningSession.id,
+            tripId: liveTrip.id,
+          })
+          if (summary) {
+            // Mutate the in-memory copy so buildLiveTripState picks it up
+            // for THIS request (no need to re-fetch).
+            liveTrip.planningContextSummary = summary
+            // Persist for future opens — fire-and-forget; if this write
+            // fails the next modify open will simply backfill again.
+            prisma.trip
+              .update({
+                where: { id: liveTrip.id },
+                data: { planningContextSummary: summary } as any,
+              })
+              .catch((persistErr) =>
+                console.error(
+                  `[AI modify] lazy-backfill persist failed for tripId=${liveTrip.id}:`,
+                  persistErr?.message ?? persistErr,
+                ),
+              )
+          }
+        }
+      }
     }
 
     const stripModifyTags = (content: string) => content.replace(/<modify>[\s\S]*?<\/modify>/g, '').trim()

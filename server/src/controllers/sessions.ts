@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
+import { generatePlanningContextSummary } from '../services/ai'
 import type {
   PlanningSessionCreateInput,
   PlanningSessionUpdateInput,
@@ -129,7 +130,10 @@ export async function promoteSession(req: AuthRequest, res: Response, next: Next
   try {
     const session = await prisma.planningSession.findFirst({
       where: { id: req.params.id, userId: req.user!.id },
-      select: { id: true, tripId: true },
+      // Pull `messages` here so we can summarize them after promote without a
+      // second round-trip. They're already in PG, this is the cheapest
+      // moment to grab them.
+      select: { id: true, tripId: true, messages: true },
     })
     if (!session) throw new AppError('Session not found', 404)
     if (session.tripId) throw new AppError('Session already promoted', 400)
@@ -150,6 +154,37 @@ export async function promoteSession(req: AuthRequest, res: Response, next: Next
       })
       return { session: updatedSession, trip }
     })
+
+    // Best-effort planning-context summary for the modify-with-AI continuity
+    // feature. Runs OUTSIDE the transaction on purpose: a Haiku outage must
+    // not roll back trip creation. Failures here log and move on — a later
+    // open of the modify panel will lazily backfill the field.
+    try {
+      const messages = Array.isArray(session.messages) ? (session.messages as any[]) : []
+      if (messages.length > 0) {
+        const summary = await generatePlanningContextSummary(messages, {
+          userId: req.user!.id,
+          sessionId: session.id,
+          tripId: result.trip.id,
+        })
+        if (summary) {
+          await prisma.trip.update({
+            where: { id: result.trip.id },
+            data: { planningContextSummary: summary } as any,
+          })
+        } else {
+          console.warn(
+            `[promoteSession] planningContextSummary returned null for tripId=${result.trip.id} ` +
+            `sessionId=${session.id} — leaving field null, will backfill lazily on first modify open.`
+          )
+        }
+      }
+    } catch (summaryErr: any) {
+      console.error(
+        `[promoteSession] post-promote summary step threw (non-fatal) for tripId=${result.trip.id}:`,
+        summaryErr?.message ?? summaryErr,
+      )
+    }
 
     res.status(201).json(result)
   } catch (err) { next(err) }
