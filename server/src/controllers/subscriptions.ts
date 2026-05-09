@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
-import { stripe, createCheckoutSession, createPortalSession } from '../services/stripe'
+import { stripe, createStripeCustomer, createCheckoutSession, createPortalSession } from '../services/stripe'
 
 function getClientOrigin(req: AuthRequest): string {
   const fwdHost = req.headers['x-forwarded-host']
@@ -24,9 +24,40 @@ export async function createCheckout(req: AuthRequest, res: Response, next: Next
     const user = await prisma.user.findUnique({ where: { id: req.user!.id } })
     if (!user) throw new AppError('User not found', 404)
 
-    if (!user.customerId) throw new AppError('No Stripe customer found', 400)
+    // Trial eligibility — must be computed BEFORE we create a Stripe customer
+    // below, otherwise the freshly-set customerId would flip this check and
+    // trial-eligible first-time users would be denied their trial. Eligible
+    // means: never had a trial AND never had a Stripe customer record.
+    // Anything else (past trial, prior subscription, returning user) is
+    // ineligible — checkout will pass trial_period_days: 0.
+    const trialEligible = !user.trialEndsAt && !user.customerId
 
-    const session = await createCheckoutSession(user.customerId, priceId, user.id, getClientOrigin(req))
+    // On-demand customer creation. The registration path at auth.ts:68 wraps
+    // createStripeCustomer in try/catch with console.error on failure (so a
+    // Stripe outage during signup doesn't block account creation), which
+    // means customerId can be null on accounts that registered during an
+    // outage. Recover here by creating the customer on the first checkout
+    // attempt, then persist for future requests.
+    let customerId = user.customerId
+    if (!customerId) {
+      const customer = await createStripeCustomer(
+        user.email,
+        `${user.firstName} ${user.lastName}`.trim(),
+      )
+      customerId = customer.id
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { customerId },
+      })
+    }
+
+    const session = await createCheckoutSession(
+      customerId,
+      priceId,
+      user.id,
+      getClientOrigin(req),
+      !trialEligible,
+    )
     res.json({ url: session.url })
   } catch (err) { next(err) }
 }

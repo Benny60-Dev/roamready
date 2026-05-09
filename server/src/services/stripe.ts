@@ -8,7 +8,18 @@ export async function createStripeCustomer(email: string, name: string) {
   return stripe.customers.create({ email, name })
 }
 
-export async function createCheckoutSession(customerId: string, priceId: string, userId: string, clientOrigin: string) {
+export async function createCheckoutSession(
+  customerId: string,
+  priceId: string,
+  userId: string,
+  clientOrigin: string,
+  /** When true, force trial_period_days to 0 so this checkout cannot grant a
+   *  trial — used for users who have already had one (trialEndsAt set) OR
+   *  already had a Stripe customer record before this checkout request. The
+   *  client paywall hides "Start free trial" framing for the same audience;
+   *  this is the server-side enforcement that makes that promise truthful. */
+  enforceNoTrial = false,
+) {
   return stripe.checkout.sessions.create({
     customer: customerId,
     payment_method_types: ['card'],
@@ -19,6 +30,7 @@ export async function createCheckoutSession(customerId: string, priceId: string,
     metadata: { userId },
     subscription_data: {
       metadata: { userId },
+      ...(enforceNoTrial ? { trial_period_days: 0 } : {}),
     },
   })
 }
