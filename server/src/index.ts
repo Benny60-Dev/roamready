@@ -97,7 +97,6 @@ import { notificationsRouter } from './routes/notifications'
 import { adminRouter } from './routes/admin'
 import { bookingsRouter } from './routes/bookings'
 import { sessionsRouter } from './routes/sessions'
-import { debugRouter } from './routes/debug'
 
 const app = express()
 
@@ -164,7 +163,6 @@ app.use('/api/v1/notifications', notificationsRouter)
 app.use('/api/v1/admin', adminRouter)
 app.use('/api/v1/bookings', bookingsRouter)
 app.use('/api/v1/sessions', sessionsRouter)
-app.use('/api/v1/debug', debugRouter)  // TODO: remove before launch — see routes/debug.ts
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
