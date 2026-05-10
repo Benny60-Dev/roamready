@@ -13,13 +13,14 @@ export async function createCheckoutSession(
   priceId: string,
   userId: string,
   clientOrigin: string,
-  /** When true, force trial_period_days to 0 so this checkout cannot grant a
-   *  trial — used for users who have already had one (trialEndsAt set) OR
-   *  already had a Stripe customer record before this checkout request. The
-   *  client paywall hides "Start free trial" framing for the same audience;
-   *  this is the server-side enforcement that makes that promise truthful. */
-  enforceNoTrial = false,
 ) {
+  // Hybrid trial model: the 7-day trial is granted app-side at signup
+  // (trialEndsAt on the User row). Stripe charges immediately at
+  // checkout — no trial_period_days, no trial_settings, no Stripe-side
+  // trial concept at all. The four configured prices have
+  // recurring.trial_period_days = null in the Stripe Dashboard, which
+  // matches this expectation; if anyone ever flips a price to include a
+  // trial there, the behavior here would silently change.
   return stripe.checkout.sessions.create({
     customer: customerId,
     payment_method_types: ['card'],
@@ -30,7 +31,6 @@ export async function createCheckoutSession(
     metadata: { userId },
     subscription_data: {
       metadata: { userId },
-      ...(enforceNoTrial ? { trial_period_days: 0 } : {}),
     },
   })
 }

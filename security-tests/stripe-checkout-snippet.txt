@@ -1,0 +1,193 @@
+RoamReady checkout flow — code snippet for Stripe Support
+Stripe account: acct_1TNcoFIXRVOMP7zw  (RoamReady.ai sandbox, US, test mode)
+Stack: Node 20 + Express + Prisma + Stripe SDK (CommonJS via TypeScript)
+
+Symptom: stripe.checkout.sessions.create returns 500-class error against
+this account even though all four price IDs (price_1TNdSt..., price_1TNdXR...,
+price_1TNdYi..., price_1TNdZK...) exist on the account, are active, and
+match the products prod_UMMBQfD1gWKT5l (Pro) / prod_UMMHXjwLwf3TOQ (Pro+).
+Account.charges_enabled returns false from accounts.retrieve(), which we
+suspect is the underlying gate.
+
+All file paths below are relative to the project root.
+Sensitive values (API key strings) have been replaced with [REDACTED_*]
+tokens. Real Stripe price IDs and the account ID have been left intact
+since they are not secret and are useful diagnostic context.
+
+
+=== Route registration ===
+
+File: server/src/routes/subscriptions.ts
+
+import { Router } from 'express'
+import { requireAuth } from '../middleware/auth'
+import { createCheckout, createPortal, getStatus, getInvoices } from '../controllers/subscriptions'
+
+export const subscriptionsRouter = Router()
+
+subscriptionsRouter.use(requireAuth)
+subscriptionsRouter.post('/checkout', createCheckout as any)
+subscriptionsRouter.post('/portal', createPortal as any)
+subscriptionsRouter.get('/status', getStatus as any)
+subscriptionsRouter.get('/invoices', getInvoices as any)
+
+(Mounted in server/src/index.ts at: app.use('/api/v1/subscriptions', subscriptionsRouter))
+
+
+=== Controller: createCheckout ===
+
+File: server/src/controllers/subscriptions.ts
+Imports (relevant): import { stripe, createStripeCustomer, createCheckoutSession, createPortalSession } from '../services/stripe'
+
+/** Allowlist of price IDs this server is configured to accept. Computed at
+ *  request time (rather than module load) so that an env-var change on a
+ *  hot-reload or restart is picked up without a code change. Any priceId
+ *  arriving in the request body must match one of these — otherwise we
+ *  refuse with 503 BILLING_NOT_CONFIGURED before reaching Stripe. This
+ *  closes a class of bugs where the client falls back to a placeholder
+ *  literal (e.g. from a missing VITE_-prefixed env var on the frontend)
+ *  and the server faithfully forwards it, producing a confusing Stripe
+ *  "No such price" 500 to the user. */
+function configuredPriceIds(): string[] {
+  return [
+    process.env.STRIPE_PRO_MONTHLY_PRICE_ID,
+    process.env.STRIPE_PRO_ANNUAL_PRICE_ID,
+    process.env.STRIPE_PROPLUS_MONTHLY_PRICE_ID,
+    process.env.STRIPE_PROPLUS_ANNUAL_PRICE_ID,
+  ].filter(
+    (v): v is string =>
+      typeof v === 'string' && v.length > 0 && v.startsWith('price_') && !/placeholder/i.test(v),
+  )
+}
+
+export async function createCheckout(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { priceId } = req.body
+    if (!priceId) throw new AppError('priceId required', 400)
+
+    // Defense-in-depth: the priceId must (a) look like a real Stripe price
+    // ID, (b) not be a placeholder, and (c) match one of the env-configured
+    // tier prices. Any failure here is a 503 (server not configured to
+    // service this checkout), which Sentry's setupExpressErrorHandler will
+    // capture via next(err). NEVER pass an unvetted string through to Stripe
+    // — Stripe's "No such price" 500 is a dead-end UX (the user just sees
+    // a generic 500 with no actionable next step).
+    const allowed = configuredPriceIds()
+    const looksReal = typeof priceId === 'string' && priceId.startsWith('price_') && !/placeholder/i.test(priceId)
+    if (!looksReal || !allowed.includes(priceId)) {
+      console.error(
+        `[Checkout] Refusing to create session — priceId=${JSON.stringify(priceId)} ` +
+        `looksReal=${looksReal} matchedConfigured=${allowed.includes(priceId)} ` +
+        `configuredCount=${allowed.length}`
+      )
+      throw new AppError(
+        'Billing is not configured for this checkout. Please contact support.',
+        503,
+        { code: 'BILLING_NOT_CONFIGURED' },
+      )
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id } })
+    if (!user) throw new AppError('User not found', 404)
+
+    // Trial eligibility — must be computed BEFORE we create a Stripe customer
+    // below, otherwise the freshly-set customerId would flip this check and
+    // trial-eligible first-time users would be denied their trial. Eligible
+    // means: never had a trial AND never had a Stripe customer record.
+    // Anything else (past trial, prior subscription, returning user) is
+    // ineligible — checkout will pass trial_period_days: 0.
+    const trialEligible = !user.trialEndsAt && !user.customerId
+
+    // On-demand customer creation. The registration path at auth.ts:68 wraps
+    // createStripeCustomer in try/catch with console.error on failure (so a
+    // Stripe outage during signup doesn't block account creation), which
+    // means customerId can be null on accounts that registered during an
+    // outage. Recover here by creating the customer on the first checkout
+    // attempt, then persist for future requests.
+    let customerId = user.customerId
+    if (!customerId) {
+      const customer = await createStripeCustomer(
+        user.email,
+        `${user.firstName} ${user.lastName}`.trim(),
+      )
+      customerId = customer.id
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { customerId },
+      })
+    }
+
+    const session = await createCheckoutSession(
+      customerId,
+      priceId,
+      user.id,
+      getClientOrigin(req),
+      !trialEligible,
+    )
+    res.json({ url: session.url })
+  } catch (err) { next(err) }
+}
+
+
+=== Service: createCheckoutSession ===
+
+File: server/src/services/stripe.ts
+
+export async function createCheckoutSession(
+  customerId: string,
+  priceId: string,
+  userId: string,
+  clientOrigin: string,
+  /** When true, force trial_period_days to 0 so this checkout cannot grant a
+   *  trial — used for users who have already had one (trialEndsAt set) OR
+   *  already had a Stripe customer record before this checkout request. The
+   *  client paywall hides "Start free trial" framing for the same audience;
+   *  this is the server-side enforcement that makes that promise truthful. */
+  enforceNoTrial = false,
+) {
+  return stripe.checkout.sessions.create({
+    customer: customerId,
+    payment_method_types: ['card'],
+    line_items: [{ price: priceId, quantity: 1 }],
+    mode: 'subscription',
+    success_url: `${clientOrigin}/profile/billing?success=true`,
+    cancel_url: `${clientOrigin}/pricing`,
+    metadata: { userId },
+    subscription_data: {
+      metadata: { userId },
+      ...(enforceNoTrial ? { trial_period_days: 0 } : {}),
+    },
+  })
+}
+
+
+=== Stripe SDK init ===
+
+File: server/src/services/stripe.ts (top of file)
+
+import Stripe from 'stripe'
+
+export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '[REDACTED_SK_TEST_KEY]', {
+  apiVersion: '2024-06-20',
+})
+
+(STRIPE_SECRET_KEY is loaded from .env at process start; the literal fallback
+above is a placeholder default used only when the env var is absent. The real
+key in use is a test-mode secret key (redacted above), scoped to
+acct_1TNcoFIXRVOMP7zw.)
+
+Stripe SDK package: stripe@^14.x  (CommonJS, no Connect / Stripe-Account header in use)
+
+
+=== Additional context ===
+
+- Webhook secret env var: STRIPE_WEBHOOK_SECRET = [REDACTED_WEBHOOK_SECRET]
+- Database: PostgreSQL via Prisma. DATABASE_URL = [REDACTED_DB_URL] (irrelevant to checkout flow)
+- The four price IDs read from process.env at the top of the controller's
+  configuredPriceIds() helper resolve to:
+    STRIPE_PRO_MONTHLY_PRICE_ID     = price_1TNdSt...  ($8.99 USD/month, active)
+    STRIPE_PRO_ANNUAL_PRICE_ID      = price_1TNdXR...  ($69.99 USD/year, active)
+    STRIPE_PROPLUS_MONTHLY_PRICE_ID = price_1TNdYi...  ($12.99 USD/month, active)
+    STRIPE_PROPLUS_ANNUAL_PRICE_ID  = price_1TNdZK...  ($109.99 USD/year, active)
+  All four returned a successful 200 from stripe.prices.retrieve() on
+  May 9 2026, so price-not-found is not the cause.

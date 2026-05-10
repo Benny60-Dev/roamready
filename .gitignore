@@ -37,3 +37,7 @@ Thumbs.db
 # Prisma
 prisma/*.db
 prisma/*.db-journal
+
+# Local developer tooling — not part of the codebase
+stripe-cli/
+*.exe

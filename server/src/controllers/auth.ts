@@ -5,7 +5,6 @@ import { Resend } from 'resend'
 import { prisma } from '../utils/prisma'
 import { AppError } from '../middleware/errorHandler'
 import { AuthRequest } from '../middleware/auth'
-import { createStripeCustomer } from '../services/stripe'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -63,13 +62,11 @@ export async function register(req: Request, res: Response, next: NextFunction) 
       },
     })
 
-    // Create Stripe customer
-    try {
-      const customer = await createStripeCustomer(user.email, `${user.firstName} ${user.lastName}`)
-      await prisma.user.update({ where: { id: user.id }, data: { customerId: customer.id } })
-    } catch (e) {
-      console.error('Stripe customer creation failed:', e)
-    }
+    // Stripe customer creation is deferred to first checkout (createCheckout
+    // controller has an on-demand recovery path that creates + persists
+    // customerId when it's still null). This matches the hybrid trial
+    // model — no card required to start, so no Stripe-side state needed
+    // until the user actually upgrades.
 
     const { accessToken, refreshToken } = generateTokens(user.id)
     setRefreshCookie(res, refreshToken)

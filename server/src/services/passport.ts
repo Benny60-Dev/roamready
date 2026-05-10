@@ -1,7 +1,6 @@
 import passport from 'passport'
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20'
 import { prisma } from '../utils/prisma'
-import { createStripeCustomer } from './stripe'
 
 passport.use(
   new GoogleStrategy(
@@ -33,12 +32,8 @@ passport.use(
             },
           })
 
-          try {
-            const customer = await createStripeCustomer(user.email, `${user.firstName} ${user.lastName}`)
-            await prisma.user.update({ where: { id: user.id }, data: { customerId: customer.id } })
-          } catch (e) {
-            console.error('Stripe customer creation failed:', e)
-          }
+          // Stripe customer is lazily created on first checkout — see the
+          // recovery path in createCheckout (controllers/subscriptions.ts).
         } else if (!user.googleId) {
           await prisma.user.update({ where: { id: user.id }, data: { googleId: profile.id } })
         }

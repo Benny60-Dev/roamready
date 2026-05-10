@@ -35,28 +35,66 @@ function getClientOrigin(req: AuthRequest): string {
   return process.env.CLIENT_URL || 'http://localhost:3000'
 }
 
+/** Allowlist of price IDs this server is configured to accept. Computed at
+ *  request time (rather than module load) so that an env-var change on a
+ *  hot-reload or restart is picked up without a code change. Any priceId
+ *  arriving in the request body must match one of these — otherwise we
+ *  refuse with 503 BILLING_NOT_CONFIGURED before reaching Stripe. This
+ *  closes a class of bugs where the client falls back to a placeholder
+ *  literal (e.g. from a missing VITE_-prefixed env var on the frontend)
+ *  and the server faithfully forwards it, producing a confusing Stripe
+ *  "No such price" 500 to the user. */
+function configuredPriceIds(): string[] {
+  return [
+    process.env.STRIPE_PRO_MONTHLY_PRICE_ID,
+    process.env.STRIPE_PRO_ANNUAL_PRICE_ID,
+    process.env.STRIPE_PROPLUS_MONTHLY_PRICE_ID,
+    process.env.STRIPE_PROPLUS_ANNUAL_PRICE_ID,
+  ].filter(
+    (v): v is string =>
+      typeof v === 'string' && v.length > 0 && v.startsWith('price_') && !/placeholder/i.test(v),
+  )
+}
+
 export async function createCheckout(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { priceId } = req.body
     if (!priceId) throw new AppError('priceId required', 400)
 
+    // Defense-in-depth: the priceId must (a) look like a real Stripe price
+    // ID, (b) not be a placeholder, and (c) match one of the env-configured
+    // tier prices. Any failure here is a 503 (server not configured to
+    // service this checkout), which Sentry's setupExpressErrorHandler will
+    // capture via next(err). NEVER pass an unvetted string through to Stripe
+    // — Stripe's "No such price" 500 is a dead-end UX (the user just sees
+    // a generic 500 with no actionable next step).
+    const allowed = configuredPriceIds()
+    const looksReal = typeof priceId === 'string' && priceId.startsWith('price_') && !/placeholder/i.test(priceId)
+    if (!looksReal || !allowed.includes(priceId)) {
+      console.error(
+        `[Checkout] Refusing to create session — priceId=${JSON.stringify(priceId)} ` +
+        `looksReal=${looksReal} matchedConfigured=${allowed.includes(priceId)} ` +
+        `configuredCount=${allowed.length}`
+      )
+      throw new AppError(
+        'Billing is not configured for this checkout. Please contact support.',
+        503,
+        { code: 'BILLING_NOT_CONFIGURED' },
+      )
+    }
+
     const user = await prisma.user.findUnique({ where: { id: req.user!.id } })
     if (!user) throw new AppError('User not found', 404)
 
-    // Trial eligibility — must be computed BEFORE we create a Stripe customer
-    // below, otherwise the freshly-set customerId would flip this check and
-    // trial-eligible first-time users would be denied their trial. Eligible
-    // means: never had a trial AND never had a Stripe customer record.
-    // Anything else (past trial, prior subscription, returning user) is
-    // ineligible — checkout will pass trial_period_days: 0.
-    const trialEligible = !user.trialEndsAt && !user.customerId
+    // Hybrid trial model: the 7-day trial is purely app-side (granted at
+    // signup via trialEndsAt). Stripe charges immediately on checkout — no
+    // Stripe-side trial. There's nothing to compute or branch on here:
+    // every checkout that reaches this controller results in a real charge.
 
-    // On-demand customer creation. The registration path at auth.ts:68 wraps
-    // createStripeCustomer in try/catch with console.error on failure (so a
-    // Stripe outage during signup doesn't block account creation), which
-    // means customerId can be null on accounts that registered during an
-    // outage. Recover here by creating the customer on the first checkout
-    // attempt, then persist for future requests.
+    // On-demand customer creation. Signup no longer pre-creates Stripe
+    // customers (auth.ts + passport.ts), so the user's customerId is null
+    // on first checkout — create it here and persist for future requests.
+    // Also covers any legacy account whose signup-time creation failed.
     let customerId = user.customerId
     if (!customerId) {
       const customer = await createStripeCustomer(
@@ -75,7 +113,6 @@ export async function createCheckout(req: AuthRequest, res: Response, next: Next
       priceId,
       user.id,
       getClientOrigin(req),
-      !trialEligible,
     )
     res.json({ url: session.url })
   } catch (err) { next(err) }
@@ -174,6 +211,13 @@ export async function handleWebhook(req: Request, res: Response, next: NextFunct
             data: {
               subscriptionId: session.subscription,
               subscriptionTier: tier,
+              // Clear the app-side trial — once the user has actually paid,
+              // the in-app "Trial active — X days left" banner should stop
+              // showing. trialEndsAt is the SOURCE OF TRUTH for that banner.
+              // We set it to null on FIRST successful checkout; subsequent
+              // renewals (subscription.updated) leave it null since it was
+              // already cleared here.
+              trialEndsAt: null,
             },
           })
 
