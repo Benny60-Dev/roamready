@@ -76,12 +76,8 @@ export default function TermsOfServicePage() {
                 <p className="text-sm mt-1">Limited access to core features at no charge.</p>
               </div>
               <div className="border border-gray-100 rounded-lg p-4" style={{ borderWidth: '0.5px' }}>
-                <h3 className="font-semibold text-gray-900">Pro — $8.99/month or $69.99/year</h3>
+                <h3 className="font-semibold text-gray-900">Pro — $8.99/month or $89.99/year</h3>
                 <p className="text-sm mt-1">Full access to trip planning, AI itinerary generation, PDF export, and more.</p>
-              </div>
-              <div className="border border-gray-100 rounded-lg p-4" style={{ borderWidth: '0.5px' }}>
-                <h3 className="font-semibold text-gray-900">Pro+ — $12.99/month or $109.99/year</h3>
-                <p className="text-sm mt-1">All Pro features plus advanced tools, priority support, and additional capabilities.</p>
               </div>
             </div>
 

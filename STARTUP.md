@@ -56,8 +56,6 @@ cd client && npm run dev    # http://localhost:3000
 ## Stripe setup
 Create these products in your Stripe dashboard:
 - Pro Monthly: $8.99/mo
-- Pro Annual: $69.99/yr
-- Pro+ Monthly: $12.99/mo
-- Pro+ Annual: $109.99/yr
+- Pro Annual: $89.99/yr
 
 Add the price IDs to `.env` and `client/.env`.
