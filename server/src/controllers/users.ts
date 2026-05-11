@@ -66,7 +66,12 @@ export async function getMe(req: AuthRequest, res: Response, next: NextFunction)
       }
     }
 
-    res.json(user)
+    // Strip the bcrypt hash before responding — see auth.ts:getMe for the
+    // matching pattern + comment on why this is destructure-and-rest
+    // rather than `omit` on the query.
+    if (!user) return res.json(null)
+    const { passwordHash: _ph, ...safe } = user
+    res.json(safe)
   } catch (err) { next(err) }
 }
 
@@ -83,7 +88,9 @@ export async function updateMe(req: AuthRequest, res: Response, next: NextFuncti
         homeLocation, homeAddress, homeStreet, homeCity, homeState, homeZip, homeLat, homeLng,
       },
     })
-    res.json(user)
+    // Strip the bcrypt hash before responding — see auth.ts:getMe.
+    const { passwordHash: _ph, ...safe } = user
+    res.json(safe)
   } catch (err) { next(err) }
 }
 

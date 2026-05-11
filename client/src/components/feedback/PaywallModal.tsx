@@ -174,6 +174,9 @@ export default function PaywallModal({ feature, onClose }: Props) {
         <div className="mb-6">
           <div className="border border-[#1F6F8B] rounded-xl p-4" style={{ borderWidth: '0.5px' }}>
             <div className="text-sm font-medium text-[#1F6F8B] mb-1">Pro</div>
+            {/* Same tagline as PricingPage's Pro card description, kept in
+                sync manually (no shared constant yet — backlog candidate). */}
+            <p className="text-xs text-gray-500 mb-2">Everything you need for a great trip.</p>
             <div className="text-2xl font-medium text-gray-900">
               ${annual ? display.annualPerMo : display.monthly}
               <span className="text-sm text-gray-500 font-normal">/mo</span>

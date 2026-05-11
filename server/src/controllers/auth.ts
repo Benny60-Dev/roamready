@@ -85,6 +85,9 @@ export async function register(req: Request, res: Response, next: NextFunction) 
 
     res.status(201).json({
       accessToken,
+      // Shape matches login's response below — keep them in lockstep so
+      // freshly-registered users have the same client state shape as
+      // freshly-logged-in users (no missing isOwner / founderPricing).
       user: {
         id: user.id,
         email: user.email,
@@ -92,6 +95,7 @@ export async function register(req: Request, res: Response, next: NextFunction) 
         lastName: user.lastName,
         subscriptionTier: user.subscriptionTier,
         trialEndsAt: user.trialEndsAt,
+        isOwner: user.isOwner,
         founderPricing: (user as any).founderPricing,
       },
     })
@@ -222,7 +226,16 @@ export async function getMe(req: AuthRequest, res: Response, next: NextFunction)
         memberships: { where: { isActive: true } },
       },
     })
-    res.json(user)
+    // Strip the bcrypt hash before responding. Destructure-and-rest is the
+    // smallest change that works against the currently-shipped Prisma
+    // client types; once a client regen happens we could migrate to
+    // `omit: { passwordHash: true }` on the query itself (Prisma 6 GA).
+    // If new sensitive fields are added to the User model later, they
+    // need to be stripped here too — mirror the same change in the
+    // parallel getMe in controllers/users.ts and in updateMe.
+    if (!user) return res.json(null)
+    const { passwordHash: _ph, ...safe } = user
+    res.json(safe)
   } catch (err) {
     next(err)
   }

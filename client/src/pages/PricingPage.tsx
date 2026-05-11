@@ -110,7 +110,7 @@ const PLANS = [
     monthlyPrice: 8.99,
     annualPrice: 7.49,     // $89.99 / 12 = $7.4992 — per-month equivalent
     annualBilled: 89.99,
-    description: 'Everything you need',
+    description: 'Everything you need for a great trip.',
     features: [
       'AI trip planner (unlimited)',
       'Rig compatibility filtering',
@@ -129,7 +129,10 @@ const PLANS = [
     // for paid plans — kept only so PLANS rows have a uniform shape with
     // the Free row's `cta`.
     cta: 'Upgrade to Pro',
-    highlight: true,
+    // No `highlight` flag — with a single paid tier, visually elevating
+    // the Pro card over Free reads as marketing-by-default. Both cards
+    // share the same neutral border/styling now.
+    highlight: false,
   },
 ]
 
@@ -219,10 +222,9 @@ export default function PricingPage() {
             return (
             <div
               key={plan.id}
-              className={`rounded-xl border p-6 ${plan.highlight ? 'border-[#EA6A0A] bg-[#FFF7ED]/20' : 'border-gray-200 bg-white'}`}
+              className="rounded-xl border border-gray-200 bg-white p-6"
               style={{ borderWidth: '0.5px' }}
             >
-              {plan.highlight && <div className="badge-green text-xs mb-3">Most popular</div>}
               <h2 className="font-medium text-gray-900 text-lg mb-0.5">{plan.name}</h2>
               <p className="text-xs text-gray-500 mb-4">{plan.description}</p>
 
@@ -254,7 +256,7 @@ export default function PricingPage() {
               </div>
 
               {plan.ctaTo ? (
-                <Link to={plan.ctaTo} className={`block text-center py-2.5 rounded-lg text-sm font-medium mb-6 ${plan.highlight ? 'btn-primary' : 'btn-outline'}`}>
+                <Link to={plan.ctaTo} className="block text-center py-2.5 rounded-lg text-sm font-medium mb-6 btn-outline">
                   {plan.cta}
                 </Link>
               ) : (() => {
@@ -266,9 +268,7 @@ export default function PricingPage() {
                   <button
                     onClick={() => handleUpgrade(plan.id)}
                     disabled={loading === plan.id || cta.disabled}
-                    className={`w-full py-2.5 rounded-lg text-sm font-medium mb-6 transition-colors ${
-                      plan.highlight ? 'bg-[#F7A829] text-white hover:bg-[#C9851A]' : 'border border-[#1F6F8B] text-[#1F6F8B] hover:bg-[#E0F0F4]'
-                    } disabled:opacity-40`}
+                    className="w-full py-2.5 rounded-lg text-sm font-medium mb-6 transition-colors border border-[#1F6F8B] text-[#1F6F8B] hover:bg-[#E0F0F4] disabled:opacity-40"
                     style={{ borderWidth: '0.5px' }}
                   >
                     {loading === plan.id ? 'Loading...' : cta.label}
