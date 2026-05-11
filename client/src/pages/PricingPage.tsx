@@ -4,6 +4,7 @@ import { Check, Info } from 'lucide-react'
 import { subscriptionsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import type { User } from '../types'
+import { PRO_FEATURES } from '../config/pricing'
 
 /** Maps a PLANS entry's id to the tier string stored on user.subscriptionTier. */
 const PLAN_TIER: Record<string, 'PRO' | null> = {
@@ -84,13 +85,11 @@ function getCta(planId: string, user: User | null): { label: string; disabled: b
   }
 }
 
-/** Plan shape — features are a flat string array. An optional
- *  `sectionLabel` renders above the bullets when present (used by the
- *  Free card's "What you keep after the trial:" framing). The Pro
- *  card has no sectionLabel — its bullets render directly under the
- *  CTA. Previously this carried a discriminated `FeatureItem[]` to
- *  support multiple sections per card; collapsed back to the simpler
- *  shape now that only one section is needed on either card. */
+/** Plan shape — features is a flat string array. Both Free and Pro
+ *  reference the same `PRO_FEATURES` constant from config/pricing.ts
+ *  (Free advertises the same features it gets during the 7-day trial;
+ *  the trial-limited messaging lives in the "Includes a 7-day Pro
+ *  trial" badge between price and CTA). */
 const PLANS: Array<{
   id: string
   name: string
@@ -98,8 +97,7 @@ const PLANS: Array<{
   annualPrice: number
   annualBilled?: number
   description: string
-  features: string[]
-  sectionLabel?: string
+  features: readonly string[]
   cta: string
   ctaTo?: string
   highlight: boolean
@@ -110,13 +108,10 @@ const PLANS: Array<{
     monthlyPrice: 0,
     annualPrice: 0,
     description: 'Start with everything, no card required.',
-    sectionLabel: 'What you keep after the trial:',
-    features: [
-      'AI trip planner',
-      'Rig profiles',
-      'Trip planning',
-      'Map view',
-    ],
+    // Mirrors Pro features exactly — what the user actually gets during
+    // their 7-day Pro trial. The trial badge above the CTA carries the
+    // "limited to 7 days" message; this list shows the value.
+    features: PRO_FEATURES,
     cta: 'Get started',
     ctaTo: '/signup',
     highlight: false,
@@ -131,19 +126,7 @@ const PLANS: Array<{
     annualPrice: 7.49,     // $89.99 / 12 = $7.4992 — per-month equivalent
     annualBilled: 89.99,
     description: 'Everything you need for a great trip.',
-    features: [
-      'AI trip planner (unlimited)',
-      'Rig compatibility filtering',
-      'Campground booking',
-      'Military campground access',
-      'OHV & van destinations',
-      'Weather alerts',
-      'Trip journal with photos',
-      'Maintenance tracker',
-      'PDF export & sharing',
-      'Resources along route',
-      'Packing list generator',
-    ],
+    features: PRO_FEATURES,
     // CTA computed at render time via getCta(). The literal here is unused
     // for paid plans — kept only so PLANS rows have a uniform shape with
     // the Free row's `cta`.
@@ -270,13 +253,16 @@ export default function PricingPage() {
               <p className="text-xs text-gray-500 mb-4">{plan.description}</p>
 
               <div className="mb-6">
+                {/* Price line. For Free (monthlyPrice = 0) we render "$0/mo"
+                    rather than the literal word "Free" — the plan name at
+                    the top of the card already says "Free", and showing it
+                    twice on the same card was visually redundant. The
+                    "Includes a 7-day Pro trial" badge a few lines down is
+                    what communicates "this $0 still gets you everything for
+                    a week." */}
                 <div className="text-3xl font-medium text-gray-900">
-                  {displayPrices.monthlyPrice === 0 ? 'Free' : (
-                    <>
-                      ${annual ? displayPrices.annualPrice : displayPrices.monthlyPrice}
-                      <span className="text-sm font-normal text-gray-500">/mo</span>
-                    </>
-                  )}
+                  ${annual ? displayPrices.annualPrice : displayPrices.monthlyPrice}
+                  <span className="text-sm font-normal text-gray-500">/mo</span>
                 </div>
                 {/* When the Annual toggle is on, the big number above is the
                     per-month EQUIVALENT (marketing hook). The line below is
@@ -364,13 +350,11 @@ export default function PricingPage() {
                 )
               })()}
 
-              {/* Features render. plan.sectionLabel is optional — when set
-                  (Free card: "What you keep after the trial:"), it renders
-                  as a small muted heading above the bullets. Pro card has
-                  no label; bullets render directly. */}
-              {plan.sectionLabel && (
-                <p className="text-xs font-medium text-[#5F5E5A] mb-1.5">{plan.sectionLabel}</p>
-              )}
+              {/* Features render. Both cards now share PRO_FEATURES from
+                  config/pricing.ts — Free advertises the same list as Pro
+                  because that's what users actually get during their 7-day
+                  trial. The trial badge above the CTA carries the "limited
+                  to 7 days" framing. */}
               <div className="space-y-2">
                 {plan.features.map((feature, i) => (
                   <div key={i} className="flex items-start gap-2 text-sm text-gray-600">

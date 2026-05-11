@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { X, Check, Zap, Info } from 'lucide-react'
 import { subscriptionsApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
+import { PRO_FEATURES } from '../../config/pricing'
 
 interface Props {
   feature?: string
@@ -55,17 +56,6 @@ const FEATURE_LABELS: Record<string, string> = {
   maintenanceTracker: 'Maintenance Tracker',
   weatherAlerts: 'Weather Alerts',
 }
-
-const PRO_FEATURES = [
-  'Campground booking & reservations',
-  'Rig compatibility filtering',
-  'AI trip planner (unlimited)',
-  'Weather alerts along route',
-  'Trip journal with photos',
-  'Maintenance tracker',
-  'PDF export & trip sharing',
-  'Military campground access',
-]
 
 export default function PaywallModal({ feature, onClose }: Props) {
   const [annual, setAnnual] = useState(true)
