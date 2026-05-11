@@ -36,6 +36,12 @@ model User {
   customerId          String?
   trialEndsAt         DateTime?
   subscriptionEndsAt  DateTime?
+  /// Lifetime founder rate eligibility — set at signup based on whether
+  /// the user joined before FOUNDER_CUTOFF_DATE (see config/founderPricing.ts).
+  /// Drives Stripe price ID selection in createCheckout AND the price/badge
+  /// display on PricingPage + PaywallModal. Once true, this never flips —
+  /// founders keep their rate even if they cancel and re-subscribe later.
+  founderPricing      Boolean              @default(false)
   isOwner             Boolean              @default(false)
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
