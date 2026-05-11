@@ -22,10 +22,12 @@ import './config/env'
     { key: 'JWT_REFRESH_SECRET', feature: 'token refresh will be broken' },
   ]
   const STRIPE_REQUIRED: Array<{ key: string; feature: string }> = [
-    { key: 'STRIPE_SECRET_KEY',              feature: 'Stripe API calls will fail' },
-    { key: 'STRIPE_WEBHOOK_SECRET',          feature: 'webhook signature verification will fail' },
-    { key: 'STRIPE_PRO_MONTHLY_PRICE_ID',    feature: 'Pro monthly checkout/tier detection will mis-bill' },
-    { key: 'STRIPE_PRO_ANNUAL_PRICE_ID',     feature: 'Pro annual checkout/tier detection will mis-bill' },
+    { key: 'STRIPE_SECRET_KEY',                      feature: 'Stripe API calls will fail' },
+    { key: 'STRIPE_WEBHOOK_SECRET',                  feature: 'webhook signature verification will fail' },
+    { key: 'STRIPE_PRO_MONTHLY_PRICE_ID',            feature: 'Pro monthly checkout/tier detection will mis-bill' },
+    { key: 'STRIPE_PRO_ANNUAL_PRICE_ID',             feature: 'Pro annual checkout/tier detection will mis-bill' },
+    { key: 'STRIPE_PRO_FOUNDER_MONTHLY_PRICE_ID',    feature: 'founder-rate monthly checkouts will fail — early-adopter users cannot upgrade' },
+    { key: 'STRIPE_PRO_FOUNDER_ANNUAL_PRICE_ID',     feature: 'founder-rate annual checkouts will fail — early-adopter users cannot upgrade' },
   ]
   const RED    = '\x1b[31m'
   const YELLOW = '\x1b[33m'

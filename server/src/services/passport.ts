@@ -1,6 +1,7 @@
 import passport from 'passport'
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20'
 import { prisma } from '../utils/prisma'
+import { isFounderEligible } from '../config/founderPricing'
 
 passport.use(
   new GoogleStrategy(
@@ -20,6 +21,10 @@ passport.use(
 
         if (!user) {
           const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+          // Founder pricing flag stamped at signup — see auth.ts:register
+          // for the parallel email/password path. Same `as any` cast for
+          // the same DLL-lock reason; remove on next dev-server restart.
+          const founderPricing = isFounderEligible()
           user = await prisma.user.create({
             data: {
               email,
@@ -29,7 +34,8 @@ passport.use(
               avatarUrl: profile.photos?.[0]?.value,
               subscriptionTier: 'FREE',
               trialEndsAt,
-            },
+              founderPricing,
+            } as any,
           })
 
           // Stripe customer is lazily created on first checkout — see the

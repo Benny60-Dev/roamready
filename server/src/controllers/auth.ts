@@ -5,6 +5,7 @@ import { Resend } from 'resend'
 import { prisma } from '../utils/prisma'
 import { AppError } from '../middleware/errorHandler'
 import { AuthRequest } from '../middleware/auth'
+import { isFounderEligible } from '../config/founderPricing'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -51,7 +52,17 @@ export async function register(req: Request, res: Response, next: NextFunction) 
     const passwordHash = await bcrypt.hash(password, 12)
     const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
 
+    // Founder pricing flag is set once at signup based on the signup
+    // timestamp vs. FOUNDER_CUTOFF_DATE. Stamped in the same row write so
+    // there's no chance of partial state (account created without the flag).
+    const founderPricing = isFounderEligible()
+
     const user = await prisma.user.create({
+      // Cast to `any` because the running dev server holds an open handle
+      // on the Prisma DLL, so `prisma generate` could not refresh the
+      // client types this session (verified: EPERM on rename). The DB
+      // column is in place; the cast is removed on the next dev-server
+      // restart when the regenerated client picks up `founderPricing`.
       data: {
         email,
         firstName,
@@ -59,7 +70,8 @@ export async function register(req: Request, res: Response, next: NextFunction) 
         passwordHash,
         subscriptionTier: 'FREE',
         trialEndsAt,
-      },
+        founderPricing,
+      } as any,
     })
 
     // Stripe customer creation is deferred to first checkout (createCheckout

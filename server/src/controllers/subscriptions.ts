@@ -48,9 +48,22 @@ function configuredPriceIds(): string[] {
   return [
     process.env.STRIPE_PRO_MONTHLY_PRICE_ID,
     process.env.STRIPE_PRO_ANNUAL_PRICE_ID,
+    process.env.STRIPE_PRO_FOUNDER_MONTHLY_PRICE_ID,
+    process.env.STRIPE_PRO_FOUNDER_ANNUAL_PRICE_ID,
   ].filter(
     (v): v is string =>
       typeof v === 'string' && v.length > 0 && v.startsWith('price_') && !/placeholder/i.test(v),
+  )
+}
+
+/** Returns true if `priceId` matches one of the two founder-rate env vars.
+ *  Used by createCheckout to enforce that only founder-eligible users can
+ *  check out at the founder rate — otherwise a non-founder client could
+ *  pick a founder priceId in dev-tools and pay the discounted rate. */
+function isFounderPriceId(priceId: string): boolean {
+  return (
+    priceId === process.env.STRIPE_PRO_FOUNDER_MONTHLY_PRICE_ID ||
+    priceId === process.env.STRIPE_PRO_FOUNDER_ANNUAL_PRICE_ID
   )
 }
 
@@ -83,6 +96,29 @@ export async function createCheckout(req: AuthRequest, res: Response, next: Next
 
     const user = await prisma.user.findUnique({ where: { id: req.user!.id } })
     if (!user) throw new AppError('User not found', 404)
+
+    // Founder-rate gating: only users whose founderPricing flag is true
+    // (set at signup if joined before FOUNDER_CUTOFF_DATE) are allowed to
+    // check out at a founder-rate priceId. Without this check, a
+    // non-founder could open dev-tools and submit a founder priceId to
+    // pay the lower rate. The client also picks the right priceId based
+    // on user.founderPricing — this guard is the server-side enforcement.
+    //
+    // Note: we DO NOT block the inverse (founder client submitting a
+    // regular priceId). That's user-side overpayment, not exploit; if a
+    // founder's stale client sends a regular priceId, let them through
+    // rather than block their upgrade.
+    if (isFounderPriceId(priceId) && !(user as any).founderPricing) {
+      console.error(
+        `[Checkout] Refusing founder-rate checkout for non-founder userId=${user.id} ` +
+        `priceId=${priceId}`
+      )
+      throw new AppError(
+        'Founder pricing is not available for this account.',
+        403,
+        { code: 'FOUNDER_INELIGIBLE' },
+      )
+    }
 
     // Hybrid trial model: the 7-day trial is purely app-side (granted at
     // signup via trialEndsAt). Stripe charges immediately on checkout — no
