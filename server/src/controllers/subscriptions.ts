@@ -126,8 +126,8 @@ export async function createPortal(req: AuthRequest, res: Response, next: NextFu
   } catch (err) { next(err) }
 }
 
-/** Map a Stripe priceId to our internal tier. With Pro+ removed, PRO is
- *  the only paid tier and this helper currently always returns 'PRO' —
+/** Map a Stripe priceId to our internal tier. PRO is currently the
+ *  only paid tier so this helper always returns 'PRO' today —
  *  but it is intentionally kept as a function (rather than inlined) so a
  *  future tier addition is a one-place edit.
  *
