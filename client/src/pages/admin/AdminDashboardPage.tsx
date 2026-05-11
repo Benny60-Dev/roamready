@@ -14,7 +14,7 @@ export default function AdminDashboardPage() {
 
   const stats = metrics ? [
     { icon: Users, label: 'Total users', value: metrics.totalUsers, sub: `+${metrics.newUsersLast30Days} this month` },
-    { icon: DollarSign, label: 'Pro subscribers', value: metrics.proUsers + metrics.proPlusUsers, sub: `${metrics.proUsers} Pro · ${metrics.proPlusUsers} Pro+` },
+    { icon: DollarSign, label: 'Pro subscribers', value: metrics.proUsers, sub: `${metrics.proUsers} Pro` },
     { icon: Map, label: 'Total trips', value: metrics.totalTrips, sub: `${metrics.completedTrips} completed` },
     { icon: Users, label: 'Free users', value: metrics.freeUsers, sub: 'Convert to paid' },
   ] : []

@@ -29,7 +29,7 @@ export default function AdminSubscribersPage() {
                 <p className="text-xs text-gray-500">{sub.email}</p>
               </div>
               <div className="text-right">
-                <span className={`badge text-xs ${sub.subscriptionTier === 'PRO_PLUS' ? 'badge-purple' : 'badge-green'}`}>
+                <span className="badge text-xs badge-green">
                   {sub.subscriptionTier}
                 </span>
                 {sub.subscriptionEndsAt && (

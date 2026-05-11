@@ -36,10 +36,6 @@ export default function AdminRevenuePage() {
             <div className="text-2xl font-medium text-gray-900">{revenue?.proSubscribers}</div>
             <div className="text-xs text-gray-500">Pro subscribers</div>
           </div>
-          <div className="card">
-            <div className="text-2xl font-medium text-gray-900">{revenue?.proPlusSubscribers}</div>
-            <div className="text-xs text-gray-500">Pro+ subscribers</div>
-          </div>
         </div>
       )}
     </div>

@@ -38,7 +38,7 @@ export default function BillingPage() {
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <p className="font-medium text-gray-900">{user?.subscriptionTier === 'FREE' ? 'Free' : user?.subscriptionTier === 'PRO' ? 'Pro' : 'Pro+'} Plan</p>
+              <p className="font-medium text-gray-900">{user?.subscriptionTier === 'FREE' ? 'Free' : 'Pro'} Plan</p>
               {isTrialing && <span className="badge-green text-xs">Trial active</span>}
             </div>
             {isTrialing ? (
