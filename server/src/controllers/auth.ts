@@ -152,6 +152,11 @@ export async function register(req: Request, res: Response, next: NextFunction) 
         isOwner: user.isOwner,
         founderPricing: (user as any).founderPricing,
         emailVerified: false,
+        // createdAt powers the 1-hour grace window the Phase 3b
+        // verification banner computes against — surface it on the
+        // initial signup response so the client doesn't need to wait
+        // for a /auth/me round-trip to know when the grace expires.
+        createdAt: user.createdAt,
       },
     })
   } catch (err) {
@@ -190,6 +195,9 @@ export async function login(req: Request, res: Response, next: NextFunction) {
         // doesn't yet know about emailVerified, but the column exists
         // in the DB and `findUnique` with no `select` returns it.
         emailVerified: (user as any).emailVerified,
+        // createdAt powers the 1-hour grace window computation on the
+        // Phase 3b client banner (now - createdAt < 1h → in-grace).
+        createdAt: user.createdAt,
       },
     })
   } catch (err) {

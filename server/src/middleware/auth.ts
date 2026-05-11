@@ -11,6 +11,12 @@ export interface AuthRequest extends Request {
     trialEndsAt: Date | null
     subscriptionEndsAt: Date | null
     isOwner: boolean
+    // Email verification + grace period — read by requireVerifiedEmail.
+    // emailVerified: true means user clicked the magic link. createdAt
+    // powers the 1-hour grace window for unverified accounts; after
+    // createdAt + 1h, gated routes 403.
+    emailVerified: boolean
+    createdAt: Date
   }
 }
 
@@ -26,6 +32,11 @@ export async function requireAuth(req: AuthRequest, _res: Response, next: NextFu
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
+      // Cast through `any` because the locally-shipped Prisma client
+      // predates the email-verification migration; emailVerified +
+      // createdAt are real DB columns and Prisma reads them at runtime,
+      // the cast only sidesteps the stale TS types. Removable on next
+      // dev-server restart + client regen.
       select: {
         id: true,
         email: true,
@@ -33,8 +44,10 @@ export async function requireAuth(req: AuthRequest, _res: Response, next: NextFu
         trialEndsAt: true,
         subscriptionEndsAt: true,
         isOwner: true,
-      },
-    })
+        emailVerified: true,
+        createdAt: true,
+      } as any,
+    }) as unknown as AuthRequest['user']
 
     if (!user) throw new AppError('User not found', 401)
 

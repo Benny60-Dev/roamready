@@ -1,9 +1,10 @@
 import { Router } from 'express'
 import { requireAuth, requireOwner, requireFeature, AuthRequest } from '../middleware/auth'
+import { requireVerifiedEmail } from '../middleware/requireVerifiedEmail'
 import { chat, getChatHistory, getModifyHistory, generateItinerary, generatePackingList, analyzeFeedback } from '../controllers/ai'
 
 export const aiRouter = Router()
-aiRouter.use(requireAuth)
+aiRouter.use(requireAuth, requireVerifiedEmail)
 
 aiRouter.post('/chat', chat as any)
 aiRouter.get('/chat/:tripId/history', getChatHistory as any)

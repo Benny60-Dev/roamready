@@ -1,9 +1,14 @@
 import { Router } from 'express'
 import { requireAuth, requireOwner } from '../middleware/auth'
+import { requireVerifiedEmail } from '../middleware/requireVerifiedEmail'
 import { getMetrics, getSubscribers, getRevenue, getAdminFeedback, analyzeFeedback } from '../controllers/admin'
 
 export const adminRouter = Router()
-adminRouter.use(requireAuth, requireOwner as any)
+// requireVerifiedEmail before requireOwner — owners always bypass the
+// gate via the isOwner check inside requireVerifiedEmail, so the order
+// is effectively a no-op for owner-only routes, but kept consistent
+// with every other gated router.
+adminRouter.use(requireAuth, requireVerifiedEmail, requireOwner as any)
 
 adminRouter.get('/metrics', getMetrics as any)
 adminRouter.get('/subscribers', getSubscribers as any)

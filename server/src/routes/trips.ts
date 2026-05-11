@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { requireAuth, requireFeature, AuthRequest } from '../middleware/auth'
+import { requireVerifiedEmail } from '../middleware/requireVerifiedEmail'
 import { validateBody } from '../middleware/validate'
 import { StopUpdateSchema, TripUpdateSchema } from '../schemas'
 import {
@@ -18,7 +19,7 @@ export const tripsRouter = Router()
 // not on consumption.
 tripsRouter.get('/share/:token', getSharedTrip)
 
-tripsRouter.use(requireAuth)
+tripsRouter.use(requireAuth, requireVerifiedEmail)
 
 tripsRouter.get('/', getTrips as any)
 tripsRouter.post('/', createTrip as any)

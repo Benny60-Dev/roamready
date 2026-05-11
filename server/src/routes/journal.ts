@@ -1,9 +1,10 @@
 import { Router } from 'express'
 import { requireAuth, requireFeature } from '../middleware/auth'
+import { requireVerifiedEmail } from '../middleware/requireVerifiedEmail'
 import { getAllJournals, getTripJournal, upsertEntry, uploadPhotos } from '../controllers/journal'
 
 export const journalRouter = Router()
-journalRouter.use(requireAuth)
+journalRouter.use(requireAuth, requireVerifiedEmail)
 
 // Reads stay open: a downgraded user can still see their own past journal
 // entries. Only writes are gated.

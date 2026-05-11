@@ -1,9 +1,10 @@
 import { Router } from 'express'
 import { requireAuth, requireFeature } from '../middleware/auth'
+import { requireVerifiedEmail } from '../middleware/requireVerifiedEmail'
 import { getItems, createItem, updateItem, logService, getHistory } from '../controllers/maintenance'
 
 export const maintenanceRouter = Router()
-maintenanceRouter.use(requireAuth)
+maintenanceRouter.use(requireAuth, requireVerifiedEmail)
 
 // Reads stay open: a downgraded user can still see their own past maintenance
 // items and service history. Only writes are gated.

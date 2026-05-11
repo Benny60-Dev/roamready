@@ -1,9 +1,10 @@
 import { Router } from 'express'
 import { requireAuth, requireFeature, AuthRequest } from '../middleware/auth'
+import { requireVerifiedEmail } from '../middleware/requireVerifiedEmail'
 import { searchCampgrounds, getCampground, getCompatible, getMilitary, getOhv, getVan, getCarCamping } from '../controllers/campgrounds'
 
 export const campgroundsRouter = Router()
-campgroundsRouter.use(requireAuth)
+campgroundsRouter.use(requireAuth, requireVerifiedEmail)
 
 campgroundsRouter.get('/search', requireFeature('campgroundBooking'), searchCampgrounds as any)
 campgroundsRouter.get('/compatible', requireFeature('campgroundBooking'), getCompatible as any)

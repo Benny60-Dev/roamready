@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth'
+import { requireVerifiedEmail } from '../middleware/requireVerifiedEmail'
 import { validateBody } from '../middleware/validate'
 import {
   PlanningSessionCreateSchema,
@@ -18,7 +19,7 @@ import {
 
 export const sessionsRouter = Router()
 
-sessionsRouter.use(requireAuth)
+sessionsRouter.use(requireAuth, requireVerifiedEmail)
 
 sessionsRouter.post('/', validateBody(PlanningSessionCreateSchema), createSession as any)
 sessionsRouter.get('/', listSessions as any)
