@@ -6,10 +6,9 @@ import { analyzeFeedbackAI } from '../services/ai'
 
 export async function getMetrics(_req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const [totalUsers, proUsers, proPlusUsers, totalTrips, completedTrips] = await Promise.all([
+    const [totalUsers, proUsers, totalTrips, completedTrips] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { subscriptionTier: 'PRO' } }),
-      prisma.user.count({ where: { subscriptionTier: 'PRO_PLUS' } }),
       prisma.trip.count(),
       prisma.trip.count({ where: { status: 'COMPLETED' } }),
     ])
@@ -20,8 +19,7 @@ export async function getMetrics(_req: AuthRequest, res: Response, next: NextFun
     res.json({
       totalUsers,
       proUsers,
-      proPlusUsers,
-      freeUsers: totalUsers - proUsers - proPlusUsers,
+      freeUsers: totalUsers - proUsers,
       totalTrips,
       completedTrips,
       newUsersLast30Days: newUsers,
@@ -53,14 +51,12 @@ export async function getRevenue(_req: AuthRequest, res: Response, next: NextFun
     const totalRevenue = charges.data.reduce((sum, c) => sum + (c.amount_captured || 0), 0) / 100
 
     const proCount = await prisma.user.count({ where: { subscriptionTier: 'PRO' } })
-    const proPlusCount = await prisma.user.count({ where: { subscriptionTier: 'PRO_PLUS' } })
 
     res.json({
       totalRevenue,
-      mrr: (proCount * 8.99) + (proPlusCount * 12.99),
-      arr: ((proCount * 8.99) + (proPlusCount * 12.99)) * 12,
+      mrr: proCount * 8.99,
+      arr: (proCount * 8.99) * 12,
       proSubscribers: proCount,
-      proPlusSubscribers: proPlusCount,
     })
   } catch (err) { next(err) }
 }

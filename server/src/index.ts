@@ -26,8 +26,6 @@ import './config/env'
     { key: 'STRIPE_WEBHOOK_SECRET',          feature: 'webhook signature verification will fail' },
     { key: 'STRIPE_PRO_MONTHLY_PRICE_ID',    feature: 'Pro monthly checkout/tier detection will mis-bill' },
     { key: 'STRIPE_PRO_ANNUAL_PRICE_ID',     feature: 'Pro annual checkout/tier detection will mis-bill' },
-    { key: 'STRIPE_PROPLUS_MONTHLY_PRICE_ID',feature: 'Pro+ monthly checkout/tier detection will mis-bill' },
-    { key: 'STRIPE_PROPLUS_ANNUAL_PRICE_ID', feature: 'Pro+ annual checkout/tier detection will mis-bill' },
   ]
   const RED    = '\x1b[31m'
   const YELLOW = '\x1b[33m'
