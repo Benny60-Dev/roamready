@@ -84,14 +84,13 @@ function getCta(planId: string, user: User | null): { label: string; disabled: b
   }
 }
 
-/** A feature item is either a plain string (rendered as a bullet) or a
- *  section object — title + bullets. Sections let the Free card show
- *  the 7-day Pro trial value AND post-trial features in two clearly
- *  labeled groups; the Pro card keeps the simpler flat-string shape.
- *  Discriminated at render time by `typeof item === 'string'`. */
-type FeatureSection = { sectionLabel: string; items: string[] }
-type FeatureItem = string | FeatureSection
-
+/** Plan shape — features are a flat string array. An optional
+ *  `sectionLabel` renders above the bullets when present (used by the
+ *  Free card's "What you keep after the trial:" framing). The Pro
+ *  card has no sectionLabel — its bullets render directly under the
+ *  CTA. Previously this carried a discriminated `FeatureItem[]` to
+ *  support multiple sections per card; collapsed back to the simpler
+ *  shape now that only one section is needed on either card. */
 const PLANS: Array<{
   id: string
   name: string
@@ -99,7 +98,8 @@ const PLANS: Array<{
   annualPrice: number
   annualBilled?: number
   description: string
-  features: FeatureItem[]
+  features: string[]
+  sectionLabel?: string
   cta: string
   ctaTo?: string
   highlight: boolean
@@ -110,27 +110,12 @@ const PLANS: Array<{
     monthlyPrice: 0,
     annualPrice: 0,
     description: 'Start with everything, no card required.',
+    sectionLabel: 'What you keep after the trial:',
     features: [
-      {
-        sectionLabel: 'Includes a 7-day Pro trial:',
-        items: [
-          'AI trip planner',
-          'Campground booking',
-          'Trip journal with photos',
-          'Maintenance tracker',
-          'PDF export & sharing',
-          'And much more',
-        ],
-      },
-      {
-        sectionLabel: 'After trial:',
-        items: [
-          'AI trip planner',
-          'Rig profiles',
-          'Trip planning',
-          'Map view',
-        ],
-      },
+      'AI trip planner',
+      'Rig profiles',
+      'Trip planning',
+      'Map view',
     ],
     cta: 'Get started',
     ctaTo: '/signup',
@@ -158,7 +143,6 @@ const PLANS: Array<{
       'PDF export & sharing',
       'Resources along route',
       'Packing list generator',
-      'Membership auto-apply',
     ],
     // CTA computed at render time via getCta(). The literal here is unused
     // for paid plans — kept only so PLANS rows have a uniform shape with
@@ -327,11 +311,35 @@ export default function PricingPage() {
                 )}
               </div>
 
+              {/* "Includes a 7-day Pro trial" callout — only on the Free
+                  card (Pro card doesn't need it; Pro IS the trial target).
+                  Light teal pill matching the existing E0F0F4 "active pill"
+                  background token; text in the darker teal #134756 for
+                  contrast. Subtle highlight, not a warning. Sits between
+                  the price and the CTA so a visitor reading top-to-bottom
+                  understands what they're getting BEFORE they click. */}
+              {plan.id === 'free' && (
+                <div className="mb-4">
+                  <span
+                    className="inline-block text-xs font-medium px-2.5 py-1 rounded-full"
+                    style={{ backgroundColor: '#E0F0F4', color: '#134756' }}
+                  >
+                    Includes a 7-day Pro trial
+                  </span>
+                </div>
+              )}
+
               {plan.ctaTo ? (
-                // Free-plan CTA — teal-outline (btn-outline class matches
-                // the spec: white bg, #1F6F8B text + border, hover #E0F0F4
-                // subtle tint).
-                <Link to={plan.ctaTo} className="block text-center py-2.5 rounded-lg text-sm font-medium mb-6 btn-outline">
+                // Free-plan CTA — solid RV Blue (#1F6F8B), white text. Both
+                // tier CTAs are now solid fills in their tier color (Free
+                // = blue, Pro = gold) so visual hierarchy reads as "both
+                // are primary actions" rather than "Pro is the real one,
+                // Free is secondary." Hover is a darker shade of the same
+                // blue (no new palette colors introduced).
+                <Link
+                  to={plan.ctaTo}
+                  className="block text-center py-2.5 rounded-lg text-sm font-medium mb-6 transition-colors bg-[#1F6F8B] text-white hover:bg-[#185A73]"
+                >
                   {plan.cta}
                 </Link>
               ) : (() => {
@@ -356,38 +364,20 @@ export default function PricingPage() {
                 )
               })()}
 
-              {/* Features can be a flat string array (Pro card) or a list of
-                  {sectionLabel, items} sections (Free card). Branch at the
-                  item level so both shapes render in one pass; the section
-                  case emits a small label + nested bullets. */}
+              {/* Features render. plan.sectionLabel is optional — when set
+                  (Free card: "What you keep after the trial:"), it renders
+                  as a small muted heading above the bullets. Pro card has
+                  no label; bullets render directly. */}
+              {plan.sectionLabel && (
+                <p className="text-xs font-medium text-[#5F5E5A] mb-1.5">{plan.sectionLabel}</p>
+              )}
               <div className="space-y-2">
-                {plan.features.map((feature, i) => {
-                  if (typeof feature === 'string') {
-                    return (
-                      <div key={i} className="flex items-start gap-2 text-sm text-gray-600">
-                        <Check size={14} className="text-[#1D9E75] flex-shrink-0 mt-0.5" />
-                        <span>{feature}</span>
-                      </div>
-                    )
-                  }
-                  // Sectioned features (Free card). First section has no
-                  // extra top margin; subsequent sections get mt-3 for visual
-                  // separation between "Includes a 7-day Pro trial:" and
-                  // "After trial:".
-                  return (
-                    <div key={i} className={i === 0 ? '' : 'mt-3'}>
-                      <p className="text-xs font-medium text-[#5F5E5A] mb-1.5">{feature.sectionLabel}</p>
-                      <div className="space-y-2">
-                        {feature.items.map((item, j) => (
-                          <div key={j} className="flex items-start gap-2 text-sm text-gray-600">
-                            <Check size={14} className="text-[#1D9E75] flex-shrink-0 mt-0.5" />
-                            <span>{item}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )
-                })}
+                {plan.features.map((feature, i) => (
+                  <div key={i} className="flex items-start gap-2 text-sm text-gray-600">
+                    <Check size={14} className="text-[#1D9E75] flex-shrink-0 mt-0.5" />
+                    <span>{feature}</span>
+                  </div>
+                ))}
               </div>
             </div>
             )

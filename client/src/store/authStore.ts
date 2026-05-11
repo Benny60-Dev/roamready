@@ -27,7 +27,6 @@ const FEATURE_GATES: Record<string, string[]> = {
   packingListGenerator: ['PRO'],
   tripJournal: ['PRO'],
   maintenanceTracker: ['PRO'],
-  membershipAutoApply: ['PRO'],
   weatherAlerts: ['PRO'],
   aiPlannerUnlimited: ['PRO'],
 }

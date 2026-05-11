@@ -86,7 +86,6 @@ export function hasAccess(
     packingListGenerator: ['PRO'],
     tripJournal: ['PRO'],
     maintenanceTracker: ['PRO'],
-    membershipAutoApply: ['PRO'],
     weatherAlerts: ['PRO'],
     aiPlannerUnlimited: ['PRO'],
   }
