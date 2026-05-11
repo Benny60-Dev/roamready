@@ -11,6 +11,50 @@ import { chatWithAI, generatePackingListAI, analyzeFeedbackAI, generatePlanningC
 const SOFT_CAP = 35
 const HARD_CAP = 60
 
+// Per-user daily AI call cap for non-paying, non-trial, non-owner accounts.
+// Quiet cost protection — NOT a marketing tier, NOT in FEATURE_GATES, NOT
+// advertised on the pricing page. Legitimate users never hit it; only
+// triggers on actual abuse (someone signing up to spam the AI before/after
+// their trial). 30 calls/24h is generous for normal planning flow which
+// typically uses 5-10 AI calls per trip, and is small enough to bound a
+// single bad-faith account's Anthropic spend.
+const FREE_TIER_AI_DAILY_CAP = 30
+const FREE_TIER_AI_WINDOW_MS = 24 * 60 * 60 * 1000
+
+/** Enforce the daily AI cap for non-Pro / non-trial / non-owner users.
+ *  Pulls req.user from the auth middleware (already shaped with
+ *  subscriptionTier, trialEndsAt, isOwner — no extra DB fetch needed).
+ *  Returns true if the cap was hit AND the response was sent — caller
+ *  must early-return. Returns false otherwise; caller continues. */
+async function enforceFreeAiCap(req: AuthRequest, res: Response): Promise<boolean> {
+  const u = req.user!
+  const now = new Date()
+  const isTrialActive = u.trialEndsAt && now < new Date(u.trialEndsAt)
+  const isPro = u.subscriptionTier === 'PRO'
+  const isOwner = u.isOwner === true
+  if (isPro || isTrialActive || isOwner) return false
+
+  const windowStart = new Date(now.getTime() - FREE_TIER_AI_WINDOW_MS)
+  const recentCallCount = await prisma.aIUsageLog.count({
+    where: {
+      userId: u.id,
+      createdAt: { gte: windowStart },
+    },
+  })
+  if (recentCallCount >= FREE_TIER_AI_DAILY_CAP) {
+    console.warn(
+      `[AI cap] userId=${u.id} hit daily cap (${recentCallCount}/${FREE_TIER_AI_DAILY_CAP}) — ` +
+      `returning 429 DAILY_LIMIT`
+    )
+    res.status(429).json({
+      error: 'DAILY_LIMIT',
+      message: "You've reached your daily AI limit. Upgrade to Pro for unlimited trip planning, or try again tomorrow.",
+    })
+    return true
+  }
+  return false
+}
+
 const VIBES = [
   'a quiet alpine lake setting',
   'high desert with red rock formations',
@@ -267,6 +311,9 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
   try {
     const { messages, tripId, sessionId, context } = req.body
     if (!messages || !Array.isArray(messages)) throw new AppError('Messages required', 400)
+
+    // Daily cap for non-paying, non-trial accounts. Quiet cost protection.
+    if (await enforceFreeAiCap(req, res)) return
 
     const userId = req.user!.id
 
@@ -542,6 +589,8 @@ export async function getModifyHistory(req: AuthRequest, res: Response, next: Ne
 export async function generateItinerary(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { messages } = req.body
+    // Daily cap for non-paying, non-trial accounts. Quiet cost protection.
+    if (await enforceFreeAiCap(req, res)) return
     const user = await prisma.user.findUnique({
       where: { id: req.user!.id },
       include: {
@@ -575,6 +624,12 @@ export async function generateItinerary(req: AuthRequest, res: Response, next: N
 export async function generatePackingList(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { tripId } = req.body
+    // Daily cap for non-paying, non-trial accounts. Defense-in-depth — the
+    // route is already behind requireFeature('packingListGenerator') which
+    // gates on subscriptionTier === 'PRO' OR trialEndsAt > now, so this
+    // check is unreachable for Free users in practice. Kept for symmetry
+    // with the other AI-consuming controllers.
+    if (await enforceFreeAiCap(req, res)) return
     const trip = await prisma.trip.findFirst({
       where: { id: tripId, userId: req.user!.id },
       include: { stops: true },
