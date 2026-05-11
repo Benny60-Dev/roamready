@@ -30,6 +30,11 @@ passport.use(
         })
 
         if (!user) {
+          // First-time Google sign-in for this email. Create the account
+          // with emailVerified=true — Google has already verified the
+          // email address on their side, so requiring our own magic-link
+          // confirmation would be redundant friction. NO token generated,
+          // NO email sent.
           const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
           // Founder pricing flag stamped at signup — see auth.ts:register
           // for the parallel email/password path. Same `as any` cast for
@@ -45,13 +50,40 @@ passport.use(
               subscriptionTier: 'FREE',
               trialEndsAt,
               founderPricing,
+              emailVerified: true,
             } as any,
           })
 
           // Stripe customer is lazily created on first checkout — see the
           // recovery path in createCheckout (controllers/subscriptions.ts).
-        } else if (!user.googleId) {
-          await prisma.user.update({ where: { id: user.id }, data: { googleId: profile.id } })
+        } else {
+          // Existing user signing in via Google. Two cases:
+          //
+          //  1. Account was created via Google before (googleId already
+          //     set) — nothing to do. Respect existing emailVerified.
+          //  2. Account was created via email/password and never linked
+          //     Google — both googleId AND (if emailVerified was false)
+          //     emailVerified now flip. Google has just vouched for the
+          //     email; treat that as equivalent to clicking our magic
+          //     link. Token is cleared in the same write to keep the DB
+          //     clean (it would still 404 verify-email since one-time
+          //     use, but explicit nulling is tidier).
+          const updates: Record<string, unknown> = {}
+          if (!user.googleId) updates.googleId = profile.id
+          if (!(user as any).emailVerified) {
+            updates.emailVerified = true
+            updates.emailVerificationToken = null
+            console.log(
+              `[google-oauth] auto-verifying email for existing user ${email} ` +
+              `via Google sign-in (was unverified)`
+            )
+          }
+          if (Object.keys(updates).length > 0) {
+            user = await prisma.user.update({
+              where: { id: user.id },
+              data: updates as any,
+            })
+          }
         }
 
         done(null, user)

@@ -7,6 +7,7 @@ import { AppError } from '../middleware/errorHandler'
 import { AuthRequest } from '../middleware/auth'
 import { isFounderEligible } from '../config/founderPricing'
 import { isDisposableEmail } from '../utils/disposableEmails'
+import { generateVerificationToken, sendVerificationEmail } from '../services/emailVerification'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -95,6 +96,41 @@ export async function register(req: Request, res: Response, next: NextFunction) 
     // model — no card required to start, so no Stripe-side state needed
     // until the user actually upgrades.
 
+    // Email verification — Phase 2 signup hook. Generate a magic-link
+    // token, save it on the user row, fire the send fire-and-forget.
+    // Registration MUST succeed even if Resend is down — the user can
+    // request a fresh link from settings later. Same non-blocking try/
+    // catch pattern that cron.ts + subscriptions.ts use for their
+    // best-effort sends. Phase 3 will add the verification-gate
+    // middleware and the 1-hour grace period; for now this just queues
+    // the email and stamps the token in the DB.
+    try {
+      const token = generateVerificationToken()
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { emailVerificationToken: token } as any,
+      })
+      // Don't await — Resend's HTTP call can take seconds and we don't
+      // want to lengthen the registration response. Errors land in the
+      // .catch and get logged but never thrown.
+      void sendVerificationEmail(user.id, user.email, token).catch(err => {
+        console.error(
+          `[register] verification email send FAILED for ${user.email}:`,
+          err?.message ?? err,
+        )
+      })
+      console.log(`[register] queued verification email for ${user.email}`)
+    } catch (verifyErr: any) {
+      // Token write failed (extremely rare — would mean a DB blip
+      // between user.create above and this update). Log + continue —
+      // signup still succeeds, user can request a fresh link from
+      // settings once Phase 3 ships the UI.
+      console.error(
+        `[register] failed to queue verification email for ${user.email}:`,
+        verifyErr?.message ?? verifyErr,
+      )
+    }
+
     const { accessToken, refreshToken } = generateTokens(user.id)
     setRefreshCookie(res, refreshToken)
 
@@ -103,6 +139,9 @@ export async function register(req: Request, res: Response, next: NextFunction) 
       // Shape matches login's response below — keep them in lockstep so
       // freshly-registered users have the same client state shape as
       // freshly-logged-in users (no missing isOwner / founderPricing).
+      // emailVerified is hardcoded false here — fresh email/password
+      // signups always start unverified. The Phase 3 frontend reads
+      // this flag to decide whether to show the verification banner.
       user: {
         id: user.id,
         email: user.email,
@@ -112,6 +151,7 @@ export async function register(req: Request, res: Response, next: NextFunction) 
         trialEndsAt: user.trialEndsAt,
         isOwner: user.isOwner,
         founderPricing: (user as any).founderPricing,
+        emailVerified: false,
       },
     })
   } catch (err) {
@@ -144,6 +184,12 @@ export async function login(req: Request, res: Response, next: NextFunction) {
         trialEndsAt: user.trialEndsAt,
         isOwner: user.isOwner,
         founderPricing: (user as any).founderPricing,
+        // Phase 3 frontend uses this to render the verification banner.
+        // `as any` here for the same DLL-lock reason as the other new
+        // fields on the user row — the locally-shipped Prisma client
+        // doesn't yet know about emailVerified, but the column exists
+        // in the DB and `findUnique` with no `select` returns it.
+        emailVerified: (user as any).emailVerified,
       },
     })
   } catch (err) {
