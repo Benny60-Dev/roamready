@@ -66,11 +66,16 @@ export async function getMe(req: AuthRequest, res: Response, next: NextFunction)
       }
     }
 
-    // Strip the bcrypt hash before responding — see auth.ts:getMe for the
-    // matching pattern + comment on why this is destructure-and-rest
-    // rather than `omit` on the query.
+    // Strip sensitive / server-only fields before responding. See
+    // auth.ts:getMe for the full rationale on each field. Mirror any
+    // future strips in this file's updateMe + the auth.ts getMe.
     if (!user) return res.json(null)
-    const { passwordHash: _ph, ...safe } = user
+    const {
+      passwordHash: _ph,
+      emailVerificationToken: _evt,
+      emailVerificationSentAt: _evsa,
+      ...safe
+    } = user as any
     res.json(safe)
   } catch (err) { next(err) }
 }
@@ -88,8 +93,14 @@ export async function updateMe(req: AuthRequest, res: Response, next: NextFuncti
         homeLocation, homeAddress, homeStreet, homeCity, homeState, homeZip, homeLat, homeLng,
       },
     })
-    // Strip the bcrypt hash before responding — see auth.ts:getMe.
-    const { passwordHash: _ph, ...safe } = user
+    // Strip sensitive / server-only fields before responding — see
+    // auth.ts:getMe for the full rationale.
+    const {
+      passwordHash: _ph,
+      emailVerificationToken: _evt,
+      emailVerificationSentAt: _evsa,
+      ...safe
+    } = user as any
     res.json(safe)
   } catch (err) { next(err) }
 }

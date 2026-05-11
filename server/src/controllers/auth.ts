@@ -287,15 +287,26 @@ export async function getMe(req: AuthRequest, res: Response, next: NextFunction)
         memberships: { where: { isActive: true } },
       },
     })
-    // Strip the bcrypt hash before responding. Destructure-and-rest is the
-    // smallest change that works against the currently-shipped Prisma
-    // client types; once a client regen happens we could migrate to
-    // `omit: { passwordHash: true }` on the query itself (Prisma 6 GA).
-    // If new sensitive fields are added to the User model later, they
-    // need to be stripped here too — mirror the same change in the
-    // parallel getMe in controllers/users.ts and in updateMe.
+    // Strip sensitive / server-only fields before responding:
+    //   - passwordHash: bcrypt hash (existing strip)
+    //   - emailVerificationToken: magic-link secret — anyone with this
+    //     value can verify the account WITHOUT opening the email,
+    //     defeating verification entirely. Critical strip.
+    //   - emailVerificationSentAt: backend-only timestamp powering the
+    //     60-second resend rate limit; no client need.
+    // Destructure-and-rest is the smallest change that works against
+    // the currently-shipped Prisma client types (cast through `any` so
+    // TS doesn't complain about destructuring fields the stale client
+    // doesn't yet know about). Once Prisma regens we could migrate to
+    // `omit: { ... }` on the query. Mirror this in users.ts:getMe +
+    // users.ts:updateMe whenever the strip list changes.
     if (!user) return res.json(null)
-    const { passwordHash: _ph, ...safe } = user
+    const {
+      passwordHash: _ph,
+      emailVerificationToken: _evt,
+      emailVerificationSentAt: _evsa,
+      ...safe
+    } = user as any
     res.json(safe)
   } catch (err) {
     next(err)
