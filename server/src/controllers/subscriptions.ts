@@ -190,6 +190,31 @@ export async function handleWebhook(req: Request, res: Response, next: NextFunct
           const sub = await stripe.subscriptions.retrieve(session.subscription as string)
           const priceId = sub.items.data[0]?.price?.id
           const tier = tierFromPriceId(priceId)
+
+          // Eagerly compute subscriptionEndsAt from the same subscription
+          // object we just retrieved (no additional Stripe call). Previously
+          // this field was only written by customer.subscription.updated,
+          // which races with this handler — the BillingPage subtext would
+          // briefly fall through to a "no active subscription" message for
+          // freshly-paid users between the two webhook deliveries. Writing
+          // it here closes that window. Wrap the read in try/catch so an
+          // unexpected shape on the Stripe response doesn't break the
+          // user.update — subscription.updated will still write it on its
+          // next delivery as a fallback.
+          let periodEnd: Date | null = null
+          try {
+            const cpe = (sub as any).current_period_end
+            if (typeof cpe === 'number' && cpe > 0) {
+              periodEnd = new Date(cpe * 1000)
+            }
+          } catch (err: any) {
+            console.error(
+              `[StripeWebhook] failed to read current_period_end for sub=${session.subscription}; ` +
+              `subscription.updated will populate it instead:`,
+              err?.message ?? err,
+            )
+          }
+
           // .update returns the updated row — capture it instead of a separate
           // findUnique so we have email + firstName for the confirmation email
           // without a second round trip.
@@ -205,6 +230,9 @@ export async function handleWebhook(req: Request, res: Response, next: NextFunct
               // renewals (subscription.updated) leave it null since it was
               // already cleared here.
               trialEndsAt: null,
+              // null is acceptable here — subscription.updated will populate
+              // it on its own delivery if we couldn't compute it above.
+              subscriptionEndsAt: periodEnd,
             },
           })
 

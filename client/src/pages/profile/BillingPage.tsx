@@ -41,23 +41,41 @@ export default function BillingPage() {
               <p className="font-medium text-gray-900">{user?.subscriptionTier === 'FREE' ? 'Free' : 'Pro'} Plan</p>
               {isTrialing && <span className="badge-green text-xs">Trial active</span>}
             </div>
+            {/* Subtext branches on subscriptionTier BEFORE subscriptionEndsAt
+                so a freshly-paid Pro user (whose subscriptionEndsAt is
+                briefly null between checkout.session.completed and
+                customer.subscription.updated webhooks) doesn't incorrectly
+                read as "Free plan". The race window has also been narrowed
+                server-side — see the checkout.session.completed handler in
+                controllers/subscriptions.ts which now writes
+                subscriptionEndsAt eagerly — but this UI guard remains as
+                defense-in-depth in case a webhook delivery fails entirely. */}
             {isTrialing ? (
               <p className="text-sm text-gray-500">Trial ends in {trialDaysLeft} day{trialDaysLeft !== 1 ? 's' : ''} — upgrade to keep Pro features</p>
+            ) : user?.subscriptionTier === 'FREE' ? (
+              <p className="text-sm text-gray-500">No active subscription</p>
             ) : user?.subscriptionEndsAt ? (
               <p className="text-sm text-gray-500">Renews {format(new Date(user.subscriptionEndsAt), 'MMM d, yyyy')}</p>
             ) : (
-              <p className="text-sm text-gray-500">Free plan</p>
+              <p className="text-sm text-gray-500">Active subscription</p>
             )}
           </div>
           <div className="flex gap-2">
             {user?.subscriptionTier !== 'FREE' && (
               <button onClick={openPortal} disabled={portalLoading} className="btn-outline text-sm flex items-center gap-1.5">
-                <ExternalLink size={13} /> Manage
+                <ExternalLink size={13} /> Manage account
               </button>
             )}
-            <Link to="/profile/billing/upgrade" className="btn-primary text-sm">
-              {user?.subscriptionTier === 'FREE' ? 'Upgrade' : 'Change plan'}
-            </Link>
+            {/* "Upgrade" only renders for FREE users. Post-Pro+-removal the
+                paid-user "Change plan" button led to a dead-end PricingPage
+                (their only tier is already "Current plan, disabled"). Real
+                cancel / update-card / change-billing-cycle actions happen
+                via the Manage-account Stripe Customer Portal instead. */}
+            {user?.subscriptionTier === 'FREE' && (
+              <Link to="/profile/billing/upgrade" className="btn-primary text-sm">
+                Upgrade
+              </Link>
+            )}
           </div>
         </div>
       </div>
