@@ -37,7 +37,7 @@ const KEEP_EMAILS = [
   'momann@gmail.com',
   'momannexpired@gmail.com',
   'Cindy@roamready.ai',
-  'teague_cindy@hotmail.com',
+  'bmolini@yahoo.com',
 ]
 const KEEP_LOWER = new Set(KEEP_EMAILS.map(e => e.toLowerCase()))
 
