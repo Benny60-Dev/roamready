@@ -6,6 +6,7 @@ import { prisma } from '../utils/prisma'
 import { AppError } from '../middleware/errorHandler'
 import { AuthRequest } from '../middleware/auth'
 import { isFounderEligible } from '../config/founderPricing'
+import { isDisposableEmail } from '../utils/disposableEmails'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -44,6 +45,20 @@ export async function register(req: Request, res: Response, next: NextFunction) 
     const { email, password, firstName, lastName } = req.body
     if (!email || !password || !firstName || !lastName) {
       throw new AppError('All fields required', 400)
+    }
+
+    // Block known disposable / throwaway email providers. Anti-abuse:
+    // disposable inboxes are the primary vector for trial-cycling
+    // (sign up → consume 7-day Pro trial → discard inbox → repeat).
+    // The list lives in utils/disposableEmails.ts; extend by editing
+    // that file. Returns 400 with a clear code so the client can show
+    // a tailored message instead of the generic "email already in use"
+    // confusion.
+    if (isDisposableEmail(email)) {
+      return res.status(400).json({
+        error: 'INVALID_EMAIL_DOMAIN',
+        message: "Please use a real email address. We'll send you trip planning tips and need to reach you if there's a booking issue.",
+      })
     }
 
     const existing = await prisma.user.findUnique({ where: { email } })

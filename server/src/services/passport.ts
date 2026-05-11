@@ -2,6 +2,7 @@ import passport from 'passport'
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20'
 import { prisma } from '../utils/prisma'
 import { isFounderEligible } from '../config/founderPricing'
+import { isDisposableEmail } from '../utils/disposableEmails'
 
 passport.use(
   new GoogleStrategy(
@@ -14,6 +15,15 @@ passport.use(
       try {
         const email = profile.emails?.[0]?.value
         if (!email) return done(new Error('No email from Google'), undefined)
+
+        // Block known disposable email domains. Safety net for the edge
+        // case of a Google Workspace account configured on a throwaway
+        // domain — vast majority of Google sign-ins are @gmail.com so
+        // this rarely triggers, but the check is cheap and consistent
+        // with the email/password registration path.
+        if (isDisposableEmail(email)) {
+          return done(new Error('Disposable email addresses are not allowed.'), undefined)
+        }
 
         let user = await prisma.user.findFirst({
           where: { OR: [{ googleId: profile.id }, { email }] },
