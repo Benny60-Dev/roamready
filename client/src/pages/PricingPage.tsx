@@ -84,18 +84,53 @@ function getCta(planId: string, user: User | null): { label: string; disabled: b
   }
 }
 
-const PLANS = [
+/** A feature item is either a plain string (rendered as a bullet) or a
+ *  section object — title + bullets. Sections let the Free card show
+ *  the 7-day Pro trial value AND post-trial features in two clearly
+ *  labeled groups; the Pro card keeps the simpler flat-string shape.
+ *  Discriminated at render time by `typeof item === 'string'`. */
+type FeatureSection = { sectionLabel: string; items: string[] }
+type FeatureItem = string | FeatureSection
+
+const PLANS: Array<{
+  id: string
+  name: string
+  monthlyPrice: number
+  annualPrice: number
+  annualBilled?: number
+  description: string
+  features: FeatureItem[]
+  cta: string
+  ctaTo?: string
+  highlight: boolean
+}> = [
   {
     id: 'free',
     name: 'Free',
     monthlyPrice: 0,
     annualPrice: 0,
-    description: 'Get started planning',
+    description: 'Start with everything, no card required.',
     features: [
-      'AI trip planner (3/month)',
-      '1 rig profile',
-      'Basic trip planning',
-      'Map view',
+      {
+        sectionLabel: 'Includes a 7-day Pro trial:',
+        items: [
+          'AI trip planner',
+          'Campground booking',
+          'Trip journal with photos',
+          'Maintenance tracker',
+          'PDF export & sharing',
+          'And much more',
+        ],
+      },
+      {
+        sectionLabel: 'After trial:',
+        items: [
+          'AI trip planner',
+          'Rig profiles',
+          'Trip planning',
+          'Map view',
+        ],
+      },
     ],
     cta: 'Get started',
     ctaTo: '/signup',
@@ -238,12 +273,13 @@ export default function PricingPage() {
             <div
               key={plan.id}
               className="rounded-xl bg-white p-6"
-              // Pro card gets a 2px Sunset Gold border — the single biggest
-              // "premium" signal without bringing back marketing badges.
-              // Free card gets a thicker 1.5px neutral border so it still
-              // reads as a card (the 0.5px border was too thin to register).
+              // Pro card: 2px Sunset Gold border — the premium signal.
+              // Free card: 2px RV Blue border — gives Free its own brand
+              // identity (was a thin neutral border that read as "lesser").
+              // Both at 2px so they're visually balanced; only the color
+              // differs to signal "Pro is premium" vs "Free is brand-blue".
               style={{
-                border: isPro ? '2px solid #F7A829' : '1.5px solid #E8E4DA',
+                border: isPro ? '2px solid #F7A829' : '2px solid #1F6F8B',
               }}
             >
               <h2 className="font-medium text-gray-900 text-lg mb-0.5">{plan.name}</h2>
@@ -305,14 +341,39 @@ export default function PricingPage() {
                 )
               })()}
 
-              <ul className="space-y-2">
-                {plan.features.map(feature => (
-                  <li key={feature} className="flex items-start gap-2 text-sm text-gray-600">
-                    <Check size={14} className="text-[#1F6F8B] flex-shrink-0 mt-0.5" />
-                    {feature}
-                  </li>
-                ))}
-              </ul>
+              {/* Features can be a flat string array (Pro card) or a list of
+                  {sectionLabel, items} sections (Free card). Branch at the
+                  item level so both shapes render in one pass; the section
+                  case emits a small label + nested bullets. */}
+              <div className="space-y-2">
+                {plan.features.map((feature, i) => {
+                  if (typeof feature === 'string') {
+                    return (
+                      <div key={i} className="flex items-start gap-2 text-sm text-gray-600">
+                        <Check size={14} className="text-[#1D9E75] flex-shrink-0 mt-0.5" />
+                        <span>{feature}</span>
+                      </div>
+                    )
+                  }
+                  // Sectioned features (Free card). First section has no
+                  // extra top margin; subsequent sections get mt-3 for visual
+                  // separation between "Includes a 7-day Pro trial:" and
+                  // "After trial:".
+                  return (
+                    <div key={i} className={i === 0 ? '' : 'mt-3'}>
+                      <p className="text-xs font-medium text-[#5F5E5A] mb-1.5">{feature.sectionLabel}</p>
+                      <div className="space-y-2">
+                        {feature.items.map((item, j) => (
+                          <div key={j} className="flex items-start gap-2 text-sm text-gray-600">
+                            <Check size={14} className="text-[#1D9E75] flex-shrink-0 mt-0.5" />
+                            <span>{item}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
             )
           })}
