@@ -1,4 +1,4 @@
-export type SubscriptionTier = 'FREE' | 'PRO' | 'PRO_PLUS'
+export type SubscriptionTier = 'FREE' | 'PRO'
 export type VehicleType = 'RV_CLASS_A' | 'RV_CLASS_B' | 'RV_CLASS_C' | 'FIFTH_WHEEL' | 'TRAVEL_TRAILER' | 'TOY_HAULER' | 'POP_UP' | 'VAN' | 'CAR_CAMPING'
 export type TowedType = 'VEHICLE' | 'TRAILER'
 export type TripStatus = 'PLANNING' | 'ACTIVE' | 'COMPLETED' | 'DRAFT'

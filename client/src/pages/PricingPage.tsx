@@ -45,8 +45,9 @@ function getCta(planId: string, user: User | null): { label: string; disabled: b
 
   // Already paid for the OTHER tier — frame as a switch (handled by Stripe
   // Checkout creating a new subscription; subscription.updated webhook flips
-  // the tier on completion).
-  if (user.subscriptionTier === 'PRO' || user.subscriptionTier === 'PRO_PLUS') {
+  // the tier on completion). Only relevant once we introduce a second paid
+  // tier again — kept for shape so the future addition is a one-line edit.
+  if (user.subscriptionTier === 'PRO') {
     return { label: `Switch to ${planLabel}`, disabled: false }
   }
 
