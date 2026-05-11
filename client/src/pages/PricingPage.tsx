@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Check } from 'lucide-react'
+import { Check, Info } from 'lucide-react'
 import { subscriptionsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import type { User } from '../types'
@@ -305,10 +305,25 @@ export default function PricingPage() {
                 )}
                 {/* Lifetime-locked founder rate badge — only renders on the
                     Pro card for users whose server-side founderPricing flag
-                    is true. Same teal accent as the "Save N%" toggle badge
-                    so the visual language stays consistent. */}
+                    is true. Info icon + native title= for the hover tooltip
+                    on desktop; an always-visible one-line caveat sits
+                    underneath so the cancel-forfeit rule is also disclosed
+                    on mobile (where title= tooltips don't fire). Wording
+                    here is the short form; the ToS Founding Member Pricing
+                    section has the full clause. */}
                 {showFounderBadge && (
-                  <p className="text-xs text-[#0F766E] mt-2 font-medium">Lifetime founder rate</p>
+                  <div className="mt-2">
+                    <p
+                      className="text-xs text-[#0F766E] font-medium inline-flex items-center gap-1 cursor-help"
+                      title="Stay subscribed to keep this rate. If you cancel and rejoin later, you'll pay the regular price at that time."
+                    >
+                      Lifetime founder rate
+                      <Info size={12} aria-hidden="true" />
+                    </p>
+                    <p className="text-[11px] text-[#5F5E5A] mt-0.5">
+                      Stay subscribed to keep this rate.
+                    </p>
+                  </div>
                 )}
               </div>
 

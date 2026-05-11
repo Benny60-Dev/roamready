@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, Check, Zap } from 'lucide-react'
+import { X, Check, Zap, Info } from 'lucide-react'
 import { subscriptionsApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 
@@ -195,9 +195,22 @@ export default function PaywallModal({ feature, onClose }: Props) {
               <span className="text-sm text-gray-500 font-normal">/mo</span>
             </div>
             {annual && <div className="text-xs text-gray-500">${display.annualBilled} billed annually</div>}
-            {/* Lifetime-locked founder rate badge — mirrors PricingPage. */}
+            {/* Lifetime-locked founder rate badge — mirrors PricingPage.
+                Info icon + native title= for desktop hover; one-line caveat
+                below for the mobile case where title tooltips don't fire. */}
             {user?.founderPricing && (
-              <div className="text-xs text-[#1F6F8B] mt-1 font-medium">Lifetime founder rate</div>
+              <div className="mt-1">
+                <p
+                  className="text-xs text-[#1F6F8B] font-medium inline-flex items-center gap-1 cursor-help"
+                  title="Stay subscribed to keep this rate. If you cancel and rejoin later, you'll pay the regular price at that time."
+                >
+                  Lifetime founder rate
+                  <Info size={12} aria-hidden="true" />
+                </p>
+                <p className="text-[11px] text-[#5F5E5A] mt-0.5">
+                  Stay subscribed to keep this rate.
+                </p>
+              </div>
             )}
             <button
               onClick={() => handleUpgrade('pro')}
