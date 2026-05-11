@@ -8,6 +8,7 @@ import { AuthRequest } from '../middleware/auth'
 import { isFounderEligible } from '../config/founderPricing'
 import { isDisposableEmail } from '../utils/disposableEmails'
 import { generateVerificationToken, sendVerificationEmail } from '../services/emailVerification'
+import { validatePassword } from '../utils/passwordPolicy'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -59,6 +60,22 @@ export async function register(req: Request, res: Response, next: NextFunction) 
       return res.status(400).json({
         error: 'INVALID_EMAIL_DOMAIN',
         message: "Please use a real email address. We'll send you trip planning tips and need to reach you if there's a booking issue.",
+      })
+    }
+
+    // Password policy gate. Server-side enforcement is the source of
+    // truth — clients can be bypassed (curl, DevTools). The matching
+    // client-side check on SignupPage handles obvious cases (empty,
+    // too short) instantly without a round trip; the breach-list
+    // check is server-only because shipping the blocklist would bloat
+    // the bundle. Match the existing 400-with-error-code response
+    // shape used by INVALID_EMAIL_DOMAIN above so the client renders
+    // both rejections through the same code path.
+    const pwCheck = validatePassword(password)
+    if (!pwCheck.valid) {
+      return res.status(400).json({
+        error: 'INVALID_PASSWORD',
+        message: pwCheck.error,
       })
     }
 
@@ -270,6 +287,19 @@ export async function resetPassword(req: Request, res: Response, next: NextFunct
   try {
     const { token, password } = req.body
     if (!token || !password) throw new AppError('Token and password required', 400)
+
+    // Password policy gate — applied BEFORE jwt.verify so a bad
+    // password fails with a useful message rather than getting
+    // swallowed by the catch-all "Invalid or expired token" below.
+    // Same response shape as the register handler so the
+    // ResetPasswordPage can render INVALID_PASSWORD identically.
+    const pwCheck = validatePassword(password)
+    if (!pwCheck.valid) {
+      return res.status(400).json({
+        error: 'INVALID_PASSWORD',
+        message: pwCheck.error,
+      })
+    }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string }
     const passwordHash = await bcrypt.hash(password, 12)

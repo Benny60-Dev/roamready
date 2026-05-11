@@ -27,7 +27,13 @@ export default function SignupPage() {
       setUser(res.data.user)
       navigate('/onboarding')
     } catch (e: any) {
-      setError(e.response?.data?.error || 'Failed to create account')
+      // Surface the server's `message` first when present — INVALID_PASSWORD
+      // (breach-list rejection) lands here, and the human-readable
+      // message is what the user needs to see ("This password appears
+      // in known data breaches..."), not the bare error code.
+      // INVALID_EMAIL_DOMAIN follows the same pattern. Falls back to
+      // `error` (legacy shape) then the generic copy.
+      setError(e.response?.data?.message || e.response?.data?.error || 'Failed to create account')
     } finally {
       setLoading(false)
     }
@@ -88,8 +94,18 @@ export default function SignupPage() {
             </div>
             <div>
               <label className="label">Password</label>
-              <input type="password" className="input" {...register('password', { required: true, minLength: 8 })} />
-              {errors.password && <p className="text-xs text-red-500 mt-1">At least 8 characters</p>}
+              {/* Client-side length check matches server policy (10 chars
+                  min). Empty / breach-list rejections happen server-side
+                  — the breach blocklist isn't shipped to the bundle to
+                  avoid weight + giving away what we filter on. The
+                  `error` state above renders server messages inline. */}
+              <input type="password" className="input" {...register('password', { required: true, minLength: 10 })} />
+              {errors.password?.type === 'minLength' && (
+                <p className="text-xs text-red-500 mt-1">Password must be at least 10 characters.</p>
+              )}
+              {errors.password?.type === 'required' && (
+                <p className="text-xs text-red-500 mt-1">Password is required.</p>
+              )}
             </div>
             <button type="submit" disabled={loading} className="btn-primary w-full py-2.5">
               {loading ? 'Creating account...' : 'Create account'}

@@ -9,7 +9,7 @@ export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token') ?? ''
   const navigate = useNavigate()
-  const { register, handleSubmit, watch } = useForm<{ password: string; confirm: string }>()
+  const { register, handleSubmit, watch, formState: { errors } } = useForm<{ password: string; confirm: string }>()
 
   async function onSubmit({ password }: { password: string; confirm: string }) {
     setLoading(true)
@@ -17,8 +17,18 @@ export default function ResetPasswordPage() {
     try {
       await authApi.resetPassword(token!, password)
       navigate('/login?reset=true')
-    } catch {
-      setError('Invalid or expired reset link')
+    } catch (e: any) {
+      // Distinguish password-policy rejection (INVALID_PASSWORD) from
+      // the legitimate "token expired / invalid" case. The server
+      // sends a structured error code + human message for the former;
+      // anything else falls through to the generic reset-link copy.
+      const code = e?.response?.data?.error
+      const message = e?.response?.data?.message
+      if (code === 'INVALID_PASSWORD' && message) {
+        setError(message)
+      } else {
+        setError('Invalid or expired reset link')
+      }
     } finally {
       setLoading(false)
     }
@@ -40,7 +50,16 @@ export default function ResetPasswordPage() {
             {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2">{error}</div>}
             <div>
               <label className="label">New password</label>
-              <input type="password" className="input" {...register('password', { required: true, minLength: 8 })} />
+              {/* Mirrors SignupPage policy: 10-char min client-side;
+                  breach-list rejection is server-side and surfaces via
+                  the `error` state above. */}
+              <input type="password" className="input" {...register('password', { required: true, minLength: 10 })} />
+              {errors.password?.type === 'minLength' && (
+                <p className="text-xs text-red-500 mt-1">Password must be at least 10 characters.</p>
+              )}
+              {errors.password?.type === 'required' && (
+                <p className="text-xs text-red-500 mt-1">Password is required.</p>
+              )}
             </div>
             <div>
               <label className="label">Confirm password</label>
