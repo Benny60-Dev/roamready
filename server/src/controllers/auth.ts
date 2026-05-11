@@ -92,6 +92,7 @@ export async function register(req: Request, res: Response, next: NextFunction) 
         lastName: user.lastName,
         subscriptionTier: user.subscriptionTier,
         trialEndsAt: user.trialEndsAt,
+        founderPricing: (user as any).founderPricing,
       },
     })
   } catch (err) {
@@ -123,6 +124,7 @@ export async function login(req: Request, res: Response, next: NextFunction) {
         subscriptionTier: user.subscriptionTier,
         trialEndsAt: user.trialEndsAt,
         isOwner: user.isOwner,
+        founderPricing: (user as any).founderPricing,
       },
     })
   } catch (err) {

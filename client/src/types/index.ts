@@ -30,6 +30,10 @@ export interface User {
   customerId?: string
   trialEndsAt?: string
   subscriptionEndsAt?: string
+  /** Lifetime founder rate eligibility — stamped at signup if joined
+   *  before FOUNDER_CUTOFF_DATE. Drives founder-rate pricing/badge on
+   *  PricingPage + PaywallModal and the priceId picked at checkout. */
+  founderPricing?: boolean
   isOwner?: boolean
   createdAt: string
   rigs?: Rig[]
