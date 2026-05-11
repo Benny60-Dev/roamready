@@ -94,6 +94,25 @@ export default function TermsOfServicePage() {
           </section>
 
           <section>
+            <h2 className="text-xl font-semibold text-gray-900 mb-3">Founding Member Pricing</h2>
+            <p>
+              During the first 30 days after RoamReady's public launch, users who sign up and subscribe to RoamReady Pro
+              qualify for our Founding Member rate: $7.99 per month or $69.99 per year. This rate is locked for as long
+              as your subscription remains continuously active.
+            </p>
+            <p className="mt-3">
+              If you cancel your subscription and rejoin later — at any time, for any reason — your Founding Member rate
+              is forfeited, and your new subscription will be billed at the then-current standard rate ($8.99 per month
+              or $89.99 per year, subject to change).
+            </p>
+            <p className="mt-3">
+              RoamReady reserves the right to extend the Founding Member window at our discretion. Founding Member
+              rates, once granted to an active subscriber, will not be raised for the duration of that continuous
+              subscription.
+            </p>
+          </section>
+
+          <section>
             <h2 className="text-xl font-semibold text-gray-900 mb-3">Refund Policy</h2>
             <p>
               New subscribers are eligible for a <strong>7-day money-back guarantee</strong> on their first subscription
