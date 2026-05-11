@@ -97,6 +97,7 @@ import { notificationsRouter } from './routes/notifications'
 import { adminRouter } from './routes/admin'
 import { bookingsRouter } from './routes/bookings'
 import { sessionsRouter } from './routes/sessions'
+import { internalRouter } from './routes/internal'
 
 const app = express()
 
@@ -163,6 +164,9 @@ app.use('/api/v1/notifications', notificationsRouter)
 app.use('/api/v1/admin', adminRouter)
 app.use('/api/v1/bookings', bookingsRouter)
 app.use('/api/v1/sessions', sessionsRouter)
+// Internal endpoints (cron jobs, etc.) — auth is via X-Cron-Secret header
+// inside each handler. NOT mounted behind requireAuth.
+app.use('/api/v1/internal', internalRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 

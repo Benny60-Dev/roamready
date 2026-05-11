@@ -35,6 +35,10 @@ model User {
   subscriptionId      String?
   customerId          String?
   trialEndsAt         DateTime?
+  /// Set by the trial-ending cron endpoint when a 24h-before email is
+  /// successfully sent. Idempotency guard so multiple cron firings
+  /// (or a retry after partial failure) don't email the same user twice.
+  trialEndEmailSentAt DateTime?
   subscriptionEndsAt  DateTime?
   /// Lifetime founder rate eligibility — set at signup based on whether
   /// the user joined before FOUNDER_CUTOFF_DATE (see config/founderPricing.ts).
