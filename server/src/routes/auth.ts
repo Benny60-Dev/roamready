@@ -11,6 +11,7 @@ import {
   appleCallback,
 } from '../controllers/auth'
 import { requireAuth, AuthRequest } from '../middleware/auth'
+import { resendVerification, verifyEmail } from '../controllers/emailVerification'
 import passport from 'passport'
 import '../services/passport'
 
@@ -23,6 +24,12 @@ authRouter.post('/refresh', refreshToken)
 authRouter.post('/forgot-password', forgotPassword)
 authRouter.post('/reset-password', resetPassword)
 authRouter.get('/me', requireAuth, getMe as (req: AuthRequest, res: any, next: any) => any)
+
+// Email verification — magic-link flow. resend-verification is behind
+// requireAuth (user must be logged in to request a fresh link to their
+// own email); verify-email is public so the link works on any device.
+authRouter.post('/resend-verification', requireAuth, resendVerification as (req: AuthRequest, res: any, next: any) => any)
+authRouter.get('/verify-email', verifyEmail)
 
 authRouter.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }))
 authRouter.get('/google/callback',

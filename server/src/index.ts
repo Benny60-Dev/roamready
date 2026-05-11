@@ -69,6 +69,21 @@ import './config/env'
       for (const msg of stripeIssues) console.warn(`${YELLOW}  • ${msg}${RESET}`)
     }
   }
+
+  // RESEND_API_KEY — separate from the Stripe block because it has its
+  // own escalation policy: missing key is a HARD-FAIL in production
+  // (transactional emails like verification + trial-end + payment-failed
+  // silently drop, which is worse than refusing to boot), but a SOFT
+  // warning in dev so contributors without Resend access can still run
+  // the app. Same pattern as the Stripe gate above.
+  if (!process.env.RESEND_API_KEY) {
+    if (isProd) {
+      console.error(`${RED}[ENV] RESEND_API_KEY is missing — refusing to boot in production. Transactional emails (verification, trial-end, payment-failed) would silently fail.${RESET}`)
+      process.exit(1)
+    } else {
+      console.warn(`${YELLOW}[ENV] RESEND_API_KEY is missing (dev only — would exit(1) in production). Email-sending paths will fail at runtime.${RESET}`)
+    }
+  }
 })()
 
 import * as Sentry from '@sentry/node'

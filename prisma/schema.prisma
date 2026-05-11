@@ -46,6 +46,21 @@ model User {
   /// display on PricingPage + PaywallModal. Once true, this never flips —
   /// founders keep their rate even if they cancel and re-subscribe later.
   founderPricing      Boolean              @default(false)
+  /// Email verification state. New signups start at false; the magic-link
+  /// flow (controllers/emailVerification.ts) flips this to true when the
+  /// token is consumed. NOT backfilled for existing users — every account
+  /// goes through verification post-deploy so we can exercise the full
+  /// flow including the owner account.
+  emailVerified              Boolean              @default(false)
+  /// Single-use hex token (32 bytes, hex-encoded → 64 chars). Set when
+  /// a verification email is sent, cleared on successful verify. @unique
+  /// for O(log n) lookup at verify time and to prevent token collisions.
+  /// Nullable because most users have no active token in flight.
+  emailVerificationToken     String?              @unique
+  /// Timestamp of the most recent verification-email send. Powers the
+  /// 60-second resend rate limit. NOT a token-expiry field — links
+  /// never expire per spec.
+  emailVerificationSentAt    DateTime?
   isOwner             Boolean              @default(false)
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
