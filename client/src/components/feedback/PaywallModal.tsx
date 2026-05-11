@@ -19,8 +19,6 @@ interface Props {
 const PRICE_IDS = {
   proMonthly:     import.meta.env.VITE_STRIPE_PRO_MONTHLY,
   proAnnual:      import.meta.env.VITE_STRIPE_PRO_ANNUAL,
-  proplusMonthly: import.meta.env.VITE_STRIPE_PROPLUS_MONTHLY,
-  proplusAnnual:  import.meta.env.VITE_STRIPE_PROPLUS_ANNUAL,
 } as const
 
 function isUsablePriceId(v: unknown): boolean {
@@ -29,9 +27,7 @@ function isUsablePriceId(v: unknown): boolean {
 
 const BILLING_CONFIGURED =
   isUsablePriceId(PRICE_IDS.proMonthly) &&
-  isUsablePriceId(PRICE_IDS.proAnnual) &&
-  isUsablePriceId(PRICE_IDS.proplusMonthly) &&
-  isUsablePriceId(PRICE_IDS.proplusAnnual)
+  isUsablePriceId(PRICE_IDS.proAnnual)
 
 const FEATURE_LABELS: Record<string, string> = {
   campgroundBooking: 'Campground Booking',
@@ -88,13 +84,12 @@ export default function PaywallModal({ feature, onClose }: Props) {
     if (!BILLING_CONFIGURED) {
       console.error(
         'PaywallModal: Stripe price IDs missing from build env. Required: ' +
-        'VITE_STRIPE_PRO_MONTHLY, VITE_STRIPE_PROPLUS_MONTHLY, ' +
-        'VITE_STRIPE_PRO_ANNUAL, VITE_STRIPE_PROPLUS_ANNUAL'
+        'VITE_STRIPE_PRO_MONTHLY, VITE_STRIPE_PRO_ANNUAL'
       )
     }
   }, [])
 
-  async function handleUpgrade(plan: 'pro' | 'proplus') {
+  async function handleUpgrade(_plan: 'pro') {
     // Defense in depth — buttons are disabled when BILLING_CONFIGURED is false,
     // but guard anyway so a stale/cached UI can never push a placeholder string
     // to Stripe. The whole reason this fix exists is to never have that happen.
@@ -102,9 +97,9 @@ export default function PaywallModal({ feature, onClose }: Props) {
 
     setLoading(true)
     try {
-      const priceId = annual
-        ? (plan === 'pro' ? PRICE_IDS.proAnnual : PRICE_IDS.proplusAnnual)
-        : (plan === 'pro' ? PRICE_IDS.proMonthly : PRICE_IDS.proplusMonthly)
+      // Pro is currently the only paid tier. The `plan` argument is kept on
+      // the signature so a future second tier is a one-line addition here.
+      const priceId = annual ? PRICE_IDS.proAnnual : PRICE_IDS.proMonthly
 
       const res = await subscriptionsApi.createCheckout(priceId)
       if (res.data.url) window.location.href = res.data.url
@@ -143,40 +138,29 @@ export default function PaywallModal({ feature, onClose }: Props) {
               onClick={() => setAnnual(true)}
               className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${annual ? 'bg-white text-gray-900' : 'text-gray-500'}`}
             >
-              Annual <span className="text-[#1F6F8B] ml-1">Save 35%</span>
+              Annual <span className="text-[#1F6F8B] ml-1">Save 17%</span>
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 mb-6">
+        {/* Single Pro card (Pro+ tier was removed). The grid wrapper from
+            the prior two-card layout is gone — a single card renders
+            full-width inside the modal, which reads cleaner than a
+            half-width card with empty space beside it. */}
+        <div className="mb-6">
           <div className="border border-[#1F6F8B] rounded-xl p-4" style={{ borderWidth: '0.5px' }}>
             <div className="text-sm font-medium text-[#1F6F8B] mb-1">Pro</div>
             <div className="text-2xl font-medium text-gray-900">
-              ${annual ? '5.83' : '8.99'}
+              ${annual ? '7.49' : '8.99'}
               <span className="text-sm text-gray-500 font-normal">/mo</span>
             </div>
-            {annual && <div className="text-xs text-gray-500">$69.99 billed annually</div>}
+            {annual && <div className="text-xs text-gray-500">$89.99 billed annually</div>}
             <button
               onClick={() => handleUpgrade('pro')}
               disabled={loading || !BILLING_CONFIGURED}
               className="btn-primary w-full mt-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {ctaText('Pro')}
-            </button>
-          </div>
-          <div className="border border-gray-200 rounded-xl p-4" style={{ borderWidth: '0.5px' }}>
-            <div className="text-sm font-medium text-gray-500 mb-1">Pro+</div>
-            <div className="text-2xl font-medium text-gray-900">
-              ${annual ? '9.17' : '12.99'}
-              <span className="text-sm text-gray-500 font-normal">/mo</span>
-            </div>
-            {annual && <div className="text-xs text-gray-500">$109.99 billed annually</div>}
-            <button
-              onClick={() => handleUpgrade('proplus')}
-              disabled={loading || !BILLING_CONFIGURED}
-              className="btn-outline w-full mt-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {ctaText('Pro+')}
             </button>
           </div>
         </div>

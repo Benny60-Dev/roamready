@@ -6,16 +6,14 @@ import { useAuthStore } from '../store/authStore'
 import type { User } from '../types'
 
 /** Maps a PLANS entry's id to the tier string stored on user.subscriptionTier. */
-const PLAN_TIER: Record<string, 'PRO' | 'PRO_PLUS' | null> = {
+const PLAN_TIER: Record<string, 'PRO' | null> = {
   free: null,
   pro: 'PRO',
-  proplus: 'PRO_PLUS',
 }
 
 /** Display label for the paid plans (used in CTA copy). */
 const PLAN_LABEL: Record<string, string> = {
   pro: 'Pro',
-  proplus: 'Pro+',
 }
 
 /** Returns the CTA label + disabled state for a paid-plan card based on
@@ -43,13 +41,11 @@ function getCta(planId: string, user: User | null): { label: string; disabled: b
     return { label: 'Current plan', disabled: true }
   }
 
-  // Already paid for the OTHER tier — frame as a switch (handled by Stripe
-  // Checkout creating a new subscription; subscription.updated webhook flips
-  // the tier on completion). Only relevant once we introduce a second paid
-  // tier again — kept for shape so the future addition is a one-line edit.
-  if (user.subscriptionTier === 'PRO') {
-    return { label: `Switch to ${planLabel}`, disabled: false }
-  }
+  // (Future-tier note: when a second paid tier returns, add an
+  // "already paid for the OTHER tier" branch here that returns
+  // "Switch to ${planLabel}". With only one paid tier today, the
+  // check above already catches every paid-user case, so a dedicated
+  // switch branch would be dead code.)
 
   // FREE tier from here on. Distinguish "still in app-side trial" from
   // "trial expired / never had one" so the copy nudges the right action.
@@ -83,8 +79,8 @@ const PLANS = [
     id: 'pro',
     name: 'Pro',
     monthlyPrice: 8.99,
-    annualPrice: 5.83,
-    annualBilled: 69.99,
+    annualPrice: 7.49,     // $89.99 / 12 = $7.4992 — per-month equivalent
+    annualBilled: 89.99,
     description: 'Everything you need',
     features: [
       'AI trip planner (unlimited)',
@@ -106,36 +102,15 @@ const PLANS = [
     cta: 'Upgrade to Pro',
     highlight: true,
   },
-  {
-    id: 'proplus',
-    name: 'Pro+',
-    monthlyPrice: 12.99,
-    annualPrice: 9.17,
-    annualBilled: 109.99,
-    description: 'For the full-time traveler',
-    features: [
-      'Everything in Pro',
-      'Multiple rig profiles',
-      'Offline access',
-      'Family account',
-      'RV recall alerts',
-      'Cost analytics',
-      'Unlimited trip journal',
-      'Priority support',
-    ],
-    // CTA computed at render time via getCta(). See note above.
-    cta: 'Upgrade to Pro+',
-    highlight: false,
-  },
 ]
 
 export default function PricingPage() {
-  // Defaults to MONTHLY so the displayed price ($8.99 Pro / $12.99 Pro+)
-  // is what the user is actually charged on the first invoice. Annual
-  // remains one click away — and when selected, both the per-month
-  // equivalent AND the annual total are shown side-by-side (see the
-  // price-display block below) to avoid the surprise charge that
-  // happened the first time we shipped this with annual default.
+  // Defaults to MONTHLY so the displayed price ($8.99 Pro) is what the
+  // user is actually charged on the first invoice. Annual remains one
+  // click away — and when selected, both the per-month equivalent AND
+  // the annual total are shown side-by-side (see the price-display
+  // block below) to avoid the surprise charge that happened the first
+  // time we shipped this with annual default.
   const [annual, setAnnual] = useState(false)
   const [loading, setLoading] = useState<string | null>(null)
   const { user, isAuthenticated } = useAuthStore()
@@ -143,9 +118,11 @@ export default function PricingPage() {
   async function handleUpgrade(planId: string) {
     if (!isAuthenticated()) return
     setLoading(planId)
+    // Pro is currently the only paid tier; the planId argument exists so
+    // a future second tier (e.g. Pro+ Family) is a one-line addition here.
     const priceId = annual
-      ? (planId === 'pro' ? import.meta.env.VITE_STRIPE_PRO_ANNUAL : import.meta.env.VITE_STRIPE_PROPLUS_ANNUAL)
-      : (planId === 'pro' ? import.meta.env.VITE_STRIPE_PRO_MONTHLY : import.meta.env.VITE_STRIPE_PROPLUS_MONTHLY)
+      ? import.meta.env.VITE_STRIPE_PRO_ANNUAL
+      : import.meta.env.VITE_STRIPE_PRO_MONTHLY
 
     try {
       // Mirror PaywallModal's isUsablePriceId guard. If the env var is missing
@@ -183,7 +160,7 @@ export default function PricingPage() {
               onClick={() => setAnnual(true)}
               className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${annual ? 'bg-white text-gray-900' : 'text-gray-500'}`}
             >
-              Annual <span className="text-[#0F766E] ml-1">Save 35%</span>
+              Annual <span className="text-[#0F766E] ml-1">Save 17%</span>
             </button>
           </div>
         </div>
