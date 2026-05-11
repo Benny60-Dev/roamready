@@ -53,7 +53,6 @@ model User {
 enum SubscriptionTier {
   FREE
   PRO
-  PRO_PLUS
 }
 
 model Rig {
