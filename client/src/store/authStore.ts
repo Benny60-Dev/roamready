@@ -2,6 +2,25 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { User } from '../types'
 
+// 1-hour app-side grace window from createdAt before an unverified
+// user is hard-gated. Mirrors GRACE_PERIOD_MS in
+// server/src/middleware/requireVerifiedEmail.ts — keep these in sync.
+const GRACE_PERIOD_MS = 60 * 60 * 1000
+
+/** Milliseconds remaining until the 1-hour verification grace expires.
+ *  Returns 0 if the user is already verified, is an owner, has no
+ *  createdAt set, or is already past grace. Exported as a standalone
+ *  pure function so the banner's setInterval-driven countdown can
+ *  call it on every tick without going through the store. */
+export function computeGracePeriodMsRemaining(user: User | null): number {
+  if (!user) return 0
+  if (user.isOwner) return 0
+  if (user.emailVerified) return 0
+  if (!user.createdAt) return 0
+  const graceEndsAt = new Date(user.createdAt).getTime() + GRACE_PERIOD_MS
+  return Math.max(0, graceEndsAt - Date.now())
+}
+
 interface AuthState {
   user: User | null
   token: string | null
@@ -13,6 +32,12 @@ interface AuthState {
   isAuthenticated: () => boolean
   hasAccess: (feature: string) => boolean
   rehydrateUser: () => Promise<void>
+  // Email-verification derived state — read at render time. Owner
+  // accounts always resolve as verified (isVerified: true; the other
+  // two: false) so owners never see the banner or gate.
+  isVerified: () => boolean
+  isInGracePeriod: () => boolean
+  isPastGracePeriod: () => boolean
 }
 
 const FEATURE_GATES: Record<string, string[]> = {
@@ -61,6 +86,33 @@ export const useAuthStore = create<AuthState>()(
         const gates = FEATURE_GATES[feature]
         if (!gates) return true
         return gates.includes(user.subscriptionTier)
+      },
+      // Email-verification derived state. Owner bypass mirrors the
+      // server-side requireVerifiedEmail middleware: isOwner === true
+      // resolves as verified, never as in/past grace.
+      isVerified: () => {
+        const user = get().user
+        if (!user) return false
+        if (user.isOwner) return true
+        return user.emailVerified === true
+      },
+      isInGracePeriod: () => {
+        const user = get().user
+        if (!user) return false
+        if (user.isOwner) return false
+        if (user.emailVerified) return false
+        if (!user.createdAt) return false
+        const graceEndsAt = new Date(user.createdAt).getTime() + GRACE_PERIOD_MS
+        return graceEndsAt > Date.now()
+      },
+      isPastGracePeriod: () => {
+        const user = get().user
+        if (!user) return false
+        if (user.isOwner) return false
+        if (user.emailVerified) return false
+        if (!user.createdAt) return false
+        const graceEndsAt = new Date(user.createdAt).getTime() + GRACE_PERIOD_MS
+        return graceEndsAt <= Date.now()
       },
     }),
     {

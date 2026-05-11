@@ -18,6 +18,7 @@ import RoadmapPage from './pages/RoadmapPage'
 import AuthCallbackPage from './pages/auth/AuthCallbackPage'
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
 import TermsOfServicePage from './pages/TermsOfServicePage'
+import VerifyEmailPage from './pages/VerifyEmailPage'
 
 // Onboarding
 import OnboardingPage from './pages/onboarding/OnboardingPage'
@@ -62,6 +63,9 @@ import AdminSubscribersPage from './pages/admin/AdminSubscribersPage'
 import FeedbackModal from './components/feedback/FeedbackModal'
 import PaywallModal from './components/feedback/PaywallModal'
 
+// Email verification — Phase 3b
+import { EmailVerificationGate } from './components/auth/EmailVerificationGate'
+
 // Heavy pages — lazy-loaded so their modules don't block the initial app bundle.
 // A runtime error or bad HMR state in these pages cannot crash the login/dashboard.
 const TripMapPage     = lazy(() => import('./pages/trips/TripMapPage'))
@@ -75,7 +79,15 @@ function TripDetailRedirect() {
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated())
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />
+  const isPastGracePeriod = useAuthStore(s => s.isPastGracePeriod())
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  // Over-grace unverified users see the gate INSTEAD OF the authed
+  // app shell (no sidebar, no top nav, no other chrome). Owner accounts
+  // and verified accounts bypass via isPastGracePeriod()'s internal
+  // checks. The in-grace banner is rendered by AppLayout, not here —
+  // it needs to sit below the AppLayout's sunset-gradient strip.
+  if (isPastGracePeriod) return <EmailVerificationGate />
+  return <>{children}</>
 }
 
 function OwnerRoute({ children }: { children: React.ReactNode }) {
@@ -109,6 +121,9 @@ export default function App() {
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/privacy" element={<PrivacyPolicyPage />} />
         <Route path="/terms" element={<TermsOfServicePage />} />
+        {/* Public — magic-link landing. Not behind PrivateRoute because
+            users may click the link from email on a logged-out device. */}
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
 
         {/* Onboarding */}
         <Route path="/onboarding/*" element={<PrivateRoute><OnboardingPage /></PrivateRoute>} />

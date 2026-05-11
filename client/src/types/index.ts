@@ -34,6 +34,10 @@ export interface User {
    *  before FOUNDER_CUTOFF_DATE. Drives founder-rate pricing/badge on
    *  PricingPage + PaywallModal and the priceId picked at checkout. */
   founderPricing?: boolean
+  /** Email verification state. Drives the in-grace banner and
+   *  over-grace gate screen (see authStore selectors). Owner accounts
+   *  bypass both regardless of this value. */
+  emailVerified?: boolean
   isOwner?: boolean
   createdAt: string
   rigs?: Rig[]

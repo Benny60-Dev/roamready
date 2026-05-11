@@ -4,12 +4,14 @@ import { useState } from 'react'
 import { useAuthStore } from '../../store/authStore'
 import { authApi } from '../../services/api'
 import SessionsPanel from '../sessions/SessionsPanel'
+import { VerificationBanner } from '../auth/VerificationBanner'
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [sessionsPanelOpen, setSessionsPanelOpen] = useState(false)
   const { user, logout } = useAuthStore()
+  const isInGracePeriod = useAuthStore(s => s.isInGracePeriod())
   const navigate = useNavigate()
 
   async function handleLogout() {
@@ -150,6 +152,13 @@ export default function AppLayout() {
         </div>
         <div className="h-1 w-full" style={{ background: 'var(--rr-sunset-gradient)' }} />
       </header>
+
+      {/* Verification banner — slots in just below the header / gradient
+          strip, above all page content. Only renders for unverified
+          users inside the 1-hour grace window; verified users + owners
+          + past-grace users never see it (past-grace gets the gate
+          screen from PrivateRoute instead, never reaches this point). */}
+      {isInGracePeriod && <VerificationBanner />}
 
       {/* Mobile sidebar */}
       {sidebarOpen && (

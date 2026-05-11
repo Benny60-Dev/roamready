@@ -19,9 +19,26 @@
 // This script does not require Prisma — uses the same pg-via-node
 // pattern that worked in Phase 1 testing (avoids the Prisma client
 // regen problem). Run from server/ directory.
+//
+// TIMEZONE NOTE: Prisma stores `createdAt` in a PostgreSQL `timestamp
+// without time zone` column and reads/writes it as UTC wall-clock.
+// node-postgres's default behavior diverges — it interprets that same
+// column as LOCAL time on read, then `.toISOString()` reports it 7h
+// off (Arizona offset) compared to what the backend sees. The two
+// lines below realign pg with Prisma:
+//   1. TZ=UTC forces JS Date serialization on write to use UTC
+//      wall-clock (so the value the script writes matches what the
+//      backend will later read via Prisma).
+//   2. The OID-1114 type parser override makes pg interpret reads of
+//      `timestamp without time zone` as UTC, matching Prisma.
+// Result: script-printed timestamps now match what the middleware
+// computes for graceExpiredAt.
+process.env.TZ = 'UTC'
 const path = require('path')
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') })
-const { Client } = require('pg')
+const pg = require('pg')
+pg.types.setTypeParser(1114, (str) => new Date(str + 'Z'))
+const { Client } = pg
 
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000
 const ONE_HOUR_MS  = 1 * 60 * 60 * 1000
