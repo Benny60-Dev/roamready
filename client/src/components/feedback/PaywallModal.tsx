@@ -152,17 +152,26 @@ export default function PaywallModal({ feature, onClose }: Props) {
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><X size={18} /></button>
         </div>
 
+        {/* Toggle mirrors PricingPage's premium-feel treatment — see that
+            file for the design rationale. */}
         <div className="flex items-center justify-center mb-6">
-          <div className="bg-gray-100 rounded-lg p-0.5 flex">
+          <div
+            className="inline-flex items-center rounded-full p-1"
+            style={{ backgroundColor: '#F1EFE8', border: '0.5px solid #E8E4DA' }}
+          >
             <button
               onClick={() => setAnnual(false)}
-              className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${!annual ? 'bg-white text-gray-900' : 'text-gray-500'}`}
+              className={`px-4 py-1.5 rounded-full text-sm transition-colors ${
+                !annual ? 'bg-[#1F6F8B] text-white font-medium' : 'bg-transparent text-[#5F5E5A] hover:text-[#2C2C2A]'
+              }`}
             >Monthly</button>
             <button
               onClick={() => setAnnual(true)}
-              className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${annual ? 'bg-white text-gray-900' : 'text-gray-500'}`}
+              className={`px-4 py-1.5 rounded-full text-sm transition-colors ${
+                annual ? 'bg-[#1F6F8B] text-white font-medium' : 'bg-transparent text-[#5F5E5A] hover:text-[#2C2C2A]'
+              }`}
             >
-              Annual <span className="text-[#1F6F8B] ml-1">Save {savePct}%</span>
+              Annual <span className="ml-1" style={{ color: annual ? '#FAC775' : '#0F766E' }}>Save {savePct}%</span>
             </button>
           </div>
         </div>
@@ -172,7 +181,11 @@ export default function PaywallModal({ feature, onClose }: Props) {
             full-width inside the modal, which reads cleaner than a
             half-width card with empty space beside it. */}
         <div className="mb-6">
-          <div className="border border-[#1F6F8B] rounded-xl p-4" style={{ borderWidth: '0.5px' }}>
+          {/* 2px Sunset Gold border mirrors PricingPage's Pro card — the
+              single "premium" signal without any marketing-badge SaaS-speak.
+              CTA below uses btn-primary (gold fill, white text, gold-darker
+              on hover) which already matches the spec exactly. */}
+          <div className="rounded-xl p-4" style={{ border: '2px solid #F7A829' }}>
             <div className="text-sm font-medium text-[#1F6F8B] mb-1">Pro</div>
             {/* Same tagline as PricingPage's Pro card description, kept in
                 sync manually (no shared constant yet — backlog candidate). */}

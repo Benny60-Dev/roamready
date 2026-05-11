@@ -197,21 +197,35 @@ export default function PricingPage() {
         <div className="text-center mb-10">
           <h1 className="text-3xl font-medium text-gray-900 mb-2">Simple, transparent pricing</h1>
           <p className="text-gray-500 mb-6">7 days free, no card required to start. Add a card anytime to lock in Pro features.</p>
-          <div className="inline-flex items-center bg-gray-100 rounded-lg p-0.5">
+          {/* Selection state is solid RV Blue + white text — clearly readable
+              at a glance. Inactive is transparent on the neutral pill
+              backdrop with muted gray text. The "Save N%" suffix on the
+              Annual button uses a light-gold accent (#FAC775) when active
+              (gold pops on blue) and falls back to teal (#0F766E) when
+              inactive so the savings hook stays visible to users still
+              looking at Monthly. */}
+          <div
+            className="inline-flex items-center rounded-full p-1"
+            style={{ backgroundColor: '#F1EFE8', border: '0.5px solid #E8E4DA' }}
+          >
             <button
               onClick={() => setAnnual(false)}
-              className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${!annual ? 'bg-white text-gray-900' : 'text-gray-500'}`}
+              className={`px-4 py-1.5 rounded-full text-sm transition-colors ${
+                !annual ? 'bg-[#1F6F8B] text-white font-medium' : 'bg-transparent text-[#5F5E5A] hover:text-[#2C2C2A]'
+              }`}
             >Monthly</button>
             <button
               onClick={() => setAnnual(true)}
-              className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${annual ? 'bg-white text-gray-900' : 'text-gray-500'}`}
+              className={`px-4 py-1.5 rounded-full text-sm transition-colors ${
+                annual ? 'bg-[#1F6F8B] text-white font-medium' : 'bg-transparent text-[#5F5E5A] hover:text-[#2C2C2A]'
+              }`}
             >
-              Annual <span className="text-[#0F766E] ml-1">Save {savePct}%</span>
+              Annual <span className="ml-1" style={{ color: annual ? '#FAC775' : '#0F766E' }}>Save {savePct}%</span>
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {PLANS.map(plan => {
             // Overlay founder prices on the Pro card when applicable.
             // Other cards (just Free today) keep the static PLANS values.
@@ -219,11 +233,18 @@ export default function PricingPage() {
               ? proPricing
               : { monthlyPrice: plan.monthlyPrice, annualPrice: plan.annualPrice, annualBilled: plan.annualBilled }
             const showFounderBadge = plan.id === 'pro' && !!user?.founderPricing
+            const isPro = plan.id === 'pro'
             return (
             <div
               key={plan.id}
-              className="rounded-xl border border-gray-200 bg-white p-6"
-              style={{ borderWidth: '0.5px' }}
+              className="rounded-xl bg-white p-6"
+              // Pro card gets a 2px Sunset Gold border — the single biggest
+              // "premium" signal without bringing back marketing badges.
+              // Free card gets a thicker 1.5px neutral border so it still
+              // reads as a card (the 0.5px border was too thin to register).
+              style={{
+                border: isPro ? '2px solid #F7A829' : '1.5px solid #E8E4DA',
+              }}
             >
               <h2 className="font-medium text-gray-900 text-lg mb-0.5">{plan.name}</h2>
               <p className="text-xs text-gray-500 mb-4">{plan.description}</p>
@@ -256,6 +277,9 @@ export default function PricingPage() {
               </div>
 
               {plan.ctaTo ? (
+                // Free-plan CTA — teal-outline (btn-outline class matches
+                // the spec: white bg, #1F6F8B text + border, hover #E0F0F4
+                // subtle tint).
                 <Link to={plan.ctaTo} className="block text-center py-2.5 rounded-lg text-sm font-medium mb-6 btn-outline">
                   {plan.cta}
                 </Link>
@@ -263,13 +287,18 @@ export default function PricingPage() {
                 // Per-render CTA — derived from current user state. The
                 // literal `plan.cta` from PLANS is intentionally ignored for
                 // paid plans (see comment on the PLANS entry).
+                // Pro-plan CTA is solid Sunset Gold (#F7A829), white text,
+                // hover darker gold (#C9851A from the existing palette —
+                // the spec's #E89516 would have been a new hex). The
+                // styling stays consistent whether the label reads
+                // "Upgrade to Pro" or "Current plan" so the visual
+                // hierarchy doesn't shift between states.
                 const cta = getCta(plan.id, user)
                 return (
                   <button
                     onClick={() => handleUpgrade(plan.id)}
                     disabled={loading === plan.id || cta.disabled}
-                    className="w-full py-2.5 rounded-lg text-sm font-medium mb-6 transition-colors border border-[#1F6F8B] text-[#1F6F8B] hover:bg-[#E0F0F4] disabled:opacity-40"
-                    style={{ borderWidth: '0.5px' }}
+                    className="w-full py-2.5 rounded-lg text-sm font-medium mb-6 transition-colors bg-[#F7A829] text-white hover:bg-[#C9851A] disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {loading === plan.id ? 'Loading...' : cta.label}
                   </button>
