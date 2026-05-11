@@ -17,17 +17,29 @@ interface Props {
 // of the bundle. Same pattern is duplicated in PricingPage.tsx — flag for a
 // follow-up that extracts a shared `useBillingConfig()` hook.
 const PRICE_IDS = {
-  proMonthly:     import.meta.env.VITE_STRIPE_PRO_MONTHLY,
-  proAnnual:      import.meta.env.VITE_STRIPE_PRO_ANNUAL,
+  proMonthly:        import.meta.env.VITE_STRIPE_PRO_MONTHLY,
+  proAnnual:         import.meta.env.VITE_STRIPE_PRO_ANNUAL,
+  proFounderMonthly: import.meta.env.VITE_STRIPE_PRO_FOUNDER_MONTHLY,
+  proFounderAnnual:  import.meta.env.VITE_STRIPE_PRO_FOUNDER_ANNUAL,
 } as const
 
 function isUsablePriceId(v: unknown): boolean {
   return typeof v === 'string' && v.length > 0 && v !== 'price_placeholder'
 }
 
+// BILLING_CONFIGURED gates on the REGULAR price IDs only — they're the
+// public-facing baseline that every PaywallModal viewer can fall back to.
+// The founder price IDs may legitimately be unset in a build that doesn't
+// participate in the founder promo (e.g. a future relaunch); we don't want
+// missing founder vars to disable billing for regular users.
 const BILLING_CONFIGURED =
   isUsablePriceId(PRICE_IDS.proMonthly) &&
   isUsablePriceId(PRICE_IDS.proAnnual)
+
+/** Mirrors PricingPage.tsx: founder users see $7.99/mo ($69.99/yr); regular
+ *  users see $8.99/mo ($89.99/yr). Keep these two locations in sync. */
+const FOUNDER_DISPLAY = { monthly: '7.99', annualPerMo: '5.83', annualBilled: '69.99' }
+const REGULAR_DISPLAY = { monthly: '8.99', annualPerMo: '7.49', annualBilled: '89.99' }
 
 const FEATURE_LABELS: Record<string, string> = {
   campgroundBooking: 'Campground Booking',
@@ -97,9 +109,13 @@ export default function PaywallModal({ feature, onClose }: Props) {
 
     setLoading(true)
     try {
-      // Pro is currently the only paid tier. The `plan` argument is kept on
-      // the signature so a future second tier is a one-line addition here.
-      const priceId = annual ? PRICE_IDS.proAnnual : PRICE_IDS.proMonthly
+      // Founder users get the founder-rate priceId; the server-side
+      // FOUNDER_INELIGIBLE guard in createCheckout rejects any attempt to
+      // submit a founder priceId from a non-founder account, so this is
+      // safe-by-default even with stale/cached state.
+      const priceId = user?.founderPricing
+        ? (annual ? PRICE_IDS.proFounderAnnual : PRICE_IDS.proFounderMonthly)
+        : (annual ? PRICE_IDS.proAnnual         : PRICE_IDS.proMonthly)
 
       const res = await subscriptionsApi.createCheckout(priceId)
       if (res.data.url) window.location.href = res.data.url
@@ -109,6 +125,14 @@ export default function PaywallModal({ feature, onClose }: Props) {
       setLoading(false)
     }
   }
+
+  // Effective display prices — mirrors effectiveProPricing() in PricingPage.tsx.
+  const display = user?.founderPricing ? FOUNDER_DISPLAY : REGULAR_DISPLAY
+  // Save N% — computed from the prices the user actually sees, matching the
+  // PricingPage formula: 1 - (annualBilled / (monthlyPrice * 12)).
+  const savePct = Math.round(
+    (1 - parseFloat(display.annualBilled) / (parseFloat(display.monthly) * 12)) * 100,
+  )
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30">
@@ -138,7 +162,7 @@ export default function PaywallModal({ feature, onClose }: Props) {
               onClick={() => setAnnual(true)}
               className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${annual ? 'bg-white text-gray-900' : 'text-gray-500'}`}
             >
-              Annual <span className="text-[#1F6F8B] ml-1">Save 17%</span>
+              Annual <span className="text-[#1F6F8B] ml-1">Save {savePct}%</span>
             </button>
           </div>
         </div>
@@ -151,10 +175,14 @@ export default function PaywallModal({ feature, onClose }: Props) {
           <div className="border border-[#1F6F8B] rounded-xl p-4" style={{ borderWidth: '0.5px' }}>
             <div className="text-sm font-medium text-[#1F6F8B] mb-1">Pro</div>
             <div className="text-2xl font-medium text-gray-900">
-              ${annual ? '7.49' : '8.99'}
+              ${annual ? display.annualPerMo : display.monthly}
               <span className="text-sm text-gray-500 font-normal">/mo</span>
             </div>
-            {annual && <div className="text-xs text-gray-500">$89.99 billed annually</div>}
+            {annual && <div className="text-xs text-gray-500">${display.annualBilled} billed annually</div>}
+            {/* Lifetime-locked founder rate badge — mirrors PricingPage. */}
+            {user?.founderPricing && (
+              <div className="text-xs text-[#1F6F8B] mt-1 font-medium">Lifetime founder rate</div>
+            )}
             <button
               onClick={() => handleUpgrade('pro')}
               disabled={loading || !BILLING_CONFIGURED}

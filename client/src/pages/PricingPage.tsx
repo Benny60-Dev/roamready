@@ -16,6 +16,32 @@ const PLAN_LABEL: Record<string, string> = {
   pro: 'Pro',
 }
 
+/** Founder-rate Pro pricing — lifetime-locked for users who signed up
+ *  before FOUNDER_CUTOFF_DATE (server-side flag on user.founderPricing).
+ *  Mirrors the shape of the PLANS Pro entry's price fields. */
+const FOUNDER_PRO_PRICING = {
+  monthlyPrice: 7.99,
+  annualPrice: 5.83,     // $69.99 / 12 = $5.8325 — per-month equivalent
+  annualBilled: 69.99,
+} as const
+
+/** Returns the effective pricing for the Pro card based on user state.
+ *  Founder users see FOUNDER_PRO_PRICING; everyone else (including
+ *  logged-out visitors) sees the regular prices baked into the PLANS
+ *  entry. */
+function effectiveProPricing(user: User | null) {
+  return user?.founderPricing
+    ? FOUNDER_PRO_PRICING
+    : { monthlyPrice: 8.99, annualPrice: 7.49, annualBilled: 89.99 }
+}
+
+/** Annual-vs-monthly savings percentage, rounded to nearest whole. Used
+ *  for the "Save N%" toggle badge so the displayed number always matches
+ *  the prices actually shown on the card. */
+function annualSavingsPct(p: { monthlyPrice: number; annualBilled: number }) {
+  return Math.round((1 - p.annualBilled / (p.monthlyPrice * 12)) * 100)
+}
+
 /** Returns the CTA label + disabled state for a paid-plan card based on
  *  what clicking it would actually do for THIS user. Five states:
  *
@@ -78,6 +104,9 @@ const PLANS = [
   {
     id: 'pro',
     name: 'Pro',
+    // Regular Pro prices — used for non-founder users (and as the public-
+    // facing default for logged-out visitors). Founder users see
+    // FOUNDER_PRO_PRICING (defined below) overlaid at render time.
     monthlyPrice: 8.99,
     annualPrice: 7.49,     // $89.99 / 12 = $7.4992 — per-month equivalent
     annualBilled: 89.99,
@@ -115,14 +144,28 @@ export default function PricingPage() {
   const [loading, setLoading] = useState<string | null>(null)
   const { user, isAuthenticated } = useAuthStore()
 
+  // Effective Pro pricing for THIS viewer — founder rates for users with
+  // user.founderPricing === true, regular rates for everyone else.
+  const proPricing = effectiveProPricing(user)
+  // Annual-toggle "Save N%" badge text reflects the prices the user
+  // actually sees: founders save ~27%, regular users save ~17%.
+  const savePct = annualSavingsPct(proPricing)
+
   async function handleUpgrade(planId: string) {
     if (!isAuthenticated()) return
     setLoading(planId)
     // Pro is currently the only paid tier; the planId argument exists so
     // a future second tier (e.g. Pro+ Family) is a one-line addition here.
-    const priceId = annual
-      ? import.meta.env.VITE_STRIPE_PRO_ANNUAL
-      : import.meta.env.VITE_STRIPE_PRO_MONTHLY
+    // Founder users get the founder-rate priceId; the server-side check
+    // in createCheckout (FOUNDER_INELIGIBLE guard) rejects any attempt to
+    // submit a founder priceId from a non-founder account.
+    const priceId = user?.founderPricing
+      ? (annual
+          ? import.meta.env.VITE_STRIPE_PRO_FOUNDER_ANNUAL
+          : import.meta.env.VITE_STRIPE_PRO_FOUNDER_MONTHLY)
+      : (annual
+          ? import.meta.env.VITE_STRIPE_PRO_ANNUAL
+          : import.meta.env.VITE_STRIPE_PRO_MONTHLY)
 
     try {
       // Mirror PaywallModal's isUsablePriceId guard. If the env var is missing
@@ -160,13 +203,20 @@ export default function PricingPage() {
               onClick={() => setAnnual(true)}
               className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${annual ? 'bg-white text-gray-900' : 'text-gray-500'}`}
             >
-              Annual <span className="text-[#0F766E] ml-1">Save 17%</span>
+              Annual <span className="text-[#0F766E] ml-1">Save {savePct}%</span>
             </button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {PLANS.map(plan => (
+          {PLANS.map(plan => {
+            // Overlay founder prices on the Pro card when applicable.
+            // Other cards (just Free today) keep the static PLANS values.
+            const displayPrices = plan.id === 'pro'
+              ? proPricing
+              : { monthlyPrice: plan.monthlyPrice, annualPrice: plan.annualPrice, annualBilled: plan.annualBilled }
+            const showFounderBadge = plan.id === 'pro' && !!user?.founderPricing
+            return (
             <div
               key={plan.id}
               className={`rounded-xl border p-6 ${plan.highlight ? 'border-[#EA6A0A] bg-[#FFF7ED]/20' : 'border-gray-200 bg-white'}`}
@@ -178,9 +228,9 @@ export default function PricingPage() {
 
               <div className="mb-6">
                 <div className="text-3xl font-medium text-gray-900">
-                  {plan.monthlyPrice === 0 ? 'Free' : (
+                  {displayPrices.monthlyPrice === 0 ? 'Free' : (
                     <>
-                      ${annual ? plan.annualPrice : plan.monthlyPrice}
+                      ${annual ? displayPrices.annualPrice : displayPrices.monthlyPrice}
                       <span className="text-sm font-normal text-gray-500">/mo</span>
                     </>
                   )}
@@ -191,8 +241,15 @@ export default function PricingPage() {
                     feature-list rows further down (text-sm text-gray-600)
                     so the user sees both numbers at the same glance — not
                     one prominent number and one footnote. */}
-                {annual && plan.annualBilled && (
-                  <p className="text-sm text-gray-600 mt-1">${plan.annualBilled} billed annually</p>
+                {annual && displayPrices.annualBilled && (
+                  <p className="text-sm text-gray-600 mt-1">${displayPrices.annualBilled} billed annually</p>
+                )}
+                {/* Lifetime-locked founder rate badge — only renders on the
+                    Pro card for users whose server-side founderPricing flag
+                    is true. Same teal accent as the "Save N%" toggle badge
+                    so the visual language stays consistent. */}
+                {showFounderBadge && (
+                  <p className="text-xs text-[#0F766E] mt-2 font-medium">Lifetime founder rate</p>
                 )}
               </div>
 
@@ -228,7 +285,8 @@ export default function PricingPage() {
                 ))}
               </ul>
             </div>
-          ))}
+            )
+          })}
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-8">
