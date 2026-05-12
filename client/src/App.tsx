@@ -124,6 +124,14 @@ export default function App() {
         {/* Public — magic-link landing. Not behind PrivateRoute because
             users may click the link from email on a logged-out device. */}
         <Route path="/verify-email" element={<VerifyEmailPage />} />
+        {/* Public — Help/FAQ. Was previously inside PrivateRoute/AppLayout,
+            but a logged-out user trying to evaluate the product should
+            still be able to read it. Matches the /verify-email pattern:
+            standalone (with its own wordmark header) for everyone. Authed
+            users clicking Help from the AppLayout nav briefly leave the
+            app shell — see HelpPage.tsx for a "back to dashboard" link
+            that softens that. */}
+        <Route path="/help" element={<HelpPage />} />
 
         {/* Onboarding */}
         <Route path="/onboarding/*" element={<PrivateRoute><OnboardingPage /></PrivateRoute>} />
@@ -157,7 +165,6 @@ export default function App() {
           <Route path="/van-destinations" element={<VanDestinationsPage />} />
           <Route path="/car-camping" element={<CarCampingPage />} />
           <Route path="/feedback" element={<FeedbackPage />} />
-          <Route path="/help" element={<HelpPage />} />
           <Route path="/admin" element={<OwnerRoute><AdminDashboardPage /></OwnerRoute>} />
           <Route path="/admin/feedback" element={<OwnerRoute><AdminFeedbackPage /></OwnerRoute>} />
           <Route path="/admin/revenue" element={<OwnerRoute><AdminRevenuePage /></OwnerRoute>} />
