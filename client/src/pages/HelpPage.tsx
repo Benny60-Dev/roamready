@@ -2,12 +2,11 @@
 //
 // VOICE RULE: this page reads in first-person PLURAL ("we / us / our")
 // throughout — RoamReady has multiple owners and the page is written
-// from the team's perspective. The one exception is the
-// "Why doesn't 'Reserve' actually book my campsite?" FAQ entry, which
-// intentionally retains its singular voice pending a planned booking-
-// flow overhaul next session that will rewrite the answer entirely.
-// User-perspective "I" in FAQ question titles ("Why do I need to ...")
-// is correct usage — that's the asker, not the team.
+// from the team's perspective. User-perspective "I" in FAQ question
+// titles ("Why do I need to ...") is correct usage — that's the
+// asker, not the team. The booking FAQ was the last singular-voice
+// holdout from the Reservation Honesty cleanup; converted to "we"
+// + retitled in the same pass.
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronDown, ChevronUp } from 'lucide-react'
@@ -26,12 +25,13 @@ const FAQ: { q: string; a: string }[] = [
     a: "Tell the planner where you want to go (or ask for a surprise), and it'll build a route that respects your rig dimensions, hookup needs, and travel style. Everything is editable — if you don't like a stop, just say so in the chat and the AI will redo it.",
   },
   {
-    q: 'Why doesn\'t "Reserve" actually book my campsite?',
-    // INTENTIONALLY UNCHANGED voice — booking-flow overhaul is queued
-    // for next session, and the answer will be rewritten end-to-end at
-    // that point. Per the Phase 4 Help spec, leave the singular voice
-    // in place rather than touch this paragraph twice.
-    a: "I'm honest about this — RoamReady doesn't book campgrounds for you yet. When you click a campground, I open the real reservation page in a new tab so you can book direct. Then come back and log your confirmation number so the trip stays organized. A full booking integration is coming, but I'd rather be upfront now than promise something I can't deliver.",
+    q: 'How does booking work?',
+    // Rewritten + voice-swept to "we". Title also retitled away from
+    // the stale "Reserve" reference — the UI button has said
+    // "Book at {name}" for a while now; the FAQ entry pointer should
+    // match. Content is the honest description: open external URL,
+    // record the confirmation # back here.
+    a: "RoamReady doesn't book campgrounds for you yet — we open the real reservation page in a new tab so you can book direct. When you're done, come back and record your confirmation number so the trip stays organized. A full booking integration is on the roadmap, but we'd rather be upfront now than promise something we can't deliver.",
   },
   {
     q: 'How do I share a trip with someone?',
