@@ -220,15 +220,6 @@ export const notificationsApi = {
   delete: (id: string) => api.delete(`/notifications/${id}`),
 }
 
-// Bookings
-export const bookingsApi = {
-  getAll: () => api.get('/bookings'),
-  create: (data: any) => api.post('/bookings', data),
-  get: (id: string) => api.get(`/bookings/${id}`),
-  update: (id: string, data: any) => api.put(`/bookings/${id}`, data),
-  cancel: (id: string) => api.post(`/bookings/${id}/cancel`),
-}
-
 // Admin
 export const adminApi = {
   getMetrics: () => api.get('/admin/metrics'),

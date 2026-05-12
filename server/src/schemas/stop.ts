@@ -1,8 +1,8 @@
 import { z } from 'zod'
 
 /**
- * Stop update payload — the request body for PUT /api/bookings/:id
- * (and reusable by future stop-update endpoints).
+ * Stop update payload — the request body for PUT /api/v1/trips/:id/stops/:stopId.
+ * (Previously also shared with the now-removed /api/v1/bookings router.)
  *
  * Fields here are exhaustively listed and all .optional() so partial updates
  * work; .strict() at the root rejects unknown keys outright (rather than
