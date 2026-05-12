@@ -3,9 +3,9 @@ import { useParams, useSearchParams, Link } from 'react-router-dom'
 import {
   CheckCircle, AlertTriangle, ExternalLink,
   Phone, MapPin, Globe, ChevronDown, ChevronUp, Loader, Check,
-  X, Users, PawPrint, Tag, Calendar, BadgeInfo, Info,
+  Calendar, BadgeInfo, Info,
 } from 'lucide-react'
-import { tripsApi, campgroundsApi, bookingsApi, usersApi } from '../../services/api'
+import { tripsApi, campgroundsApi, usersApi } from '../../services/api'
 import { Trip, Stop, Campground, Rig } from '../../types'
 import { useAuthStore } from '../../store/authStore'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge } from '../../utils/stopBadge'
@@ -258,143 +258,6 @@ function ReservationSection({
   )
 }
 
-// ─── Reservation confirm modal ────────────────────────────────────────────────
-
-function ReservationConfirmModal({
-  cg,
-  stop,
-  confirming,
-  onConfirm,
-  onCancel,
-}: {
-  cg: Campground
-  stop: Stop
-  confirming: boolean
-  onConfirm: () => void
-  onCancel: () => void
-}) {
-  const { user } = useAuthStore()
-  const profile = user?.travelProfile
-  const activeMemberships = user?.memberships?.filter(m => m.isActive && m.autoApply) ?? []
-  const totalCost = cg.siteRate ? cg.siteRate * stop.nights : null
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
-        {/* Header */}
-        <div className="flex items-start justify-between p-4 border-b border-gray-100">
-          <div>
-            <h2 className="text-base font-semibold text-gray-900">Confirm campground</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Review and confirm your booking</p>
-          </div>
-          <button
-            onClick={onCancel}
-            className="text-gray-400 hover:text-gray-600 transition-colors -mt-0.5 -mr-0.5"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Campground details */}
-        <div className="p-4 space-y-3">
-          {/* Campground name + tags */}
-          <div>
-            <h3 className="font-medium text-gray-900">{cg.name}</h3>
-            {cg.address && (
-              <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
-                <MapPin size={10} />
-                {cg.address}
-              </p>
-            )}
-            <div className="flex flex-wrap gap-1.5 mt-1.5">
-              {cg.maxRigLength && (
-                <span className="badge text-xs bg-gray-100 text-gray-600">Max {cg.maxRigLength} ft</span>
-              )}
-              {cg.hookupTypes?.map(h => (
-                <span key={h} className="badge-green text-xs">{h}</span>
-              ))}
-              {cg.isPetFriendly && <span className="badge-blue text-xs">🐾 Pets OK</span>}
-              {cg.rating != null && (
-                <span className="badge text-xs bg-amber-50 text-amber-700">★ {cg.rating.toFixed(1)}</span>
-              )}
-            </div>
-          </div>
-
-          {/* Dates */}
-          <div className="bg-gray-50 rounded-lg px-3 py-2.5 space-y-1.5 text-xs text-gray-600">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Check-in</span>
-              <span className="font-medium">{formatDate(stop.arrivalDate)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Check-out</span>
-              <span className="font-medium">{formatDate(stop.departureDate)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Nights</span>
-              <span className="font-medium">{stop.nights}</span>
-            </div>
-          </div>
-
-          {/* Cost */}
-          {cg.siteRate && (
-            <div className="bg-[#DCE5D5]/30 border border-[#3E5540]/20 rounded-lg px-3 py-2.5 text-xs">
-              <div className="flex justify-between text-gray-600">
-                <span>${cg.siteRate}/night × {stop.nights} nights</span>
-                <span className="font-semibold text-gray-900">${totalCost}</span>
-              </div>
-              {activeMemberships.length > 0 && (
-                <div className="mt-1.5 flex items-center gap-1 text-[#0F766E]">
-                  <Tag size={10} />
-                  <span>Membership discounts may apply: {activeMemberships.map(m => m.type).join(', ')}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Party */}
-          {profile && (
-            <div className="flex items-center gap-4 text-xs text-gray-500">
-              <span className="flex items-center gap-1">
-                <Users size={12} />
-                {profile.adults} adult{profile.adults !== 1 ? 's' : ''}
-                {profile.children > 0 ? `, ${profile.children} child${profile.children !== 1 ? 'ren' : ''}` : ''}
-              </span>
-              {profile.hasPets && (
-                <span className="flex items-center gap-1 text-[#0F766E]">
-                  <PawPrint size={12} />
-                  Pets
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Actions */}
-        <div className="flex gap-2 p-4 pt-0">
-          <button
-            onClick={onCancel}
-            disabled={confirming}
-            className="flex-1 btn-outline text-sm disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={confirming}
-            className="flex-1 btn-primary text-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
-          >
-            {confirming
-              ? <><Loader size={13} className="animate-spin" /> Booking…</>
-              : <><Check size={13} /> Confirm booking</>
-            }
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─── Recommended campground card (primary recommendation per stop) ───────────
 
 function RecommendedCampgroundCard({
@@ -410,10 +273,6 @@ function RecommendedCampgroundCard({
   cg: Campground
   stop: Stop
   draftMode: boolean
-  // Kept in the type for callers that still want to open the legacy ReservationConfirmModal —
-  // currently the parent still passes setPendingAlt as onReserve. Not consumed by the card body
-  // anymore since the gold button calls onSelectCampground directly.
-  onReserve: () => void
   onSelectCampground: () => void
   onStopUpdated: (stopId: string, data: Partial<Stop>) => void
   onUnbook: (stop: Stop) => void
@@ -583,9 +442,6 @@ function AlternateCampgroundCard({
   // draft alt is promoted to the primary slot and filtered out of altOptions, so this is
   // defensive — kept to mirror the primary card's draftMode visibility logic.
   draftMode: boolean
-  // Kept in the type — see RecommendedCampgroundCard for the same rationale. Not consumed
-  // by the card body since the gold button calls onSelectCampground directly.
-  onReserve: () => void
   onSelectCampground: () => void
 }) {
   const isConfirmed = stop.campgroundId === cg.id && stop.bookingStatus === 'CONFIRMED'
@@ -707,9 +563,6 @@ export default function TripBookingPage() {
   const [activeStop, setActiveStop] = useState<string | null>(null)
   // per-stop expand/collapse alternatives
   const [expandedAlts, setExpandedAlts] = useState<Record<string, boolean>>({})
-  // pendingAlt carries both the campground choice AND which stop it belongs to
-  const [pendingAlt, setPendingAlt] = useState<{ cg: Campground; stop: Stop } | null>(null)
-  const [confirming, setConfirming] = useState(false)
   // Reservation Honesty: clicking the gold button records the user's chosen campground here
   // *without* writing to the DB. The form expands in draft mode and only the user's "Save
   // reservation info" click (in ReservationSection) commits the booking. Keys are stopIds;
@@ -823,20 +676,6 @@ export default function TripBookingPage() {
     }
   }
 
-  async function handleBook(stopId: string, campgroundId: string, campgroundName: string, siteRate?: number) {
-    await bookingsApi.create({ stopId, campgroundId, campgroundName, siteRate })
-    setTrip(prev => {
-      if (!prev) return prev
-      const updatedStops = prev.stops?.map(s =>
-        s.id === stopId
-          ? { ...s, bookingStatus: 'CONFIRMED' as any, campgroundName, campgroundId, isCompatible: true, incompatibilityReasons: [], ...(siteRate !== undefined ? { siteRate } : {}) }
-          : s
-      )
-      const estimatedCamp = updatedStops?.reduce((sum, s) => s.siteRate ? sum + s.siteRate * s.nights : sum, 0)
-      return { ...prev, stops: updatedStops, ...(estimatedCamp ? { estimatedCamp } : {}) }
-    })
-  }
-
   // Reservation Honesty: gold button now opens the form in *draft mode* only — no DB write.
   // The user's "Save reservation info" click is the actual commit (see ReservationSection.save).
   // Storing the chosen campground here also lets renderStopContent promote it as the
@@ -915,17 +754,6 @@ export default function TripBookingPage() {
       alert('Could not unbook. Please try again.')
     } finally {
       setUnbooking(false)
-    }
-  }
-
-  async function handleConfirmAlt() {
-    if (!pendingAlt) return
-    setConfirming(true)
-    try {
-      await handleBook(pendingAlt.stop.id, pendingAlt.cg.id, pendingAlt.cg.name, pendingAlt.cg.siteRate)
-      setPendingAlt(null)
-    } finally {
-      setConfirming(false)
     }
   }
 
@@ -1060,7 +888,6 @@ export default function TripBookingPage() {
             cg={recommended}
             stop={stop}
             draftMode={stopDraftMode}
-            onReserve={() => setPendingAlt({ cg: recommended, stop })}
             onSelectCampground={() => handleSelectCampground(stop, recommended)}
             onStopUpdated={handleStopUpdated}
             onUnbook={(stop) => setUnbookTarget(stop)}
@@ -1124,7 +951,6 @@ export default function TripBookingPage() {
                       // its gold button while it's the active draft. Other alts in the list
                       // stay clickable so the user can switch drafts before committing.
                       draftMode={draftSelections[stop.id]?.id === cg.id}
-                      onReserve={() => setPendingAlt({ cg, stop })}
                       onSelectCampground={() => handleSelectCampground(stop, cg)}
                     />
                   ))}
@@ -1148,17 +974,6 @@ export default function TripBookingPage() {
         <span className="text-gray-300 text-xs">›</span>
         <span className="text-xs text-gray-700 font-medium truncate max-w-[200px]">{trip.name}</span>
       </div>
-
-      {/* Reservation confirm modal */}
-      {pendingAlt && (
-        <ReservationConfirmModal
-          cg={pendingAlt.cg}
-          stop={pendingAlt.stop}
-          confirming={confirming}
-          onConfirm={handleConfirmAlt}
-          onCancel={() => setPendingAlt(null)}
-        />
-      )}
 
       {/* ── MOBILE: horizontal tab bar (hidden on md+) ── */}
       <div className="md:hidden flex-shrink-0 bg-white border-b border-gray-100 overflow-x-auto">
