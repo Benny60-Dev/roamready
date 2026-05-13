@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
+import type { MaintenanceItemUpdateInput } from '../schemas'
 
 function computeStatus(item: any, currentMiles?: number): 'OK' | 'DUE_SOON' | 'OVERDUE' {
   const now = new Date()
@@ -64,7 +65,7 @@ export async function updateItem(req: AuthRequest, res: Response, next: NextFunc
 
     const updated = await prisma.maintenanceItem.update({
       where: { id: req.params.itemId },
-      data: req.body,
+      data: req.body as MaintenanceItemUpdateInput,
     })
     res.json(updated)
   } catch (err) { next(err) }
