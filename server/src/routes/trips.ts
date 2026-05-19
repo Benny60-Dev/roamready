@@ -2,9 +2,9 @@ import { Router } from 'express'
 import { requireAuth, requireFeature, AuthRequest } from '../middleware/auth'
 import { requireVerifiedEmail } from '../middleware/requireVerifiedEmail'
 import { validateBody } from '../middleware/validate'
-import { StopUpdateSchema, TripUpdateSchema } from '../schemas'
+import { StopUpdateSchema, TripUpdateSchema, TripShiftDatesSchema } from '../schemas'
 import {
-  getTrips, createTrip, getTrip, updateTrip, deleteTrip,
+  getTrips, createTrip, getTrip, updateTrip, shiftTripDates, deleteTrip,
   getStops, createStop, updateStop, deleteStop,
   getSharedTrip, exportPdf, generatePackingList,
   generateItinerary, saveItinerary, generateRoutes, generateActivities,
@@ -25,6 +25,7 @@ tripsRouter.get('/', getTrips as any)
 tripsRouter.post('/', createTrip as any)
 tripsRouter.get('/:id', getTrip as any)
 tripsRouter.put('/:id', validateBody(TripUpdateSchema), updateTrip as any)
+tripsRouter.post('/:id/shift-dates', validateBody(TripShiftDatesSchema), shiftTripDates as any)
 tripsRouter.delete('/:id', deleteTrip as any)
 
 tripsRouter.get('/:id/stops', getStops as any)

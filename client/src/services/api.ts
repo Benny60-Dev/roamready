@@ -97,6 +97,7 @@ export const tripsApi = {
   create: (data: any) => api.post('/trips', data),
   get: (id: string) => api.get(`/trips/${id}`),
   update: (id: string, data: any) => api.put(`/trips/${id}`, data),
+  shiftDates: (id: string, body: { newStartDate: string }) => api.post(`/trips/${id}/shift-dates`, body),
   delete: (id: string) => api.delete(`/trips/${id}`),
   getShared: (token: string) => api.get(`/trips/share/${token}`),
   createShare: (id: string) => api.post<{ sharedToken: string; regenerated: boolean }>(`/trips/${id}/share`),

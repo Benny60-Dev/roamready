@@ -46,3 +46,29 @@ export const TripUpdateSchema = z
   .strict()
 
 export type TripUpdateInput = z.infer<typeof TripUpdateSchema>
+
+/**
+ * Trip-date shift payload — request body for POST /api/v1/trips/:id/shift-dates.
+ *
+ * Used by the Modify-with-AI flow's shift_trip_dates action to move an entire
+ * trip forward or backward in time. The server computes the delta between the
+ * trip's current startDate and newStartDate, then applies that delta to:
+ *   - Trip.startDate, Trip.endDate
+ *   - Every Stop's arrivalDate and departureDate (where non-null)
+ * Trip duration and per-stop nights are preserved.
+ *
+ * No past-date guard at the schema layer — backdating is a legitimate use
+ * case for COMPLETED trips (record-keeping after the fact). The AI is
+ * instructed in the modify-mode prompt to avoid past dates unless the user
+ * explicitly asks for one.
+ *
+ * `z.coerce.date()` accepts both Date instances and ISO strings ("2026-08-09")
+ * — the Modify panel sends a YYYY-MM-DD string per the prompt spec.
+ */
+export const TripShiftDatesSchema = z
+  .object({
+    newStartDate: z.coerce.date(),
+  })
+  .strict()
+
+export type TripShiftDatesInput = z.infer<typeof TripShiftDatesSchema>

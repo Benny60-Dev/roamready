@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { X, Wand2 } from 'lucide-react'
+import { format } from 'date-fns'
 import { aiApi, tripsApi } from '../../services/api'
 import { Trip, StopType } from '../../types'
 import { useVoiceInput } from '../../hooks/useVoiceInput'
@@ -18,7 +19,7 @@ const QUICK_CHIPS = [
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ModifyAction {
-  action: 'add_stop' | 'remove_stop' | 'change_nights' | 'suggest_campground'
+  action: 'add_stop' | 'remove_stop' | 'change_nights' | 'suggest_campground' | 'shift_trip_dates'
   // new schema (server-injected prompt)
   locationName?: string
   locationState?: string
@@ -30,6 +31,9 @@ interface ModifyAction {
   nights?: number
   type?: StopType
   campgroundName?: string
+  // shift_trip_dates — ISO YYYY-MM-DD string emitted by the AI; the server
+  // parses via z.coerce.date() so a Date instance is unnecessary here.
+  newStartDate?: string
 }
 
 interface ChatMsg {
@@ -70,9 +74,47 @@ function getConfirmationText(action: ModifyAction): string {
       return `Change ${name}${state} to ${action.nights} night${action.nights !== 1 ? 's' : ''}`
     case 'suggest_campground':
       return `Switch ${name}${state} campground to ${action.campgroundName}`
+    case 'shift_trip_dates': {
+      const parsed = action.newStartDate ? new Date(action.newStartDate) : null
+      const pretty = parsed && !isNaN(parsed.getTime())
+        ? format(parsed, 'MMMM d, yyyy')
+        : (action.newStartDate ?? 'a new date')
+      return `Shift trip to start on ${pretty}`
+    }
     default:
       return 'Apply this change'
   }
+}
+
+/** Action-specific Apply button label. The default is "✓ Apply"; only
+ *  shift_trip_dates currently overrides it. Kept as a helper alongside
+ *  getConfirmationText so future actions have an obvious place to add
+ *  their own custom button text. */
+function getApplyButtonLabel(action: ModifyAction): string {
+  switch (action.action) {
+    case 'shift_trip_dates':
+      return 'Shift dates'
+    default:
+      return '✓ Apply'
+  }
+}
+
+/** Secondary "fine print" line beneath the main confirmation text, shown
+ *  only for actions where the consequence isn't fully captured by the
+ *  one-line summary. Returns null when no sub-line should render so the
+ *  card stays compact for simpler actions. */
+function getConfirmationSubText(action: ModifyAction, trip: Trip): string | null {
+  if (action.action !== 'shift_trip_dates') return null
+  if (!trip.startDate || !action.newStartDate) return null
+  const newStart = new Date(action.newStartDate)
+  const oldStart = new Date(trip.startDate)
+  if (isNaN(newStart.getTime()) || isNaN(oldStart.getTime())) return null
+  const dayDelta = Math.round((newStart.getTime() - oldStart.getTime()) / 86400000)
+  if (dayDelta === 0) return 'No change — trip already starts on that date.'
+  const stopCount = trip.stops?.length ?? 0
+  const direction = dayDelta > 0 ? 'later' : 'earlier'
+  const absDelta = Math.abs(dayDelta)
+  return `All ${stopCount} stop${stopCount === 1 ? '' : 's'} will move ${absDelta} day${absDelta === 1 ? '' : 's'} ${direction}. Trip length stays the same.`
 }
 
 // ─── Typing dots ──────────────────────────────────────────────────────────────
@@ -229,89 +271,127 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
         ? resolvedName
         : (() => { const raw = resolvedName; const c = raw.lastIndexOf(','); return c >= 0 ? raw.slice(0, c).trim() : raw.trim() })()
 
-      if (action.action === 'add_stop') {
-        // Duplicate guard — block if a stop with a matching name already exists
-        const locationNeedle = cleanName.toLowerCase()
-        const duplicate = locationNeedle ? sortedStops.find(
-          (s: any) =>
-            s.locationName.toLowerCase().includes(locationNeedle) ||
-            locationNeedle.includes(s.locationName.toLowerCase())
-        ) : undefined
-        console.log('[applyMod] duplicate check — needle:', locationNeedle, '| duplicate:', duplicate ? duplicate.locationName : 'none')
+      // Dispatch the action. Converted from an if/else chain to a switch so
+      // the `default:` branch can throw on any unknown action — closing the
+      // silent-success failure mode where a hallucinated action name (e.g.
+      // a date-change variant the AI invents) used to fall through with no
+      // mutation and still render a green "✅ Done!" bubble.
+      switch (action.action) {
+        case 'add_stop': {
+          // Duplicate guard — block if a stop with a matching name already exists
+          const locationNeedle = cleanName.toLowerCase()
+          const duplicate = locationNeedle ? sortedStops.find(
+            (s: any) =>
+              s.locationName.toLowerCase().includes(locationNeedle) ||
+              locationNeedle.includes(s.locationName.toLowerCase())
+          ) : undefined
+          console.log('[applyMod] duplicate check — needle:', locationNeedle, '| duplicate:', duplicate ? duplicate.locationName : 'none')
 
-        // Round-trip exception: a return-home add_stop legitimately re-uses
-        // the home city. Allow when the incoming stop is type=HOME, the matched
-        // duplicate is the trip's STARTING HOME (first HOME in sortedStops),
-        // and there is not already a closing HOME on the trip.
-        const homeStops = sortedStops.filter((s: any) => s.type === 'HOME')
-        const startingHome = homeStops[0]
-        const isReturnHomeAdd =
-          !!duplicate &&
-          action.type === 'HOME' &&
-          duplicate.type === 'HOME' &&
-          duplicate === startingHome &&
-          homeStops.length === 1
+          // Round-trip exception: a return-home add_stop legitimately re-uses
+          // the home city. Allow when the incoming stop is type=HOME, the matched
+          // duplicate is the trip's STARTING HOME (first HOME in sortedStops),
+          // and there is not already a closing HOME on the trip.
+          const homeStops = sortedStops.filter((s: any) => s.type === 'HOME')
+          const startingHome = homeStops[0]
+          const isReturnHomeAdd =
+            !!duplicate &&
+            action.type === 'HOME' &&
+            duplicate.type === 'HOME' &&
+            duplicate === startingHome &&
+            homeStops.length === 1
 
-        if (duplicate && !isReturnHomeAdd) {
+          if (duplicate && !isReturnHomeAdd) {
+            setMessages(prev => [
+              ...prev,
+              { role: 'assistant', content: `${duplicate.locationName} is already on your trip (stop #${duplicate.order}). No change was made.` },
+            ])
+            setApplying(false)
+            return
+          }
+
+          // Position resolution:
+          // 1. Return-home adds (type=HOME on a trip that already has a HOME start) ALWAYS land at the end.
+          //    The AI cannot reliably compute "the end" when stop orders are non-contiguous, so the client forces it.
+          // 2. Otherwise, if afterStopOrder is provided, honor it.
+          // 3. Otherwise, if legacy after_stop name is provided, use that.
+          // 4. Otherwise, append after the last stop.
+          const lastStop = sortedStops[sortedStops.length - 1]
+          const forceAppendAsReturnHome =
+            action.type === 'HOME' &&
+            sortedStops.some((s: any) => s.type === 'HOME')
+
+          let afterStop: any
+          if (forceAppendAsReturnHome) {
+            afterStop = lastStop
+          } else if (action.afterStopOrder != null) {
+            afterStop = sortedStops.find((s: any) => s.order === action.afterStopOrder)
+          } else if (action.after_stop) {
+            afterStop = findStop(action.after_stop)
+          } else {
+            afterStop = lastStop
+          }
+
+          const afterOrder = afterStop?.order ?? (lastStop?.order ?? 0)
+          const newOrder = afterOrder + 1
+          console.log('[applyMod] position — forceAppendAsReturnHome:', forceAppendAsReturnHome, '| afterStop:', afterStop?.locationName, '| afterOrder:', afterOrder, '| newOrder:', newOrder)
+
+          const payload = {
+            locationName: cleanName,
+            locationState: resolvedState || undefined,
+            nights: action.nights ?? 1,
+            type: action.type ?? 'DESTINATION',
+            order: newOrder,
+            bookingStatus: 'NOT_BOOKED',
+            isCompatible: true,
+          }
+          console.log('[applyMod] calling createStop with payload:', JSON.stringify(payload))
+          const createRes = await tripsApi.createStop(trip.id, payload)
+          console.log('[applyMod] createStop response status:', createRes.status, '| data:', JSON.stringify(createRes.data))
+          break
+        }
+        case 'remove_stop': {
+          const stop = findStop(cleanName)
+          if (stop) await tripsApi.deleteStop(trip.id, stop.id)
+          else throw new Error(`Could not find stop: ${cleanName}`)
+          break
+        }
+        case 'change_nights': {
+          const stop = findStop(cleanName)
+          if (stop && action.nights) await tripsApi.updateStop(trip.id, stop.id, { nights: action.nights })
+          else throw new Error(`Could not find stop or nights missing: ${cleanName}`)
+          break
+        }
+        case 'suggest_campground': {
+          const stop = findStop(cleanName)
+          if (stop && action.campgroundName) {
+            await tripsApi.updateStop(trip.id, stop.id, { campgroundName: action.campgroundName })
+          } else throw new Error(`Could not find stop or campground name missing`)
+          break
+        }
+        case 'shift_trip_dates': {
+          if (!action.newStartDate) throw new Error('shift_trip_dates missing newStartDate')
+          // The shift endpoint returns the full trip (with stops, journal-included)
+          // — same shape as tripsApi.get — so we can skip the trailing refetch
+          // and pass the response straight to onTripUpdated. Saves one round-trip.
+          const shiftRes = await tripsApi.shiftDates(trip.id, { newStartDate: action.newStartDate })
+          onTripUpdated(shiftRes.data)
+          setMessages(prev =>
+            prev.map((m, i) => (i === msgIndex ? { ...m, modifyApplied: true } : m))
+          )
           setMessages(prev => [
             ...prev,
-            { role: 'assistant', content: `${duplicate.locationName} is already on your trip (stop #${duplicate.order}). No change was made.` },
+            { role: 'assistant', content: '✅ Trip dates shifted. Would you like to make any other modifications?' },
           ])
           setApplying(false)
           return
         }
-
-        // Position resolution:
-        // 1. Return-home adds (type=HOME on a trip that already has a HOME start) ALWAYS land at the end.
-        //    The AI cannot reliably compute "the end" when stop orders are non-contiguous, so the client forces it.
-        // 2. Otherwise, if afterStopOrder is provided, honor it.
-        // 3. Otherwise, if legacy after_stop name is provided, use that.
-        // 4. Otherwise, append after the last stop.
-        const lastStop = sortedStops[sortedStops.length - 1]
-        const forceAppendAsReturnHome =
-          action.type === 'HOME' &&
-          sortedStops.some((s: any) => s.type === 'HOME')
-
-        let afterStop: any
-        if (forceAppendAsReturnHome) {
-          afterStop = lastStop
-        } else if (action.afterStopOrder != null) {
-          afterStop = sortedStops.find((s: any) => s.order === action.afterStopOrder)
-        } else if (action.after_stop) {
-          afterStop = findStop(action.after_stop)
-        } else {
-          afterStop = lastStop
-        }
-
-        const afterOrder = afterStop?.order ?? (lastStop?.order ?? 0)
-        const newOrder = afterOrder + 1
-        console.log('[applyMod] position — forceAppendAsReturnHome:', forceAppendAsReturnHome, '| afterStop:', afterStop?.locationName, '| afterOrder:', afterOrder, '| newOrder:', newOrder)
-
-        const payload = {
-          locationName: cleanName,
-          locationState: resolvedState || undefined,
-          nights: action.nights ?? 1,
-          type: action.type ?? 'DESTINATION',
-          order: newOrder,
-          bookingStatus: 'NOT_BOOKED',
-          isCompatible: true,
-        }
-        console.log('[applyMod] calling createStop with payload:', JSON.stringify(payload))
-        const createRes = await tripsApi.createStop(trip.id, payload)
-        console.log('[applyMod] createStop response status:', createRes.status, '| data:', JSON.stringify(createRes.data))
-      } else if (action.action === 'remove_stop') {
-        const stop = findStop(cleanName)
-        if (stop) await tripsApi.deleteStop(trip.id, stop.id)
-        else throw new Error(`Could not find stop: ${cleanName}`)
-      } else if (action.action === 'change_nights') {
-        const stop = findStop(cleanName)
-        if (stop && action.nights) await tripsApi.updateStop(trip.id, stop.id, { nights: action.nights })
-        else throw new Error(`Could not find stop or nights missing: ${cleanName}`)
-      } else if (action.action === 'suggest_campground') {
-        const stop = findStop(cleanName)
-        if (stop && action.campgroundName) {
-          await tripsApi.updateStop(trip.id, stop.id, { campgroundName: action.campgroundName })
-        } else throw new Error(`Could not find stop or campground name missing`)
+        default:
+          // Defensive: any action name the AI invents (e.g. a hallucinated
+          // date variant before shift_trip_dates existed) falls through here.
+          // Throwing surfaces a clean error bubble via the existing catch
+          // below instead of the old silent-success "✅ Done!" path.
+          console.error('Unsupported modify action:', action)
+          throw new Error(`Unsupported modify action: ${(action as any).action}`)
       }
 
       // Refresh trip data and propagate upward
@@ -453,16 +533,20 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
                 !msg.modifyCancelled && (
                   <div className="mt-2 mr-4 bg-white border border-[#1F6F8B]/25 rounded-xl p-3 shadow-sm">
                     <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Proposed change</p>
-                    <p className="text-sm font-medium text-gray-900 mb-2.5">
+                    <p className="text-sm font-medium text-gray-900 mb-1">
                       {getConfirmationText(msg.modifyAction)}
                     </p>
+                    {(() => {
+                      const sub = getConfirmationSubText(msg.modifyAction, trip)
+                      return sub ? <p className="text-[11px] text-gray-500 mb-2">{sub}</p> : <div className="mb-1.5" />
+                    })()}
                     <div className="flex gap-2">
                       <button
                         onClick={() => applyModification(i, msg.modifyAction!)}
                         disabled={applying}
                         className="flex-1 py-1.5 text-xs font-medium rounded-lg bg-[#F7A829] text-white hover:bg-[#C9851A] transition-colors disabled:opacity-50"
                       >
-                        {applying ? 'Applying…' : '✓ Apply'}
+                        {applying ? 'Applying…' : getApplyButtonLabel(msg.modifyAction)}
                       </button>
                       <button
                         onClick={() => cancelModification(i)}
