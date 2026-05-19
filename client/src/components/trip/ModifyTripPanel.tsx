@@ -105,9 +105,16 @@ function getApplyButtonLabel(action: ModifyAction): string {
  *  card stays compact for simpler actions. */
 function getConfirmationSubText(action: ModifyAction, trip: Trip): string | null {
   if (action.action !== 'shift_trip_dates') return null
-  if (!trip.startDate || !action.newStartDate) return null
+  if (!action.newStartDate) return null
+  // trip.startDate is typically null in this codebase — the canonical anchor
+  // is the first stop's arrivalDate (same convention as buildTimeline and the
+  // server-side shift handler). Falling back here means the "X days later"
+  // preview still renders for the common case.
+  const firstStopArrival = trip.stops?.find(s => s.arrivalDate)?.arrivalDate
+  const oldStartStr = trip.startDate ?? firstStopArrival
+  if (!oldStartStr) return null
   const newStart = new Date(action.newStartDate)
-  const oldStart = new Date(trip.startDate)
+  const oldStart = new Date(oldStartStr)
   if (isNaN(newStart.getTime()) || isNaN(oldStart.getTime())) return null
   const dayDelta = Math.round((newStart.getTime() - oldStart.getTime()) / 86400000)
   if (dayDelta === 0) return 'No change — trip already starts on that date.'
