@@ -5,7 +5,7 @@ import axios from 'axios'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
-import type { StopUpdateInput, TripUpdateInput } from '../schemas'
+import type { StopUpdateInput, TripUpdateInput, TripShiftDatesInput } from '../schemas'
 import { generatePackingListAI, generateTripItineraryAI, generateStopActivitiesAI, generateRouteHighlightsAI } from '../services/ai'
 import { fetchLiveForecast, fetchHistoricalWeather, isoDate } from '../services/weatherFetch'
 
@@ -413,6 +413,102 @@ export async function updateTrip(req: AuthRequest, res: Response, next: NextFunc
     // req.body is guaranteed to be a parsed TripUpdateInput by validateBody on the route.
     const data: TripUpdateInput = req.body
     const updated = await prisma.trip.update({ where: { id: req.params.id }, data })
+    res.json(updated)
+  } catch (err) { next(err) }
+}
+
+/**
+ * Shift the entire trip forward or backward in time. Closes the
+ * Modify-with-AI hallucination loop where the assistant claimed to change
+ * dates but had no tool to actually do it (see commit message + the
+ * `shift_trip_dates` action in the modify-mode system prompt).
+ *
+ * Semantics:
+ *   - Anchor: Trip.startDate. delta = newStartDate − currentStartDate (ms).
+ *   - Trip.endDate, every Stop.arrivalDate, every Stop.departureDate are
+ *     shifted by the same delta. Stops with null arrival/departure dates
+ *     are left alone (HOME stops, or stops the user hasn't dated yet).
+ *   - Stop ordering, nights, and Trip.totalNights are NOT touched —
+ *     duration is preserved by definition.
+ *   - The whole mutation runs in a single prisma.$transaction so a partial
+ *     failure leaves no half-shifted trip behind.
+ *
+ * Edge cases:
+ *   - Trip with null startDate: 400. We can't compute a delta from a null
+ *     anchor, and the modify-mode prompt only documents this action for
+ *     trips that have dates set in the first place.
+ *   - deltaMs === 0 (user picked the current start date): return the trip
+ *     unchanged without doing any writes.
+ *   - No past-date guard at the API layer — the modify-mode prompt
+ *     instructs the AI to avoid past dates unless the user explicitly
+ *     asks. Backdating COMPLETED trips for record-keeping must remain
+ *     possible, so blocking server-side would over-constrain.
+ */
+export async function shiftTripDates(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const trip = await prisma.trip.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+      include: { stops: { orderBy: { order: 'asc' } } },
+    })
+    if (!trip) throw new AppError('Trip not found', 404)
+    if (!trip.startDate) {
+      throw new AppError(
+        'Cannot shift a trip that has no start date set. Set a start date first, then ask the AI to shift the trip.',
+        400,
+      )
+    }
+
+    const { newStartDate }: TripShiftDatesInput = req.body
+    const deltaMs = newStartDate.getTime() - trip.startDate.getTime()
+
+    // No-op shortcut: same date in, same trip out. Mirror getTrip's return
+    // shape so the client can hot-swap state either way.
+    if (deltaMs === 0) {
+      return res.json(trip)
+    }
+
+    const shifted = (d: Date | null): Date | null =>
+      d ? new Date(d.getTime() + deltaMs) : null
+
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.trip.update({
+        where: { id: trip.id },
+        data: {
+          startDate: shifted(trip.startDate),
+          // Trip.endDate may be null on legacy/in-progress trips; shifted()
+          // preserves null so we never invent an endDate that wasn't there.
+          endDate: shifted(trip.endDate),
+        },
+      })
+
+      for (const stop of trip.stops) {
+        // Skip stops with both dates null (typically HOME/transit stops
+        // the user never dated) so we don't issue a no-op UPDATE per row.
+        if (stop.arrivalDate == null && stop.departureDate == null) continue
+        await tx.stop.update({
+          where: { id: stop.id },
+          data: {
+            arrivalDate: shifted(stop.arrivalDate),
+            departureDate: shifted(stop.departureDate),
+          },
+        })
+      }
+
+      // Return the post-shift trip in the same shape as getTrip so the
+      // frontend can pass response.data straight into onTripUpdated().
+      return tx.trip.findUnique({
+        where: { id: trip.id },
+        include: { stops: { orderBy: { order: 'asc' }, include: { journalEntry: true } } },
+      })
+    })
+
+    console.log(
+      '[shiftTripDates] tripId=%s deltaDays=%d stopsShifted=%d',
+      trip.id,
+      Math.round(deltaMs / 86400000),
+      trip.stops.filter(s => s.arrivalDate != null || s.departureDate != null).length,
+    )
+
     res.json(updated)
   } catch (err) { next(err) }
 }
