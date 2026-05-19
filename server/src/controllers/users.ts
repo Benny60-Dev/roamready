@@ -25,7 +25,7 @@ export async function getMe(req: AuthRequest, res: Response, next: NextFunction)
     console.log('[getMe] called for user', req.user!.id)
     let user = await prisma.user.findUnique({
       where: { id: req.user!.id },
-      include: { rigs: true, travelProfile: true, memberships: true },
+      include: { rigs: true, travelProfile: true, memberships: true, parties: { include: { people: true, pets: true } } },
     })
 
     console.log('[getMe] backfill check — homeLat is', user?.homeLat, 'homeLocation is', user?.homeLocation)
@@ -56,7 +56,7 @@ export async function getMe(req: AuthRequest, res: Response, next: NextFunction)
             user = await prisma.user.update({
               where: { id: req.user!.id },
               data: { homeLat: lat, homeLng: lng, homeCity, homeState, homeZip, homeStreet, homeAddress },
-              include: { rigs: true, travelProfile: true, memberships: true },
+              include: { rigs: true, travelProfile: true, memberships: true, parties: { include: { people: true, pets: true } } },
             }) as typeof user
             console.log('[getMe] backfill complete — saved', { homeLat: lat, homeLng: lng, homeCity, homeState, homeZip, homeStreet, homeAddress })
           }

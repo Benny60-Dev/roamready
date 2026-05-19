@@ -43,6 +43,54 @@ export interface User {
   rigs?: Rig[]
   travelProfile?: TravelProfile
   memberships?: Membership[]
+  parties?: TravelParty[]
+}
+
+export type PersonRole = 'ADULT' | 'TEEN' | 'CHILD' | 'INFANT'
+export type PetType = 'DOG' | 'CAT' | 'OTHER'
+
+export interface Person {
+  id: string
+  partyId: string
+  role: PersonRole
+  name?: string | null
+  age?: number | null
+  isTraveling: boolean
+  isEmergencyContact: boolean
+  emergencyPhone?: string | null
+  accessibilityNeeds?: any
+  dietaryNotes?: string | null
+  militaryStatus?: string | null
+  firstResponder?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Pet {
+  id: string
+  partyId: string
+  type: PetType
+  name?: string | null
+  breed?: string | null
+  weightLbs?: number | null
+  leashTrained: boolean
+  comfortableInCrowds: boolean
+  comfortableAtNight: boolean
+  notes?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TravelParty {
+  id: string
+  userId?: string | null
+  tripId?: string | null
+  isDefault: boolean
+  notes?: string | null
+  people: Person[]
+  pets: Pet[]
+  createdAt: string
+  updatedAt: string
 }
 
 export interface Rig {
