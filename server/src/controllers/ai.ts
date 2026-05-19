@@ -193,6 +193,17 @@ function buildLiveTripState(trip: any): string {
     return parts.join(' | ')
   })
 
+  // Trip.startDate / Trip.endDate are typically null in this codebase — the
+  // promote flow only writes startLocation/endLocation/totalMiles/etc. The
+  // canonical trip-bounds anchor is the first/last stop with a non-null
+  // arrival/departure date (matches TripSummaryPage's buildTimeline). Fall
+  // back to the Trip columns first in case a future write does populate them,
+  // then to stops, and finally fmtDate handles null gracefully ("not set").
+  const firstStopArrival = stops.find((s: any) => s.arrivalDate != null)?.arrivalDate
+  const lastStopDeparture = [...stops].reverse().find((s: any) => s.departureDate != null)?.departureDate
+  const effectiveStart = trip.startDate ?? firstStopArrival
+  const effectiveEnd = trip.endDate ?? lastStopDeparture
+
   return [
     '=== MODIFY MODE — TRIP MODIFICATION INSTRUCTIONS ===',
     '',
@@ -287,7 +298,7 @@ function buildLiveTripState(trip: any): string {
     '',
     `Trip: ${trip.name}`,
     `Route: ${trip.startLocation} → ${trip.endLocation}`,
-    `Dates: ${fmtDate(trip.startDate)} – ${fmtDate(trip.endDate)}`,
+    `Dates: ${fmtDate(effectiveStart)} – ${fmtDate(effectiveEnd)}`,
     // Today's date is injected so shift_trip_dates can resolve relative
     // user phrases ("two weeks later", "next month") to an absolute
     // YYYY-MM-DD before emitting the <modify> tag.

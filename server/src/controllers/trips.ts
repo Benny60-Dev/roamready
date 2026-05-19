@@ -424,21 +424,29 @@ export async function updateTrip(req: AuthRequest, res: Response, next: NextFunc
  * `shift_trip_dates` action in the modify-mode system prompt).
  *
  * Semantics:
- *   - Anchor: Trip.startDate. delta = newStartDate − currentStartDate (ms).
- *   - Trip.endDate, every Stop.arrivalDate, every Stop.departureDate are
- *     shifted by the same delta. Stops with null arrival/departure dates
- *     are left alone (HOME stops, or stops the user hasn't dated yet).
+ *   - Anchor: the FIRST stop with a non-null arrivalDate (by `order`
+ *     ascending). Trip.startDate is unreliable in this codebase — the
+ *     promote flow doesn't write it and there's no UI to set it directly,
+ *     so almost every real Trip row has startDate=null. Stop arrivalDates
+ *     are the canonical source of truth (see TripSummaryPage's
+ *     buildTimeline, which already prefers stop.arrivalDate for the same
+ *     reason). delta = newStartDate − anchorStop.arrivalDate (ms).
+ *   - Trip.startDate, Trip.endDate, every Stop.arrivalDate, every
+ *     Stop.departureDate are shifted by the same delta. The `shifted()`
+ *     helper is null-safe, so Trip.startDate / Trip.endDate / stops with
+ *     null dates stay null — we don't invent values that weren't there.
  *   - Stop ordering, nights, and Trip.totalNights are NOT touched —
  *     duration is preserved by definition.
  *   - The whole mutation runs in a single prisma.$transaction so a partial
  *     failure leaves no half-shifted trip behind.
  *
  * Edge cases:
- *   - Trip with null startDate: 400. We can't compute a delta from a null
- *     anchor, and the modify-mode prompt only documents this action for
- *     trips that have dates set in the first place.
- *   - deltaMs === 0 (user picked the current start date): return the trip
- *     unchanged without doing any writes.
+ *   - Trip with zero stop arrival dates: 400 — there's truly nothing to
+ *     anchor against. Rare: it'd require a trip where every stop has both
+ *     arrivalDate AND departureDate null, which only happens for an
+ *     empty/half-built itinerary.
+ *   - deltaMs === 0 (user picked the current effective start): return the
+ *     trip unchanged without doing any writes.
  *   - No past-date guard at the API layer — the modify-mode prompt
  *     instructs the AI to avoid past dates unless the user explicitly
  *     asks. Backdating COMPLETED trips for record-keeping must remain
@@ -451,15 +459,23 @@ export async function shiftTripDates(req: AuthRequest, res: Response, next: Next
       include: { stops: { orderBy: { order: 'asc' } } },
     })
     if (!trip) throw new AppError('Trip not found', 404)
-    if (!trip.startDate) {
+
+    // Anchor on the first stop that actually has a date. Stops are already
+    // ordered by `order` ascending from the include above, so .find() walks
+    // them in the user-facing sequence.
+    const anchorStop = trip.stops.find(s => s.arrivalDate != null)
+    if (!anchorStop) {
       throw new AppError(
-        'Cannot shift a trip that has no start date set. Set a start date first, then ask the AI to shift the trip.',
+        'Cannot shift a trip with no stop dates set. The trip needs dates on at least one stop before it can be shifted.',
         400,
       )
     }
 
     const { newStartDate }: TripShiftDatesInput = req.body
-    const deltaMs = newStartDate.getTime() - trip.startDate.getTime()
+    // .find() above asserts arrivalDate is non-null, but TS doesn't narrow
+    // through .find predicates — the ! is the minimal cast.
+    const currentStartMs = anchorStop.arrivalDate!.getTime()
+    const deltaMs = newStartDate.getTime() - currentStartMs
 
     // No-op shortcut: same date in, same trip out. Mirror getTrip's return
     // shape so the client can hot-swap state either way.
