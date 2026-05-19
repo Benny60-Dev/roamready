@@ -98,6 +98,7 @@ import { errorHandler } from './middleware/errorHandler'
 import { prisma } from './utils/prisma'
 import { authRouter } from './routes/auth'
 import { usersRouter } from './routes/users'
+import { partiesRouter } from './routes/parties'
 import { tripsRouter } from './routes/trips'
 import { aiRouter } from './routes/ai'
 import { campgroundsRouter } from './routes/campgrounds'
@@ -164,6 +165,11 @@ const limiter = rateLimit({
 app.use('/api/', limiter)
 
 app.use('/api/v1/auth', authRouter)
+// More-specific path registered FIRST so Express routes /me/parties/* to
+// partiesRouter directly instead of falling through usersRouter. usersRouter
+// has no /me/parties handler today, so registration order is for clarity
+// and a small perf win, not correctness.
+app.use('/api/v1/users/me/parties', partiesRouter)
 app.use('/api/v1/users', usersRouter)
 app.use('/api/v1/trips', tripsRouter)
 app.use('/api/v1/ai', aiRouter)

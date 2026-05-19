@@ -329,6 +329,62 @@ export async function createTrip(req: AuthRequest, res: Response, next: NextFunc
       include: { stops: true },
     })
     console.log('[createTrip] created trip id=%s', trip.id)
+
+    // Travel Party Phase B: clone the user's default party onto this trip.
+    // Trip-scoped party (tripId set, userId null, isDefault false) becomes
+    // the authoritative party for AI prompts on this trip — modify-mode
+    // already reads trip.party first and falls back to user.parties.
+    // This is the ONLY place trip-scoped parties are created in v1.
+    //
+    // Best-effort: if the user has no default party (e.g. account created
+    // before the backfill) or the clone fails for any reason, the trip is
+    // still returned. The AI falls back to user-level defaultParty, or to
+    // legacy TravelProfile fields, exactly as before this commit.
+    try {
+      const defaultParty = await prisma.travelParty.findFirst({
+        where: { userId: req.user!.id, isDefault: true },
+        include: { people: true, pets: true },
+      })
+      if (defaultParty) {
+        await prisma.travelParty.create({
+          data: {
+            tripId: trip.id,
+            isDefault: false,
+            notes: defaultParty.notes,
+            people: {
+              create: defaultParty.people.map(p => ({
+                role: p.role,
+                name: p.name,
+                age: p.age,
+                isTraveling: p.isTraveling,
+                isEmergencyContact: p.isEmergencyContact,
+                emergencyPhone: p.emergencyPhone,
+                accessibilityNeeds: p.accessibilityNeeds ?? undefined,
+                dietaryNotes: p.dietaryNotes,
+                militaryStatus: p.militaryStatus,
+                firstResponder: p.firstResponder,
+              })),
+            },
+            pets: {
+              create: defaultParty.pets.map(p => ({
+                type: p.type,
+                name: p.name,
+                breed: p.breed,
+                weightLbs: p.weightLbs,
+                leashTrained: p.leashTrained,
+                comfortableInCrowds: p.comfortableInCrowds,
+                comfortableAtNight: p.comfortableAtNight,
+                notes: p.notes,
+              })),
+            },
+          },
+        })
+        console.log('[createTrip] cloned default party → trip.party for trip=%s', trip.id)
+      }
+    } catch (cloneErr: any) {
+      console.warn('[createTrip] party clone failed (non-fatal) for trip=%s:', trip.id, cloneErr?.message ?? cloneErr)
+    }
+
     res.status(201).json(trip)
   } catch (err: any) {
     console.error('[createTrip] FAILED:', err?.message)

@@ -77,6 +77,18 @@ export const usersApi = {
   createMembership: (data: any) => api.post('/users/me/memberships', data),
   updateMembership: (id: string, data: any) => api.put(`/users/me/memberships/${id}`, data),
   deleteMembership: (id: string) => api.delete(`/users/me/memberships/${id}`),
+  // Travel Party (Phase B)
+  getParties: () => api.get('/users/me/parties'),
+  getDefaultParty: () => api.get('/users/me/parties/default'),
+  createParty: (data: any) => api.post('/users/me/parties', data),
+  updateParty: (partyId: string, data: any) => api.put(`/users/me/parties/${partyId}`, data),
+  deleteParty: (partyId: string) => api.delete(`/users/me/parties/${partyId}`),
+  createPerson: (partyId: string, data: any) => api.post(`/users/me/parties/${partyId}/people`, data),
+  updatePerson: (partyId: string, id: string, data: any) => api.put(`/users/me/parties/${partyId}/people/${id}`, data),
+  deletePerson: (partyId: string, id: string) => api.delete(`/users/me/parties/${partyId}/people/${id}`),
+  createPet: (partyId: string, data: any) => api.post(`/users/me/parties/${partyId}/pets`, data),
+  updatePet: (partyId: string, id: string, data: any) => api.put(`/users/me/parties/${partyId}/pets/${id}`, data),
+  deletePet: (partyId: string, id: string) => api.delete(`/users/me/parties/${partyId}/pets/${id}`),
 }
 
 // Trips

@@ -323,6 +323,10 @@ export async function getMe(req: AuthRequest, res: Response, next: NextFunction)
         rigs: true,
         travelProfile: true,
         memberships: { where: { isActive: true } },
+        // Travel Party Phase B: hydrate the user's parties (typically just
+        // the default) with people + pets so the profile UI renders on
+        // mount without a second round-trip. Mirror this in users.ts:getMe.
+        parties: { include: { people: true, pets: true } },
       },
     })
     // Strip sensitive / server-only fields before responding:
