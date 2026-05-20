@@ -466,20 +466,24 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
         onClick={onClose}
       />
 
-      {/* Slide-in panel — h-[100dvh] (dynamic viewport height) accounts for
-          mobile browser chrome (URL bar, bottom toolbar). Strict h-full /
-          h-screen / 100vh would put ChatInput behind the chrome on mobile.
-          Older browsers without dvh support fall back gracefully via the
-          parent containing block.
+      {/* Slide-in panel — inset between AppLayout's chrome rather than
+          covering it. top-14 clears the sticky header (h-14 = 56px:
+          hamburger, logo, clock/bell/profile menu). bottom-14 on mobile
+          clears the fixed bottom nav (Home/Trips/Plan/Bookings/Profile),
+          which is also ~56px tall; md:bottom-0 lets the panel extend to
+          the viewport edge on desktop where there's no bottom nav.
 
-          z-50 (NOT z-40) so the panel stacks above AppLayout's mobile bottom
-          nav, which is also fixed-position at z-40. With both at z-40 the nav
-          (registered later in the DOM) covered the panel's chat-input footer
-          on mobile, making the input invisible. App-level modals (Paywall,
-          Feedback) are also z-50 but render AFTER all routes in App.tsx, so
-          they naturally stack above this panel via DOM order. */}
+          No h-[100dvh] needed — using top+bottom insets means the panel
+          adapts automatically when iOS Safari's URL bar shows/hides.
+
+          z-40 matches the chrome's z-index. Since the panel no longer
+          OVERLAPS the chrome (it sits inset between header and bottom
+          nav), the same z-index is fine — chrome remains interactive at
+          the top and bottom, panel owns the middle. App-level modals
+          (Paywall, Feedback) at z-50 still stack above this panel,
+          preserving the modal hierarchy. */}
       <div
-        className={`fixed top-0 right-0 h-[100dvh] w-full sm:w-[22rem] bg-white border-l border-gray-200 flex flex-col z-50 shadow-2xl transition-transform duration-300 ease-in-out ${
+        className={`fixed top-14 right-0 bottom-14 md:bottom-0 w-full sm:w-[22rem] bg-white border-l border-gray-200 flex flex-col z-40 shadow-2xl transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
         style={{ borderLeftWidth: '0.5px' }}
