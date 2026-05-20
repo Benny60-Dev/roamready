@@ -357,12 +357,21 @@ function RecommendedCampgroundCard({
       {!isConfirmed && !draftMode && (
         <div className="space-y-2">
           {cg.reservationUrl && (
-            <button
-              onClick={() => window.open(cg.reservationUrl!, '_blank', 'noopener,noreferrer')}
-              className="bg-rr-gold hover:bg-rr-gold-dark text-white rounded-lg font-medium transition-colors text-sm w-full flex items-center justify-center gap-1.5 py-2.5"
-            >
-              <ExternalLink size={13} /> Book at {truncateName(cg.name)}
-            </button>
+            <div>
+              <button
+                onClick={() => window.open(cg.reservationUrl!, '_blank', 'noopener,noreferrer')}
+                className="bg-rr-gold hover:bg-rr-gold-dark text-white rounded-lg font-medium transition-colors text-sm w-full flex items-center justify-center gap-1.5 py-2.5"
+              >
+                <ExternalLink size={13} /> Book at {truncateName(cg.name)}
+              </button>
+              {/* Reservation Honesty: always-visible subtext under the gold button so first-time
+                  users see the truth before they click. The fuller line lives inside the expanded
+                  ReservationSection ("RoamReady doesn't make reservations for you...") and stays
+                  there as the more thorough explanation when they come back to record a conf #. */}
+              <p className="text-xs text-gray-500 text-center mt-1.5 leading-snug">
+                Opens the campground's site — you book directly with them.
+              </p>
+            </div>
           )}
           <button
             onClick={onSelectCampground}
