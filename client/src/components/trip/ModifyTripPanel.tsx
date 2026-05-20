@@ -470,9 +470,16 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
           mobile browser chrome (URL bar, bottom toolbar). Strict h-full /
           h-screen / 100vh would put ChatInput behind the chrome on mobile.
           Older browsers without dvh support fall back gracefully via the
-          parent containing block. */}
+          parent containing block.
+
+          z-50 (NOT z-40) so the panel stacks above AppLayout's mobile bottom
+          nav, which is also fixed-position at z-40. With both at z-40 the nav
+          (registered later in the DOM) covered the panel's chat-input footer
+          on mobile, making the input invisible. App-level modals (Paywall,
+          Feedback) are also z-50 but render AFTER all routes in App.tsx, so
+          they naturally stack above this panel via DOM order. */}
       <div
-        className={`fixed top-0 right-0 h-[100dvh] w-full sm:w-[22rem] bg-white border-l border-gray-200 flex flex-col z-40 shadow-2xl transition-transform duration-300 ease-in-out ${
+        className={`fixed top-0 right-0 h-[100dvh] w-full sm:w-[22rem] bg-white border-l border-gray-200 flex flex-col z-50 shadow-2xl transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
         style={{ borderLeftWidth: '0.5px' }}
