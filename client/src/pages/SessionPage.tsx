@@ -1,12 +1,11 @@
 import { useCallback, useState, useRef, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { MapPin, Tent, Users, Loader, Plus, X } from 'lucide-react'
+import { MapPin, Tent, Users, Loader, Plus, X, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
 import { aiApi, sessionsApi, tripsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import { ChatMessage } from '../types'
 import BottomSheet from '../components/ui/BottomSheet'
 import ConfirmModal from '../components/ui/ConfirmModal'
-import SessionTipCard from '../components/sessions/SessionTipCard'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
 import { useVoiceInput } from '../hooks/useVoiceInput'
 import { ChatInput } from '../components/ChatInput'
@@ -53,12 +52,19 @@ function deriveTitle(text: string): string {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const STARTER_CHIPS = [
-  'Plan me a surprise trip',
-  'I have a destination in mind',
-  'Just camping this weekend',
-  'Help me pick dates',
+// Examples surfaced inside the "Learn how to prompt me" disclosure. The
+// disclosure replaces the prior 4 starter chips + the randomized SessionTipCard
+// + an italic "or try" line — three competing CTAs collapsed into one quiet
+// expandable affordance. Buttons populate the input only; they do not submit,
+// so the user can edit before sending.
+const SIMPLE_EXAMPLES = [
+  'Surprise me',
+  'Plan a 5-day trip to Moab starting this Saturday',
+  'Plan a long weekend somewhere I can swim with my dog',
 ]
+
+const DESCRIPTIVE_EXAMPLE =
+  "Plan a 10-day trip starting June 6th. I want to go from Phoenix up through Sedona and Flagstaff, then over to Durango. I need to be at my sister's house in Santa Fe on day 5, and we'd like a full-hookup site every night since we're traveling with the dog."
 
 function TypingIndicator() {
   return (
@@ -99,6 +105,10 @@ export default function SessionPage() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [greeting, setGreeting] = useState<string | null>(null)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  // "Learn how to prompt me" disclosure — collapsed by default. Replaces the
+  // prior starter chips + randomized tip card + italic fallback line, all of
+  // which were competing CTAs under the input.
+  const [howOpen, setHowOpen] = useState(false)
   // Disables the header buttons during the async create/delete dance so a
   // double-tap can't fire two requests or navigate twice.
   const [isProcessing, setIsProcessing] = useState(false)
@@ -263,10 +273,10 @@ export default function SessionPage() {
   async function sendMessage(overrideText?: string) {
     // ChatInput wires the Send button as `onClick={onSubmit}`, which means
     // React passes the MouseEvent as the first arg when the user clicks.
-    // Suggestion-chip callers (e.g. applyChip) DO pass real string overrides
-    // and must continue to work — so coerce non-strings (the event) to
-    // undefined and fall through to `input` instead of calling .trim() on
-    // a SyntheticEvent.
+    // String-override callers (none currently — the disclosure populates the
+    // input rather than calling sendMessage directly) must continue to work,
+    // so coerce non-strings (the event) to undefined and fall through to
+    // `input` instead of calling .trim() on a SyntheticEvent.
     const safeOverride = typeof overrideText === 'string' ? overrideText : undefined
     const text = (safeOverride ?? input).trim()
     if (!text || typing) return
@@ -297,7 +307,7 @@ export default function SessionPage() {
     }
   }
 
-  function applyChip(text: string) {
+  function applyExample(text: string) {
     setInput(text)
     inputRef.current?.focus()
   }
@@ -531,43 +541,141 @@ export default function SessionPage() {
                   variant="hero"
                 />
 
-                {/* Starter chips */}
-                <div className="flex flex-wrap gap-2 justify-center mt-3">
-                  {STARTER_CHIPS.map(chip => (
-                    <button
-                      key={chip}
-                      type="button"
-                      onClick={() => applyChip(chip)}
-                      className="transition-colors"
+                {/* Learn how to prompt me — single quiet disclosure that replaces the
+                    prior chip row, randomized tip card, and italic fallback line. Default
+                    collapsed; clicking the header expands to show Simple + Descriptive
+                    example sections. Each example button populates the input (no submit)
+                    so the user can edit before sending — same pattern the chips used. */}
+                <div style={{ marginTop: 20 }}>
+                  <button
+                    type="button"
+                    onClick={() => setHowOpen(v => !v)}
+                    aria-expanded={howOpen}
+                    aria-controls="how-to-prompt-panel"
+                    className="w-full text-left transition-colors bg-white"
+                    style={{
+                      border: '0.5px solid #E8E4DA',
+                      borderRadius: howOpen ? '8px 8px 0 0' : 8,
+                      padding: '11px 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      fontSize: 13,
+                      color: '#5F5E5A',
+                      cursor: 'pointer',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#FBFAF8' }}
+                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFFFFF' }}
+                  >
+                    <Sparkles size={14} color="#1F6F8B" aria-hidden="true" />
+                    <span style={{ flex: 1 }}>Learn how to prompt me</span>
+                    {howOpen
+                      ? <ChevronUp size={14} color="#888780" aria-hidden="true" />
+                      : <ChevronDown size={14} color="#888780" aria-hidden="true" />}
+                  </button>
+
+                  {howOpen && (
+                    <div
+                      id="how-to-prompt-panel"
+                      className="bg-white"
                       style={{
-                        background: 'transparent',
                         border: '0.5px solid #E8E4DA',
-                        borderRadius: 8,
-                        padding: '8px 14px',
-                        fontSize: 13,
-                        color: '#5F5E5A',
-                        minHeight: 36,
+                        borderTop: 'none',
+                        borderRadius: '0 0 8px 8px',
+                        padding: '14px 14px 12px',
                       }}
-                      onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#F5F4F2' }}
-                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent' }}
                     >
-                      {chip}
-                    </button>
-                  ))}
-                </div>
+                      {/* SIMPLE section */}
+                      <div style={{ marginBottom: 16 }}>
+                        <div className="flex items-baseline" style={{ gap: 8, marginBottom: 8 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2A', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                            Simple
+                          </span>
+                          <span style={{ fontSize: 11, color: '#888780', fontStyle: 'italic' }}>
+                            quick &amp; casual
+                          </span>
+                        </div>
+                        <div className="flex flex-col" style={{ gap: 6 }}>
+                          {SIMPLE_EXAMPLES.map(text => (
+                            <button
+                              key={text}
+                              type="button"
+                              onClick={() => applyExample(text)}
+                              className="text-left transition-colors"
+                              style={{
+                                background: 'transparent',
+                                border: '0.5px solid #E8E4DA',
+                                borderRadius: 6,
+                                padding: '8px 12px',
+                                fontSize: 13,
+                                color: '#5F5E5A',
+                                cursor: 'pointer',
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#F5F4F2' }}
+                              onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent' }}
+                            >
+                              {text}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
 
-                {/* Tip card */}
-                <div style={{ marginTop: 24 }}>
-                  <SessionTipCard />
-                </div>
+                      {/* DESCRIPTIVE section */}
+                      <div>
+                        <div className="flex items-baseline" style={{ gap: 8, marginBottom: 8 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2A', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                            Descriptive
+                          </span>
+                          <span style={{ fontSize: 11, color: '#888780', fontStyle: 'italic' }}>
+                            the more you tell me, the better
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => applyExample(DESCRIPTIVE_EXAMPLE)}
+                          className="text-left transition-colors w-full"
+                          style={{
+                            background: 'transparent',
+                            border: '0.5px solid #E8E4DA',
+                            borderRadius: 6,
+                            padding: '10px 12px',
+                            fontSize: 13,
+                            color: '#5F5E5A',
+                            lineHeight: 1.5,
+                            cursor: 'pointer',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#F5F4F2' }}
+                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent' }}
+                        >
+                          {DESCRIPTIVE_EXAMPLE}
+                        </button>
+                      </div>
 
-                {/* Example fallback line */}
-                <p
-                  className="italic text-center"
-                  style={{ fontSize: 12, color: '#888780', marginTop: 16 }}
-                >
-                  or try: "Plan a 5-night trip to Moab starting next Saturday"
-                </p>
+                      {/* Show less */}
+                      <div style={{ marginTop: 12, textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => setHowOpen(false)}
+                          className="transition-colors"
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            fontSize: 12,
+                            color: '#1F6F8B',
+                            padding: '4px 8px',
+                            cursor: 'pointer',
+                            textDecoration: 'underline',
+                            textUnderlineOffset: 2,
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.color = '#134756' }}
+                          onMouseLeave={e => { e.currentTarget.style.color = '#1F6F8B' }}
+                        >
+                          Show less
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               {/* Watermark — flow-positioned below the empty-state content */}
               <div
