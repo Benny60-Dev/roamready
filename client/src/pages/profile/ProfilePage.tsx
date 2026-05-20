@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { Autocomplete, useJsApiLoader } from '@react-google-maps/api'
-import { Truck, Map, CreditCard, Bell, Shield, ChevronRight, Save, MapPin, Accessibility, Users } from 'lucide-react'
+import { Truck, Map, CreditCard, Shield, ChevronRight, Save, MapPin, Accessibility, Users } from 'lucide-react'
 import { usersApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 
@@ -73,7 +73,11 @@ export default function ProfilePage() {
     { to: '/profile/style',         icon: Map,     label: 'Travel Style',   sub: 'Preferences & budget' },
     { to: '/profile/accessibility', icon: Accessibility, label: 'Accessibility',  sub: 'Needs & requirements' },
     { to: '/profile/memberships',   icon: Shield,  label: 'Memberships',    sub: 'ATB, Good Sam, etc.' },
-    { to: '/profile/notifications', icon: Bell,    label: 'Notifications',  sub: 'Alerts & reminders' },
+    // Notifications link removed May 19 — the settings page persists toggles
+    // but no downstream code reads them, push/SMS have no providers, and 5
+    // of 6 types have no sender. Route stays registered in App.tsx so any
+    // bookmarked /profile/notifications URLs still work and re-linking here
+    // post-launch is a one-line restoration once delivery is wired up.
     { to: '/profile/billing',       icon: CreditCard, label: 'Billing',     sub: user?.subscriptionTier === 'FREE' ? 'Free plan' : `${user?.subscriptionTier} plan` },
   ]
 
