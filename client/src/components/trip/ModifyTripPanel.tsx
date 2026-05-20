@@ -5,6 +5,7 @@ import { aiApi, tripsApi } from '../../services/api'
 import { Trip, StopType } from '../../types'
 import { useVoiceInput } from '../../hooks/useVoiceInput'
 import { ChatInput } from '../ChatInput'
+import { parseTripDate } from '../../utils/dates'
 
 // ─── Quick suggestion chips ───────────────────────────────────────────────────
 
@@ -75,8 +76,11 @@ function getConfirmationText(action: ModifyAction): string {
     case 'suggest_campground':
       return `Switch ${name}${state} campground to ${action.campgroundName}`
     case 'shift_trip_dates': {
-      const parsed = action.newStartDate ? new Date(action.newStartDate) : null
-      const pretty = parsed && !isNaN(parsed.getTime())
+      // parseTripDate normalizes "YYYY-MM-DD" (what the AI emits) or any ISO
+      // shape to a local-noon Date whose format() output matches the intended
+      // calendar day regardless of viewer timezone.
+      const parsed = parseTripDate(action.newStartDate)
+      const pretty = parsed
         ? format(parsed, 'MMMM d, yyyy')
         : (action.newStartDate ?? 'a new date')
       return `Shift trip to start on ${pretty}`
@@ -113,9 +117,14 @@ function getConfirmationSubText(action: ModifyAction, trip: Trip): string | null
   const firstStopArrival = trip.stops?.find(s => s.arrivalDate)?.arrivalDate
   const oldStartStr = trip.startDate ?? firstStopArrival
   if (!oldStartStr) return null
-  const newStart = new Date(action.newStartDate)
-  const oldStart = new Date(oldStartStr)
-  if (isNaN(newStart.getTime()) || isNaN(oldStart.getTime())) return null
+  // Use parseTripDate on both ends so the delta math operates on calendar-day
+  // semantics. Raw `new Date("2026-07-10T00:00:00Z") - new Date("2026-07-10")`
+  // can yield a 7-hour negative offset that rounds to ±1 day in some TZs.
+  // Local-noon Dates from parseTripDate sit far from midnight boundaries, so
+  // the delta is always an exact multiple of 86_400_000 ms.
+  const newStart = parseTripDate(action.newStartDate)
+  const oldStart = parseTripDate(oldStartStr)
+  if (!newStart || !oldStart) return null
   const dayDelta = Math.round((newStart.getTime() - oldStart.getTime()) / 86400000)
   if (dayDelta === 0) return 'No change — trip already starts on that date.'
   const stopCount = trip.stops?.length ?? 0

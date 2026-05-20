@@ -4,7 +4,7 @@ import { Plus, Map, Calendar, DollarSign, Tent, ChevronRight, Wrench, Package } 
 import { tripsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import { Trip } from '../types'
-import { format } from 'date-fns'
+import { formatTripDate } from '../utils/dates'
 
 function TripCard({ trip }: { trip: Trip }) {
   const statusColor = {
@@ -28,7 +28,7 @@ function TripCard({ trip }: { trip: Trip }) {
         {trip.startDate && (
           <span className="flex items-center gap-1">
             <Calendar size={12} />
-            {format(new Date(trip.startDate), 'MMM d')}
+            {formatTripDate(trip.startDate, 'MMM d')}
           </span>
         )}
         {trip.totalNights && (

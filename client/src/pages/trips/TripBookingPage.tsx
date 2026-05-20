@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { tripsApi, campgroundsApi, usersApi } from '../../services/api'
 import { Trip, Stop, Campground, Rig } from '../../types'
+import { formatTripDate } from '../../utils/dates'
 import { useAuthStore } from '../../store/authStore'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge } from '../../utils/stopBadge'
 import { useUIStore } from '../../store/uiStore'
@@ -28,7 +29,9 @@ function calcDistance(lat1?: number | null, lng1?: number | null, lat2?: number 
 
 function formatDate(iso?: string): string {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  // Routes through parseTripDate so the displayed calendar day matches the
+  // stored UTC date instead of shifting back a day in negative-offset TZs.
+  return formatTripDate(iso, 'MMM d, yyyy') || '—'
 }
 
 function truncateName(name: string): string {

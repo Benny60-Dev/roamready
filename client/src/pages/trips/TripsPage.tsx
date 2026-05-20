@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Plus, Search, Calendar, Map, DollarSign, Tent } from 'lucide-react'
 import { tripsApi } from '../../services/api'
 import { Trip } from '../../types'
-import { format } from 'date-fns'
+import { formatTripDate } from '../../utils/dates'
 
 export default function TripsPage() {
   const [trips, setTrips] = useState<Trip[]>([])
@@ -108,7 +108,7 @@ export default function TripsPage() {
                   </div>
                   <p className="text-xs text-gray-500 truncate">{trip.startLocation} → {trip.endLocation}</p>
                   <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
-                    {trip.startDate && <span className="flex items-center gap-1"><Calendar size={11} />{format(new Date(trip.startDate), 'MMM d, yyyy')}</span>}
+                    {trip.startDate && <span className="flex items-center gap-1"><Calendar size={11} />{formatTripDate(trip.startDate, 'MMM d, yyyy')}</span>}
                     {trip.totalNights && <span className="flex items-center gap-1"><Tent size={11} />{trip.totalNights} nights</span>}
                     {trip.totalMiles && <span className="flex items-center gap-1"><Map size={11} />{trip.totalMiles.toLocaleString()} mi</span>}
                   </div>

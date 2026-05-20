@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Calendar, CheckCircle, Clock, Tent, MapPin, DollarSign, ChevronRight } from 'lucide-react'
 import { tripsApi } from '../services/api'
 import { Trip } from '../types'
-import { format } from 'date-fns'
+import { formatTripDate } from '../utils/dates'
 
 // ─── Per-trip booking stats ───────────────────────────────────────────────────
 
@@ -73,8 +73,8 @@ function TripBookingCard({ trip }: { trip: Trip }) {
             {earliestDate && (
               <span className="flex items-center gap-1">
                 <Calendar size={11} />
-                {format(new Date(earliestDate), 'MMM d, yyyy')}
-                {trip.endDate && <> → {format(new Date(trip.endDate), 'MMM d, yyyy')}</>}
+                {formatTripDate(earliestDate, 'MMM d, yyyy')}
+                {trip.endDate && <> → {formatTripDate(trip.endDate, 'MMM d, yyyy')}</>}
               </span>
             )}
             <span className="flex items-center gap-1">
