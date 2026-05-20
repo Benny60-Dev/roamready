@@ -3,6 +3,7 @@ import {
 } from '@react-pdf/renderer'
 import { Trip, Stop, ItineraryDay, ItineraryActivity, POI } from '../../types/index'
 import { format, addDays } from 'date-fns'
+import { parseTripDate } from '../../utils/dates'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -162,7 +163,10 @@ function fmtCurrency(n?: number | null): string {
 function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
   const entries: TimelineEntry[] = []
   let dayNum = 1
-  let currentDate = startDate ? new Date(startDate) : undefined
+  // parseTripDate routes the ISO/date-only input through the UTC-day-as-local
+  // normalization (see utils/dates.ts) so date-fns format() on these dates
+  // renders the intended calendar day regardless of viewer timezone.
+  let currentDate: Date | undefined = parseTripDate(startDate) ?? undefined
 
   for (let i = 0; i < stops.length; i++) {
     const stop = stops[i]
@@ -189,7 +193,7 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
     if (stop.type === 'OVERNIGHT_ONLY') {
       entries.push({
         dayNum,
-        date: stop.arrivalDate ? new Date(stop.arrivalDate) : currentDate ? new Date(currentDate) : undefined,
+        date: parseTripDate(stop.arrivalDate) ?? (currentDate ? new Date(currentDate) : undefined),
         type: 'OVERNIGHT',
         stop,
         departureTime: '06:00',
@@ -203,8 +207,9 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
       const nights = stop.nights ?? 0
       for (let n = 0; n < nights; n++) {
         let entryDate: Date | undefined
-        if (stop.arrivalDate) {
-          entryDate = addDays(new Date(stop.arrivalDate), n)
+        const parsedArrival = parseTripDate(stop.arrivalDate)
+        if (parsedArrival) {
+          entryDate = addDays(parsedArrival, n)
         } else if (currentDate) {
           entryDate = n === 0 ? new Date(currentDate) : addDays(new Date(currentDate), n)
         }
@@ -470,9 +475,13 @@ export function TripPDF({ trip, mapImageBase64 }: Props) {
     return sum + seg
   }, 0)
 
+  // parseTripDate normalizes the UTC calendar day so 'MMM d, yyyy' renders
+  // the intended date regardless of viewer timezone. Filter() also drops the
+  // null-passthrough output from parseTripDate, so we never format invalid.
   const dateRange = [trip.startDate, trip.endDate]
-    .filter(Boolean)
-    .map(d => format(new Date(d!), 'MMM d, yyyy'))
+    .map(d => parseTripDate(d))
+    .filter((d): d is Date => d != null)
+    .map(d => format(d, 'MMM d, yyyy'))
     .join(' – ') || 'Dates TBD'
 
   const generatedOn = format(new Date(), 'MMM d, yyyy')

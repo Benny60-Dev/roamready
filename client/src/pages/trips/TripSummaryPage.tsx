@@ -14,6 +14,7 @@ import { Trip, Stop, ItineraryDay, ItineraryActivity, StopWeather, POI } from '.
 import { useAuthStore } from '../../store/authStore'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge, StopBadge } from '../../utils/stopBadge'
 import { format, addDays } from 'date-fns'
+import { parseTripDate, toYmd } from '../../utils/dates'
 import { StopWeatherCard } from '../../components/weather/StopWeatherCard'
 
 // ─── Format helpers ───────────────────────────────────────────────────────────
@@ -126,7 +127,10 @@ interface TimelineEntry {
 function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
   const entries: TimelineEntry[] = []
   let dayNum = 1
-  let currentDate = startDate ? new Date(startDate) : undefined
+  // parseTripDate normalizes ISO/date-only inputs to a Date whose local-time
+  // accessors return the UTC calendar day. addDays + date-fns format() below
+  // all then render the intended date regardless of viewer timezone.
+  let currentDate: Date | undefined = parseTripDate(startDate) ?? undefined
 
   for (let i = 0; i < stops.length; i++) {
     const stop = stops[i]
@@ -146,9 +150,7 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
         // and the arrival entry orphans into its own card — no "Arrive {time}"
         // pill, no date in the day header. Falls back to currentDate when no
         // DB arrivalDate exists yet (matches the OVERNIGHT branch below).
-        date: stop.arrivalDate
-          ? new Date(stop.arrivalDate)
-          : currentDate ? new Date(currentDate) : undefined,
+        date: parseTripDate(stop.arrivalDate) ?? (currentDate ? new Date(currentDate) : undefined),
         type: 'DRIVE',
         stop, prevStop,
         miles: miles || undefined,
@@ -171,9 +173,7 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
       // Fall back to currentDate when no DB date exists yet.
       entries.push({
         dayNum,
-        date: stop.arrivalDate
-          ? new Date(stop.arrivalDate)
-          : currentDate ? new Date(currentDate) : undefined,
+        date: parseTripDate(stop.arrivalDate) ?? (currentDate ? new Date(currentDate) : undefined),
         type: 'OVERNIGHT',
         stop,
         departureTime: '06:00',
@@ -192,9 +192,7 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
         // date even when trip.startDate is null. Same fallback shape as the
         // DRIVE branch above and the OVERNIGHT branch below — keeping all
         // entries on a consistent date source preserves buildGroups' merge.
-        date: stop.arrivalDate
-          ? new Date(stop.arrivalDate)
-          : currentDate ? new Date(currentDate) : undefined,
+        date: parseTripDate(stop.arrivalDate) ?? (currentDate ? new Date(currentDate) : undefined),
         type: 'STAY',
         stop,
         nightNum: 1,
@@ -221,9 +219,7 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
           !!homeStop &&
           homeStop.locationName.trim().toLowerCase() ===
             stop.locationName.trim().toLowerCase()
-        const entryDate = stop.arrivalDate
-          ? new Date(stop.arrivalDate)
-          : currentDate ? new Date(currentDate) : undefined
+        const entryDate = parseTripDate(stop.arrivalDate) ?? (currentDate ? new Date(currentDate) : undefined)
         entries.push({
           dayNum,
           date: entryDate,
@@ -242,8 +238,9 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
           // Prefer stop.arrivalDate + offset (authoritative after a cascade save).
           // Fall back to currentDate when no DB date exists yet.
           let entryDate: Date | undefined
-          if (stop.arrivalDate) {
-            entryDate = addDays(new Date(stop.arrivalDate), n)
+          const parsedArrival = parseTripDate(stop.arrivalDate)
+          if (parsedArrival) {
+            entryDate = addDays(parsedArrival, n)
           } else if (currentDate) {
             entryDate = n === 0 ? new Date(currentDate) : addDays(new Date(currentDate), n)
           }
@@ -696,26 +693,34 @@ export default function TripSummaryPage() {
     const sorted = [...stops].sort((a, b) => a.order - b.order)
 
     // Use trip.startDate as anchor; fall back to today if trip has no start date.
-    const anchor = trip?.startDate ? new Date(trip.startDate) : new Date()
+    // parseTripDate normalizes ISO/date-only to a local-noon Date whose local
+    // accessors return the UTC calendar day, so toYmd below writes the calendar
+    // day the user sees on screen — round-tripping correctly through storage.
+    const anchor = parseTripDate(trip?.startDate) ?? new Date()
     let current = new Date(anchor)
 
     let totalNights = 0
 
-    console.log('[cascade] Starting date cascade for', sorted.length, 'stops, anchor =', current.toISOString())
+    console.log('[cascade] Starting date cascade for', sorted.length, 'stops, anchor =', toYmd(current))
 
     for (const s of sorted) {
       const nights = s.type === 'OVERNIGHT_ONLY' ? 1 : (s.nights || 0)
-      const arrivalISO   = new Date(current).toISOString()
-      const departureISO = addDays(new Date(current), nights).toISOString()
+      // Write YYYY-MM-DD strings (not full ISO timestamps) so the server stores
+      // the calendar day the user sees, not a timestamp whose UTC date may
+      // differ from the displayed local date. Prisma's z.coerce.date() accepts
+      // "YYYY-MM-DD" and produces a Date at UTC midnight — matching what the
+      // AI emits and what parseTripDate normalizes on read.
+      const arrivalYmd   = toYmd(current)
+      const departureYmd = toYmd(addDays(current, nights))
 
-      await tripsApi.updateStop(id, s.id, { arrivalDate: arrivalISO, departureDate: departureISO })
-      console.log(`[cascade] Updated stop "${s.locationName}" arrivalDate to ${arrivalISO} (${nights} night${nights !== 1 ? 's' : ''})`)
+      await tripsApi.updateStop(id, s.id, { arrivalDate: arrivalYmd, departureDate: departureYmd })
+      console.log(`[cascade] Updated stop "${s.locationName}" arrivalDate to ${arrivalYmd} (${nights} night${nights !== 1 ? 's' : ''})`)
 
       totalNights += nights
       current = addDays(current, nights)
     }
 
-    const endDate = current.toISOString()
+    const endDate = toYmd(current)
     await tripsApi.update(id, { totalNights, endDate })
     console.log(`[cascade] Updated trip totalNights=${totalNights} endDate=${endDate}`)
   }, [id, trip?.startDate])

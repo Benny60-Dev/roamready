@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { MapPin, Calendar, DollarSign, Tent } from 'lucide-react'
 import { tripsApi } from '../services/api'
 import { Trip } from '../types'
-import { format } from 'date-fns'
+import { formatTripDate } from '../utils/dates'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge } from '../utils/stopBadge'
 
 export default function SharedTripPage() {
@@ -88,7 +88,7 @@ export default function SharedTripPage() {
                   }
                   {!isEndpoint && (
                     <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-400">
-                      {stop.arrivalDate && <span><Calendar size={11} className="inline mr-0.5" />{format(new Date(stop.arrivalDate), 'EEE, MMM d')}</span>}
+                      {stop.arrivalDate && <span><Calendar size={11} className="inline mr-0.5" />{formatTripDate(stop.arrivalDate, 'EEE, MMM d')}</span>}
                       <span><Tent size={11} className="inline mr-0.5" />{stop.nights} night{stop.nights !== 1 ? 's' : ''}</span>
                       {stop.hookupType && <span className="badge-green">{stop.hookupType}</span>}
                     </div>

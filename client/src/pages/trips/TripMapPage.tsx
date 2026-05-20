@@ -7,7 +7,7 @@ import {
   Pencil, Trash2, Check, BookOpen, Package, Share2, Download, CheckCircle, Clock, XCircle, CloudRain, Wand2,
   Maximize2, Minimize2, Play,
 } from 'lucide-react'
-import { format } from 'date-fns'
+import { formatTripDate } from '../../utils/dates'
 import { tripsApi } from '../../services/api'
 import { Trip, Stop, StopWeather, LiveForecast } from '../../types'
 import { StopWeatherCard, ALERT_STYLES } from '../../components/weather/StopWeatherCard'
@@ -308,7 +308,7 @@ function StopPopup({
 
       <div className="flex flex-wrap gap-2 mt-1.5 text-xs text-gray-400">
         {stop.arrivalDate && (
-          <span className="flex items-center gap-0.5"><Calendar size={10} />{new Date(stop.arrivalDate).toLocaleDateString()}</span>
+          <span className="flex items-center gap-0.5"><Calendar size={10} />{formatTripDate(stop.arrivalDate, 'M/d/yyyy')}</span>
         )}
         {stop.hookupType && <span className="badge-green text-[10px]">{stop.hookupType}</span>}
         {stop.isPetFriendly && <span className="text-[#0F766E]">🐾 Pet-friendly</span>}
@@ -411,7 +411,7 @@ function SidebarWeatherTab({ trip, weatherData, loading }: {
               </div>
               {stop.arrivalDate && (
                 <span className="text-[10px] text-gray-400 flex-shrink-0">
-                  {format(new Date(stop.arrivalDate), 'MMM d')}
+                  {formatTripDate(stop.arrivalDate, 'MMM d')}
                 </span>
               )}
             </div>
