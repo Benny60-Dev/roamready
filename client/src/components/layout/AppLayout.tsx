@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { Home, Map, MessageSquare, Tent, User, Bell, Menu, X, LogOut, ChevronDown, Clock, HelpCircle } from 'lucide-react'
+import { Home, Map, MessageSquare, Tent, User, Menu, X, LogOut, ChevronDown, Clock, HelpCircle } from 'lucide-react'
 import { useState } from 'react'
 import { useAuthStore } from '../../store/authStore'
 import { authApi } from '../../services/api'
@@ -114,9 +114,10 @@ export default function AppLayout() {
             >
               <Clock size={16} strokeWidth={2} />
             </button>
-            <button className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600">
-              <Bell size={18} />
-            </button>
+            {/* Bell button removed May 19 — see Notification audit. Schema + read API exist
+                but no code creates Notification rows, so the bell would have nothing to show.
+                Restore (alongside a producer + dropdown panel) when the in-app notification
+                feed is wired up. */}
             <div className="relative">
               <button
                 onClick={() => setProfileOpen(!profileOpen)}
