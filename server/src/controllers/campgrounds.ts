@@ -3,7 +3,7 @@ import axios from 'axios'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { getCache, setCache } from '../utils/redis'
-import { verifyCampgroundBatch, searchCampgroundsByArea } from '../services/googlePlaces'
+import { verifyCampground, verifyCampgroundBatch, searchCampgroundsByArea } from '../services/googlePlaces'
 
 interface CampgroundResult {
   id: string
@@ -202,11 +202,17 @@ export async function searchCampgrounds(req: AuthRequest, res: Response, next: N
     //                          with an "AI suggestion" badge + Google Maps search link
     // Without a stopId we keep the legacy RIDB-only behavior so the destinations
     // pages (military, OHV, van, car-camping) and any other callers don't change.
-    let stop: { locationName: string; locationState: string | null; campgroundCandidates: any } | null = null
+    let stop: {
+      id: string
+      locationName: string
+      locationState: string | null
+      campgroundName: string | null
+      campgroundCandidates: any
+    } | null = null
     if (stopId && typeof stopId === 'string') {
       stop = await prisma.stop.findFirst({
         where: { id: stopId, trip: { userId } },
-        select: { locationName: true, locationState: true, campgroundCandidates: true },
+        select: { id: true, locationName: true, locationState: true, campgroundName: true, campgroundCandidates: true },
       })
       console.log(
         `[campgrounds] Orchestration triggered for stopId=${stopId}, candidates=${JSON.stringify(stop?.campgroundCandidates ?? null)}`,
@@ -341,6 +347,63 @@ export async function searchCampgrounds(req: AuthRequest, res: Response, next: N
       ...dedupedRidb,
       ...aiOnlyResults,
     ]
+
+    // User-named primary: when the user has chosen a specific campground for this stop
+    // (via Modify-with-AI's suggest_campground or the EditStopModal), that choice MUST
+    // win the primary-card slot regardless of what Places/RIDB returned. We try one
+    // verifyCampground lookup to hydrate full details (rating/phone/website/lat-lng);
+    // on Places miss we synthesize a name-only entry mirroring the Tier 3 AI-only
+    // shape so the card still renders cleanly. The synthesized id is deterministic
+    // (places-{placeId} on hit, user-named-{stopId} on miss) so the booking-commit
+    // flow's `bookedCg = cgs.find(cg => cg.id === stop.campgroundId)` reload-match
+    // continues to work across requests.
+    if (stop && stop.campgroundName && stop.campgroundName.trim().length > 0) {
+      const namedLocationLabel = stop.locationState
+        ? `${stop.locationName}, ${stop.locationState}`
+        : stop.locationName
+      const verifiedNamed = await verifyCampground(
+        stop.campgroundName,
+        namedLocationLabel,
+        { userId },
+      )
+      let namedEntry: CampgroundResult
+      if (verifiedNamed) {
+        namedEntry = {
+          id: `places-${verifiedNamed.placeId}`,
+          name: verifiedNamed.name,
+          address: verifiedNamed.address,
+          phone: verifiedNamed.phone,
+          website: verifiedNamed.website,
+          reservationUrl: verifiedNamed.website || verifiedNamed.googleMapsUrl,
+          latitude: verifiedNamed.latitude,
+          longitude: verifiedNamed.longitude,
+          rating: verifiedNamed.rating,
+          userRatingCount: verifiedNamed.userRatingCount,
+          source: 'google_places',
+        }
+      } else {
+        namedEntry = {
+          id: `user-named-${stop.id}`,
+          name: stop.campgroundName,
+          address: null,
+          phone: null,
+          rating: null,
+          reservationUrl: `https://www.google.com/maps/search/${encodeURIComponent(stop.campgroundName + ' ' + namedLocationLabel)}`,
+          source: 'user_named',
+        }
+      }
+      // Dedup by id: if the user-named campground was also surfaced by the AI-candidates
+      // Places batch (same placeId), remove the duplicate before prepending so the
+      // alternates list (compatible.filter(cg => cg.id !== recommended?.id)) excludes it
+      // cleanly and we don't render the same card twice.
+      const dupIdx = merged.findIndex(cg => cg.id === namedEntry.id)
+      if (dupIdx >= 0) merged.splice(dupIdx, 1)
+      merged.unshift(namedEntry)
+      console.log(
+        `[campgrounds] User-named campground "${stop.campgroundName}" prepended for stopId=${stop.id} (verified=${!!verifiedNamed})`,
+      )
+    }
+
     if (merged.length > 0) {
       merged[0].isPrimary = true
     }
