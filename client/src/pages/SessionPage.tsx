@@ -466,43 +466,51 @@ export default function SessionPage() {
         past 100dvh and required scrolling to see in-progress trips. */}
     <div className={`flex flex-col${isEmptyState ? '' : ' min-h-[calc(100dvh-8rem)] md:h-[calc(100dvh-8rem)]'}`}>
       {/* Header row — title + last-edited timestamp on the left, "New trip" /
-          "Cancel this plan" actions on the right. Sits above both branches
-          (empty state and active conversation) so it's always reachable. */}
-      <div
-        className="flex justify-between items-center px-4 py-2 border-b border-gray-100"
-        style={{ borderBottomWidth: '0.5px' }}
-      >
-        <div className="min-w-0">
-          <div className="text-sm font-medium text-gray-900 truncate">
-            {sessionTitle || 'Planning your trip'}
-          </div>
-          {sessionUpdatedAt && (
-            <div className="text-xs text-gray-500 mt-0.5">
-              Last edited {relativeTime(sessionUpdatedAt)}
+          "Cancel this plan" actions on the right. Hidden in the empty state
+          because no plan exists yet, so "Cancel this plan" is meaningless and
+          "+ New trip" is redundant (the whole canvas IS for starting a trip);
+          also removes ~48px of vertical chrome so the greeting starts higher.
+          The header is rendered only once the user has sent something — the
+          moment a plan actually exists to title, timestamp, restart, or
+          discard. The block below is preserved exactly as-is for the active
+          conversation. */}
+      {!isEmptyState && (
+        <div
+          className="flex justify-between items-center px-4 py-2 border-b border-gray-100"
+          style={{ borderBottomWidth: '0.5px' }}
+        >
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-gray-900 truncate">
+              {sessionTitle || 'Planning your trip'}
             </div>
-          )}
+            {sessionUpdatedAt && (
+              <div className="text-xs text-gray-500 mt-0.5">
+                Last edited {relativeTime(sessionUpdatedAt)}
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={handleNewTrip}
+              disabled={isProcessing}
+              className="px-3 py-1.5 text-xs border border-gray-200 rounded-md hover:bg-gray-50 flex items-center gap-1 disabled:opacity-50"
+            >
+              <Plus size={13} />
+              New trip
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowCancelConfirm(true)}
+              disabled={isProcessing}
+              className="px-3 py-1.5 text-xs border border-red-200 text-red-700 rounded-md hover:bg-red-50 flex items-center gap-1 disabled:opacity-50"
+            >
+              <X size={13} />
+              Cancel this plan
+            </button>
+          </div>
         </div>
-        <div className="flex gap-2 flex-shrink-0">
-          <button
-            type="button"
-            onClick={handleNewTrip}
-            disabled={isProcessing}
-            className="px-3 py-1.5 text-xs border border-gray-200 rounded-md hover:bg-gray-50 flex items-center gap-1 disabled:opacity-50"
-          >
-            <Plus size={13} />
-            New trip
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowCancelConfirm(true)}
-            disabled={isProcessing}
-            className="px-3 py-1.5 text-xs border border-red-200 text-red-700 rounded-md hover:bg-red-50 flex items-center gap-1 disabled:opacity-50"
-          >
-            <X size={13} />
-            Cancel this plan
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* Main area: chat column + optional itinerary sidebar */}
       <div className="flex flex-1 gap-4 overflow-hidden min-h-0">
@@ -517,12 +525,15 @@ export default function SessionPage() {
             //    natural height, and the strip lives right beneath it. `relative` makes
             //    this the positioning context for the watermark — which is absolutely
             //    positioned behind the content (see below) so it doesn't add flow height.
-            <div className="relative flex flex-col items-center px-2 pt-4 pb-12 overflow-hidden">
+            <div className="relative flex flex-col items-center px-2 pt-0 pb-24 overflow-hidden">
               {/* Watermark — absolutely positioned at the bottom of the hero area,
                   behind everything else. Rendered first so subsequent in-flow content
-                  naturally paints on top (no z-index acrobatics needed). Was previously
-                  an in-flow block with `marginTop: 48` that added ~100–230px of vertical
-                  space and pushed the strip below the fold. */}
+                  naturally paints on top (no z-index acrobatics needed). Sized to
+                  always fit within the hero's pb-24 (96px) so its top edge never
+                  crosses the disclosure above — at the max clamp (72px) there's a
+                  ~24px clearance to the disclosure's bottom; at narrower viewports
+                  the watermark gets smaller and the clearance grows. Previously
+                  clamp(48,12vw,120) overlapped the disclosure noticeably. */}
               <div
                 aria-hidden="true"
                 className="pointer-events-none select-none whitespace-nowrap overflow-hidden text-center absolute left-0 right-0 bottom-0"
@@ -531,7 +542,7 @@ export default function SessionPage() {
                   fontWeight: 600,
                   letterSpacing: '-0.02em',
                   lineHeight: 1,
-                  fontSize: 'clamp(48px, 12vw, 120px)',
+                  fontSize: 'clamp(36px, 7vw, 72px)',
                 }}
               >
                 <span style={{ color: '#1F6F8B' }}>Roam</span>
@@ -542,7 +553,7 @@ export default function SessionPage() {
               {/* Hero greeting */}
               {greeting && (
                 <h1
-                  className="text-center mx-auto pt-6 md:pt-12"
+                  className="text-center mx-auto pt-4 md:pt-8"
                   style={{
                     maxWidth: 720,
                     fontSize: 'clamp(22px, 4vw, 28px)',
