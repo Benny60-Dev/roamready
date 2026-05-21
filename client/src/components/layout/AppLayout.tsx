@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { Home, Map, MessageSquare, Tent, User, Menu, X, LogOut, ChevronDown, Clock, HelpCircle } from 'lucide-react'
 import { useState } from 'react'
 import { useAuthStore } from '../../store/authStore'
@@ -13,6 +13,7 @@ export default function AppLayout() {
   const { user, logout } = useAuthStore()
   const isInGracePeriod = useAuthStore(s => s.isInGracePeriod())
   const navigate = useNavigate()
+  const { pathname } = useLocation()
 
   async function handleLogout() {
     await authApi.logout()
@@ -20,17 +21,23 @@ export default function AppLayout() {
     navigate('/login')
   }
 
-  const navLinks = [
+  // matchPrefix: the Plan link points at /sessions/new, but that page
+  // immediately redirects to /sessions/:id, so NavLink's default isActive
+  // (exact or `to + '/'` prefix) never matches. Treating any /sessions
+  // pathname as Plan-active keeps the heading highlighted while the user
+  // is in a planning session. No other nav item routes under /sessions,
+  // so this prefix can't double-highlight a sibling.
+  const navLinks: Array<{ to: string; icon: typeof Home; label: string; matchPrefix?: string }> = [
     { to: '/dashboard', icon: Home, label: 'Home' },
     { to: '/trips', icon: Map, label: 'Trips' },
-    { to: '/sessions/new', icon: MessageSquare, label: 'Plan' },
+    { to: '/sessions/new', icon: MessageSquare, label: 'Plan', matchPrefix: '/sessions' },
     { to: '/reservations', icon: Tent, label: 'Bookings' },
     { to: '/profile', icon: User, label: 'Profile' },
   ]
 
   // Desktop-only — keeps the 5-item mobile bottom tab bar from getting crowded.
   // Mobile users still reach Help via the slide-out sidebar (which renders this list).
-  const desktopExtraLinks = [
+  const desktopExtraLinks: typeof navLinks = [
     { to: '/help', icon: HelpCircle, label: 'Help' },
   ]
 
@@ -56,15 +63,16 @@ export default function AppLayout() {
 
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-1">
-            {navLinks.map(({ to, label }) => (
+            {navLinks.map(({ to, label, matchPrefix }) => (
               <NavLink
                 key={to}
                 to={to}
-                className={({ isActive }) =>
-                  `px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                    isActive ? 'bg-[#E0F0F4] text-[#1F6F8B] font-medium' : 'text-gray-600 hover:bg-gray-100'
+                className={({ isActive }) => {
+                  const active = isActive || (matchPrefix ? pathname.startsWith(matchPrefix) : false)
+                  return `px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                    active ? 'bg-[#E0F0F4] text-[#1F6F8B] font-medium' : 'text-gray-600 hover:bg-gray-100'
                   }`
-                }
+                }}
               >
                 {label}
               </NavLink>
@@ -166,16 +174,17 @@ export default function AppLayout() {
         <div className="md:hidden fixed inset-0 z-30 bg-black/30" onClick={() => setSidebarOpen(false)}>
           <div className="w-64 h-full bg-white border-r border-gray-200 pt-4 px-3" onClick={e => e.stopPropagation()}>
             <nav className="flex flex-col gap-1 mt-2">
-              {[...navLinks, ...desktopExtraLinks].map(({ to, icon: Icon, label }) => (
+              {[...navLinks, ...desktopExtraLinks].map(({ to, icon: Icon, label, matchPrefix }) => (
                 <NavLink
                   key={to}
                   to={to}
                   onClick={() => setSidebarOpen(false)}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm ${
-                      isActive ? 'bg-[#E0F0F4] text-[#1F6F8B] font-medium' : 'text-gray-600 hover:bg-gray-100'
+                  className={({ isActive }) => {
+                    const active = isActive || (matchPrefix ? pathname.startsWith(matchPrefix) : false)
+                    return `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm ${
+                      active ? 'bg-[#E0F0F4] text-[#1F6F8B] font-medium' : 'text-gray-600 hover:bg-gray-100'
                     }`
-                  }
+                  }}
                 >
                   <Icon size={18} />
                   {label}
@@ -194,15 +203,16 @@ export default function AppLayout() {
       {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40" style={{ borderTopWidth: '0.5px' }}>
         <div className="flex">
-          {navLinks.map(({ to, icon: Icon, label }) => (
+          {navLinks.map(({ to, icon: Icon, label, matchPrefix }) => (
             <NavLink
               key={to}
               to={to}
-              className={({ isActive }) =>
-                `flex-1 flex flex-col items-center py-2 gap-0.5 text-xs ${
-                  isActive ? 'text-[#1F6F8B]' : 'text-gray-500'
+              className={({ isActive }) => {
+                const active = isActive || (matchPrefix ? pathname.startsWith(matchPrefix) : false)
+                return `flex-1 flex flex-col items-center py-2 gap-0.5 text-xs ${
+                  active ? 'text-[#1F6F8B]' : 'text-gray-500'
                 }`
-              }
+              }}
             >
               <Icon size={20} />
               {label}
