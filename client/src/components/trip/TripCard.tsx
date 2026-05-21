@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Calendar, Map, Tent, DollarSign } from 'lucide-react'
+import { Calendar, Map, Tent, DollarSign, Trash2 } from 'lucide-react'
 import { Trip } from '../../types'
 import { formatTripDate, relativeTime } from '../../utils/dates'
 
@@ -193,17 +193,49 @@ export default function TripCard({
     )
   }
 
-  // ── Default 'grid' variant ─ matches DashboardPage.tsx:9-55 exactly.
+  // ── Default 'grid' variant ─ matches DashboardPage's prior inline card,
+  //    with two Block-3-followup additions:
+  //      (a) a small trash icon in the top-right action cluster (only when
+  //          onDelete is wired — the compact variant never gets one);
+  //      (b) a secondary "N stops · M booked" meta line below the existing
+  //          dates/nights/miles/cost row, gated on stops actually existing.
+  const stopCount = trip.stops?.length ?? 0
+  const bookedCount = trip.stops?.filter(s => s.bookingStatus === 'CONFIRMED').length ?? 0
+  const showStopsLine = stopCount > 0
+
   return (
     <Link to={`/trips/${trip.id}/map`} className="card hover:border-[#1F6F8B]/30 transition-all block">
-      <div className="flex items-start justify-between mb-3">
-        <div>
-          <h3 className="font-medium text-gray-900 text-sm">{trip.name}</h3>
+      <div className="flex items-start justify-between mb-3 gap-2">
+        <div className="min-w-0 flex-1">
+          <h3 className="font-medium text-gray-900 text-sm truncate">{trip.name}</h3>
           {effectiveShowRoute && (
-            <p className="text-xs text-gray-500 mt-0.5">{trip.startLocation} → {trip.endLocation}</p>
+            <p className="text-xs text-gray-500 mt-0.5 truncate">{trip.startLocation} → {trip.endLocation}</p>
           )}
         </div>
-        <span className={`badge ${statusClass} capitalize`}>{trip.status.toLowerCase()}</span>
+        {/* Top-right action cluster — status pill sits where it always has;
+            the trash icon slots in beside it (only rendered when onDelete is
+            provided). Both are flex-shrink-0 so the truncating name/route on
+            the left can compress instead. */}
+        <div className="flex items-start gap-2 flex-shrink-0">
+          <span className={`badge ${statusClass} capitalize`}>{trip.status.toLowerCase()}</span>
+          {onDelete && (
+            <button
+              type="button"
+              onClick={e => {
+                // Outer <Link> would navigate to /trips/:id/map on this click —
+                // preventDefault stops the route change; stopPropagation belts-
+                // and-suspenders against any bubbling handler.
+                e.preventDefault()
+                e.stopPropagation()
+                onDelete(trip.id)
+              }}
+              aria-label={`Delete ${trip.name}`}
+              className="p-1 -m-1 text-gray-400 hover:text-[#B3261E] transition-colors"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
       <div className="flex items-center gap-4 text-xs text-gray-500">
         {trip.startDate && (
@@ -236,6 +268,13 @@ export default function TripCard({
           </span>
         )}
       </div>
+      {/* Secondary meta line — "N stops · M booked" — only when stops exist;
+          a trip with no stops simply omits the line rather than showing 0/0. */}
+      {showStopsLine && (
+        <div className="text-xs text-gray-400 mt-1">
+          {stopCount} stop{stopCount === 1 ? '' : 's'} · {bookedCount} booked
+        </div>
+      )}
     </Link>
   )
 }

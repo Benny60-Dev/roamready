@@ -15,12 +15,15 @@ import ConfirmModal from '../components/ui/ConfirmModal'
 type TabKey = 'active' | 'completed' | 'all'
 
 const TABS: Array<{ key: TabKey; label: string; filter: (t: Trip) => boolean }> = [
-  // "Active" = anything currently in motion or being planned. The old Dashboard
-  // surfaced PLANNING trips as the main list and rendered a single ACTIVE trip
-  // in its own hero card; the merge folds both into one tab since they're both
-  // "trips the user cares about right now". If a richer ACTIVE-trip surface is
-  // wanted later, it can come back as a polish — not part of the 3b merge.
-  { key: 'active',    label: 'Active',    filter: t => t.status === 'ACTIVE' || t.status === 'PLANNING' },
+  // "In Progress" = anything currently in motion or being planned. The old
+  // Dashboard surfaced PLANNING trips as the main list and rendered a single
+  // ACTIVE trip in its own hero card; the merge folds both into one tab since
+  // they're both "trips the user cares about right now". The tab key stays
+  // 'active' to keep state-handler diffs minimal; only the human-facing label
+  // changed in the Block 3 follow-up — "Active" was reading as a status name
+  // ("ACTIVE" the enum value), "In Progress" reads as a state of mind across
+  // both PLANNING and ACTIVE rows.
+  { key: 'active',    label: 'In Progress', filter: t => t.status === 'ACTIVE' || t.status === 'PLANNING' },
   { key: 'completed', label: 'Completed', filter: t => t.status === 'COMPLETED' },
   // "All" intentionally includes DRAFT trips even though no code path currently
   // writes that status — keeps a forward-compatible escape hatch the moment
