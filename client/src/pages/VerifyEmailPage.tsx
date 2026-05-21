@@ -116,7 +116,7 @@ export default function VerifyEmailPage() {
             </p>
             <button
               type="button"
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate('/sessions/new')}
               className="w-full py-2.5 rounded-lg text-sm font-medium transition-colors bg-[#F7A829] text-white hover:bg-[#C9851A]"
             >
               Continue to RoamReady

@@ -19,7 +19,7 @@ export default function AuthCallbackPage() {
         if (!res.data.rigs?.length) {
           navigate('/onboarding')
         } else {
-          navigate('/dashboard')
+          navigate('/sessions/new')
         }
       })
       .catch(() => navigate('/login?error=auth_failed'))
