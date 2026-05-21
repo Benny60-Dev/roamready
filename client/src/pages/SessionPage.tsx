@@ -458,7 +458,13 @@ export default function SessionPage() {
 
   return (
     <>
-    <div className="flex flex-col min-h-[calc(100dvh-8rem)] md:h-[calc(100dvh-8rem)]">
+    {/* Outer wrapper height: locked to ~viewport ONLY in active-conversation state,
+        where the chat history needs a fixed parent height so its flex-1 overflow-y-auto
+        can resolve and the input pins to the bottom. In empty state we drop the lock so
+        the hero + disclosure stack to their natural height and the sibling Continue-
+        planning strip below sits above the fold — otherwise the lock pushed the strip
+        past 100dvh and required scrolling to see in-progress trips. */}
+    <div className={`flex flex-col${isEmptyState ? '' : ' min-h-[calc(100dvh-8rem)] md:h-[calc(100dvh-8rem)]'}`}>
       {/* Header row — title + last-edited timestamp on the left, "New trip" /
           "Cancel this plan" actions on the right. Sits above both branches
           (empty state and active conversation) so it's always reachable. */}
@@ -504,8 +510,35 @@ export default function SessionPage() {
         <div className="flex-1 flex flex-col overflow-hidden min-h-0">
 
           {isEmptyState ? (
-            // ── Pre-conversation: hero greeting + chips + input + tip + watermark
-            <div className="flex-1 flex flex-col items-center justify-center px-2">
+            // ── Pre-conversation: hero greeting + chips + input + tip + watermark.
+            //    Layout dropped flex-1/justify-center (which forced vertical centering
+            //    inside a viewport-tall parent and pushed the Continue-planning sibling
+            //    strip below the fold). Now the content stacks from the top at its
+            //    natural height, and the strip lives right beneath it. `relative` makes
+            //    this the positioning context for the watermark — which is absolutely
+            //    positioned behind the content (see below) so it doesn't add flow height.
+            <div className="relative flex flex-col items-center px-2 pt-4 pb-12 overflow-hidden">
+              {/* Watermark — absolutely positioned at the bottom of the hero area,
+                  behind everything else. Rendered first so subsequent in-flow content
+                  naturally paints on top (no z-index acrobatics needed). Was previously
+                  an in-flow block with `marginTop: 48` that added ~100–230px of vertical
+                  space and pushed the strip below the fold. */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none select-none whitespace-nowrap overflow-hidden text-center absolute left-0 right-0 bottom-0"
+                style={{
+                  opacity: 0.10,
+                  fontWeight: 600,
+                  letterSpacing: '-0.02em',
+                  lineHeight: 1,
+                  fontSize: 'clamp(48px, 12vw, 120px)',
+                }}
+              >
+                <span style={{ color: '#1F6F8B' }}>Roam</span>
+                <span style={{ color: '#F7A829' }}>Ready</span>
+                <span style={{ color: '#1F6F8B' }}>.ai</span>
+              </div>
+
               {/* Hero greeting */}
               {greeting && (
                 <h1
@@ -711,24 +744,6 @@ export default function SessionPage() {
                     </div>
                   )}
                 </div>
-              </div>
-              {/* Watermark — flow-positioned below the empty-state content */}
-              <div
-                aria-hidden="true"
-                className="pointer-events-none select-none whitespace-nowrap overflow-hidden text-center"
-                style={{
-                  width: '100%',
-                  marginTop: 48,
-                  opacity: 0.12,
-                  fontWeight: 600,
-                  letterSpacing: '-0.02em',
-                  lineHeight: 1,
-                  fontSize: 'clamp(48px, 12vw, 120px)',
-                }}
-              >
-                <span style={{ color: '#1F6F8B' }}>Roam</span>
-                <span style={{ color: '#F7A829' }}>Ready</span>
-                <span style={{ color: '#1F6F8B' }}>.ai</span>
               </div>
             </div>
           ) : (
