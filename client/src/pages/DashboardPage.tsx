@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Map, Tent, Wrench, Package } from 'lucide-react'
+import { Plus, Search } from 'lucide-react'
 import { tripsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import { Trip } from '../types'
@@ -219,27 +219,13 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Quick actions — unchanged from previous Dashboard. */}
-      <div>
-        <h2 className="text-sm font-medium text-gray-700 mb-2">Quick actions</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {[
-            { to: '/maintenance',  icon: Wrench,  label: 'Maintenance' },
-            { to: '/reservations', icon: Tent,    label: 'Bookings' },
-            { to: '/resources',    icon: Map,     label: 'Resources' },
-            { to: '/roadmap',      icon: Package, label: 'Roadmap' },
-          ].map(({ to, icon: Icon, label }) => (
-            <Link
-              key={to}
-              to={to}
-              className="card flex flex-col items-center gap-2 py-4 hover:border-[#1F6F8B]/30 transition-all"
-            >
-              <Icon size={18} className="text-[#1F6F8B]" />
-              <span className="text-xs text-gray-600">{label}</span>
-            </Link>
-          ))}
-        </div>
-      </div>
+      {/* Block 4 retired the Quick Actions tile row that used to live here
+          (Maintenance / Bookings / Resources / Roadmap). Maintenance, Resources,
+          and Roadmap moved to the /resources hub (Resources is a top-nav item
+          since Block 2). Bookings is intentionally NOT on the hub — it's trip
+          workflow, not a resource — and is reachable for now only via the
+          breadcrumb on TripBookingPage. Block 5 surfaces /reservations as a
+          fourth Dashboard tab to close that loop. */}
 
       {/* Delete confirmation — reuses the existing ConfirmModal (also used for
           Discard plan on SessionPage and the Unbook flow). Replaces TripsPage's
