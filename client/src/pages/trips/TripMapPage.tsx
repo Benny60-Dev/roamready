@@ -1155,7 +1155,7 @@ export default function TripMapPage() {
 
       {/* Breadcrumb strip */}
       <div className="flex-shrink-0 bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-1.5">
-        <Link to="/trips" className="text-xs text-[#1F6F8B] hover:text-[#134756] transition-colors">My Trips</Link>
+        <Link to="/dashboard" className="text-xs text-[#1F6F8B] hover:text-[#134756] transition-colors">Dashboard</Link>
         <span className="text-gray-300 text-xs">›</span>
         <span className="text-xs text-gray-700 font-medium truncate max-w-[200px]">{trip?.name ?? '…'}</span>
       </div>

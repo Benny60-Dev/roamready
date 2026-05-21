@@ -952,7 +952,7 @@ export default function TripSummaryPage() {
   return (
     <div className="space-y-6 max-w-3xl">
       <Breadcrumb items={[
-        { label: 'My Trips', href: '/trips' },
+        { label: 'Dashboard', href: '/dashboard' },
         { label: trip.name, href: `/trips/${id}/map` },
         { label: 'Full Itinerary' },
       ]} />

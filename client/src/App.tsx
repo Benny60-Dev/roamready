@@ -25,7 +25,6 @@ import OnboardingPage from './pages/onboarding/OnboardingPage'
 
 // App pages
 import DashboardPage from './pages/DashboardPage'
-import TripsPage from './pages/trips/TripsPage'
 import SessionPage from './pages/SessionPage'
 import SessionNewPage from './pages/SessionNewPage'
 import TripBookingPage from './pages/trips/TripBookingPage'
@@ -140,7 +139,10 @@ export default function App() {
         {/* App */}
         <Route element={<PrivateRoute><AppLayout /></PrivateRoute>}>
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/trips" element={<TripsPage />} />
+          {/* /trips retired in Block 3b — the merged Dashboard absorbed its
+              search, status filtering, and delete capabilities. Redirect keeps
+              any legacy bookmarks or stale links working silently. */}
+          <Route path="/trips" element={<Navigate to="/dashboard" replace />} />
           <Route path="/trips/new" element={<Navigate to="/sessions/new" replace />} />
           <Route path="/sessions/new" element={<SessionNewPage />} />
           <Route path="/sessions/:id" element={<SessionPage />} />
