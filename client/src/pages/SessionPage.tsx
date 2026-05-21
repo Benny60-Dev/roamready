@@ -1,15 +1,16 @@
 import { useCallback, useState, useRef, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { MapPin, Tent, Users, Loader, Plus, X, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { MapPin, Tent, Users, Loader, Plus, X, Sparkles, ChevronDown, ChevronUp, Calendar, Map, ChevronRight } from 'lucide-react'
 import { aiApi, sessionsApi, tripsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
-import { ChatMessage } from '../types'
+import { ChatMessage, Trip } from '../types'
 import BottomSheet from '../components/ui/BottomSheet'
 import ConfirmModal from '../components/ui/ConfirmModal'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
 import { useVoiceInput } from '../hooks/useVoiceInput'
 import { ChatInput } from '../components/ChatInput'
 import { selectGreeting } from '../utils/greeting'
+import { formatTripDate } from '../utils/dates'
 
 // Window augmentation for SpeechRecognition / webkitSpeechRecognition lives
 // in client/src/types/global.d.ts now — see useVoiceInput hook for usage.
@@ -66,6 +67,13 @@ const SIMPLE_EXAMPLES = [
 const DESCRIPTIVE_EXAMPLE =
   "Plan a 10-day trip starting June 6th. I want to go from Phoenix up through Sedona and Flagstaff, then over to Durango. I need to be at my sister's house in Santa Fe on day 5, and we'd like a full-hookup site every night since we're traveling with the dog."
 
+// Headline example shown in the collapsed blue "Try:" callout that fronts the
+// prompt disclosure. It's a teaser — what a good prompt looks like — but it's
+// also wired to a "Use this prompt →" affordance inside the callout so the
+// user can populate the input from it without expanding the panel.
+const TRY_EXAMPLE =
+  "10 days through Utah's national parks in early October, leaving from Phoenix in our 32ft fifth wheel."
+
 function TypingIndicator() {
   return (
     <div className="flex gap-1 items-center px-3 py-2 w-fit">
@@ -109,6 +117,13 @@ export default function SessionPage() {
   // prior starter chips + randomized tip card + italic fallback line, all of
   // which were competing CTAs under the input.
   const [howOpen, setHowOpen] = useState(false)
+  // PLANNING trips fed to the "Continue planning" strip below the empty-state
+  // canvas. Fetched once on mount; the strip stays hidden while loading and
+  // collapses entirely when the user has zero PLANNING trips (a new user sees
+  // only the canvas). Same data source DashboardPage uses (tripsApi.getAll),
+  // filtered client-side — no new endpoint.
+  const [planningTrips, setPlanningTrips] = useState<Trip[]>([])
+  const [tripsLoading, setTripsLoading] = useState(true)
   // Disables the header buttons during the async create/delete dance so a
   // double-tap can't fire two requests or navigate twice.
   const [isProcessing, setIsProcessing] = useState(false)
@@ -267,6 +282,27 @@ export default function SessionPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, typing])
 
+  // ── Continue-planning strip data ───────────────────────────────────────────
+  // Fetched once on mount. Trips don't change while the user is inside this
+  // session (promoting via Build Itinerary navigates away to /trips/:id/map),
+  // so a single fetch is enough — no re-fetch on session-id change.
+  useEffect(() => {
+    let cancelled = false
+    tripsApi.getAll()
+      .then(res => {
+        if (cancelled) return
+        const planning = (res.data as Trip[])
+          .filter(t => t.status === 'PLANNING')
+          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        setPlanningTrips(planning)
+      })
+      .catch(() => { /* non-fatal — strip just stays hidden on error */ })
+      .finally(() => {
+        if (!cancelled) setTripsLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [])
+
   const rig      = user?.rigs?.[0]
   const profile  = user?.travelProfile
 
@@ -422,7 +458,13 @@ export default function SessionPage() {
     : ''
   const showRigStrip = !!(rigChipText || partyChipText || styleChipText)
 
+  // Most recent 3 PLANNING trips for the strip below the canvas. Sorted by
+  // updatedAt desc in the fetch effect.
+  const recentPlanning = planningTrips.slice(0, 3)
+  const showContinueStrip = isEmptyState && !tripsLoading && planningTrips.length > 0
+
   return (
+    <>
     <div className="flex flex-col min-h-[calc(100dvh-8rem)] md:h-[calc(100dvh-8rem)]">
       {/* Header row — title + last-edited timestamp on the left, "New trip" /
           "Cancel this plan" actions on the right. Sits above both branches
@@ -541,38 +583,79 @@ export default function SessionPage() {
                   variant="hero"
                 />
 
-                {/* Learn how to prompt me — single quiet disclosure that replaces the
-                    prior chip row, randomized tip card, and italic fallback line. Default
-                    collapsed; clicking the header expands to show Simple + Descriptive
-                    example sections. Each example button populates the input (no submit)
-                    so the user can edit before sending — same pattern the chips used. */}
+                {/* Try: callout — replaces the prior plain "Learn how to prompt me" header
+                    as the collapsed-state trigger for the prompt disclosure. Blue-tinted
+                    card with a 3px RV-Blue left accent, showing the headline example. Two
+                    distinct click targets to keep the interaction unambiguous:
+                      • Clicking the main row (Sparkles + "Try: …" + chevron) toggles the
+                        disclosure open/closed. It does NOT populate the input.
+                      • Clicking "Use this prompt →" populates the input with TRY_EXAMPLE
+                        (populate-don't-submit, same pattern as the examples inside the
+                        expanded panel).
+                    The expanded panel content (Simple / Descriptive / Show less) is
+                    unchanged from the previous disclosure. */}
                 <div style={{ marginTop: 20 }}>
-                  <button
-                    type="button"
-                    onClick={() => setHowOpen(v => !v)}
-                    aria-expanded={howOpen}
-                    aria-controls="how-to-prompt-panel"
-                    className="w-full text-left transition-colors bg-white"
+                  <div
                     style={{
-                      border: '0.5px solid #E8E4DA',
+                      border: '0.5px solid #B5D5E3',
+                      borderLeft: '3px solid #1F6F8B',
                       borderRadius: howOpen ? '8px 8px 0 0' : 8,
-                      padding: '11px 14px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      fontSize: 13,
-                      color: '#5F5E5A',
-                      cursor: 'pointer',
+                      backgroundColor: '#E0F0F4',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#FBFAF8' }}
-                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFFFFF' }}
                   >
-                    <Sparkles size={14} color="#1F6F8B" aria-hidden="true" />
-                    <span style={{ flex: 1 }}>Learn how to prompt me</span>
-                    {howOpen
-                      ? <ChevronUp size={14} color="#888780" aria-hidden="true" />
-                      : <ChevronDown size={14} color="#888780" aria-hidden="true" />}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setHowOpen(v => !v)}
+                      aria-expanded={howOpen}
+                      aria-controls="how-to-prompt-panel"
+                      className="w-full text-left transition-colors"
+                      style={{
+                        padding: '12px 14px 6px',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 10,
+                        fontSize: 13,
+                        color: '#134756',
+                        cursor: 'pointer',
+                        background: 'transparent',
+                        border: 'none',
+                        borderRadius: howOpen ? '5px 5px 0 0' : 5,
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#D2E7EF' }}
+                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent' }}
+                    >
+                      <Sparkles size={14} color="#1F6F8B" aria-hidden="true" style={{ flexShrink: 0, marginTop: 3 }} />
+                      <span style={{ flex: 1, lineHeight: 1.5 }}>
+                        <span style={{ fontWeight: 600 }}>Try: </span>
+                        <span>"{TRY_EXAMPLE}"</span>
+                      </span>
+                      {howOpen
+                        ? <ChevronUp size={14} color="#1F6F8B" aria-hidden="true" style={{ flexShrink: 0, marginTop: 4 }} />
+                        : <ChevronDown size={14} color="#1F6F8B" aria-hidden="true" style={{ flexShrink: 0, marginTop: 4 }} />}
+                    </button>
+                    <div style={{ padding: '0 14px 10px 38px', display: 'flex' }}>
+                      <button
+                        type="button"
+                        onClick={() => applyExample(TRY_EXAMPLE)}
+                        className="transition-colors"
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          fontSize: 12,
+                          color: '#1F6F8B',
+                          padding: '2px 0',
+                          cursor: 'pointer',
+                          textDecoration: 'underline',
+                          textUnderlineOffset: 2,
+                          fontWeight: 500,
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.color = '#134756' }}
+                        onMouseLeave={e => { e.currentTarget.style.color = '#1F6F8B' }}
+                      >
+                        Use this prompt →
+                      </button>
+                    </div>
+                  </div>
 
                   {howOpen && (
                     <div
@@ -852,5 +935,75 @@ export default function SessionPage() {
         isConfirming={isProcessing}
       />
     </div>
+
+    {/* Continue planning strip — sibling of the viewport-locked canvas above so it
+        sits below the fold on desktop without breaking the active-conversation
+        height lock (chat history needs that lock to scroll internally). Renders
+        only in the empty state, only after the trips fetch resolves, and only
+        when the user has at least one PLANNING trip — for a new user with zero
+        in-progress trips, this collapses to nothing and they see just the canvas. */}
+    {showContinueStrip && (
+      <div
+        className="px-2"
+        style={{
+          borderTop: '0.5px solid #E8E4DA',
+          marginTop: 32,
+          paddingTop: 24,
+          paddingBottom: 8,
+        }}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-medium text-gray-900">Continue planning</h2>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+              {planningTrips.length} in progress
+            </span>
+          </div>
+          <Link
+            to="/dashboard"
+            className="text-xs text-[#1F6F8B] hover:underline flex items-center gap-1"
+          >
+            View all in Dashboard
+            <ChevronRight size={12} />
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {recentPlanning.map(trip => (
+            <Link
+              key={trip.id}
+              to={`/trips/${trip.id}/map`}
+              className="card hover:border-[#1F6F8B]/30 transition-all block"
+              style={{ padding: 12 }}
+            >
+              <div className="mb-1.5">
+                <span className="badge badge-planning text-xs capitalize">planning</span>
+              </div>
+              <h3 className="font-medium text-gray-900 text-sm truncate mb-1">{trip.name}</h3>
+              <div className="flex items-center gap-2.5 text-xs text-gray-500 flex-wrap">
+                {trip.startDate && (
+                  <span className="flex items-center gap-1">
+                    <Calendar size={11} />
+                    {formatTripDate(trip.startDate, 'MMM d')}
+                  </span>
+                )}
+                {trip.totalNights != null && (
+                  <span className="flex items-center gap-1">
+                    <Tent size={11} />
+                    {trip.totalNights}n
+                  </span>
+                )}
+                {trip.totalMiles != null && (
+                  <span className="flex items-center gap-1">
+                    <Map size={11} />
+                    {trip.totalMiles.toLocaleString()}mi
+                  </span>
+                )}
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+    )}
+    </>
   )
 }
