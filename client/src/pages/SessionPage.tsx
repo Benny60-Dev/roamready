@@ -1,46 +1,20 @@
 import { useCallback, useState, useRef, useEffect } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { MapPin, Tent, Users, Loader, Plus, X, Sparkles, ChevronDown, ChevronUp, Calendar, Map, ChevronRight } from 'lucide-react'
+import { MapPin, Tent, Users, Loader, Plus, X, Sparkles, ChevronDown, ChevronUp, ChevronRight } from 'lucide-react'
 import { aiApi, sessionsApi, tripsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import { ChatMessage, Trip } from '../types'
 import BottomSheet from '../components/ui/BottomSheet'
 import ConfirmModal from '../components/ui/ConfirmModal'
+import TripCard from '../components/trip/TripCard'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
 import { useVoiceInput } from '../hooks/useVoiceInput'
 import { ChatInput } from '../components/ChatInput'
 import { selectGreeting } from '../utils/greeting'
-import { formatTripDate } from '../utils/dates'
+import { relativeTime } from '../utils/dates'
 
 // Window augmentation for SpeechRecognition / webkitSpeechRecognition lives
 // in client/src/types/global.d.ts now — see useVoiceInput hook for usage.
-
-// Compact "5 minutes ago" / "yesterday" / "May 6" formatter for the header's
-// last-edited line. Same shape as SessionNewPage / SessionsPanel each have
-// inline; not worth extracting to a util for a third instance yet.
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime()
-  const now = Date.now()
-  const diff = Math.max(0, now - then)
-  const minute = 60_000
-  const hour = 60 * minute
-  const day = 24 * hour
-  if (diff < minute) return 'just now'
-  if (diff < hour) {
-    const m = Math.floor(diff / minute)
-    return `${m} minute${m === 1 ? '' : 's'} ago`
-  }
-  if (diff < day) {
-    const h = Math.floor(diff / hour)
-    return `${h} hour${h === 1 ? '' : 's'} ago`
-  }
-  if (diff < 2 * day) return 'yesterday'
-  if (diff < 7 * day) {
-    const d = Math.floor(diff / day)
-    return `${d} days ago`
-  }
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
 
 // Take the first 40 chars of a user message, cut at the last word boundary if reasonable.
 function deriveTitle(text: string): string {
@@ -947,37 +921,7 @@ export default function SessionPage() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {recentPlanning.map(trip => (
-            <Link
-              key={trip.id}
-              to={`/trips/${trip.id}/map`}
-              className="card hover:border-[#1F6F8B]/30 transition-all block"
-              style={{ padding: 12 }}
-            >
-              <div className="mb-1.5">
-                <span className="badge badge-planning text-xs capitalize">planning</span>
-              </div>
-              <h3 className="font-medium text-gray-900 text-sm truncate mb-1">{trip.name}</h3>
-              <div className="flex items-center gap-2.5 text-xs text-gray-500 flex-wrap">
-                {trip.startDate && (
-                  <span className="flex items-center gap-1">
-                    <Calendar size={11} />
-                    {formatTripDate(trip.startDate, 'MMM d')}
-                  </span>
-                )}
-                {trip.totalNights != null && (
-                  <span className="flex items-center gap-1">
-                    <Tent size={11} />
-                    {trip.totalNights}n
-                  </span>
-                )}
-                {trip.totalMiles != null && (
-                  <span className="flex items-center gap-1">
-                    <Map size={11} />
-                    {trip.totalMiles.toLocaleString()}mi
-                  </span>
-                )}
-              </div>
-            </Link>
+            <TripCard key={trip.id} trip={trip} variant="compact" />
           ))}
         </div>
       </div>

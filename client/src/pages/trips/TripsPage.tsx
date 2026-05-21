@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Calendar, Map, DollarSign, Tent } from 'lucide-react'
+import { Plus, Search } from 'lucide-react'
 import { tripsApi } from '../../services/api'
 import { Trip } from '../../types'
-import { formatTripDate } from '../../utils/dates'
+import TripCard from '../../components/trip/TripCard'
 
 export default function TripsPage() {
   const [trips, setTrips] = useState<Trip[]>([])
@@ -22,8 +22,13 @@ export default function TripsPage() {
     return matchSearch && matchFilter
   })
 
-  async function deleteTrip(id: string, e: React.MouseEvent) {
-    e.preventDefault()
+  // Signature reshaped to (id) for the shared TripCard's onDelete callback.
+  // The card calls e.preventDefault()/stopPropagation() internally to stop
+  // the outer <Link> from navigating, so the previous (id, e) shape isn't
+  // needed at this layer anymore. Behavior is otherwise unchanged — still
+  // window.confirm() then tripsApi.delete + local filter; the ConfirmModal
+  // swap is deferred to Sub-commit B when TripsPage is retired.
+  async function deleteTrip(id: string) {
     if (!confirm('Delete this trip?')) return
     await tripsApi.delete(id)
     setTrips(trips.filter(t => t.id !== id))
@@ -85,51 +90,15 @@ export default function TripsPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map(trip => {
-            const statusColors = {
-              PLANNING: 'badge-planning',
-              ACTIVE: 'badge-active',
-              COMPLETED: 'badge-completed',
-              // Reserved — no current code path sets status to DRAFT (future "resume planning" feature)
-              DRAFT: 'badge-draft',
-            }
-            return (
-              <Link
-                key={trip.id}
-                to={`/trips/${trip.id}/map`}
-                className="card flex items-center justify-between hover:border-[#1F6F8B]/30 transition-all"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-medium text-gray-900 text-sm truncate">{trip.name}</h3>
-                    <span className={`${statusColors[trip.status]} text-xs`}>
-                      {trip.status.toLowerCase()}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 truncate">{trip.startLocation} → {trip.endLocation}</p>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
-                    {trip.startDate && <span className="flex items-center gap-1"><Calendar size={11} />{formatTripDate(trip.startDate, 'MMM d, yyyy')}</span>}
-                    {trip.totalNights && <span className="flex items-center gap-1"><Tent size={11} />{trip.totalNights} nights</span>}
-                    {trip.totalMiles && <span className="flex items-center gap-1"><Map size={11} />{trip.totalMiles.toLocaleString()} mi</span>}
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 ml-4">
-                  {(trip.estimatedFuel || trip.estimatedCamp) && (
-                    <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
-                      <DollarSign size={13} />
-                      {((trip.estimatedFuel || 0) + (trip.estimatedCamp || 0)).toLocaleString()}
-                    </span>
-                  )}
-                  <button
-                    onClick={e => deleteTrip(trip.id, e)}
-                    className="text-xs text-gray-400 hover:text-red-500 transition-colors px-2 py-1"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </Link>
-            )
-          })}
+          {filtered.map(trip => (
+            <TripCard
+              key={trip.id}
+              trip={trip}
+              variant="row"
+              dateFormat="MMM d, yyyy"
+              onDelete={deleteTrip}
+            />
+          ))}
         </div>
       )}
     </div>
