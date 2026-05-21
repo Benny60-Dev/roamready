@@ -3,30 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Loader } from 'lucide-react'
 import { sessionsApi } from '../services/api'
 import type { PlanningSession } from '../types'
-
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime()
-  const now = Date.now()
-  const diff = Math.max(0, now - then)
-  const minute = 60_000
-  const hour = 60 * minute
-  const day = 24 * hour
-  if (diff < minute) return 'a moment ago'
-  if (diff < hour) {
-    const m = Math.floor(diff / minute)
-    return `${m} minute${m === 1 ? '' : 's'} ago`
-  }
-  if (diff < day) {
-    const h = Math.floor(diff / hour)
-    return `${h} hour${h === 1 ? '' : 's'} ago`
-  }
-  if (diff < 2 * day) return 'yesterday'
-  if (diff < 7 * day) {
-    const d = Math.floor(diff / day)
-    return `${d} days ago`
-  }
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
+import { relativeTime } from '../utils/dates'
 
 export default function SessionNewPage() {
   const navigate = useNavigate()

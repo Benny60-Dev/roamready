@@ -114,3 +114,47 @@ export function toYmd(d: Date): string {
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
+
+/**
+ * Format an ISO timestamp as a relative time string ("5 minutes ago" / "2d ago").
+ *
+ * Replaces three byte-near-identical inline copies that had drifted into
+ * SessionPage, SessionNewPage, and SessionsPanel — see Block 3a for the
+ * extraction. The verbose form is the canonical "X ago" copy the rest of
+ * the app uses; the compact form (opts.short=true) collapses the labels
+ * down for crowded card meta rows (used by Block 3b's Dashboard cards).
+ *
+ *   verbose (default):   "just now" / "5 minutes ago" / "3 hours ago" /
+ *                        "yesterday" / "4 days ago" / "May 6"
+ *   short (compact):     "now"      / "5m ago"       / "3h ago"      /
+ *                        "1d ago"   / "4d ago"       / "May 6"
+ *
+ * The >7-day fallback ("MMM d") matches in both modes — once a trip is
+ * more than a week old there's no value in fuzzy time, an absolute date
+ * is more useful.
+ */
+export function relativeTime(iso: string, opts?: { short?: boolean }): string {
+  const short = opts?.short === true
+  const then = new Date(iso).getTime()
+  const now = Date.now()
+  const diff = Math.max(0, now - then)
+  const minute = 60_000
+  const hour = 60 * minute
+  const day = 24 * hour
+
+  if (diff < minute) return short ? 'now' : 'just now'
+  if (diff < hour) {
+    const m = Math.floor(diff / minute)
+    return short ? `${m}m ago` : `${m} minute${m === 1 ? '' : 's'} ago`
+  }
+  if (diff < day) {
+    const h = Math.floor(diff / hour)
+    return short ? `${h}h ago` : `${h} hour${h === 1 ? '' : 's'} ago`
+  }
+  if (diff < 2 * day) return short ? '1d ago' : 'yesterday'
+  if (diff < 7 * day) {
+    const d = Math.floor(diff / day)
+    return short ? `${d}d ago` : `${d} days ago`
+  }
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}

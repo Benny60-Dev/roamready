@@ -1,58 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Map, Calendar, DollarSign, Tent, ChevronRight, Wrench, Package } from 'lucide-react'
+import { Plus, Map, Tent, ChevronRight, Wrench, Package } from 'lucide-react'
 import { tripsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import { Trip } from '../types'
-import { formatTripDate } from '../utils/dates'
-
-function TripCard({ trip }: { trip: Trip }) {
-  const statusColor = {
-    PLANNING: 'badge-planning',
-    ACTIVE: 'badge-active',
-    COMPLETED: 'badge-completed',
-    // Reserved — no current code path sets status to DRAFT (future "resume planning" feature)
-    DRAFT: 'badge-draft',
-  }[trip.status]
-
-  return (
-    <Link to={`/trips/${trip.id}/map`} className="card hover:border-[#1F6F8B]/30 transition-all block">
-      <div className="flex items-start justify-between mb-3">
-        <div>
-          <h3 className="font-medium text-gray-900 text-sm">{trip.name}</h3>
-          <p className="text-xs text-gray-500 mt-0.5">{trip.startLocation} → {trip.endLocation}</p>
-        </div>
-        <span className={`badge ${statusColor} capitalize`}>{trip.status.toLowerCase()}</span>
-      </div>
-      <div className="flex items-center gap-4 text-xs text-gray-500">
-        {trip.startDate && (
-          <span className="flex items-center gap-1">
-            <Calendar size={12} />
-            {formatTripDate(trip.startDate, 'MMM d')}
-          </span>
-        )}
-        {trip.totalNights && (
-          <span className="flex items-center gap-1">
-            <Tent size={12} />
-            {trip.totalNights}n
-          </span>
-        )}
-        {trip.totalMiles && (
-          <span className="flex items-center gap-1">
-            <Map size={12} />
-            {trip.totalMiles.toLocaleString()}mi
-          </span>
-        )}
-        {(trip.estimatedFuel || trip.estimatedCamp) && (
-          <span className="flex items-center gap-1">
-            <DollarSign size={12} />
-            ~${((trip.estimatedFuel || 0) + (trip.estimatedCamp || 0)).toLocaleString()}
-          </span>
-        )}
-      </div>
-    </Link>
-  )
-}
+import TripCard from '../components/trip/TripCard'
 
 export default function DashboardPage() {
   const [trips, setTrips] = useState<Trip[]>([])
