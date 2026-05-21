@@ -1,7 +1,37 @@
 import { useEffect, useState } from 'react'
-import { Breadcrumb } from '../components/ui/Breadcrumb'
-import { MapPin, Phone, Star } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { MapPin, Phone, Star, Wrench, Package, Mountain, Caravan } from 'lucide-react'
 import { resourcesApi } from '../services/api'
+
+/**
+ * Resources hub + Along-Route finder.
+ *
+ * Block 4 expanded /resources from a single-purpose "find nearby providers"
+ * page into a hub for the app's read-only / reference surfaces:
+ *
+ *   - Hub tiles (top)   : Maintenance, Product Roadmap, OHV Destinations,
+ *                          Van Destinations. These four pages were previously
+ *                          orphaned (OHV/Van had zero inbound links in the
+ *                          authed app; Maintenance + Roadmap were only
+ *                          reachable from the Dashboard's Quick Actions row,
+ *                          which Block 4 retired alongside this build).
+ *   - Along-Route finder (below) : the original geolocation feature — RV
+ *                          repair, propane, dump stations, etc., within 25mi
+ *                          of the user's current location. Kept verbatim;
+ *                          only the page chrome around it changed.
+ *
+ * Not on the hub deliberately:
+ *   - /reservations (trip workflow, not a resource — Block 5 surfaces it as
+ *     a Dashboard tab).
+ *   - /car-camping (orphaned today but not in the Block 4 spec's tile list;
+ *     decision deferred — easy to add later as a fifth tile if wanted).
+ */
+const HUB_TILES = [
+  { to: '/maintenance',      icon: Wrench,   label: 'Maintenance',      desc: 'Rig service tracker' },
+  { to: '/roadmap',          icon: Package,  label: 'Product Roadmap',  desc: "What we're shipping next" },
+  { to: '/ohv-destinations', icon: Mountain, label: 'OHV Destinations', desc: 'Off-highway parks & trails' },
+  { to: '/van-destinations', icon: Caravan,  label: 'Van Destinations', desc: 'Van-life favorites' },
+]
 
 const RESOURCE_TABS = [
   { id: 'rv_repair', label: '🔧 RV Repair', desc: 'Roadside & shop repair' },
@@ -38,72 +68,100 @@ export default function ResourcesPage() {
   }, [location, activeTab])
 
   return (
-    <div className="space-y-4">
-      <Breadcrumb items={[
-        { label: 'Profile', href: '/profile' },
-        { label: 'Resources' },
-      ]} />
+    <div className="space-y-6">
+      {/* Page header. Stale "Profile › Resources" breadcrumb removed — Resources
+          is a top-nav destination now (since Block 2), not a Profile sub-page. */}
       <div>
-        <h1 className="text-xl font-medium text-gray-900">Resources Along Route</h1>
-        {locationError && <p className="text-xs text-amber-600 mt-1">{locationError}</p>}
+        <h1 className="text-xl font-medium text-gray-900">Resources</h1>
+        <p className="text-sm text-gray-500">Tools, references, and travel guides.</p>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {RESOURCE_TABS.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex-shrink-0 px-3 py-2 rounded-lg text-sm border transition-colors ${
-              activeTab === tab.id ? 'bg-[#1F6F8B] text-white border-[#1F6F8B]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-            }`}
-            style={{ borderWidth: '0.5px' }}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {loading ? (
-        <div className="space-y-2">{[1, 2, 3, 4].map(i => <div key={i} className="card h-20 animate-pulse bg-gray-50" />)}</div>
-      ) : resources.length === 0 ? (
-        <div className="card text-center py-12">
-          <p className="text-gray-500 text-sm">
-            {location ? 'No results found nearby.' : 'Allow location access to find resources near you.'}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {resources.map(r => (
-            <div key={r.id} className="card flex items-start gap-3">
-              <div className="w-8 h-8 bg-gray-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                <MapPin size={15} className="text-[#1F6F8B]" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900">{r.name}</p>
-                {r.address && <p className="text-xs text-gray-500 mt-0.5">{r.address}</p>}
-                <div className="flex items-center gap-3 mt-1">
-                  {r.rating && (
-                    <span className="flex items-center gap-0.5 text-xs text-amber-500">
-                      <Star size={11} fill="currentColor" /> {r.rating}
-                    </span>
-                  )}
-                  {r.isOpen !== undefined && (
-                    <span className={`text-xs ${r.isOpen ? 'text-[#0F766E]' : 'text-gray-400'}`}>
-                      {r.isOpen ? 'Open now' : 'Closed'}
-                    </span>
-                  )}
-                </div>
-              </div>
-              {r.phone && (
-                <a href={`tel:${r.phone}`} className="flex items-center gap-1 text-xs text-[#1F6F8B]">
-                  <Phone size={12} /> Call
-                </a>
-              )}
-            </div>
+      {/* Hub tiles — same compact card visual language the Dashboard's
+          (now retired) Quick Actions row used, kept consistent on purpose so
+          users who recognized them there map the same metaphor here. */}
+      <div>
+        <h2 className="text-sm font-medium text-gray-700 mb-2">Tools &amp; guides</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {HUB_TILES.map(({ to, icon: Icon, label, desc }) => (
+            <Link
+              key={to}
+              to={to}
+              className="card flex flex-col items-center text-center gap-2 py-4 hover:border-[#1F6F8B]/30 transition-all"
+            >
+              <Icon size={20} className="text-[#1F6F8B]" />
+              <span className="text-sm font-medium text-gray-700">{label}</span>
+              <span className="text-xs text-gray-500 leading-snug">{desc}</span>
+            </Link>
           ))}
         </div>
-      )}
+      </div>
+
+      {/* Along-Route finder — original ResourcesPage content, structurally
+          unchanged. Wrapped in its own section header so it reads as a
+          distinct surface from the hub above. */}
+      <div className="space-y-3">
+        <div>
+          <h2 className="text-sm font-medium text-gray-700">Resources along your route</h2>
+          {locationError && <p className="text-xs text-amber-600 mt-1">{locationError}</p>}
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {RESOURCE_TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-shrink-0 px-3 py-2 rounded-lg text-sm border transition-colors ${
+                activeTab === tab.id ? 'bg-[#1F6F8B] text-white border-[#1F6F8B]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+              }`}
+              style={{ borderWidth: '0.5px' }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div className="space-y-2">{[1, 2, 3, 4].map(i => <div key={i} className="card h-20 animate-pulse bg-gray-50" />)}</div>
+        ) : resources.length === 0 ? (
+          <div className="card text-center py-12">
+            <p className="text-gray-500 text-sm">
+              {location ? 'No results found nearby.' : 'Allow location access to find resources near you.'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {resources.map(r => (
+              <div key={r.id} className="card flex items-start gap-3">
+                <div className="w-8 h-8 bg-gray-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <MapPin size={15} className="text-[#1F6F8B]" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">{r.name}</p>
+                  {r.address && <p className="text-xs text-gray-500 mt-0.5">{r.address}</p>}
+                  <div className="flex items-center gap-3 mt-1">
+                    {r.rating && (
+                      <span className="flex items-center gap-0.5 text-xs text-amber-500">
+                        <Star size={11} fill="currentColor" /> {r.rating}
+                      </span>
+                    )}
+                    {r.isOpen !== undefined && (
+                      <span className={`text-xs ${r.isOpen ? 'text-[#0F766E]' : 'text-gray-400'}`}>
+                        {r.isOpen ? 'Open now' : 'Closed'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {r.phone && (
+                  <a href={`tel:${r.phone}`} className="flex items-center gap-1 text-xs text-[#1F6F8B]">
+                    <Phone size={12} /> Call
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
