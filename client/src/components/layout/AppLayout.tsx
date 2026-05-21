@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { Home, Map, MessageSquare, Tent, User, Menu, X, LogOut, ChevronDown, Clock, HelpCircle } from 'lucide-react'
+import { Home, LayoutDashboard, Compass, User, Menu, X, LogOut, ChevronDown, Clock, HelpCircle } from 'lucide-react'
 import { useState } from 'react'
 import { useAuthStore } from '../../store/authStore'
 import { authApi } from '../../services/api'
@@ -21,18 +21,22 @@ export default function AppLayout() {
     navigate('/login')
   }
 
-  // matchPrefix: the Plan link points at /sessions/new, but that page
-  // immediately redirects to /sessions/:id, so NavLink's default isActive
-  // (exact or `to + '/'` prefix) never matches. Treating any /sessions
-  // pathname as Plan-active keeps the heading highlighted while the user
-  // is in a planning session. No other nav item routes under /sessions,
-  // so this prefix can't double-highlight a sibling.
+  // Home now IS the AI planning canvas. Its `to` is /sessions/new, which
+  // SessionNewPage immediately redirects to /sessions/:id (resume the latest
+  // active session, or create a fresh one). NavLink's default isActive (exact
+  // or `to + '/'` prefix) wouldn't match once we land on /sessions/<uuid>,
+  // so matchPrefix '/sessions' is what keeps Home highlighted on the canvas.
+  // No other nav item routes under /sessions, so this can't double-highlight.
+  //
+  // Retired (Block 2a): the separate "Plan" item (folded into Home), "Trips"
+  // (folds into Dashboard in Block 3), and "Bookings" (returns in Block 5).
+  // The /trips, /reservations, /sessions/new, /trips/new routes remain alive
+  // for deep links and back-compat — only their nav slots were removed.
   const navLinks: Array<{ to: string; icon: typeof Home; label: string; matchPrefix?: string }> = [
-    { to: '/dashboard', icon: Home, label: 'Home' },
-    { to: '/trips', icon: Map, label: 'Trips' },
-    { to: '/sessions/new', icon: MessageSquare, label: 'Plan', matchPrefix: '/sessions' },
-    { to: '/reservations', icon: Tent, label: 'Bookings' },
-    { to: '/profile', icon: User, label: 'Profile' },
+    { to: '/sessions/new', icon: Home,            label: 'Home', matchPrefix: '/sessions' },
+    { to: '/dashboard',    icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/resources',    icon: Compass,         label: 'Resources' },
+    { to: '/profile',      icon: User,            label: 'Profile' },
   ]
 
   // Desktop-only — keeps the 5-item mobile bottom tab bar from getting crowded.
@@ -53,7 +57,7 @@ export default function AppLayout() {
             >
               {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
-            <NavLink to="/dashboard" className="flex items-center gap-2">
+            <NavLink to="/sessions/new" className="flex items-center gap-2">
               <img src="/roamready-icon.png" alt="RoamReady" className="h-8 w-auto object-contain" />
               <span className="font-medium hidden sm:block">
                 <span style={{ color: '#1F6F8B' }}>Roam</span><span style={{ color: '#F7A829' }}>Ready</span><span style={{ color: '#1F6F8B' }}>.ai</span>

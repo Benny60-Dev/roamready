@@ -1,6 +1,7 @@
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { MapPin, Zap, Shield, Users, Truck, Wind, Compass, Check, ChevronRight } from 'lucide-react'
 import SplashScreen from '../components/SplashScreen'
+import { useAuthStore } from '../store/authStore'
 
 const VEHICLE_TYPES = [
   {
@@ -37,6 +38,13 @@ const FEATURES = [
 ]
 
 export default function LandingPage() {
+  // Authed users hitting "/" jump straight to the canvas. Block 2a moved the
+  // app's home from the trip-list dashboard to the AI planning canvas, so
+  // the marketing site is now strictly a logged-out surface. SessionNewPage
+  // (the canvas target) handles the resume-or-create dance on landing.
+  const isAuthenticated = useAuthStore(s => s.isAuthenticated())
+  if (isAuthenticated) return <Navigate to="/sessions/new" replace />
+
   return (
     <div className="min-h-screen bg-white">
       <SplashScreen />

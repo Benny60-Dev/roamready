@@ -23,7 +23,7 @@ export default function LoginPage() {
       const res = await authApi.login(data.email, data.password)
       setToken(res.data.accessToken)
       setUser(res.data.user)
-      navigate('/dashboard')
+      navigate('/sessions/new')
     } catch (e: any) {
       setError(e.response?.data?.error || 'Invalid email or password')
     } finally {
