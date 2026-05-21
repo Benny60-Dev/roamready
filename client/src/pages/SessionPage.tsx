@@ -67,13 +67,6 @@ const SIMPLE_EXAMPLES = [
 const DESCRIPTIVE_EXAMPLE =
   "Plan a 10-day trip starting June 6th. I want to go from Phoenix up through Sedona and Flagstaff, then over to Durango. I need to be at my sister's house in Santa Fe on day 5, and we'd like a full-hookup site every night since we're traveling with the dog."
 
-// Headline example shown in the collapsed blue "Try:" callout that fronts the
-// prompt disclosure. It's a teaser — what a good prompt looks like — but it's
-// also wired to a "Use this prompt →" affordance inside the callout so the
-// user can populate the input from it without expanding the panel.
-const TRY_EXAMPLE =
-  "10 days through Utah's national parks in early October, leaving from Phoenix in our 32ft fifth wheel."
-
 function TypingIndicator() {
   return (
     <div className="flex gap-1 items-center px-3 py-2 w-fit">
@@ -583,79 +576,38 @@ export default function SessionPage() {
                   variant="hero"
                 />
 
-                {/* Try: callout — replaces the prior plain "Learn how to prompt me" header
-                    as the collapsed-state trigger for the prompt disclosure. Blue-tinted
-                    card with a 3px RV-Blue left accent, showing the headline example. Two
-                    distinct click targets to keep the interaction unambiguous:
-                      • Clicking the main row (Sparkles + "Try: …" + chevron) toggles the
-                        disclosure open/closed. It does NOT populate the input.
-                      • Clicking "Use this prompt →" populates the input with TRY_EXAMPLE
-                        (populate-don't-submit, same pattern as the examples inside the
-                        expanded panel).
-                    The expanded panel content (Simple / Descriptive / Show less) is
-                    unchanged from the previous disclosure. */}
+                {/* Learn how to prompt me — single quiet disclosure that replaces the
+                    prior chip row, randomized tip card, and italic fallback line. Default
+                    collapsed; clicking the header expands to show Simple + Descriptive
+                    example sections. Each example button populates the input (no submit)
+                    so the user can edit before sending — same pattern the chips used. */}
                 <div style={{ marginTop: 20 }}>
-                  <div
+                  <button
+                    type="button"
+                    onClick={() => setHowOpen(v => !v)}
+                    aria-expanded={howOpen}
+                    aria-controls="how-to-prompt-panel"
+                    className="w-full text-left transition-colors bg-white"
                     style={{
-                      border: '0.5px solid #B5D5E3',
-                      borderLeft: '3px solid #1F6F8B',
+                      border: '0.5px solid #E8E4DA',
                       borderRadius: howOpen ? '8px 8px 0 0' : 8,
-                      backgroundColor: '#E0F0F4',
+                      padding: '11px 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      fontSize: 13,
+                      color: '#5F5E5A',
+                      cursor: 'pointer',
                     }}
+                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#FBFAF8' }}
+                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFFFFF' }}
                   >
-                    <button
-                      type="button"
-                      onClick={() => setHowOpen(v => !v)}
-                      aria-expanded={howOpen}
-                      aria-controls="how-to-prompt-panel"
-                      className="w-full text-left transition-colors"
-                      style={{
-                        padding: '12px 14px 6px',
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        gap: 10,
-                        fontSize: 13,
-                        color: '#134756',
-                        cursor: 'pointer',
-                        background: 'transparent',
-                        border: 'none',
-                        borderRadius: howOpen ? '5px 5px 0 0' : 5,
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#D2E7EF' }}
-                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent' }}
-                    >
-                      <Sparkles size={14} color="#1F6F8B" aria-hidden="true" style={{ flexShrink: 0, marginTop: 3 }} />
-                      <span style={{ flex: 1, lineHeight: 1.5 }}>
-                        <span style={{ fontWeight: 600 }}>Try: </span>
-                        <span>"{TRY_EXAMPLE}"</span>
-                      </span>
-                      {howOpen
-                        ? <ChevronUp size={14} color="#1F6F8B" aria-hidden="true" style={{ flexShrink: 0, marginTop: 4 }} />
-                        : <ChevronDown size={14} color="#1F6F8B" aria-hidden="true" style={{ flexShrink: 0, marginTop: 4 }} />}
-                    </button>
-                    <div style={{ padding: '0 14px 10px 38px', display: 'flex' }}>
-                      <button
-                        type="button"
-                        onClick={() => applyExample(TRY_EXAMPLE)}
-                        className="transition-colors"
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          fontSize: 12,
-                          color: '#1F6F8B',
-                          padding: '2px 0',
-                          cursor: 'pointer',
-                          textDecoration: 'underline',
-                          textUnderlineOffset: 2,
-                          fontWeight: 500,
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.color = '#134756' }}
-                        onMouseLeave={e => { e.currentTarget.style.color = '#1F6F8B' }}
-                      >
-                        Use this prompt →
-                      </button>
-                    </div>
-                  </div>
+                    <Sparkles size={14} color="#1F6F8B" aria-hidden="true" />
+                    <span style={{ flex: 1 }}>Learn how to prompt me</span>
+                    {howOpen
+                      ? <ChevronUp size={14} color="#888780" aria-hidden="true" />
+                      : <ChevronDown size={14} color="#888780" aria-hidden="true" />}
+                  </button>
 
                   {howOpen && (
                     <div
