@@ -30,7 +30,6 @@ import SessionNewPage from './pages/SessionNewPage'
 import TripBookingPage from './pages/trips/TripBookingPage'
 import TripJournalPage from './pages/trips/TripJournalPage'
 import PackingListPage from './pages/PackingListPage'
-import ReservationsPage from './pages/ReservationsPage'
 
 // Profile pages
 import ProfilePage from './pages/profile/ProfilePage'
@@ -152,7 +151,12 @@ export default function App() {
           <Route path="/trips/:id/itinerary" element={<TripSummaryPage />} />
           <Route path="/trips/:id/journal" element={<TripJournalPage />} />
           <Route path="/packing/:tripId" element={<PackingListPage />} />
-          <Route path="/reservations" element={<ReservationsPage />} />
+          {/* /reservations retired in Block 5 — bookings are now the
+              Reservations tab on the merged Dashboard. The redirect targets
+              ?tab=reservations so any legacy bookmark or in-app breadcrumb
+              that still points here lands directly on the tab, not the
+              default In Progress view. */}
+          <Route path="/reservations" element={<Navigate to="/dashboard?tab=reservations" replace />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/profile/rig" element={<RigPage />} />
           <Route path="/profile/rig/:id/edit" element={<EditRigPage />} />
