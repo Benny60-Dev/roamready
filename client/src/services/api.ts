@@ -134,6 +134,11 @@ export interface PromoteSessionPayload {
   estimatedFuel?: number | null
   estimatedCamp?: number | null
   fuelPrice?: number | null
+  // Block 8 — per-trip vehicle decisions from the ConfirmVehiclesModal.
+  // See server/src/schemas/planningSession.ts PlanningSessionPromoteSchema
+  // and prisma/schema.prisma Trip model for the full semantics.
+  bringingTowed?: boolean | null
+  adHocVehicle?: { year?: number; make?: string; model?: string; length?: number } | null
 }
 
 export interface UpdateSessionPayload {

@@ -6,6 +6,7 @@ import { useAuthStore } from '../store/authStore'
 import { ChatMessage, Trip } from '../types'
 import BottomSheet from '../components/ui/BottomSheet'
 import ConfirmModal from '../components/ui/ConfirmModal'
+import ConfirmVehiclesModal, { type ConfirmVehiclesResult } from '../components/trip/ConfirmVehiclesModal'
 import TripCard from '../components/trip/TripCard'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
 import { useVoiceInput } from '../hooks/useVoiceInput'
@@ -98,6 +99,11 @@ export default function SessionPage() {
   // shown in the header as "Last edited 5 minutes ago" so the user knows
   // where they left off.
   const [sessionUpdatedAt, setSessionUpdatedAt] = useState<string | null>(null)
+  // Block 8 — opens before promote when the user has a rig on file so the
+  // modal can ask "are you bringing the toad?" and accept an ad-hoc vehicle.
+  // Skipped entirely when the user has no rigs — promote runs straight
+  // through with the pre-Block-8 behavior in that case.
+  const [confirmVehiclesOpen, setConfirmVehiclesOpen] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -315,7 +321,28 @@ export default function SessionPage() {
     inputRef.current?.focus()
   }
 
-  async function buildItinerary() {
+  // Block 8 — resolve the user's primary rig once. Prefer the explicitly-
+  // flagged default; fall back to the first if no default is marked. Null
+  // means "no rig on file", in which case onBuildItineraryClick skips the
+  // ConfirmVehiclesModal and promotes straight through.
+  const defaultRig = user?.rigs?.find(r => r.isDefault) ?? user?.rigs?.[0] ?? null
+
+  function onBuildItineraryClick() {
+    if (!itinerary || !sessionId || creating) return
+    // No rig on file → no toad question to ask, no rigId to attach, no
+    // ad-hoc vehicle UI useful (the user hasn't set up their profile yet).
+    // Promote with empty vehicle data — matches pre-Block-8 behavior so
+    // the canvas stays usable for un-onboarded users.
+    if (!defaultRig) {
+      buildItinerary({ bringingTowed: null, adHocVehicle: null })
+      return
+    }
+    // Rig on file → open the modal. It will call buildItinerary with the
+    // captured vehicle decisions once the user confirms.
+    setConfirmVehiclesOpen(true)
+  }
+
+  async function buildItinerary(vehicleData: ConfirmVehiclesResult) {
     if (!itinerary || !sessionId) return
     setCreating(true)
     setBuildError(null)
@@ -335,6 +362,15 @@ export default function SessionPage() {
         totalNights: itinerary.totalNights,
         estimatedFuel: itinerary.estimatedFuel,
         estimatedCamp: itinerary.estimatedCamp,
+        // Block 8 — wire the rig + vehicle decisions into the promote payload.
+        // rigId: scout found no caller was setting this before, so every
+        //   pre-Block-8 trip has rigId:null and the rig was implicit (the
+        //   user's default). We have the rig in hand here, so populate it.
+        // bringingTowed + adHocVehicle: collected by the ConfirmVehiclesModal
+        //   (or both null when the modal was skipped — no rig on file).
+        rigId: defaultRig?.id ?? null,
+        bringingTowed: vehicleData.bringingTowed,
+        adHocVehicle: vehicleData.adHocVehicle,
       })
       const tripId = promoted.data.trip.id
       console.timeEnd('[buildItinerary] promoteSession')
@@ -826,7 +862,7 @@ export default function SessionPage() {
               </div>
               {buildError && <p className="text-xs text-red-600 mb-3 text-center">{buildError}</p>}
               <button
-                onClick={buildItinerary}
+                onClick={onBuildItineraryClick}
                 disabled={creating}
                 className="btn-primary w-full text-sm flex items-center justify-center gap-2"
               >
@@ -864,7 +900,7 @@ export default function SessionPage() {
               </div>
               {buildError && <p className="text-xs text-red-600 mt-3 text-center">{buildError}</p>}
               <button
-                onClick={buildItinerary}
+                onClick={onBuildItineraryClick}
                 disabled={creating}
                 className="btn-primary w-full mt-4 text-sm flex items-center justify-center gap-2 flex-shrink-0"
               >
@@ -886,6 +922,24 @@ export default function SessionPage() {
         danger
         isConfirming={isProcessing}
       />
+
+      {/* Block 8 — confirm-vehicles modal. Renders only when the user has a
+          rig on file (defaultRig truthy); for users without a rig, the
+          modal is skipped and buildItinerary runs straight through. The
+          modal collects bringingTowed + adHocVehicle and passes them into
+          the promote payload via buildItinerary's vehicleData arg. */}
+      {defaultRig && (
+        <ConfirmVehiclesModal
+          isOpen={confirmVehiclesOpen}
+          rig={defaultRig}
+          isConfirming={creating}
+          onCancel={() => setConfirmVehiclesOpen(false)}
+          onConfirm={vehicleData => {
+            setConfirmVehiclesOpen(false)
+            buildItinerary(vehicleData)
+          }}
+        />
+      )}
     </div>
 
     {/* Continue planning strip — sibling of the viewport-locked canvas above so it

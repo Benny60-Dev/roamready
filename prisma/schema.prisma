@@ -299,6 +299,26 @@ model Trip {
   /// because (a) old trips precede this field, (b) summarization is
   /// best-effort and may be skipped if the AI call fails.
   planningContextSummary String? @db.Text
+  // ─── Per-trip vehicle decisions (Block 8, May 2026) ─────────────────────
+  // Captured by the ConfirmVehiclesModal that fires at promote time (after
+  // the AI emits an <itinerary>, before the Trip row is created). Answers
+  // "what are you bringing on this trip?" — distinct from the profile's
+  // "what do you own?" framing.
+  //
+  // bringingTowed: only meaningful when deriveSecondVehicle(rig.vehicleType)
+  //   === 'toad' (motorhomes — toad is optional). null = not asked (e.g.
+  //   user has no rig on file and the modal was skipped, or a future API
+  //   caller bypassed the modal); UI should treat null/true as "yes" (the
+  //   modal's default selection). Tow-vehicle direction leaves this null
+  //   since the truck is required and the modal doesn't ask.
+  //
+  // adHocVehicle: optional one-off vehicle the user added from the modal's
+  //   "+ Add a different vehicle for this trip" link. JSON because it's a
+  //   small bag of fields (year/make/model/length) and we don't expect to
+  //   query into it. NOT written back to the user's profile/rigs — strictly
+  //   trip-only.
+  bringingTowed  Boolean?
+  adHocVehicle   Json?
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
   stops          Stop[]
