@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { randomBytes } from 'crypto'
 import axios from 'axios'
+import { Prisma } from '@prisma/client'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
@@ -412,7 +413,14 @@ export async function updateTrip(req: AuthRequest, res: Response, next: NextFunc
 
     // req.body is guaranteed to be a parsed TripUpdateInput by validateBody on the route.
     const data: TripUpdateInput = req.body
-    const updated = await prisma.trip.update({ where: { id: req.params.id }, data })
+    // See sessions.ts:145 for the rationale on the adHocVehicle cast — Zod
+    // typed it as Record<string, unknown> which TS can't prove satisfies
+    // Prisma.InputJsonValue; the cast bridges the two type systems without
+    // changing runtime behavior (null still nulls, undefined still skips).
+    const updated = await prisma.trip.update({
+      where: { id: req.params.id },
+      data: { ...data, adHocVehicle: data.adHocVehicle as Prisma.InputJsonValue | undefined },
+    })
     res.json(updated)
   } catch (err) { next(err) }
 }

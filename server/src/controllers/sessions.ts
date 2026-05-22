@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express'
+import { Prisma } from '@prisma/client'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
@@ -142,7 +143,19 @@ export async function promoteSession(req: AuthRequest, res: Response, next: Next
 
     const result = await prisma.$transaction(async (tx) => {
       const trip = await tx.trip.create({
-        data: { ...data, userId: req.user!.id, status: 'PLANNING' },
+        data: {
+          ...data,
+          userId: req.user!.id,
+          status: 'PLANNING',
+          // adHocVehicle is Zod-typed as Record<string, unknown> — known-good
+          // JSON because validateBody parsed it through z.record(z.string(),
+          // z.unknown()).nullable().optional(). Prisma's Json? column wants
+          // Prisma.InputJsonValue, which TypeScript can't infer from the
+          // Zod shape alone, so we narrow with a cast. Behavior is unchanged
+          // — literal null still flows through to Prisma's runtime as a
+          // null write; undefined still means "don't set the column."
+          adHocVehicle: data.adHocVehicle as Prisma.InputJsonValue | undefined,
+        },
       })
       // Mirror trip.name onto session.title so the SessionsPanel reads
       // consistently after promotion (the user-typed auto-title becomes the
