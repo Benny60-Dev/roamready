@@ -60,8 +60,17 @@ function RigCard({ rig, onDelete, onSetDefault }: { rig: Rig; onDelete: (id: str
             <Pencil size={14} className="text-gray-400" />
           </Link>
           {!rig.isDefault && (
-            <button onClick={() => onSetDefault(rig.id)} title="Set as default" className="p-1.5 rounded-lg hover:bg-gray-100">
-              <Star size={14} className="text-gray-400" />
+            // Icon + text label so the action is readable at a glance instead
+            // of relying on the title tooltip. Stays ghost-styled (no fill,
+            // gray text) to match the pencil/trash icon-buttons on either
+            // side — gold/primary treatment is reserved for top-line CTAs.
+            <button
+              onClick={() => onSetDefault(rig.id)}
+              title="Set as default"
+              className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            >
+              <Star size={14} />
+              Set as default
             </button>
           )}
           <button onClick={() => onDelete(rig.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500">
