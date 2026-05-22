@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { MapPin, Phone, Star, Wrench, Package, Mountain, Caravan } from 'lucide-react'
+import { MapPin, Phone, Star, Wrench, Package, Mountain, Caravan, Tent } from 'lucide-react'
 import { resourcesApi } from '../services/api'
 
 /**
@@ -22,15 +22,20 @@ import { resourcesApi } from '../services/api'
  *
  * Not on the hub deliberately:
  *   - /reservations (trip workflow, not a resource — Block 5 surfaces it as
- *     a Dashboard tab).
- *   - /car-camping (orphaned today but not in the Block 4 spec's tile list;
- *     decision deferred — easy to add later as a fifth tile if wanted).
+ *     a Dashboard tab). We DON'T add a temporary link here; pushing Block 4
+ *     and Block 5 together keeps origin from ever seeing an orphan state.
+ *
+ * Car Camping was added in the Block 4 follow-up — same orphaning shape as
+ * OHV/Van (zero inbound links pre-Block 4). Desc line uses the page's own
+ * subtitle ("Tent sites, walk-in, and backcountry") so the hub copy stays
+ * in sync with what the destination actually shows.
  */
 const HUB_TILES = [
   { to: '/maintenance',      icon: Wrench,   label: 'Maintenance',      desc: 'Rig service tracker' },
   { to: '/roadmap',          icon: Package,  label: 'Product Roadmap',  desc: "What we're shipping next" },
   { to: '/ohv-destinations', icon: Mountain, label: 'OHV Destinations', desc: 'Off-highway parks & trails' },
   { to: '/van-destinations', icon: Caravan,  label: 'Van Destinations', desc: 'Van-life favorites' },
+  { to: '/car-camping',      icon: Tent,     label: 'Car Camping',      desc: 'Tent sites & backcountry' },
 ]
 
 const RESOURCE_TABS = [
@@ -81,7 +86,10 @@ export default function ResourcesPage() {
           users who recognized them there map the same metaphor here. */}
       <div>
         <h2 className="text-sm font-medium text-gray-700 mb-2">Tools &amp; guides</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {/* 5-tile responsive grid. Tablet 3-col splits 3+2 (no orphan); desktop
+            5-col fits the row exactly. Mobile 2-col leaves a single tile on the
+            third row — unavoidable with 5 and visually fine. */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           {HUB_TILES.map(({ to, icon: Icon, label, desc }) => (
             <Link
               key={to}
