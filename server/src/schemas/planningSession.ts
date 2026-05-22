@@ -67,6 +67,15 @@ export const PlanningSessionPromoteSchema = z
     estimatedFuel: z.number().min(0).nullable().optional(),
     estimatedCamp: z.number().min(0).nullable().optional(),
     fuelPrice: z.number().min(0).nullable().optional(),
+    // Block 8 — per-trip vehicle decisions from ConfirmVehiclesModal.
+    //   bringingTowed: "are you bringing the toad?" yes/no answer. Only sent
+    //     when the rig's derived direction is 'toad'; null/omitted otherwise
+    //     (the modal doesn't ask in tow_vehicle or none directions).
+    //   adHocVehicle: optional one-off vehicle the user added via the modal's
+    //     "+ Add a different vehicle for this trip" link. Permissive shape —
+    //     small bag of fields, server stores as JSON, never normalised.
+    bringingTowed: z.boolean().nullable().optional(),
+    adHocVehicle: z.record(z.string(), z.unknown()).nullable().optional(),
   })
   .strict()
 

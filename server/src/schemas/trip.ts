@@ -42,6 +42,12 @@ export const TripUpdateSchema = z
     actualFuel: z.number().min(0).nullable().optional(),
     actualCamp: z.number().min(0).nullable().optional(),
     fuelPrice: z.number().min(0).nullable().optional(),
+    // Block 8 — per-trip vehicle decisions, editable post-promote so users can
+    // change their mind about whether to bring the toad after the trip is
+    // created. See PlanningSessionPromoteSchema for the field semantics; the
+    // same shape applies here.
+    bringingTowed: z.boolean().nullable().optional(),
+    adHocVehicle: z.record(z.string(), z.unknown()).nullable().optional(),
   })
   .strict()
 

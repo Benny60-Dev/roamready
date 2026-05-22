@@ -202,6 +202,15 @@ export interface Trip {
   aiConversation?: ChatMessage[]
   itinerary?: ItineraryDay[]
   stops?: Stop[]
+  // Block 8 — per-trip vehicle decisions captured by ConfirmVehiclesModal at
+  // promote time. See prisma/schema.prisma Trip model for the full rationale.
+  // bringingTowed: null = not asked / not applicable; UI treats null|true as
+  //   "yes, bringing the toad" (modal default). Only meaningful when the
+  //   rig's deriveSecondVehicle direction is 'toad'.
+  // adHocVehicle: optional one-off vehicle for this trip only — NOT saved to
+  //   the user's profile/rigs.
+  bringingTowed?: boolean | null
+  adHocVehicle?: { year?: number; make?: string; model?: string; length?: number } | null
   createdAt: string
   updatedAt: string
 }
