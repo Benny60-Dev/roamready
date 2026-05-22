@@ -149,6 +149,7 @@ function pickRigInput(body: any) {
     licensePlate,
     isTowing, towedType,
     towedYear, towedMake, towedModel, towedLength, towedLicensePlate,
+    towedHeight, towedFuelType,
   } = body ?? {}
   return {
     vehicleType,
@@ -165,6 +166,9 @@ function pickRigInput(body: any) {
     licensePlate,
     isTowing, towedType,
     towedYear, towedMake, towedModel, towedLength, towedLicensePlate,
+    // Block 7 — tow-vehicle-only fields (truck pulling a trailer/5th wheel).
+    // Stay null in the toad direction (form omits the inputs there).
+    towedHeight, towedFuelType,
   }
 }
 

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link } from 'react-router-dom'
-import { Plus, Trash2, Star, Pencil, BadgeInfo } from 'lucide-react'
+import { Plus, Trash2, Star, Pencil, BadgeInfo, Car, Truck, AlertCircle } from 'lucide-react'
 import { usersApi } from '../../services/api'
 import { Rig, VehicleType, TowedType } from '../../types'
+import { deriveSecondVehicle } from '../../utils/rigs'
 
 export const VEHICLE_LABELS: Record<VehicleType, string> = {
   RV_CLASS_A: 'Class A Motorhome',
@@ -17,28 +18,10 @@ export const VEHICLE_LABELS: Record<VehicleType, string> = {
   CAR_CAMPING: 'Car Camping',
 }
 
-// Compact one-line summary of the towed unit. Used in the rig card; the modal
-// on the booking page renders the same data with more chrome. Returns null when
-// there's nothing to show so callers can short-circuit cleanly.
-function formatTowedLine(rig: Rig): { icon: string; text: string } | null {
-  if (!rig.isTowing || !rig.towedType) return null
-  const parts: string[] = []
-  if (rig.towedType === 'VEHICLE') {
-    const name = [rig.towedYear, rig.towedMake, rig.towedModel].filter(Boolean).join(' ')
-    if (name) parts.push(name)
-    if (rig.towedLength) parts.push(`${rig.towedLength}ft`)
-    if (rig.towedLicensePlate) parts.push(rig.towedLicensePlate)
-    return parts.length ? { icon: '🚗', text: `Towing ${parts.join(' · ')}` } : null
-  } else {
-    if (rig.towedLength) parts.push(`${rig.towedLength}ft trailer`)
-    else parts.push('trailer')
-    if (rig.towedLicensePlate) parts.push(rig.towedLicensePlate)
-    return { icon: '🚚', text: `Towing ${parts.join(' · ')}` }
-  }
-}
-
 function RigCard({ rig, onDelete, onSetDefault }: { rig: Rig; onDelete: (id: string) => void; onSetDefault: (id: string) => void }) {
-  const towedLine = formatTowedLine(rig)
+  // The "towed unit" inline summary line (formatTowedLine) was removed Block 7
+  // in favor of a sibling SecondVehicleCard rendered just below this one —
+  // see SecondVehicleCard below + the rigs.map render path.
   return (
     <div className={`card ${rig.isDefault ? 'border-[#1F6F8B]/40 bg-[#E0F0F4]/30' : ''}`}>
       <div className="flex items-start justify-between">
@@ -67,9 +50,6 @@ function RigCard({ rig, onDelete, onSetDefault }: { rig: Rig; onDelete: (id: str
           {rig.isToyHauler && rig.toys && (
             <div className="mt-1 text-xs text-[#1F6F8B]">🏍️ {(rig.toys as string[]).join(', ')}</div>
           )}
-          {towedLine && (
-            <div className="mt-1 text-xs text-[#1F6F8B]">{towedLine.icon} {towedLine.text}</div>
-          )}
         </div>
         <div className="flex items-center gap-1 ml-2">
           <Link
@@ -93,6 +73,144 @@ function RigCard({ rig, onDelete, onSetDefault }: { rig: Rig; onDelete: (id: str
   )
 }
 
+// ── Second-vehicle card ─────────────────────────────────────────────────────
+// Renders just below the rig card. Adapts to the rig's direction:
+//   - 'toad'        : optional toad behind a motorhome. Blue/info combined-
+//                     length strip ("Used for tunnel, pass, and ferry
+//                     restrictions while towing").
+//   - 'tow_vehicle' : required truck in front of a trailer/5th wheel. Shows
+//                     fuel type. Amber/warning combined-length strip
+//                     ("Checked against every campground site for fit").
+//   - 'none'        : returns null (vans + car camping have no second vehicle).
+// Combined-length value is DISPLAY ONLY — no code reads it for any fit /
+// restriction check today; campgrounds.ts still uses rig.length alone. The
+// strip is a UI promise that's deliberately ahead of the engine.
+function SecondVehicleCard({ rig }: { rig: Rig }) {
+  const { direction } = deriveSecondVehicle(rig.vehicleType)
+  if (direction === 'none') return null
+
+  const hasData =
+    rig.isTowing &&
+    !!(rig.towedYear || rig.towedMake || rig.towedModel || rig.towedLength || rig.towedLicensePlate)
+
+  // ── Empty state ─────────────────────────────────────────────────────────
+  if (!hasData) {
+    if (direction === 'tow_vehicle') {
+      // Stronger nudge — the trailer literally cannot move without a tow
+      // vehicle, so the empty state nags more than the toad's quiet "+ Add".
+      return (
+        <div
+          className="card border-dashed bg-amber-50/40"
+          style={{ borderColor: '#FDE68A', borderWidth: '0.5px' }}
+        >
+          <div className="flex items-start gap-3">
+            <AlertCircle size={18} className="text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-amber-900">A tow vehicle is recommended</p>
+              <p className="text-xs text-amber-800 mt-0.5">
+                Your {VEHICLE_LABELS[rig.vehicleType].toLowerCase()} can't move without one.
+              </p>
+            </div>
+            <Link
+              to={`/profile/rig/${rig.id}/edit`}
+              className="text-xs font-medium text-[#1F6F8B] hover:underline whitespace-nowrap flex-shrink-0"
+            >
+              + Add tow vehicle
+            </Link>
+          </div>
+        </div>
+      )
+    }
+    // Toad direction — soft prompt, no alarm.
+    return (
+      <div className="card border-dashed" style={{ borderWidth: '0.5px' }}>
+        <Link
+          to={`/profile/rig/${rig.id}/edit`}
+          className="flex items-center justify-center gap-2 text-sm text-gray-500 hover:text-[#1F6F8B] transition-colors py-1"
+        >
+          <Plus size={14} /> Add a towed vehicle
+        </Link>
+      </div>
+    )
+  }
+
+  // ── Populated state ─────────────────────────────────────────────────────
+  const isToad = direction === 'toad'
+  const Icon = isToad ? Car : Truck
+  const badgeText = isToad ? 'Toad' : 'Required to tow'
+  const subLine = isToad
+    ? `Towed behind the ${VEHICLE_LABELS[rig.vehicleType]}`
+    : `Tows the ${VEHICLE_LABELS[rig.vehicleType]}`
+  const towedName =
+    [rig.towedYear, rig.towedMake, rig.towedModel].filter(Boolean).join(' ') ||
+    (rig.towedType === 'TRAILER' ? 'Trailer' : 'Vehicle')
+
+  // Combined length = rig + towed (hitch gap ignored). Display-only — see
+  // comment above the function.
+  const combinedLength = (rig.length || 0) + (rig.towedLength || 0)
+  const hasCombined = combinedLength > 0
+
+  return (
+    <div className="card">
+      <div className="flex items-start justify-between">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+            <Icon size={16} className="text-[#1F6F8B] flex-shrink-0" />
+            <p className="font-medium text-gray-900">{towedName}</p>
+            <span className="badge-active text-xs">{badgeText}</span>
+          </div>
+          <p className="text-xs text-gray-500">{subLine}</p>
+          <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-gray-400">
+            {rig.towedLength && <span>{rig.towedLength}ft</span>}
+            {!isToad && rig.towedHeight && <span>{rig.towedHeight}ft tall</span>}
+            {!isToad && rig.towedFuelType && <span>{rig.towedFuelType}</span>}
+            {rig.towedLicensePlate && (
+              <span className="inline-flex items-center gap-1">
+                <BadgeInfo size={12} className="text-gray-400" />
+                {rig.towedLicensePlate}
+              </span>
+            )}
+          </div>
+        </div>
+        <Link
+          to={`/profile/rig/${rig.id}/edit`}
+          title="Edit second vehicle"
+          className="p-1.5 rounded-lg hover:bg-gray-100 flex-shrink-0"
+        >
+          <Pencil size={14} className="text-gray-400" />
+        </Link>
+      </div>
+
+      {/* Combined-length strip — DISPLAY ONLY. No code reads this for any
+          fit/restriction check today; campgrounds.ts still uses rig.length
+          alone. Direction-specific styling to telegraph the intended use:
+            - Toad (blue/info): tunnel/pass/ferry — restrictions that only
+              kick in while you're driving with the toad attached.
+            - Tow-vehicle (amber/warning): campground-fit — the trailer is
+              the rig itself, so combined length is what every site has to
+              accommodate. */}
+      {hasCombined && (
+        <div
+          className={`mt-3 px-3 py-2 rounded-md text-xs ${
+            isToad
+              ? 'bg-[#E0F0F4] text-[#134756]'
+              : 'bg-amber-50 text-amber-800'
+          }`}
+        >
+          <div className="font-medium">
+            {isToad ? 'Combined driving length' : 'Combined length'}: {combinedLength}ft
+          </div>
+          <div className="opacity-80 mt-0.5">
+            {isToad
+              ? 'Used for tunnel, pass, and ferry restrictions while towing.'
+              : 'Checked against every campground site for fit (may need pull-through).'}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 type TowingChoice = 'NONE' | 'VEHICLE' | 'TRAILER'
 
 export default function RigPage() {
@@ -101,11 +219,28 @@ export default function RigPage() {
   const [saving, setSaving] = useState(false)
   const [towingChoice, setTowingChoice] = useState<TowingChoice>('NONE')
   const { register, handleSubmit, reset, watch } = useForm()
-  const vehicleType = watch('vehicleType')
+  const vehicleType = watch('vehicleType') as VehicleType | undefined
   const isToyHauler = vehicleType === 'TOY_HAULER'
-  // Towing question only applies to motorhomes — travel trailers / fifth wheels
-  // ARE the thing being towed, so the question is nonsense for them.
-  const towingApplies = vehicleType === 'RV_CLASS_A' || vehicleType === 'RV_CLASS_B' || vehicleType === 'RV_CLASS_C'
+  // Block 7 — second-vehicle direction is derived from vehicleType. There's
+  // no second-vehicle UI for 'none' direction (vans, car camping); 'toad'
+  // shows the optional radio + sub-form (motorhomes); 'tow_vehicle' shows
+  // an always-on sub-form (trailers/5th wheels — they can't move without
+  // it, so we don't ask "are you towing", we just ask "tell us about it").
+  const { direction } = deriveSecondVehicle(vehicleType)
+  const showSecondVehicleSection = direction !== 'none'
+  const isToadDirection = direction === 'toad'
+  const isTowVehicleDirection = direction === 'tow_vehicle'
+
+  // Keep towingChoice in sync with direction. For tow_vehicle direction,
+  // there's no radio — second vehicle is always a VEHICLE (the truck) and
+  // is always present (set isTowing=true at save). For 'none' direction,
+  // force back to NONE so a previous toad selection doesn't leak through if
+  // the user re-picks vehicleType.
+  useEffect(() => {
+    if (isTowVehicleDirection) setTowingChoice('VEHICLE')
+    else if (direction === 'none') setTowingChoice('NONE')
+    // 'toad' direction — leave the user's radio choice intact
+  }, [direction, isTowVehicleDirection])
 
   useEffect(() => {
     usersApi.getRigs().then(res => setRigs(res.data))
@@ -114,25 +249,47 @@ export default function RigPage() {
   async function onSubmit(data: any) {
     setSaving(true)
     try {
-      const isTowing = towingApplies && towingChoice !== 'NONE'
-      const towedType: TowedType | null = isTowing ? (towingChoice as TowedType) : null
-      const towedFields = isTowing
-        ? {
-            towedType,
-            towedYear: towingChoice === 'VEHICLE' ? data.towedYear : null,
-            towedMake: towingChoice === 'VEHICLE' ? data.towedMake : null,
-            towedModel: towingChoice === 'VEHICLE' ? data.towedModel : null,
-            towedLength: data.towedLength ?? null,
-            towedLicensePlate: data.towedLicensePlate ?? null,
-          }
-        : {
-            towedType: null,
-            towedYear: null,
-            towedMake: null,
-            towedModel: null,
-            towedLength: null,
-            towedLicensePlate: null,
-          }
+      // Build towed fields per direction. tow_vehicle always saves the truck
+      // (it's required). toad saves only when the user picked VEHICLE or
+      // TRAILER. 'none' clears everything.
+      let isTowing = false
+      let towedFields: Record<string, unknown> = {
+        towedType: null,
+        towedYear: null,
+        towedMake: null,
+        towedModel: null,
+        towedLength: null,
+        towedLicensePlate: null,
+        towedHeight: null,
+        towedFuelType: null,
+      }
+      if (isTowVehicleDirection) {
+        isTowing = true
+        towedFields = {
+          towedType: 'VEHICLE' as TowedType,
+          towedYear: data.towedYear ?? null,
+          towedMake: data.towedMake ?? null,
+          towedModel: data.towedModel ?? null,
+          towedLength: data.towedLength ?? null,
+          towedLicensePlate: data.towedLicensePlate ?? null,
+          towedHeight: data.towedHeight ?? null,
+          towedFuelType: data.towedFuelType ?? null,
+        }
+      } else if (isToadDirection && towingChoice !== 'NONE') {
+        isTowing = true
+        towedFields = {
+          towedType: towingChoice as TowedType,
+          towedYear: towingChoice === 'VEHICLE' ? data.towedYear ?? null : null,
+          towedMake:  towingChoice === 'VEHICLE' ? data.towedMake  ?? null : null,
+          towedModel: towingChoice === 'VEHICLE' ? data.towedModel ?? null : null,
+          towedLength: data.towedLength ?? null,
+          towedLicensePlate: data.towedLicensePlate ?? null,
+          // Toad direction: height + fuelType are never collected (form
+          // omits the inputs), so they stay null.
+          towedHeight: null,
+          towedFuelType: null,
+        }
+      }
       const res = await usersApi.createRig({
         ...data,
         isToyHauler: data.vehicleType === 'TOY_HAULER',
@@ -172,14 +329,22 @@ export default function RigPage() {
         </button>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-4">
         {rigs.map(rig => (
-          <RigCard key={rig.id} rig={rig} onDelete={deleteRig} onSetDefault={setDefault} />
+          <div key={rig.id} className="space-y-2">
+            <RigCard rig={rig} onDelete={deleteRig} onSetDefault={setDefault} />
+            <SecondVehicleCard rig={rig} />
+          </div>
         ))}
         {rigs.length === 0 && !showForm && (
           <div className="card text-center py-10 text-sm text-gray-500">
             No rigs added yet. Add your first rig to enable compatibility filtering.
           </div>
+        )}
+        {rigs.length > 0 && (
+          <p className="text-xs text-gray-400 italic pt-1">
+            One rig + one towed/tow vehicle per profile.
+          </p>
         )}
       </div>
 
@@ -277,8 +442,17 @@ export default function RigPage() {
               <p className="mt-1 text-xs text-gray-400">Most campgrounds ask for this at check-in.</p>
             </div>
 
-            {/* Towing question — gated to motorhomes only */}
-            {towingApplies && (
+            {/* ── Second-vehicle section (Block 7) ─────────────────────────
+                Direction derived from vehicleType:
+                  - toad        : optional. Radio (None/Vehicle/Trailer) +
+                                  conditional sub-form. No fuel type field
+                                  (toad's unhooked at camp).
+                  - tow_vehicle : required. Always-on sub-form with the truck
+                                  details + fuel type + optional height. No
+                                  radio (it's always a vehicle).
+                  - none        : section hidden entirely (vans, car camping).
+            */}
+            {showSecondVehicleSection && isToadDirection && (
               <>
                 <div>
                   <label className="label">Are you towing?</label>
@@ -307,9 +481,12 @@ export default function RigPage() {
 
                 {towingChoice !== 'NONE' && (
                   <div className="rounded-xl bg-gray-50 p-4 space-y-3">
-                    <p className="text-sm font-medium text-gray-700">
-                      {towingChoice === 'VEHICLE' ? 'About your toad' : 'About your trailer'}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-700">
+                        {towingChoice === 'VEHICLE' ? 'Towed vehicle' : 'About your trailer'}
+                      </p>
+                      {towingChoice === 'VEHICLE' && <span className="badge-active text-xs">Toad</span>}
+                    </div>
                     {towingChoice === 'VEHICLE' && (
                       <>
                         <div className="grid grid-cols-3 gap-3">
@@ -363,6 +540,59 @@ export default function RigPage() {
                   </div>
                 )}
               </>
+            )}
+
+            {showSecondVehicleSection && isTowVehicleDirection && (
+              <div className="rounded-xl bg-gray-50 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-gray-700">Your tow vehicle</p>
+                  <span className="badge-active text-xs">Required to tow</span>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="label">Year</label>
+                    <input type="number" className="input" placeholder="2020" {...register('towedYear', { valueAsNumber: true })} />
+                  </div>
+                  <div>
+                    <label className="label">Make</label>
+                    <input className="input" placeholder="Ford" {...register('towedMake')} />
+                  </div>
+                  <div>
+                    <label className="label">Model</label>
+                    <input className="input" placeholder="F-250" {...register('towedModel')} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label">Length (ft)</label>
+                    <input type="number" step="0.1" min="0" className="input" placeholder="20" {...register('towedLength', { valueAsNumber: true })} />
+                  </div>
+                  <div>
+                    <label className="label">Height (ft)</label>
+                    <input type="number" step="0.1" min="0" className="input" placeholder="7" {...register('towedHeight', { valueAsNumber: true })} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label">License plate</label>
+                    <input
+                      className="input"
+                      style={{ textTransform: 'uppercase' }}
+                      placeholder="ABC-1234"
+                      {...register('towedLicensePlate')}
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Fuel type</label>
+                    <select className="input" {...register('towedFuelType')}>
+                      <option value="">Any</option>
+                      <option value="Gas">Gas</option>
+                      <option value="Diesel">Diesel</option>
+                      <option value="Electric">Electric</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
             )}
 
             <div className="flex gap-2">

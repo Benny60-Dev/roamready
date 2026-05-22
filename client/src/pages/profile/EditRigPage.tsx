@@ -5,6 +5,7 @@ import { ArrowLeft } from 'lucide-react'
 import { usersApi } from '../../services/api'
 import { Rig, TowedType, VehicleType } from '../../types'
 import { VEHICLE_LABELS } from './RigPage'
+import { deriveSecondVehicle } from '../../utils/rigs'
 
 type TowingChoice = 'NONE' | 'VEHICLE' | 'TRAILER'
 
@@ -24,7 +25,19 @@ export default function EditRigPage() {
   const { register, handleSubmit, reset, watch } = useForm()
   const vehicleType: VehicleType | undefined = watch('vehicleType') as VehicleType | undefined
   const isToyHauler = vehicleType === 'TOY_HAULER'
-  const towingApplies = vehicleType === 'RV_CLASS_A' || vehicleType === 'RV_CLASS_B' || vehicleType === 'RV_CLASS_C'
+  // Block 7 — see RigPage.tsx for the full direction-derivation rationale.
+  // Mirror the same derivation here so the edit form behaves identically.
+  const { direction } = deriveSecondVehicle(vehicleType)
+  const showSecondVehicleSection = direction !== 'none'
+  const isToadDirection = direction === 'toad'
+  const isTowVehicleDirection = direction === 'tow_vehicle'
+
+  // Keep towingChoice in sync with derived direction whenever the user
+  // changes vehicleType inside the edit form. Reset behavior matches RigPage.
+  useEffect(() => {
+    if (isTowVehicleDirection) setTowingChoice('VEHICLE')
+    else if (direction === 'none') setTowingChoice('NONE')
+  }, [direction, isTowVehicleDirection])
 
   // No /users/me/rigs/:id endpoint exists — fetch all and filter. Cheap query.
   useEffect(() => {
@@ -57,6 +70,12 @@ export default function EditRigPage() {
         towedModel: found.towedModel,
         towedLength: found.towedLength,
         towedLicensePlate: found.towedLicensePlate,
+        // Block 7 — tow-vehicle-only fields. The form omits these inputs in
+        // toad direction, so they'll be no-ops there, but seeding them
+        // anyway lets users see the previously-saved value when switching
+        // a rig's vehicleType from trailer back to a different trailer.
+        towedHeight: found.towedHeight,
+        towedFuelType: found.towedFuelType,
       })
       setTowingChoice(found.isTowing && found.towedType ? found.towedType : 'NONE')
     })
@@ -66,25 +85,46 @@ export default function EditRigPage() {
     if (!rig) return
     setSaving(true)
     try {
-      const isTowing = towingApplies && towingChoice !== 'NONE'
-      const towedType: TowedType | null = isTowing ? (towingChoice as TowedType) : null
-      const towedFields = isTowing
-        ? {
-            towedType,
-            towedYear: towingChoice === 'VEHICLE' ? data.towedYear : null,
-            towedMake: towingChoice === 'VEHICLE' ? data.towedMake : null,
-            towedModel: towingChoice === 'VEHICLE' ? data.towedModel : null,
-            towedLength: data.towedLength ?? null,
-            towedLicensePlate: data.towedLicensePlate ?? null,
-          }
-        : {
-            towedType: null,
-            towedYear: null,
-            towedMake: null,
-            towedModel: null,
-            towedLength: null,
-            towedLicensePlate: null,
-          }
+      // Mirror RigPage.onSubmit's direction-aware build. See that file for
+      // the full rationale; in short: tow_vehicle always saves (required),
+      // toad saves only when user picked VEHICLE/TRAILER, 'none' clears all.
+      let isTowing = false
+      let towedFields: Record<string, unknown> = {
+        towedType: null,
+        towedYear: null,
+        towedMake: null,
+        towedModel: null,
+        towedLength: null,
+        towedLicensePlate: null,
+        towedHeight: null,
+        towedFuelType: null,
+      }
+      if (isTowVehicleDirection) {
+        isTowing = true
+        towedFields = {
+          towedType: 'VEHICLE' as TowedType,
+          towedYear: data.towedYear ?? null,
+          towedMake: data.towedMake ?? null,
+          towedModel: data.towedModel ?? null,
+          towedLength: data.towedLength ?? null,
+          towedLicensePlate: data.towedLicensePlate ?? null,
+          towedHeight: data.towedHeight ?? null,
+          towedFuelType: data.towedFuelType ?? null,
+        }
+      } else if (isToadDirection && towingChoice !== 'NONE') {
+        isTowing = true
+        towedFields = {
+          towedType: towingChoice as TowedType,
+          towedYear: towingChoice === 'VEHICLE' ? data.towedYear ?? null : null,
+          towedMake:  towingChoice === 'VEHICLE' ? data.towedMake  ?? null : null,
+          towedModel: towingChoice === 'VEHICLE' ? data.towedModel ?? null : null,
+          towedLength: data.towedLength ?? null,
+          towedLicensePlate: data.towedLicensePlate ?? null,
+          // Toad direction doesn't collect height/fuelType — keep null.
+          towedHeight: null,
+          towedFuelType: null,
+        }
+      }
       await usersApi.updateRig(rig.id, {
         ...data,
         isToyHauler: data.vehicleType === 'TOY_HAULER',
@@ -225,8 +265,10 @@ export default function EditRigPage() {
             <p className="mt-1 text-xs text-gray-400">Most campgrounds ask for this at check-in.</p>
           </div>
 
-          {/* Towing question — gated to motorhomes only */}
-          {towingApplies && (
+          {/* ── Second-vehicle section (Block 7) ─────────────────────────
+              Mirrors RigPage's add-form behavior — see that file for the
+              direction-derivation rationale. */}
+          {showSecondVehicleSection && isToadDirection && (
             <>
               <div>
                 <label className="label">Are you towing?</label>
@@ -255,9 +297,12 @@ export default function EditRigPage() {
 
               {towingChoice !== 'NONE' && (
                 <div className="rounded-xl bg-gray-50 p-4 space-y-3">
-                  <p className="text-sm font-medium text-gray-700">
-                    {towingChoice === 'VEHICLE' ? 'About your toad' : 'About your trailer'}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-gray-700">
+                      {towingChoice === 'VEHICLE' ? 'Towed vehicle' : 'About your trailer'}
+                    </p>
+                    {towingChoice === 'VEHICLE' && <span className="badge-active text-xs">Toad</span>}
+                  </div>
                   {towingChoice === 'VEHICLE' && (
                     <>
                       <div className="grid grid-cols-3 gap-3">
@@ -309,6 +354,58 @@ export default function EditRigPage() {
                 </div>
               )}
             </>
+          )}
+
+          {showSecondVehicleSection && isTowVehicleDirection && (
+            <div className="rounded-xl bg-gray-50 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-gray-700">Your tow vehicle</p>
+                <span className="badge-active text-xs">Required to tow</span>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="label">Year</label>
+                  <input type="number" className="input" {...register('towedYear', { valueAsNumber: true })} />
+                </div>
+                <div>
+                  <label className="label">Make</label>
+                  <input className="input" {...register('towedMake')} />
+                </div>
+                <div>
+                  <label className="label">Model</label>
+                  <input className="input" {...register('towedModel')} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Length (ft)</label>
+                  <input type="number" step="0.1" min="0" className="input" {...register('towedLength', { valueAsNumber: true })} />
+                </div>
+                <div>
+                  <label className="label">Height (ft)</label>
+                  <input type="number" step="0.1" min="0" className="input" {...register('towedHeight', { valueAsNumber: true })} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">License plate</label>
+                  <input
+                    className="input"
+                    style={{ textTransform: 'uppercase' }}
+                    {...register('towedLicensePlate')}
+                  />
+                </div>
+                <div>
+                  <label className="label">Fuel type</label>
+                  <select className="input" {...register('towedFuelType')}>
+                    <option value="">Any</option>
+                    <option value="Gas">Gas</option>
+                    <option value="Diesel">Diesel</option>
+                    <option value="Electric">Electric</option>
+                  </select>
+                </div>
+              </div>
+            </div>
           )}
 
           <div className="flex gap-2 pt-2">
