@@ -203,7 +203,31 @@ export async function updateRig(req: AuthRequest, res: Response, next: NextFunct
     if (!rig) throw new AppError('Rig not found', 404)
 
     const data: any = pickRigInput(req.body)
-    const updated = await prisma.rig.update({ where: { id: req.params.id }, data })
+
+    // Single-default-rig invariant. The previous implementation just spread
+    // `data` onto the target rig, which meant a user clicking "Set as default"
+    // on a second rig left BOTH rigs flagged isDefault=true. Fix: when the
+    // caller is promoting a rig to default, do it inside a transaction that
+    // first clears isDefault on every OTHER rig the user owns. Prisma's
+    // $transaction guarantees rollback if either statement fails, so we
+    // can't land in a half-state where the clear ran but the set didn't
+    // (or vice versa). For non-default updates the old single-statement
+    // path is preserved — no transaction overhead for the common case of
+    // editing year/make/model/etc.
+    let updated
+    if (data.isDefault === true) {
+      const [, target] = await prisma.$transaction([
+        prisma.rig.updateMany({
+          where: { userId: req.user!.id, NOT: { id: req.params.id } },
+          data: { isDefault: false },
+        }),
+        prisma.rig.update({ where: { id: req.params.id }, data }),
+      ])
+      updated = target
+    } else {
+      updated = await prisma.rig.update({ where: { id: req.params.id }, data })
+    }
+
     res.json(updated)
   } catch (err) { next(err) }
 }
