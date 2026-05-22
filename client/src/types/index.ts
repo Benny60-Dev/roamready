@@ -14,8 +14,12 @@ export interface User {
   firstName: string
   lastName: string
   phone?: string
-  emergencyContact?: string
-  emergencyPhone?: string
+  // emergencyContact / emergencyPhone removed (Block 6). The Prisma columns
+  // are intentionally left in place (orphaned) to keep the one-time
+  // backfillTravelParty script functional if the DB is ever re-seeded;
+  // the application layer no longer reads or writes them. Live emergency-
+  // contact data is on Person (isEmergencyContact + emergencyPhone) inside
+  // the travel-party model.
   homeLocation?: string
   homeAddress?: string
   homeStreet?: string
