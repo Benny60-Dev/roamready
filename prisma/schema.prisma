@@ -132,6 +132,18 @@ model Rig {
   towedModel         String?
   towedLength        Float?
   towedLicensePlate  String?
+  // Second-vehicle dimensions and fuel — both added Block 7 (May 2026).
+  // towedHeight: only collected in the TOW VEHICLE direction (the truck pulling
+  //   the trailer/5th wheel) for future bridge-clearance / garage-fit checks.
+  //   Toad sub-form omits this since a flat-towed Jeep's height never matters
+  //   for the rig's own restrictions.
+  // towedFuelType: also TOW VEHICLE only — diesel range/cost matters for the
+  //   prime mover. The toad's fuel doesn't matter because it's unhooked at
+  //   camp and just gets driven locally.
+  // See client/src/utils/rigs.ts deriveSecondVehicle for the direction
+  // derivation from vehicleType.
+  towedHeight        Float?
+  towedFuelType      String?
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
   maintenanceItems MaintenanceItem[]

@@ -140,6 +140,13 @@ export interface Rig {
   towedModel?: string
   towedLength?: number
   towedLicensePlate?: string
+  // Block 7 (May 2026) additions — second-vehicle height + fuel. Both only set
+  // in the TOW VEHICLE direction (truck pulling a trailer/5th wheel) — the
+  // toad sub-form omits them since a flat-towed Jeep's height/fuel never
+  // matters for the rig's planning. See client/src/utils/rigs.ts
+  // deriveSecondVehicle for the direction derivation from vehicleType.
+  towedHeight?: number
+  towedFuelType?: string
   createdAt: string
 }
 
