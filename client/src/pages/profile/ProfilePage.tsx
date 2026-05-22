@@ -141,14 +141,12 @@ export default function ProfilePage() {
             )}
           </div>
 
-          <div>
-            <label className="label">Emergency contact name</label>
-            <input className="input" {...register('emergencyContact')} />
-          </div>
-          <div>
-            <label className="label">Emergency contact phone</label>
-            <input className="input" type="tel" {...register('emergencyPhone')} />
-          </div>
+          {/* Emergency contact name + phone removed (Block 6) — they were
+              write-only (only the account holder sees their own Profile, so
+              they'd never look up their own emergency contact) and implied a
+              safety capability the product doesn't have. The travel-party
+              emergency contact (Person.isEmergencyContact) is the live model
+              for that use case and is reachable via /profile/party. */}
 
           {/* Hidden structured fields — populated by Autocomplete */}
           <input type="hidden" {...register('homeStreet')} />

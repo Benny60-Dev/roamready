@@ -82,14 +82,20 @@ export async function getMe(req: AuthRequest, res: Response, next: NextFunction)
 
 export async function updateMe(req: AuthRequest, res: Response, next: NextFunction) {
   try {
+    // emergencyContact + emergencyPhone removed from the payload (Block 6).
+    // The Prisma columns remain on the User model (orphaned) so the one-time
+    // backfillTravelParty script still compiles + runs if the DB is re-seeded,
+    // but the application layer no longer writes them. Prisma treats absent
+    // keys in data{} as "don't update this column", so any existing values
+    // in the DB are preserved untouched.
     const {
-      firstName, lastName, phone, emergencyContact, emergencyPhone, avatarUrl,
+      firstName, lastName, phone, avatarUrl,
       homeLocation, homeAddress, homeStreet, homeCity, homeState, homeZip, homeLat, homeLng,
     } = req.body
     const user = await prisma.user.update({
       where: { id: req.user!.id },
       data: {
-        firstName, lastName, phone, emergencyContact, emergencyPhone, avatarUrl,
+        firstName, lastName, phone, avatarUrl,
         homeLocation, homeAddress, homeStreet, homeCity, homeState, homeZip, homeLat, homeLng,
       },
     })
