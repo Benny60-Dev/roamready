@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../utils/prisma'
-import { AuthRequest } from '../middleware/auth'
+import { AuthRequest, hasAccess } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
 import { generatePlanningContextSummary } from '../services/ai'
 import type {
@@ -172,9 +172,17 @@ export async function promoteSession(req: AuthRequest, res: Response, next: Next
     // feature. Runs OUTSIDE the transaction on purpose: a Haiku outage must
     // not roll back trip creation. Failures here log and move on — a later
     // open of the modify panel will lazily backfill the field.
+    //
+    // Block 9 — this is the only AI call on the promote route, and the route
+    // itself MUST succeed for every user (free or Pro) so the trip lands in
+    // the DB. We gate just the AI call, not the route: non-Pro users skip
+    // the summary (planningContextSummary stays null on the trip row) and
+    // the rest of promote proceeds. If they later upgrade and open the
+    // modify panel, that surface already lazy-backfills the field anyway —
+    // see the lazily-backfill note above.
     try {
       const messages = Array.isArray(session.messages) ? (session.messages as any[]) : []
-      if (messages.length > 0) {
+      if (messages.length > 0 && hasAccess(req.user!, 'aiPlannerUnlimited')) {
         const summary = await generatePlanningContextSummary(messages, {
           userId: req.user!.id,
           sessionId: session.id,

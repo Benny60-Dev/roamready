@@ -64,6 +64,11 @@ const FEATURE_LABELS: Record<string, string> = {
   tripJournal: 'Trip Journal',
   maintenanceTracker: 'Maintenance Tracker',
   weatherAlerts: 'Weather Alerts',
+  // Block 9 — added so a 403 from requireFeature('aiPlannerUnlimited') (the
+  // new umbrella gate on /ai/chat, /ai/generate-itinerary, and the three
+  // /trips/:id/(itinerary|activities)/generate + .../highlights routes)
+  // renders as "Unlock AI Trip Planner" instead of the raw key string.
+  aiPlannerUnlimited: 'AI Trip Planner',
 }
 
 export default function PaywallModal({ feature, redirectOnDismiss, onClose }: Props) {

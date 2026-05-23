@@ -42,8 +42,17 @@ tripsRouter.get('/:id/map-image', getTripMapImage as any)
 tripsRouter.get('/:id/weather', requireFeature('weatherAlerts'), getTripWeather as any)
 tripsRouter.post('/:id/packing-list', requireFeature('packingListGenerator'), generatePackingList as any)
 tripsRouter.post('/:id/stops/reassign-pois', reassignPOIs as any)
-tripsRouter.post('/:id/itinerary/generate', generateItinerary as any)
+// Block 9 — three AI-calling endpoints on the trips router get
+// requireFeature('aiPlannerUnlimited') so non-Pro users hit a 403 → paywall.
+//   /:id/itinerary/generate   → generateTripItineraryAI  (build from chat)
+//   /:id/activities/generate  → generateStopActivitiesAI (per-stop suggestions)
+//   /:id/stops/:id/highlights → generateRouteHighlightsAI (per-stop narrative)
+// The neighbors here that LOOK AI-named but aren't stay ungated:
+//   /:id/routes               → fetchAllSegmentRoutes (Google Directions)
+//   /:id/stops/reassign-pois  → Google Places
+//   PUT /:id/itinerary        → saveItinerary (DB write only, no LLM)
+tripsRouter.post('/:id/itinerary/generate', requireFeature('aiPlannerUnlimited'), generateItinerary as any)
 tripsRouter.put('/:id/itinerary', saveItinerary as any)
 tripsRouter.post('/:id/routes', generateRoutes as any)
-tripsRouter.post('/:id/activities/generate', generateActivities as any)
-tripsRouter.post('/:id/stops/:stopId/highlights', generateRouteHighlights as any)
+tripsRouter.post('/:id/activities/generate', requireFeature('aiPlannerUnlimited'), generateActivities as any)
+tripsRouter.post('/:id/stops/:stopId/highlights', requireFeature('aiPlannerUnlimited'), generateRouteHighlights as any)
