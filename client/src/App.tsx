@@ -182,7 +182,13 @@ export default function App() {
       </Suspense>
 
       {feedbackModalOpen && <FeedbackModal onClose={closeFeedbackModal} />}
-      {paywallModal.open && <PaywallModal feature={paywallModal.feature} onClose={closePaywall} />}
+      {paywallModal.open && (
+        <PaywallModal
+          feature={paywallModal.feature}
+          redirectOnDismiss={paywallModal.redirectOnDismiss}
+          onClose={closePaywall}
+        />
+      )}
     </BrowserRouter>
   )
 }

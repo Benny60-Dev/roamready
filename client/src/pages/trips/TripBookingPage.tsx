@@ -605,7 +605,10 @@ export default function TripBookingPage() {
   // Load trip — honor ?stopId param from incoming navigation
   useEffect(() => {
     if (!hasAccess('campgroundBooking')) {
-      openPaywall('campgroundBooking')
+      // Empty shell behind the modal — route dismissals to /dashboard so
+      // the user has a clear exit instead of a blank page. Mirrors the
+      // same intent on Ohv/Van destinations pages.
+      openPaywall('campgroundBooking', { redirectOnDismiss: '/dashboard' })
       // Critical: clear loading so the page renders an empty state behind the
       // paywall instead of an infinite spinner. Without this, setLoading(false)
       // only fires inside the .then() of the trip fetch, which never runs.

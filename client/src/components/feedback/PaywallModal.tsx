@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { X, Check, Zap, Info } from 'lucide-react'
 import { subscriptionsApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
@@ -6,6 +7,14 @@ import { PRO_FEATURES } from '../../config/pricing'
 
 interface Props {
   feature?: string
+  /** Optional route to navigate to when the user dismisses the modal.
+   *  Set by Pro-only pages where the content behind the modal is an
+   *  empty shell (OhvDestinationsPage / VanDestinationsPage /
+   *  TripBookingPage) so dismissing doesn't strand the user. When unset,
+   *  dismissing just closes the modal and leaves the user on the current
+   *  page (the right behavior when the modal was layered over usable
+   *  free content). */
+  redirectOnDismiss?: string
   onClose: () => void
 }
 
@@ -57,12 +66,23 @@ const FEATURE_LABELS: Record<string, string> = {
   weatherAlerts: 'Weather Alerts',
 }
 
-export default function PaywallModal({ feature, onClose }: Props) {
+export default function PaywallModal({ feature, redirectOnDismiss, onClose }: Props) {
+  const navigate = useNavigate()
   const [annual, setAnnual] = useState(true)
   const [loading, setLoading] = useState(false)
   const user = useAuthStore(s => s.user)
 
   const featureLabel = feature ? FEATURE_LABELS[feature] || feature : null
+
+  // Dismiss handler — navigate first (if the caller set a redirect target),
+  // then close the modal. Navigate-first ordering matters because closing
+  // the modal triggers unmount, and we want the route change to land
+  // before the modal disappears so the user perceives one continuous
+  // transition rather than blank-page-then-redirect.
+  function handleDismiss() {
+    if (redirectOnDismiss) navigate(redirectOnDismiss)
+    onClose()
+  }
 
   // Trial eligibility — user has never started a trial AND has no Stripe
   // customer record. Both fields are nullable on the User row; either one
@@ -139,7 +159,7 @@ export default function PaywallModal({ feature, onClose }: Props) {
               <p className="text-xs text-gray-500">Available with Pro</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><X size={18} /></button>
+          <button onClick={handleDismiss} className="p-1 rounded-lg hover:bg-gray-100"><X size={18} /></button>
         </div>
 
         {/* Toggle mirrors PricingPage's premium-feel treatment — see that
