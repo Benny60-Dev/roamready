@@ -309,7 +309,13 @@ export default function SessionPage() {
       setMessages([...next, { role: 'assistant', content: aiText }])
       const parsed = parseItinerary(aiText)
       if (parsed) setItinerary(parsed)
-    } catch {
+    } catch (err: any) {
+      // FEATURE_GATED 403 — paywall modal already opened by the central
+      // axios interceptor. Skip the generic assistant-bubble error so the
+      // user isn't double-narrated by the modal AND a chat message.
+      if (err?.response?.status === 403 && err?.response?.data?.code === 'FEATURE_GATED') {
+        return
+      }
       setMessages([...next, { role: 'assistant', content: 'Sorry, I had trouble responding. Please try again.' }])
     } finally {
       setTyping(false)
@@ -410,6 +416,14 @@ export default function SessionPage() {
       navigate(`/trips/${tripId}/map`)
     } catch (e: any) {
       console.error('[buildItinerary] failed:', e)
+      // FEATURE_GATED 403 — paywall modal already opened by the central
+      // axios interceptor. Clear loading state and bail; do NOT set
+      // buildError, because rendering "This feature requires Pro: ..."
+      // raw text alongside the modal double-narrates the failure.
+      if (e?.response?.status === 403 && e?.response?.data?.code === 'FEATURE_GATED') {
+        setCreating(false)
+        return
+      }
       setBuildError(e?.response?.data?.message || e?.message || 'Something went wrong. Please try again.')
       setCreating(false)
     }

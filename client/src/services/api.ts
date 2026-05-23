@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
+import { useUIStore } from '../store/uiStore'
 
 export const api = axios.create({
   baseURL: '/api/v1',
@@ -46,6 +47,33 @@ api.interceptors.response.use(
       original._retried429 = true
       await new Promise(resolve => setTimeout(resolve, delayMs))
       return api(original)
+    }
+
+    // 403 FEATURE_GATED → open the paywall modal centrally. The server's
+    // requireFeature(...) middleware throws AppError(... 403, { code:
+    // 'FEATURE_GATED', feature }) — that envelope is the contract this
+    // branch reads. Every gated route (AI, PDF export, trip sharing, etc.)
+    // funnels through here so we don't need each call site to detect 403s
+    // and open the modal individually; per-site catches just suppress
+    // their generic "Sorry, I had trouble responding" messages on this
+    // code so the paywall isn't double-narrated.
+    //
+    // No redirectOnDismiss — these errors fire from pages the user can
+    // still meaningfully view (their trip, the canvas, the modify panel).
+    // The paywall-dismiss fix's close-in-place behavior is the right
+    // default; the proactive Pro-only pages (Ohv/Van/TripBooking) keep
+    // their own openPaywall calls with redirectOnDismiss because their
+    // shells are empty without Pro — different cohort.
+    //
+    // Promise still rejects after the modal opens so callers' catch
+    // blocks still run for loading-state cleanup. The double-narration
+    // suppression is each catch's job, not the interceptor's.
+    if (
+      error.response?.status === 403 &&
+      error.response?.data?.code === 'FEATURE_GATED' &&
+      typeof error.response.data.feature === 'string'
+    ) {
+      useUIStore.getState().openPaywall(error.response.data.feature)
     }
 
     return Promise.reject(error)

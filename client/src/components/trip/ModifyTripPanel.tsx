@@ -244,7 +244,15 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
         ...(modifyAction ? { modifyAction } : {}),
       }
       setMessages(prev => [...prev, aiMsg])
-    } catch {
+    } catch (err: any) {
+      // FEATURE_GATED 403 — paywall modal already opened by the central
+      // axios interceptor (see services/api.ts). Skip the generic
+      // assistant-bubble error so the user isn't double-narrated by both
+      // the modal AND a chat message saying "Sorry, I had trouble".
+      // Other errors (network, 5xx, etc.) keep the existing fallback.
+      if (err?.response?.status === 403 && err?.response?.data?.code === 'FEATURE_GATED') {
+        return
+      }
       setMessages(prev => [
         ...prev,
         { role: 'assistant', content: 'Sorry, I had trouble responding. Please try again.' },
