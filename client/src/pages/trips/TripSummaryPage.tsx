@@ -130,7 +130,20 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
   // parseTripDate normalizes ISO/date-only inputs to a Date whose local-time
   // accessors return the UTC calendar day. addDays + date-fns format() below
   // all then render the intended date regardless of viewer timezone.
-  let currentDate: Date | undefined = parseTripDate(startDate) ?? undefined
+  //
+  // currentDate is the running fallback for any stop whose stored arrivalDate
+  // is null (notably AI-added stops, which arrive with both date columns
+  // null until the server's recomputeStopDates fills them in). It used to
+  // be Date | undefined, which meant the fallback branch in every entry
+  // pushed produced `undefined` when startDate was missing — buildGroups
+  // then couldn't merge null-dated entries onto a calendar day, and the
+  // stop's cards silently dropped from the rendered itinerary. Seeding
+  // with `new Date()` when startDate is missing guarantees every pushed
+  // entry has a real Date, so the day-grouping always has something to
+  // hang it on. The server recompute is the primary fix; this is the
+  // belt-and-suspenders so a future regression on the write side can't
+  // make stops invisible again.
+  let currentDate: Date = parseTripDate(startDate) ?? new Date()
 
   for (let i = 0; i < stops.length; i++) {
     const stop = stops[i]
@@ -150,7 +163,9 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
         // and the arrival entry orphans into its own card — no "Arrive {time}"
         // pill, no date in the day header. Falls back to currentDate when no
         // DB arrivalDate exists yet (matches the OVERNIGHT branch below).
-        date: parseTripDate(stop.arrivalDate) ?? (currentDate ? new Date(currentDate) : undefined),
+        // currentDate is now guaranteed-Date (see seed at top of function),
+        // so this fallback always produces a valid Date — never undefined.
+        date: parseTripDate(stop.arrivalDate) ?? new Date(currentDate),
         type: 'DRIVE',
         stop, prevStop,
         miles: miles || undefined,
@@ -173,7 +188,7 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
       // Fall back to currentDate when no DB date exists yet.
       entries.push({
         dayNum,
-        date: parseTripDate(stop.arrivalDate) ?? (currentDate ? new Date(currentDate) : undefined),
+        date: parseTripDate(stop.arrivalDate) ?? new Date(currentDate),
         type: 'OVERNIGHT',
         stop,
         departureTime: '06:00',
@@ -182,7 +197,7 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
         activities: [],
       })
       dayNum++
-      if (currentDate) currentDate = addDays(currentDate, 1)
+      currentDate = addDays(currentDate, 1)
 
     // ── HOME stop — always render one STAY entry as the departure point ─────
     } else if (stop.type === 'HOME') {
@@ -192,7 +207,7 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
         // date even when trip.startDate is null. Same fallback shape as the
         // DRIVE branch above and the OVERNIGHT branch below — keeping all
         // entries on a consistent date source preserves buildGroups' merge.
-        date: parseTripDate(stop.arrivalDate) ?? (currentDate ? new Date(currentDate) : undefined),
+        date: parseTripDate(stop.arrivalDate) ?? new Date(currentDate),
         type: 'STAY',
         stop,
         nightNum: 1,
@@ -219,7 +234,7 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
           !!homeStop &&
           homeStop.locationName.trim().toLowerCase() ===
             stop.locationName.trim().toLowerCase()
-        const entryDate = parseTripDate(stop.arrivalDate) ?? (currentDate ? new Date(currentDate) : undefined)
+        const entryDate = parseTripDate(stop.arrivalDate) ?? new Date(currentDate)
         entries.push({
           dayNum,
           date: entryDate,
@@ -237,13 +252,14 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
         for (let n = 0; n < nights; n++) {
           // Prefer stop.arrivalDate + offset (authoritative after a cascade save).
           // Fall back to currentDate when no DB date exists yet.
-          let entryDate: Date | undefined
+          // currentDate is guaranteed-Date now, so the fallback branch always
+          // produces a Date. Previously `entryDate` could remain undefined
+          // when both stored arrivalDate and currentDate were null — that's
+          // the path that produced the silent-drop bug on AI-added stops.
           const parsedArrival = parseTripDate(stop.arrivalDate)
-          if (parsedArrival) {
-            entryDate = addDays(parsedArrival, n)
-          } else if (currentDate) {
-            entryDate = n === 0 ? new Date(currentDate) : addDays(new Date(currentDate), n)
-          }
+          const entryDate: Date = parsedArrival
+            ? addDays(parsedArrival, n)
+            : (n === 0 ? new Date(currentDate) : addDays(new Date(currentDate), n))
           entries.push({
             dayNum,
             date: entryDate,
@@ -257,7 +273,7 @@ function buildTimeline(stops: Stop[], startDate?: string): TimelineEntry[] {
           })
           dayNum++
         }
-        if (currentDate) currentDate = addDays(currentDate, nights)
+        currentDate = addDays(currentDate, nights)
       }
     }
   }

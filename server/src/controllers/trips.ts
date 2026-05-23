@@ -60,6 +60,118 @@ async function syncTripEndpoints(tripId: string): Promise<void> {
   })
 }
 
+const MS_PER_DAY = 86_400_000
+
+/**
+ * Walk every stop in `order` ascending from the trip's anchor date and
+ * recompute Stop.arrivalDate = running date, Stop.departureDate = running
+ * date + nights, advancing the running date by the stop's nights. Persist
+ * each stop, then sync Trip.totalNights and Trip.endDate in the same
+ * transaction.
+ *
+ * Closes a bug where AI-modified add_stop inserted a stop with
+ * arrivalDate=null / departureDate=null. The client's buildTimeline
+ * fallback would then run out of a valid running date and emit entries
+ * with date=null, which buildGroups silently drops — the stop existed in
+ * the DB but was invisible in the itinerary.
+ *
+ * Anchor priority mirrors shiftTripDates: trip.startDate is unreliable
+ * (the promote flow doesn't write it), so we fall back to the first stop
+ * that has an arrivalDate set, and ultimately to `new Date()` when neither
+ * is present. This matches what TripSummaryPage.cascadeAndSaveDates does
+ * on the client when a user manually edits a stop.
+ *
+ * Distinct from shiftTripDates which moves all dates by a delta — this
+ * recomputes from scratch using each stop's `nights` value, so the call
+ * sites that perturb the schedule (createStop, updateStop on nights
+ * change, deleteStop) all converge on the same canonical layout.
+ */
+async function recomputeStopDates(tripId: string): Promise<void> {
+  const trip = await prisma.trip.findUnique({
+    where: { id: tripId },
+    include: { stops: { orderBy: { order: 'asc' } } },
+  })
+  if (!trip || trip.stops.length === 0) return
+
+  // Anchor: trip.startDate if set, else the first stop with a stored
+  // arrivalDate (cascade-populated by prior edits), else today. Null
+  // here would re-introduce the bug we're fixing, hence the new Date()
+  // floor — same fallback the client cascade uses. Validate against
+  // an Invalid Date snuck in from corrupted data so the walk never
+  // propagates NaN into stop.arrivalDate columns.
+  const firstDatedStop = trip.stops.find(s => s.arrivalDate != null)
+  const anchorRaw = trip.startDate ?? firstDatedStop?.arrivalDate ?? new Date()
+  const anchor: Date = isNaN(anchorRaw.getTime()) ? new Date() : anchorRaw
+  let current = new Date(anchor.getTime())
+  let totalNights = 0
+
+  // Build the per-stop update operations up front, then run the whole
+  // batch atomically via the array form of $transaction.
+  //
+  // The prior version used the interactive callback form
+  // (`$transaction(async (tx) => { for await tx.stop.update … })`),
+  // which has subtle timing semantics: an await inside the callback
+  // that hits Prisma's interactive-tx timeout (default 5s) or transient
+  // pool contention can cause the whole tx to silently roll back —
+  // including, critically, the LAST update in the loop. The bug
+  // observed was exactly that shape: stops 1..N-1 wrote successfully
+  // but the trailing return-home stop kept its pre-insert date because
+  // the rollback erased its update. Switching to the array form makes
+  // the batch a single declarative unit Prisma resolves in one round
+  // trip — no interactive-tx timeout window, no per-await re-entry,
+  // and the LAST write is no more privileged than any other.
+  //
+  // `.map()` runs synchronously, so the closure captures `arrival`,
+  // `departure`, and the running `current` cleanly in iteration order
+  // before any Prisma promise is awaited. Each returned PrismaPromise
+  // carries its own snapshotted payload.
+  const stopWrites = trip.stops.map(stop => {
+    const nights = stop.type === 'OVERNIGHT_ONLY' ? 1 : (stop.nights ?? 0)
+    const arrival = new Date(current.getTime())
+    const departure = new Date(current.getTime() + nights * MS_PER_DAY)
+    totalNights += nights
+    current = new Date(current.getTime() + nights * MS_PER_DAY)
+    return prisma.stop.update({
+      where: { id: stop.id },
+      data: { arrivalDate: arrival, departureDate: departure },
+    })
+  })
+
+  // Snapshot the post-walk current as endDate. Also persist `anchor`
+  // back to Trip.startDate so subsequent recomputes (a later AI
+  // modify, a delete, a nights edit) anchor on the same date instead
+  // of re-falling-back to new Date() if startDate was originally null
+  // — without this, each call would drift the trip's whole schedule
+  // by the time between calls.
+  const finalAnchor = new Date(anchor.getTime())
+  const finalEndDate = new Date(current.getTime())
+
+  await prisma.$transaction([
+    ...stopWrites,
+    prisma.trip.update({
+      where: { id: tripId },
+      data: {
+        startDate: finalAnchor,
+        endDate: finalEndDate,
+        totalNights,
+      },
+    }),
+  ])
+
+  // Visibility: every recompute logs its inputs and outputs so a
+  // future regression in this path is diagnosable without a debugger.
+  // Cheap (a single line per write path) and useful for confirming
+  // the LAST stop got its walked date in production logs.
+  console.log(
+    '[recomputeStopDates] tripId=%s stops=%d anchor=%s endDate=%s totalNights=%d',
+    tripId,
+    trip.stops.length,
+    finalAnchor.toISOString(),
+    finalEndDate.toISOString(),
+    totalNights,
+  )
+}
+
 // ─── Google Maps Directions helpers ──────────────────────────────────────────
 
 const DIR_MAP: Record<string, string> = { N: 'North', S: 'South', E: 'East', W: 'West' }
@@ -701,7 +813,34 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
     } catch (e: any) {
       console.warn('[syncTripEndpoints] createStop tripId=%s failed: %s', req.params.id, e?.message)
     }
-    res.status(201).json(stop)
+    // AI-modified add_stop inserts a Stop with arrivalDate=null /
+    // departureDate=null because the AI doesn't supply them. Without
+    // this recompute, the client's buildTimeline falls back to its
+    // running-date pointer, which used to drift to undefined when a
+    // null-dated stop appeared mid-trip — the stop's cards then dropped
+    // out of the rendered itinerary even though the row was in the DB.
+    // Recomputing fills in the new stop AND re-walks following stops so
+    // any schedule shift propagates cleanly. Try/catch so a recompute
+    // failure doesn't roll back the successful create — the stop is
+    // still inserted, dates can be cascaded later via a manual edit.
+    try {
+      await recomputeStopDates(req.params.id)
+    } catch (e: any) {
+      // Surface code + message + stack. Previously this swallowed the
+      // root cause with just `.message`, which hid an interactive-tx
+      // rollback that caused the trailing stop's update to disappear.
+      console.warn(
+        '[recomputeStopDates] createStop tripId=%s failed code=%s message=%s\n%s',
+        req.params.id, e?.code, e?.message, e?.stack,
+      )
+    }
+    // Refetch the stop so the response reflects the post-recompute
+    // arrivalDate/departureDate. The caller (ModifyTripPanel) does its
+    // own GET-trip refetch afterward, but returning fresh dates here
+    // keeps the contract honest for any future caller that consumes
+    // the create response directly.
+    const finalStop = await prisma.stop.findUnique({ where: { id: stop.id } })
+    res.status(201).json(finalStop ?? stop)
   } catch (err: any) {
     console.error('[createStop] FAILED tripId=%s:', req.params.id, err?.message)
     next(err)
@@ -748,6 +887,21 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
     } catch (e: any) {
       console.warn('[syncTripEndpoints] updateStop tripId=%s failed: %s', req.params.id, e?.message)
     }
+    // If nights changed, the schedule downstream of this stop shifts. The
+    // client's handleSaveEditStop runs cascadeAndSaveDates after a nights
+    // edit, but the AI modify-mode path (change_nights action) hits this
+    // endpoint directly without that client cascade, so the server has
+    // to re-walk dates itself. Gated on an actual change so a notes /
+    // campground / booking edit doesn't pay the recompute cost.
+    const nightsChanged =
+      data.nights !== undefined && data.nights !== null && data.nights !== stop.nights
+    if (nightsChanged) {
+      try {
+        await recomputeStopDates(req.params.id)
+      } catch (e: any) {
+        console.warn('[recomputeStopDates] updateStop tripId=%s failed: %s', req.params.id, e?.message)
+      }
+    }
     res.json(updated)
   } catch (err) { next(err) }
 }
@@ -793,6 +947,17 @@ export async function deleteStop(req: AuthRequest, res: Response, next: NextFunc
       await syncTripEndpoints(req.params.id)
     } catch (e: any) {
       console.warn('[syncTripEndpoints] deleteStop tripId=%s failed: %s', req.params.id, e?.message)
+    }
+    // Removing a stop shrinks the schedule — every later stop's
+    // arrivalDate/departureDate should slide earlier so the itinerary
+    // doesn't leave a hole. The client's confirmDeleteStop already runs
+    // cascadeAndSaveDates after a delete, but the AI modify-mode
+    // (remove_stop action) hits this endpoint directly without that
+    // cascade, so the server has to re-walk dates itself.
+    try {
+      await recomputeStopDates(req.params.id)
+    } catch (e: any) {
+      console.warn('[recomputeStopDates] deleteStop tripId=%s failed: %s', req.params.id, e?.message)
     }
     res.json({ message: 'Stop deleted' })
   } catch (err) { next(err) }
