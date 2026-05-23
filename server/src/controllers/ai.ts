@@ -422,10 +422,18 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       }
     }
 
-    const stripModifyTags = (content: string) => content.replace(/<modify>[\s\S]*?<\/modify>/g, '').trim()
-
-    // Fix B: phrases Claude uses when it thinks it performed a modification without emitting a tag
-    const MOD_CLAIM_RE = /\b(i('ll| will| just| have)? (add(ed)?|remov(ed)?|delet(ed)?|chang(ed)?|updat(ed)?|adjust(ed)?|mov(ed)?|insert(ed)?)|adding|removing|done!|applied|✅)\b/i
+    // Annotate each <modify>{…}</modify> block in an assistant turn with the
+    // literal marker "[✓ change already applied]", preserving surrounding
+    // prose. Replaces the previous stripModifyTags helper that DELETED the
+    // tags entirely — that turned every past assistant turn into a tagless
+    // "successful" demonstration, and the model would gradually learn (via
+    // in-context pattern-matching) that tags were optional, then stop
+    // emitting them mid-conversation in long modify sessions. Annotating
+    // instead lets the model see (a) it DID emit tags before in the right
+    // format → keep emitting, and (b) the corresponding action is already
+    // done → don't re-emit. Tagless prose turns are unaffected.
+    const annotateAppliedModify = (content: string) =>
+      content.replace(/<modify>[\s\S]*?<\/modify>/g, '[✓ change already applied]').trim()
 
     // Cap history at the last 10 messages before sending to Claude.
     const HISTORY_CAP = 10
@@ -436,11 +444,14 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       ...nonSystemMessages.slice(-HISTORY_CAP),
     ]
 
-    // Fix B: Strip <modify> tags from assistant history before sending to Claude.
-    // System prompt (now first in combined prompt per Fix A) teaches the format — history
-    // tag-less responses would teach the wrong pattern if left in.
+    // Annotate <modify> tags in assistant history before sending to Claude.
+    // System prompt (now first in combined prompt per Fix A) teaches the
+    // format; assistant history demonstrates that the model DID emit tags
+    // before AND that those actions are already applied — see the
+    // annotateAppliedModify comment for the rationale on the
+    // strip→annotate change.
     const cleanedMessages = cappedMessages.map((m: any) =>
-      m.role === 'assistant' ? { ...m, content: stripModifyTags(m.content) } : m
+      m.role === 'assistant' ? { ...m, content: annotateAppliedModify(m.content) } : m
     )
 
     const liveStateMsg = liveTrip ? buildLiveTripState(liveTrip) : null
@@ -525,23 +536,36 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
 
     const aiCtx = { userId, sessionId: sessionId ?? null, tripId: tripId ?? null }
     let response = await chatWithAI(messagesForAI, userProfile, recentSurpriseDestinations, surpriseVibe, aiCtx)
+
+    // Tracked across the retry path; surfaced to the client in the response
+    // envelope so the UI can render a fallback notice when modify mode was
+    // active, we attempted a retry, and the final response STILL has no
+    // <modify> tag.
+    let modifyTagMissing = false
+
     if (liveStateMsg) {
       const hasTag = /<modify>/.test(response)
       console.log('[AI modify] response hasModifyTag=%s preview=%s', hasTag, response.slice(0, 200))
 
-      // Fix C: Auto-retry if the response describes a modification but omits the <modify> tag.
-      // One retry only — if the second attempt also lacks a tag, return it as-is.
-      if (!hasTag && MOD_CLAIM_RE.test(response)) {
+      // Auto-retry whenever a modify-mode response lacks a <modify> tag,
+      // regardless of whether the prose contains a hard-claim phrase. The
+      // previous gate on MOD_CLAIM_RE (matching "I'll add" / "Done!" / "✅"
+      // etc.) missed calm prose that should have included a tag — e.g.
+      // "Sure, here's what I'd do…" would skip retry and silently no-op.
+      // One retry only; if the second attempt also lacks a tag, set
+      // modifyTagMissing so the UI surfaces the failure instead of
+      // showing prose with no Apply affordance and no error.
+      if (!hasTag) {
         console.warn('[AI modify] No <modify> tag detected in modification response — auto-retrying with reminder')
         const retryMessages = [
           ...messagesForAI,
-          { role: 'assistant' as const, content: stripModifyTags(response) },
+          { role: 'assistant' as const, content: annotateAppliedModify(response) },
           {
             role: 'user' as const,
             content:
-              '[SYSTEM REMINDER: Your previous response described a trip modification but is missing the required <modify> JSON block. ' +
-              'Without the <modify> tag, NO change will be made — the user will be confused. ' +
-              'Please repeat your response and include the <modify> JSON block exactly as specified in the instructions above.]',
+              '[SYSTEM REMINDER: Your previous reply did not include a <modify> JSON block, so NO change was applied. ' +
+              'If the user\'s request requires a trip modification, repeat your response and include the correct <modify>{...}</modify> block now. ' +
+              'If the request does NOT require a modification (just a question or discussion), reply normally without a tag.]',
           },
         ]
         const retryResponse = await chatWithAI(retryMessages, userProfile, recentSurpriseDestinations, surpriseVibe, aiCtx)
@@ -549,6 +573,13 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
         console.log('[AI modify] retry hasModifyTag=%s preview=%s', retryHasTag, retryResponse.slice(0, 200))
         if (retryHasTag) {
           response = retryResponse
+        } else {
+          // Retry also produced no tag. Could be a legitimate question/
+          // discussion (no modification intended) or a genuine failure
+          // (modification intended but not emitted). The server can't
+          // disambiguate — let the UI render a fallback notice; the
+          // user knows what they asked for and can rephrase if needed.
+          modifyTagMissing = true
         }
       }
     }
@@ -563,13 +594,14 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
           .filter((m: any) => m.role !== 'system')
           .map((m: any) => ({
             role: m.role,
-            // Strip <modify> tags from stored history so reloaded conversations don't
-            // make Claude believe it already performed those actions in future sessions.
-            content: m.role === 'assistant' ? stripModifyTags(m.content) : m.content,
+            // Annotate <modify> tags in stored history so reloaded conversations
+            // see consistent format AND the "already applied" marker — see the
+            // annotateAppliedModify helper for the rationale on the
+            // strip→annotate change.
+            content: m.role === 'assistant' ? annotateAppliedModify(m.content) : m.content,
           }))
-        // Fix B: strip <modify> tags from stored history (both old and new responses) so future
-        // reloads don't contain tags that confuse the modify-or-not pattern in history.
-        persistable.push({ role: 'assistant', content: stripModifyTags(response) })
+        // Same annotation for the new assistant response being persisted.
+        persistable.push({ role: 'assistant', content: annotateAppliedModify(response) })
 
         await prisma.trip.update({
           where: { id: tripId },
@@ -580,7 +612,11 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       }
     }
 
-    res.json({ message: response })
+    // modifyTagMissing surfaces to the client when modify mode was active,
+    // we retried once, and the final response STILL lacked a <modify> tag.
+    // For non-modify chats it stays false. The client (ModifyTripPanel)
+    // renders an inline notice under the assistant bubble when set.
+    res.json({ message: response, modifyTagMissing })
   } catch (err: any) {
     console.error('[AI chat error] message:', err?.message)
     console.error('[AI chat error] status:', err?.status)

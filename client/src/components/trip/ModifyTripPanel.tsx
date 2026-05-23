@@ -43,6 +43,13 @@ interface ChatMsg {
   modifyAction?: ModifyAction
   modifyApplied?: boolean
   modifyCancelled?: boolean
+  /** Set to true by the server (modifyTagMissing in the /ai/chat response
+   *  envelope) when modify mode was active, the server retried once, and
+   *  the final response still lacked a <modify> tag. The render path adds
+   *  a small inline warning under the assistant bubble so the user knows
+   *  no change was applied — distinct from the "Apply" confirmation card
+   *  (which only renders when modifyAction is present and unapplied). */
+  modifyTagMissing?: boolean
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -236,12 +243,18 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
       const apiMessages = newMessages.map(m => ({ role: m.role, content: m.content }))
       const res = await aiApi.chat(apiMessages, trip.id, 'modify')
       const aiText: string = res.data.message
+      // modifyTagMissing surfaces when the server retried once and still got
+      // no <modify> tag back. We attach it to the assistant message so the
+      // render path can show the inline warning notice — see the ChatMsg
+      // interface above + the notice block in the messages.map render.
+      const modifyTagMissing: boolean = res.data?.modifyTagMissing === true
 
       const modifyAction = parseModify(aiText)
       const aiMsg: ChatMsg = {
         role: 'assistant',
         content: aiText,
         ...(modifyAction ? { modifyAction } : {}),
+        ...(modifyTagMissing ? { modifyTagMissing: true } : {}),
       }
       setMessages(prev => [...prev, aiMsg])
     } catch (err: any) {
@@ -603,6 +616,16 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
               )}
               {msg.role === 'assistant' && msg.modifyAction && msg.modifyCancelled && (
                 <div className="mt-1 ml-0.5 text-[11px] text-gray-400">Cancelled</div>
+              )}
+              {/* Modify-tag-missing notice — server retried once and still got
+                  prose with no <modify> block. Matches the styling tier of the
+                  Applied / Cancelled siblings above (text-[11px], ml-0.5,
+                  font-medium), in amber to signal "warning, action needed"
+                  without escalating to a destructive red. */}
+              {msg.role === 'assistant' && msg.modifyTagMissing && (
+                <div className="mt-1 ml-0.5 text-[11px] text-amber-700 font-medium">
+                  ⚠️ I couldn't apply that change automatically — try rephrasing your request.
+                </div>
               )}
             </div>
           ))}
