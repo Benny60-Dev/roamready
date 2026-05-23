@@ -11,7 +11,10 @@ export default function VanDestinationsPage() {
 
   useEffect(() => {
     if (!hasAccess('vanDestinations')) {
-      openPaywall('vanDestinations')
+      // Empty shell behind the modal — route dismissals to /dashboard so
+      // the user has a clear exit instead of a blank page. Mirrors the
+      // same intent on OhvDestinationsPage.
+      openPaywall('vanDestinations', { redirectOnDismiss: '/dashboard' })
       // Clear loading so the page renders an empty state behind the paywall
       // instead of an infinite spinner. setLoading(false) only fires inside
       // the .then() below, which the early-return skips.

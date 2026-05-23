@@ -14,7 +14,11 @@ export default function OhvDestinationsPage() {
 
   useEffect(() => {
     if (!hasAccess('ohvDestinations')) {
-      openPaywall('ohvDestinations')
+      // This page renders an empty shell behind the modal (no API call fires
+      // for FREE users). redirectOnDismiss sends dismissals to /dashboard so
+      // closing the modal doesn't leave the user staring at a blank header
+      // and an empty grid.
+      openPaywall('ohvDestinations', { redirectOnDismiss: '/dashboard' })
       // Clear loading so the page renders an empty state behind the paywall
       // instead of an infinite spinner. setLoading(false) only fires inside
       // the .then() below, which the early-return skips.
