@@ -574,7 +574,16 @@ export default function TripSummaryPage() {
           return updated
         })
       })
-      .catch(() => {})
+      .catch((err: any) => {
+        // FEATURE_GATED 403 → paywall already opened by the central axios
+        // interceptor (services/api.ts). Other errors are silently swallowed
+        // — this surface auto-runs in the background on trip view, so noisy
+        // toasts on transient failures would be worse than a quiet log.
+        if (err?.response?.status === 403 && err?.response?.data?.code === 'FEATURE_GATED') {
+          return
+        }
+        console.error('[TripSummaryPage] generateActivities failed:', err)
+      })
       .finally(() => setGeneratingActivities(false))
   }, [loading, id, entries.length, itineraryPending])
 
@@ -584,6 +593,16 @@ export default function TripSummaryPage() {
     try {
       const res = await tripsApi.generateItinerary(id)
       setEntries(prev => mergeAI(prev, res.data as ItineraryDay[]))
+    } catch (err: any) {
+      // FEATURE_GATED 403 → paywall opened by the interceptor; just clear
+      // loading via the finally below. Other errors are logged but not
+      // user-surfaced here — the prior code had no catch at all and let
+      // the rejection go unhandled; this preserves that silent posture
+      // for non-paywall failures while preventing the unhandled noise.
+      if (err?.response?.status === 403 && err?.response?.data?.code === 'FEATURE_GATED') {
+        return
+      }
+      console.error('[TripSummaryPage] handleGenerate failed:', err)
     } finally {
       setGenerating(false)
     }
@@ -1552,7 +1571,13 @@ function DriveContent({
       try {
         const res = await tripsApi.generateRouteHighlights(entry.stop.tripId, entry.stop.id)
         setHighlights(res.data.routeHighlights ?? null)
-      } catch {
+      } catch (err: any) {
+        // FEATURE_GATED 403 → paywall opened by the central interceptor.
+        // Leave highlights null so the disclosure collapses cleanly; the
+        // "Could not load…" fallback below would compete with the modal.
+        if (err?.response?.status === 403 && err?.response?.data?.code === 'FEATURE_GATED') {
+          return
+        }
         setHighlights('Could not load points of interest.')
       } finally {
         setLoadingHighlights(false)
@@ -2067,7 +2092,13 @@ function AddStopModal({ afterOrder, surroundingStops, onAdd, onClose, saving }: 
         .filter((l: string) => l.length > 0)
         .slice(0, 3)
       setAiSuggestions(lines)
-    } catch {
+    } catch (err: any) {
+      // FEATURE_GATED 403 → paywall already opened by the central interceptor.
+      // Skip the inline "Could not load suggestions" so the suggestion list
+      // stays empty rather than competing with the modal narration.
+      if (err?.response?.status === 403 && err?.response?.data?.code === 'FEATURE_GATED') {
+        return
+      }
       setAiSuggestions(['Could not load suggestions — try typing a location manually.'])
     } finally {
       setAiLoading(false)

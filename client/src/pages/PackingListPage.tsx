@@ -27,6 +27,20 @@ export default function PackingListPage() {
     try {
       const res = await tripsApi.generatePackingList(tripId)
       setCategories(res.data)
+    } catch (err: any) {
+      // FEATURE_GATED 403 → paywall opened by the central axios interceptor
+      // (services/api.ts). This endpoint can 403 with feature
+      // 'packingListGenerator' (more specific gate, checked first) OR
+      // 'aiPlannerUnlimited' (umbrella) — interceptor reads
+      // error.response.data.feature and opens the modal with whichever
+      // arrived. We just clear loading via the finally and bail. Non-
+      // paywall failures keep the prior silent posture (this surface had
+      // no catch at all before; this minimal upgrade prevents unhandled
+      // rejections without changing visible UX).
+      if (err?.response?.status === 403 && err?.response?.data?.code === 'FEATURE_GATED') {
+        return
+      }
+      console.error('[PackingListPage] generate failed:', err)
     } finally {
       setGenerating(false)
     }
