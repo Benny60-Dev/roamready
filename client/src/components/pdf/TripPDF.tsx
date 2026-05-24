@@ -4,6 +4,7 @@ import {
 import { Trip, Stop, ItineraryDay, ItineraryActivity, POI, TripFuelEstimate } from '../../types/index'
 import { format, addDays } from 'date-fns'
 import { parseTripDate } from '../../utils/dates'
+import { computeTripTotals } from '../../utils/tripTotals'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -458,9 +459,12 @@ interface Props {
   mapImageBase64?: string | null
   /** Live regional fuel-cost estimate threaded from the page that triggered
    *  the PDF (the page already fetches this async — passing the result down
-   *  as a prop avoids the PDF needing its own async fetch + state). Null
-   *  when the estimate hadn't loaded yet by export time; the totals fall
-   *  back to the trip.estimatedFuel column in that case. */
+   *  as a prop avoids the PDF needing its own async fetch + state). When
+   *  null/noEstimate (e.g. estimate hadn't loaded by export time, or the
+   *  rig has no MPG), the helper returns camp-only and the fuel stat
+   *  renders as "—". The stale trip.estimatedFuel column is intentionally
+   *  not consulted as a fallback — it's the inconsistent AI guess the
+   *  helper exists to retire. */
   fuelEstimate?: TripFuelEstimate | null
 }
 
@@ -472,30 +476,20 @@ export function TripPDF({ trip, mapImageBase64, fuelEstimate }: Props) {
 
   const totalNights = trip.totalNights ?? sortedStops.reduce((s, st) => s + st.nights, 0)
 
-  // Camp totals — Planned (siteRate * nights for every stop) vs Actual-so-far
-  // (real cost where the user recorded actualRate at booking, estimate
-  // elsewhere). Mirrors the Cost Breakdown card on TripSummaryPage so the
-  // PDF reflects the same numbers the user sees on screen.
-  const totalCampEst = sortedStops.reduce((s, st) => s + (st.siteRate || 0) * st.nights, 0)
-  const totalCampActual = sortedStops.reduce((s, st) => {
-    const isBooked = st.bookingStatus === 'CONFIRMED'
-    const hasActual = isBooked && st.actualRate != null
-    return s + (hasActual
-      ? (st.actualRate ?? 0) * st.nights + (st.actualFees ?? 0)
-      : (st.siteRate || 0) * st.nights)
-  }, 0)
-  // Fuel: prefer the live estimate threaded as a prop, fall back to the
-  // legacy trip.estimatedFuel column when the estimate hadn't loaded by
-  // export time.
-  const fuelEst = fuelEstimate && !fuelEstimate.noEstimate
-    ? fuelEstimate.total
-    : (trip.estimatedFuel || 0)
-  const fuelActual = trip.actualFuel
-  const plannedTotal = totalCampEst + fuelEst
-  const actualTotalSoFar = totalCampActual + (fuelActual ?? fuelEst)
-  const hasAnyActuals =
-    sortedStops.some(s => s.bookingStatus === 'CONFIRMED' && s.actualRate != null) ||
-    fuelActual != null
+  // Trip totals via the shared helper — same arithmetic the on-screen
+  // Cost Breakdown and stat-strip use, so PDF totals can't drift from
+  // what the user saw before clicking Export. fuelEstimate is threaded
+  // as a prop from the page that triggered the PDF (the page already
+  // fetched it async); when null/noEstimate, the helper returns camp-only
+  // and the stats grid renders fuel as "—".
+  const totals = computeTripTotals(trip, {
+    fuelEstimate: fuelEstimate?.noEstimate ? null : (fuelEstimate?.total ?? null),
+  })
+  const totalCampEst = totals.campEst
+  const fuelEst = totals.fuelEst
+  const plannedTotal = totals.plannedTotal
+  const actualTotalSoFar = totals.actualTotal
+  const hasAnyActuals = totals.hasAnyActuals
 
   // Live total miles: prefer Routes API driveDistanceMiles per stop, fall back to Haversine.
   const liveTotalMiles = sortedStops.slice(1).reduce((sum, stop, i) => {

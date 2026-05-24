@@ -5,6 +5,7 @@ import { tripsApi } from '../services/api'
 import { Trip } from '../types'
 import { formatTripDate } from '../utils/dates'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge } from '../utils/stopBadge'
+import { computeTripTotals } from '../utils/tripTotals'
 
 export default function SharedTripPage() {
   const { token } = useParams<{ token: string }>()
@@ -31,7 +32,15 @@ export default function SharedTripPage() {
   const sortedStops        = [...(trip.stops || [])].sort((a, b) => a.order - b.order)
   // No homeLocation available in public shared view — last stop always gets 'F'
   const stopDisplayNumbers = buildStopBadges(sortedStops)
-  const totalCost = (trip.estimatedFuel || 0) + (trip.estimatedCamp || 0)
+  // Camp-only on the share view: this page is public (token-auth, not
+  // user-auth), so it can't call the auth-required GET /trips/:id/fuel-estimate
+  // endpoint. Show the camp number labeled honestly as "Est. camp" rather
+  // than a fuel-inclusive "Est. cost" the page can't actually produce here.
+  // Also retires the stale trip.estimatedFuel + trip.estimatedCamp combo
+  // that this page used before — those are the AI-set fields driving the
+  // inter-surface drift the helper exists to fix.
+  const tripTotals = computeTripTotals(trip)
+  const campTotal = tripTotals.campEst
 
   return (
     <div className="min-h-screen bg-rr-bg">
@@ -58,7 +67,7 @@ export default function SharedTripPage() {
             { icon: MapPin, label: 'Miles', value: trip.totalMiles?.toLocaleString() || '–' },
             { icon: Tent, label: 'Nights', value: trip.totalNights || '–' },
             { icon: MapPin, label: 'Stops', value: sortedStops.filter(s => s.type !== 'HOME').length },
-            { icon: DollarSign, label: 'Est. cost', value: totalCost ? `$${totalCost.toLocaleString()}` : '–' },
+            { icon: DollarSign, label: 'Est. camp', value: campTotal > 0 ? `$${Math.round(campTotal).toLocaleString()}` : '–' },
           ].map(({ icon: Icon, label, value }) => (
             <div key={label} className="card text-center">
               <Icon size={15} className="text-[#1F6F8B] mx-auto mb-1" />

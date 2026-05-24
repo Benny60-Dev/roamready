@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { Calendar, Map, Tent, DollarSign, Trash2 } from 'lucide-react'
 import { Trip } from '../../types'
 import { formatTripDate, relativeTime } from '../../utils/dates'
+import { computeTripTotals } from '../../utils/tripTotals'
 
 /**
  * Shared trip card. Replaces three previously-divergent inline copies:
@@ -67,8 +68,16 @@ export default function TripCard({
   const effectiveShowRoute = showRoute ?? !isCompact
 
   const statusClass = STATUS_BADGE[trip.status]
-  const cost = (trip.estimatedFuel || 0) + (trip.estimatedCamp || 0)
-  const hasCost = !!(trip.estimatedFuel || trip.estimatedCamp)
+  // Camp-only on the dashboard / trips list / continue-planning card —
+  // these are list surfaces that render many cards at once and MUST NOT
+  // fan out per-card fuel-estimate API calls. Label the number "camp" so
+  // it can't be mistaken for the full Cost Breakdown total on the
+  // itinerary page. The legacy `(estimatedFuel || 0) + (estimatedCamp || 0)`
+  // combo (which produced the ~$10,090 dashboard number that contradicted
+  // every other surface) is retired here too.
+  const tripTotals = computeTripTotals(trip)
+  const cost = tripTotals.hasAnyActuals ? tripTotals.campActual : tripTotals.campEst
+  const hasCost = cost > 0
 
   if (variant === 'row') {
     // ── Horizontal list-row layout ─ matches TripsPage.tsx:96-131 exactly.
@@ -117,7 +126,8 @@ export default function TripCard({
           {effectiveShowCost && hasCost && (
             <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
               <DollarSign size={13} />
-              {cost.toLocaleString()}
+              {Math.round(cost).toLocaleString()}
+              <span className="text-xs text-gray-400 ml-0.5">camp</span>
             </span>
           )}
           {onDelete && (
@@ -180,7 +190,7 @@ export default function TripCard({
           {effectiveShowCost && hasCost && (
             <span className="flex items-center gap-1">
               <DollarSign size={11} />
-              ~${cost.toLocaleString()}
+              ~${Math.round(cost).toLocaleString()} camp
             </span>
           )}
           {showRelative && trip.updatedAt && (
@@ -259,7 +269,7 @@ export default function TripCard({
         {effectiveShowCost && hasCost && (
           <span className="flex items-center gap-1">
             <DollarSign size={12} />
-            ~${cost.toLocaleString()}
+            ~${Math.round(cost).toLocaleString()} camp
           </span>
         )}
         {showRelative && trip.updatedAt && (

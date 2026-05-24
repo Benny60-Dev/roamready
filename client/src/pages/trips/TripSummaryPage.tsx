@@ -15,6 +15,7 @@ import { useAuthStore } from '../../store/authStore'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge, StopBadge } from '../../utils/stopBadge'
 import { format, addDays } from 'date-fns'
 import { parseTripDate, toYmd } from '../../utils/dates'
+import { computeTripTotals } from '../../utils/tripTotals'
 import { StopWeatherCard } from '../../components/weather/StopWeatherCard'
 
 // ─── Format helpers ───────────────────────────────────────────────────────────
@@ -1047,8 +1048,15 @@ export default function TripSummaryPage() {
 
   const sortedStops = [...(trip.stops || [])].sort((a, b) => a.order - b.order)
   const stopDisplayNumbers = buildStopBadges(sortedStops, user)
-  const totalCamp = sortedStops.reduce((sum, s) => sum + (s.siteRate || 0) * s.nights, 0)
-  const grandTotal = totalCamp + (trip.estimatedFuel || 0)
+  // Canonical trip totals — shared with the Cost Breakdown IIFE below and
+  // the PDF / map / dashboard / share surfaces via the same helper. The
+  // legacy local `totalCamp` / `grandTotal` were removed; reading them was
+  // the source of the inter-surface total drift the helper was extracted
+  // to fix. Fuel is passed only when fuelEstimate has loaded AND isn't a
+  // noEstimate result.
+  const tripTotals = computeTripTotals(trip, {
+    fuelEstimate: fuelEstimate?.noEstimate ? null : (fuelEstimate?.total ?? null),
+  })
 
   // Live total miles: prefer Routes API driveDistanceMiles per stop, fall back to Haversine.
   const liveTotalMiles = sortedStops.slice(1).reduce((sum, stop, i) => {
@@ -1111,7 +1119,11 @@ export default function TripSummaryPage() {
             <StatCell value={String(sortedStops.length)} label="Stops" shortLabel="stops" />
           </div>
           <div className="flex-1 flex justify-center">
-            <StatCell value={`$${grandTotal.toLocaleString()}`} label="Est. total" shortLabel="est." />
+            <StatCell
+              value={`$${Math.round(tripTotals.hasAnyActuals ? tripTotals.actualTotal : tripTotals.plannedTotal).toLocaleString()}`}
+              label={tripTotals.hasAnyActuals ? 'Actual' : 'Est. total'}
+              shortLabel={tripTotals.hasAnyActuals ? 'actual' : 'est.'}
+            />
           </div>
         </div>
       </div>
@@ -1253,8 +1265,11 @@ export default function TripSummaryPage() {
           moment any actual lands. All money values guarded against null /
           NaN — loading fuel renders "—", never "$null". */}
       {(() => {
-        // Per-stop computation. campCost is what shows for the row;
-        // isActualCamp drives the pine "actual" tag vs the gray "est." tag.
+        // Per-stop ROW data — kept local because it drives row rendering
+        // (the actual/est tag per row) rather than the trip-level totals.
+        // The totals themselves come from computeTripTotals (shared with
+        // the header stat-strip + every other surface) so the rows and
+        // the totals can't drift even by a cent.
         const stopRows = sortedStops
           .map(stop => {
             const isBooked = stop.bookingStatus === 'CONFIRMED'
@@ -1271,28 +1286,11 @@ export default function TripSummaryPage() {
           })
           .filter((r): r is NonNullable<typeof r> => r !== null)
 
-        const totalCampEst = stopRows.reduce((sum, r) => sum + r.estCamp, 0)
-        const totalCampActual = stopRows.reduce((sum, r) => sum + r.displayCamp, 0)
-
-        // Fuel: prefer the live endpoint result; fall back to trip.estimatedFuel
-        // (the legacy column, usually 0). Loading state stays null.
-        const fuelEst = fuelEstimate?.noEstimate
-          ? null
-          : fuelEstimate?.total ?? null
-        const fuelActual = trip.actualFuel ?? null
-
-        // Aggregate totals. Actual-so-far uses real where known + estimate
-        // for everything else; loading fuel leaves total = camp + 0 rather
-        // than NaN-propagating into the displayed number.
-        const plannedTotal = totalCampEst + (fuelEst ?? 0)
-        const actualTotalSoFar =
-          totalCampActual + (fuelActual ?? fuelEst ?? 0)
-
-        // Collapse-when-equal: ONE "Estimated total" line until at least one
-        // actual exists. An "actual" = any booked stop with actualRate set,
-        // OR a logged trip.actualFuel.
-        const hasAnyActuals =
-          stopRows.some(r => r.isActualCamp) || fuelActual != null
+        // Trip totals — single source of truth via the shared helper.
+        // Camp values match Σ over stopRows exactly (rows with displayCamp<=0
+        // contribute 0 anyway, so filtering them out for display vs. summing
+        // them all is mathematically identical).
+        const { fuelEst, fuelActual, plannedTotal, actualTotal, hasAnyActuals } = tripTotals
 
         // Caption strings — guard against null asOf when source==='fallback'.
         const fuelCaption = (() => {
@@ -1422,7 +1420,7 @@ export default function TripSummaryPage() {
               </div>
               <div className="flex items-center justify-between font-medium">
                 <span className="text-gray-900">Actual so far</span>
-                <span className="text-[#1F6F8B]">${fmtMoney(Math.round(actualTotalSoFar))}</span>
+                <span className="text-[#1F6F8B]">${fmtMoney(Math.round(actualTotal))}</span>
               </div>
               <p className="text-[11px] text-gray-400 mt-1">
                 Actual so far uses your real costs where recorded, planned estimates elsewhere.

@@ -9,7 +9,8 @@ import {
 } from 'lucide-react'
 import { formatTripDate } from '../../utils/dates'
 import { tripsApi } from '../../services/api'
-import { Trip, Stop, StopWeather, LiveForecast } from '../../types'
+import { Trip, Stop, StopWeather, LiveForecast, TripFuelEstimate } from '../../types'
+import { computeTripTotals } from '../../utils/tripTotals'
 import { StopWeatherCard, ALERT_STYLES } from '../../components/weather/StopWeatherCard'
 const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel'))
 import ConfirmModal from '../../components/ui/ConfirmModal'
@@ -447,6 +448,11 @@ export default function TripMapPage() {
   const [tripNameInput, setTripNameInput]   = useState('')
   const [modifyPanelOpen, setModifyPanelOpen] = useState(false)
   const [mapExpanded, setMapExpanded]       = useState(false)
+  // Live regional fuel-cost estimate. Same fetch shape as TripSummaryPage —
+  // async, non-blocking. Null while loading; populated by the useEffect
+  // below once the trip is ready. Passed through to computeTripTotals so
+  // the map's "Est. cost" stat matches what the itinerary shows.
+  const [fuelEstimate, setFuelEstimate]     = useState<TripFuelEstimate | null>(null)
   const [isMobile, setIsMobile]             = useState(() => window.innerWidth < 768)
   const [isDesktop, setIsDesktop]           = useState(() => window.innerWidth >= 1024)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
@@ -570,6 +576,21 @@ export default function TripMapPage() {
       })
       .finally(() => setWeatherLoading(false))
   }, [trip?.stops])
+
+  // ── Fetch the regional fuel-cost estimate ─────────────────────────────────────
+  // Same pattern as TripSummaryPage so the map's "Est. cost" stat matches the
+  // itinerary's. Async + non-blocking — the stat shows "–" until the estimate
+  // lands. Errors silently log; a failed fetch leaves fuelEstimate null which
+  // computeTripTotals treats as "camp only" (cleaner than rendering NaN).
+  useEffect(() => {
+    if (!id || !trip?.id) return
+    tripsApi.getFuelEstimate(id)
+      .then(res => setFuelEstimate(res.data))
+      .catch(err => {
+        console.warn('[TripMapPage] fuel estimate fetch failed:', err?.message ?? err)
+        setFuelEstimate(null)
+      })
+  }, [id, trip?.id])
 
   // ── Geocode stops missing lat/lng, save to DB ─────────────────────────────────
   useEffect(() => {
@@ -843,21 +864,29 @@ export default function TripMapPage() {
     }, 0)
   }, [trip?.stops])
 
-  // Cost and booking stats
+  // Cost and booking stats — totalCost via the shared computeTripTotals
+  // helper so the map page's "Est. cost" stat agrees with the itinerary's
+  // stat-strip and Cost Breakdown to the dollar. Reads the live fuel
+  // estimate from state (fetched in the useEffect above); falls back to
+  // camp-only when the estimate hasn't loaded yet or returned noEstimate.
+  // Deliberately does NOT read trip.estimatedFuel — that was the stale
+  // AI guess driving the prior inter-surface drift.
   const { totalCost, nonHomeStops, bookedStops } = useMemo(() => {
     const stops = trip?.stops || []
-    const camp = stops.reduce((sum, s) => sum + ((s as any).siteRate || 0) * s.nights, 0)
+    const totals = computeTripTotals(trip, {
+      fuelEstimate: fuelEstimate?.noEstimate ? null : (fuelEstimate?.total ?? null),
+    })
     // Badge-based: catches return-home loops where the closing stop is typed
     // DESTINATION but badged 'H'. Mirrors TripBookingPage's bookableStops so
     // the two pages report the same "X of Y" on the same trip.
     const nonHome = stops.filter((s: Stop) => !isHomeBadge(stopBadges[s.id]))
     const booked = nonHome.filter(s => s.bookingStatus === 'CONFIRMED').length
     return {
-      totalCost: camp + (trip?.estimatedFuel || 0),
+      totalCost: totals.hasAnyActuals ? totals.actualTotal : totals.plannedTotal,
       nonHomeStops: nonHome,
       bookedStops: booked,
     }
-  }, [trip?.stops, trip?.estimatedFuel, stopBadges])
+  }, [trip, fuelEstimate, stopBadges])
 
   // Total unique weather alerts across all stops — for the Weather tab badge
   const totalAlerts = useMemo(() => {
@@ -1343,7 +1372,7 @@ export default function TripMapPage() {
                 </div>
                 <div className="bg-gray-50 rounded-lg px-2.5 py-2 text-center">
                   <p className="text-[10px] text-gray-400 mb-0.5">Est. cost</p>
-                  <p className="text-sm font-semibold text-gray-900">{totalCost ? `$${totalCost.toLocaleString()}` : '–'}</p>
+                  <p className="text-sm font-semibold text-gray-900">{totalCost ? `$${Math.round(totalCost).toLocaleString()}` : '–'}</p>
                 </div>
                 <div className="bg-gray-50 rounded-lg px-2.5 py-2 text-center">
                   <p className="text-[10px] text-gray-400 mb-0.5">Booked</p>

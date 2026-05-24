@@ -13,6 +13,7 @@ import { useVoiceInput } from '../hooks/useVoiceInput'
 import { ChatInput } from '../components/ChatInput'
 import { selectGreeting } from '../utils/greeting'
 import { relativeTime } from '../utils/dates'
+import { computeTripTotals } from '../utils/tripTotals'
 
 // Window augmentation for SpeechRecognition / webkitSpeechRecognition lives
 // in client/src/types/global.d.ts now — see useVoiceInput hook for usage.
@@ -821,7 +822,7 @@ export default function SessionPage() {
                     <span className="text-base flex-shrink-0">🗺️</span>
                     <span className="font-medium text-[#1F6F8B] truncate">{itinerary.name}</span>
                     <span className="text-xs text-[#134756] flex-shrink-0">
-                      · {itinerary.totalNights}n · ${((itinerary.estimatedFuel || 0) + (itinerary.estimatedCamp || 0)).toLocaleString()}
+                      · {itinerary.totalNights}n · ${Math.round(computeTripTotals(itinerary).campEst).toLocaleString()} camp
                     </span>
                   </div>
                   <span className="text-sm text-[#1F6F8B] font-medium flex-shrink-0">Review →</span>
@@ -858,7 +859,7 @@ export default function SessionPage() {
             <div className="px-5 py-4">
               <div className="grid grid-cols-2 gap-2 mb-4 text-xs text-gray-500">
                 <div>~{itinerary.totalMiles?.toLocaleString()} mi</div>
-                <div>~${((itinerary.estimatedFuel || 0) + (itinerary.estimatedCamp || 0)).toLocaleString()}</div>
+                <div>~${Math.round(computeTripTotals(itinerary).campEst).toLocaleString()} camp</div>
               </div>
               <div className="space-y-2 mb-4">
                 {itinerary.stops?.map((stop: any, i: number) => (
@@ -896,7 +897,7 @@ export default function SessionPage() {
               </div>
               <div className="grid grid-cols-2 gap-2 mb-4 text-xs text-gray-500">
                 <div>~{itinerary.totalMiles?.toLocaleString()} mi</div>
-                <div>~${((itinerary.estimatedFuel || 0) + (itinerary.estimatedCamp || 0)).toLocaleString()}</div>
+                <div>~${Math.round(computeTripTotals(itinerary).campEst).toLocaleString()} camp</div>
               </div>
               <div className="flex-1 overflow-y-auto min-h-0 space-y-2">
                 {itinerary.stops?.map((stop: any, i: number) => (
