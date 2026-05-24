@@ -351,6 +351,14 @@ model Stop {
   bookingStatus          BookingStatus @default(NOT_BOOKED)
   confirmationNum        String?
   siteRate               Float?
+  // Block 13 — actual cost capture. siteRate is the pre-booking estimate
+  // (campground's published rate or AI guess); actualRate is the per-night
+  // rate the USER recorded at booking time (after discounts / loyalty /
+  // promo) and actualFees is a flat add-on for taxes + fees on top of
+  // (actualRate * nights). Both nullable so unbooked stops carry neither
+  // and a booked stop can record one without the other.
+  actualRate             Float?
+  actualFees             Float?
   estimatedFuel          Float?
   checkInTime            String?
   checkOutTime           String?

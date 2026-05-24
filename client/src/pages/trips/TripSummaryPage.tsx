@@ -1627,6 +1627,12 @@ function DayCard({
                 <span className="text-sm font-semibold text-gray-800">{stop.campgroundName}</span>
               </div>
             )}
+            {/* Block 13 — rate + booked-detail line on the multi-night
+                stay card. Same shared helpers as the drive-day arrival
+                cards so a stop reads consistently no matter which card
+                type it's seen on. */}
+            <RateLine stop={stop} />
+            <BookedSummary stop={stop} />
             {stop.latitude && stop.longitude && (
               <div>
                 <button
@@ -1866,6 +1872,73 @@ function DriveContent({
   )
 }
 
+// ─── RateLine ─────────────────────────────────────────────────────────────────
+
+/**
+ * Estimate-vs-actual rate display. Block 13 split siteRate (pre-booking
+ * estimate — from the campground's published rate or an AI guess) from
+ * actualRate (what the user actually paid, recorded at booking time).
+ * This helper picks the right one and renders nothing when there's
+ * nothing meaningful to show — so we never produce "$null", "Est. $0",
+ * or an empty "$/night". Branches:
+ *   1. CONFIRMED + actualRate present → "$X/night" (no prefix)
+ *   2. else if siteRate present + > 0 → "Est. $X/night"
+ *   3. else → null (no row)
+ * Shared by StayContent, OvernightContent, and the STAY_GROUP sub-header
+ * so the est/actual logic lives in exactly one place.
+ *
+ * Formatting: integer rates render bare (no trailing ".00"); rates with
+ * cents render with two decimals. Matches user expectation for typical
+ * campground pricing.
+ */
+function RateLine({ stop }: { stop: Stop }) {
+  const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2))
+  const isBooked = stop.bookingStatus === 'CONFIRMED'
+  if (isBooked && stop.actualRate != null) {
+    return <div className="text-xs text-gray-400 ml-4">${fmt(stop.actualRate)}/night</div>
+  }
+  if (stop.siteRate != null && stop.siteRate > 0) {
+    return <div className="text-xs text-gray-400 ml-4">Est. ${fmt(stop.siteRate)}/night</div>
+  }
+  return null
+}
+
+// ─── BookedSummary ────────────────────────────────────────────────────────────
+
+/**
+ * Booked-stop detail line — only renders when bookingStatus === CONFIRMED
+ * AND at least one piece of detail is available. Composes a compact
+ * "<nights> nights · Site <site#> · $<total> total" line; any segment
+ * with no data is dropped, so a stop with no site number simply omits
+ * the "Site X" middle piece. Total prefers actualRate, falls back to
+ * siteRate if the user hasn't recorded an actual yet, and adds
+ * actualFees on top. Suppressed entirely when no rate is available so
+ * we never render "$0 total". "(incl. fees)" appended only when fees > 0
+ * so the line stays short for the common no-fees case.
+ *
+ * Shared by StayContent, OvernightContent, and STAY_GROUP — same helper
+ * everywhere keeps the math + null guards in one place.
+ */
+function BookedSummary({ stop }: { stop: Stop }) {
+  if (stop.bookingStatus !== 'CONFIRMED') return null
+  const ratePerNight = stop.actualRate ?? stop.siteRate ?? 0
+  const fees = stop.actualFees ?? 0
+  const total = ratePerNight * stop.nights + fees
+  const parts: string[] = []
+  if (stop.nights > 0) {
+    parts.push(`${stop.nights} night${stop.nights === 1 ? '' : 's'}`)
+  }
+  if (stop.siteNumber) {
+    parts.push(`Site ${stop.siteNumber}`)
+  }
+  if (ratePerNight > 0 && total > 0) {
+    const totalDisplay = Number.isInteger(total) ? total.toLocaleString() : total.toFixed(2)
+    parts.push(fees > 0 ? `$${totalDisplay} total (incl. fees)` : `$${totalDisplay} total`)
+  }
+  if (parts.length === 0) return null
+  return <div className="text-xs text-gray-500 ml-4">{parts.join(' · ')}</div>
+}
+
 // ─── StayContent ──────────────────────────────────────────────────────────────
 
 // `arrival` / `poiMinutes` props removed in Block 11 pass 1 — the inline
@@ -1937,27 +2010,35 @@ function StayContent({ entry, weather }: {
             <span className="text-sm font-semibold text-gray-800">{stop.campgroundName}</span>
           </div>
         )}
+        {/* Block 13 — estimate-vs-actual rate + booked-detail line.
+            Shared with OvernightContent + STAY_GROUP via the helpers
+            above. Both render nothing when there's no data, so a
+            rate-less / unbooked stop adds zero visual rows here. */}
+        <RateLine stop={stop} />
+        <BookedSummary stop={stop} />
       </div>
 
-      {/* Book this stop! / Confirmed — not shown for HOME stops */}
+      {/* Book this stop! / Confirmed — not shown for HOME stops.
+          Block 13: the booked pill is now a static informational chip
+          (pine #3E5540 on a light pine tint, per the locked palette) and
+          the edit affordance is an explicit "Edit booking" RV-blue text
+          link beside it — replaces the prior implicit pattern where the
+          whole sage pill was a Link. Two confirmationNum branches
+          collapsed into one (label-only difference) since they were
+          byte-identical apart from the trailing "#..." text. */}
       {stop.type !== 'HOME' && (stop.bookingStatus === 'CONFIRMED' ? (
-        stop.confirmationNum ? (
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-[#3E5540] bg-[#3E5540]/10 px-2.5 py-1 rounded-full w-fit">
+            <Check size={11} />
+            {stop.confirmationNum ? `Confirmed · #${stop.confirmationNum}` : 'Booked'}
+          </div>
           <Link
             to={`/trips/${stop.tripId}/booking?stopId=${stop.id}`}
-            className="flex items-center gap-1.5 text-xs font-semibold text-[#2F4030] bg-[#DCE5D5] hover:bg-[#C5D4BA] px-2.5 py-1 rounded-full w-fit transition-colors"
+            className="text-xs text-[#1F6F8B] hover:text-[#134756] font-medium transition-colors"
           >
-            <Check size={11} />
-            Confirmed · #{stop.confirmationNum}
+            Edit booking
           </Link>
-        ) : (
-          <Link
-            to={`/trips/${stop.tripId}/booking?stopId=${stop.id}`}
-            className="flex items-center gap-1.5 text-xs font-semibold text-[#2F4030] bg-[#DCE5D5] hover:bg-[#C5D4BA] px-2.5 py-1 rounded-full w-fit transition-colors"
-          >
-            <Check size={11} />
-            Booked
-          </Link>
-        )
+        </div>
       ) : (
         <button
           onClick={() => navigate(`/trips/${stop.tripId}/booking?stopId=${stop.id}`)}
@@ -2170,33 +2251,31 @@ function OvernightContent({ entry, weather }: {
             <span className="text-sm font-semibold text-gray-800">{stop.campgroundName}</span>
           </div>
         )}
-        {/* Rate only — "Early departure" trailing text removed in Block 11
-            pass 2 (the overnight context already implies a short stay) and
-            the rate-null variant is suppressed entirely so we don't render
-            an italic placeholder when there's nothing to show. */}
-        {stop.siteRate != null && (
-          <div className="text-xs text-gray-400 ml-4">${stop.siteRate}/night</div>
-        )}
+        {/* Rate + booked-detail summary — both via shared helpers so the
+            est/actual logic lives in exactly one place. RateLine handles
+            the Block 13 prefix toggle ("Est." before booking, no prefix
+            after, hidden when there's nothing to show); BookedSummary
+            adds "nights · Site # · $total" only when CONFIRMED. */}
+        <RateLine stop={stop} />
+        <BookedSummary stop={stop} />
       </div>
 
+      {/* Block 13 — same booked-pill + Edit-booking pattern as StayContent.
+          OvernightContent has no HOME guard since OVERNIGHT entries are
+          never HOME-typed. */}
       {stop.bookingStatus === 'CONFIRMED' ? (
-        stop.confirmationNum ? (
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-[#3E5540] bg-[#3E5540]/10 px-2.5 py-1 rounded-full w-fit">
+            <Check size={11} />
+            {stop.confirmationNum ? `Confirmed · #${stop.confirmationNum}` : 'Booked'}
+          </div>
           <Link
             to={`/trips/${stop.tripId}/booking?stopId=${stop.id}`}
-            className="flex items-center gap-1.5 text-xs font-semibold text-[#2F4030] bg-[#DCE5D5] hover:bg-[#C5D4BA] px-2.5 py-1 rounded-full w-fit transition-colors"
+            className="text-xs text-[#1F6F8B] hover:text-[#134756] font-medium transition-colors"
           >
-            <Check size={11} />
-            Confirmed · #{stop.confirmationNum}
+            Edit booking
           </Link>
-        ) : (
-          <Link
-            to={`/trips/${stop.tripId}/booking?stopId=${stop.id}`}
-            className="flex items-center gap-1.5 text-xs font-semibold text-[#2F4030] bg-[#DCE5D5] hover:bg-[#C5D4BA] px-2.5 py-1 rounded-full w-fit transition-colors"
-          >
-            <Check size={11} />
-            Booked
-          </Link>
-        )
+        </div>
       ) : (
         <button
           onClick={() => navigate(`/trips/${stop.tripId}/booking?stopId=${stop.id}`)}

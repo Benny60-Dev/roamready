@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Stop" ADD COLUMN     "actualFees" DOUBLE PRECISION,
+ADD COLUMN     "actualRate" DOUBLE PRECISION;

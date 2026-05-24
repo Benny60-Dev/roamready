@@ -57,6 +57,13 @@ interface ReservationForm {
   checkInTime: string
   checkOutTime: string
   notes: string
+  // Block 13 — actual cost capture. Stored as strings (matching the rest
+  // of the form-state convention for <input> values) and converted to
+  // numbers in the save payload below. siteRate is the campground's
+  // published/AI-estimated rate; these two record what the user actually
+  // paid after discounts / fees / taxes.
+  actualRate: string
+  actualFees: string
 }
 
 function ReservationSection({
@@ -79,6 +86,11 @@ function ReservationSection({
     checkInTime: stop.checkInTime || '',
     checkOutTime: stop.checkOutTime || '',
     notes: stop.notes || '',
+    // Pre-fill from prior actuals so editing a booking shows the values
+    // already recorded. Number → string via `?? ''` because the inputs are
+    // controlled text fields; the save path converts back to number.
+    actualRate: stop.actualRate != null ? String(stop.actualRate) : '',
+    actualFees: stop.actualFees != null ? String(stop.actualFees) : '',
   })
 
   // Track previous bookingStatus + draftMode across renders. The component stays mounted
@@ -108,6 +120,8 @@ function ReservationSection({
         checkInTime: stop.checkInTime || '',
         checkOutTime: stop.checkOutTime || '',
         notes: stop.notes || '',
+        actualRate: stop.actualRate != null ? String(stop.actualRate) : '',
+        actualFees: stop.actualFees != null ? String(stop.actualFees) : '',
       })
       setOpen(false)
     }
@@ -123,12 +137,24 @@ function ReservationSection({
   async function save() {
     setSaving(true)
     try {
+      // Block 13 — convert the actual-cost text inputs to numbers (or
+      // undefined when blank / non-numeric so the field is left alone in
+      // the DB). The HTML inputs are type="number" so non-numeric strings
+      // are rare, but Number('') is 0 and would clobber a previously-set
+      // value — hence the explicit empty-string guard before Number().
+      const toNum = (s: string): number | undefined => {
+        if (s.trim() === '') return undefined
+        const n = Number(s)
+        return Number.isFinite(n) && n >= 0 ? n : undefined
+      }
       const payload: Partial<Stop> = {
         confirmationNum: form.confirmationNum || undefined,
         siteNumber: form.siteNumber || undefined,
         checkInTime: form.checkInTime || undefined,
         checkOutTime: form.checkOutTime || undefined,
         notes: form.notes || undefined,
+        actualRate: toNum(form.actualRate),
+        actualFees: toNum(form.actualFees),
       }
       // Reservation Honesty: when this save fires from draft mode it IS the booking commit —
       // flip bookingStatus and link the chosen campground in the same updateStop call so we
@@ -232,6 +258,40 @@ function ReservationSection({
                 placeholder="11:00 AM"
                 value={form.checkOutTime}
                 onChange={e => set('checkOutTime', e.target.value)}
+              />
+            </div>
+            {/* Block 13 — actual cost capture. The campground's published rate
+                (stop.siteRate) is the pre-booking estimate; what users
+                actually pay is shaped by discounts, loyalty, taxes, and
+                fees that vary site-by-site. These two inputs record the
+                real numbers so the trip's cost total reflects reality
+                instead of the published-rate estimate. Both are optional
+                — a user can save reservation info without filling them
+                in, and can come back later to fill them after the stay. */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Rate per night (actual)</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.01"
+                className="input text-xs w-full"
+                placeholder="65.00"
+                value={form.actualRate}
+                onChange={e => set('actualRate', e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Fees &amp; taxes</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.01"
+                className="input text-xs w-full"
+                placeholder="0.00"
+                value={form.actualFees}
+                onChange={e => set('actualFees', e.target.value)}
               />
             </div>
           </div>

@@ -34,6 +34,13 @@ export const StopUpdateSchema = z
       .optional(),
     confirmationNum: z.string().max(100).nullable().optional(),
     siteRate: z.number().min(0).nullable().optional(),
+    // Block 13 — actual cost capture. siteRate stays the estimate; the next
+    // two record what the user paid at booking time. Same validation shape
+    // as siteRate (non-negative, nullable, optional) so a partial update
+    // can set either independently. The schema is .strict(), so omitting
+    // these here would 400 every booking save that includes them.
+    actualRate: z.number().min(0).nullable().optional(),
+    actualFees: z.number().min(0).nullable().optional(),
     estimatedFuel: z.number().min(0).nullable().optional(),
     checkInTime: z.string().max(20).nullable().optional(),
     checkOutTime: z.string().max(20).nullable().optional(),

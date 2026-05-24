@@ -232,6 +232,11 @@ export interface Stop {
   bookingStatus: BookingStatus
   confirmationNum?: string
   siteRate?: number
+  // Block 13 — actual cost capture. siteRate remains the pre-booking
+  // estimate; actualRate/actualFees hold the real numbers the user
+  // recorded at booking time. Optional + nullable so partial saves work.
+  actualRate?: number | null
+  actualFees?: number | null
   estimatedFuel?: number
   hookupType?: string
   checkInTime?: string
