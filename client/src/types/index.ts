@@ -258,6 +258,36 @@ export interface Stop {
   journalEntry?: JournalEntry
 }
 
+// ─── Fuel-cost estimate (GET /api/v1/trips/:id/fuel-estimate) ─────────────────
+// Returned by the server's computeFuelEstimate via the per-leg EIA pricing
+// service. perLeg breaks the trip into consecutive stop-pair segments, each
+// priced by the destination state's regional retail rate. `source` is the
+// worst-case data tier across legs ('fallback' if any used the hardcoded
+// table). `noEstimate` is set when computation couldn't proceed (no rig MPG,
+// fewer than 2 stops); the client surfaces a hint in that case.
+
+export interface FuelLegEstimate {
+  fromOrder: number
+  toOrder: number
+  toState: string | null
+  miles: number
+  pricePerGallon: number
+  region: string
+  paddCode: string
+  source: 'eia' | 'cache' | 'fallback'
+  cost: number
+}
+
+export interface TripFuelEstimate {
+  total: number
+  fuelType: 'gas' | 'diesel'
+  perLeg: FuelLegEstimate[]
+  source: 'eia' | 'cache' | 'fallback'
+  asOf: string | null
+  noEstimate?: boolean
+  noEstimateReason?: string
+}
+
 export interface JournalEntry {
   id: string
   stopId: string

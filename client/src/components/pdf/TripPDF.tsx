@@ -1,7 +1,7 @@
 import {
   Document, Page, View, Text, StyleSheet, Image,
 } from '@react-pdf/renderer'
-import { Trip, Stop, ItineraryDay, ItineraryActivity, POI } from '../../types/index'
+import { Trip, Stop, ItineraryDay, ItineraryActivity, POI, TripFuelEstimate } from '../../types/index'
 import { format, addDays } from 'date-fns'
 import { parseTripDate } from '../../utils/dates'
 
@@ -456,17 +456,46 @@ function StopEntry({ entry }: { entry: TimelineEntry }) {
 interface Props {
   trip: Trip
   mapImageBase64?: string | null
+  /** Live regional fuel-cost estimate threaded from the page that triggered
+   *  the PDF (the page already fetches this async — passing the result down
+   *  as a prop avoids the PDF needing its own async fetch + state). Null
+   *  when the estimate hadn't loaded yet by export time; the totals fall
+   *  back to the trip.estimatedFuel column in that case. */
+  fuelEstimate?: TripFuelEstimate | null
 }
 
-export function TripPDF({ trip, mapImageBase64 }: Props) {
+export function TripPDF({ trip, mapImageBase64, fuelEstimate }: Props) {
   const sortedStops = [...(trip.stops || [])].sort((a, b) => a.order - b.order)
 
   const rawEntries = buildTimeline(sortedStops, trip.startDate ?? undefined)
   const entries = trip.itinerary ? mergeAI(rawEntries, trip.itinerary) : rawEntries
 
   const totalNights = trip.totalNights ?? sortedStops.reduce((s, st) => s + st.nights, 0)
-  const totalCamp   = sortedStops.reduce((s, st) => s + (st.siteRate || 0) * st.nights, 0)
-  const grandTotal  = totalCamp + (trip.estimatedFuel || 0)
+
+  // Camp totals — Planned (siteRate * nights for every stop) vs Actual-so-far
+  // (real cost where the user recorded actualRate at booking, estimate
+  // elsewhere). Mirrors the Cost Breakdown card on TripSummaryPage so the
+  // PDF reflects the same numbers the user sees on screen.
+  const totalCampEst = sortedStops.reduce((s, st) => s + (st.siteRate || 0) * st.nights, 0)
+  const totalCampActual = sortedStops.reduce((s, st) => {
+    const isBooked = st.bookingStatus === 'CONFIRMED'
+    const hasActual = isBooked && st.actualRate != null
+    return s + (hasActual
+      ? (st.actualRate ?? 0) * st.nights + (st.actualFees ?? 0)
+      : (st.siteRate || 0) * st.nights)
+  }, 0)
+  // Fuel: prefer the live estimate threaded as a prop, fall back to the
+  // legacy trip.estimatedFuel column when the estimate hadn't loaded by
+  // export time.
+  const fuelEst = fuelEstimate && !fuelEstimate.noEstimate
+    ? fuelEstimate.total
+    : (trip.estimatedFuel || 0)
+  const fuelActual = trip.actualFuel
+  const plannedTotal = totalCampEst + fuelEst
+  const actualTotalSoFar = totalCampActual + (fuelActual ?? fuelEst)
+  const hasAnyActuals =
+    sortedStops.some(s => s.bookingStatus === 'CONFIRMED' && s.actualRate != null) ||
+    fuelActual != null
 
   // Live total miles: prefer Routes API driveDistanceMiles per stop, fall back to Haversine.
   const liveTotalMiles = sortedStops.slice(1).reduce((sum, stop, i) => {
@@ -528,20 +557,33 @@ export function TripPDF({ trip, mapImageBase64 }: Props) {
             </View>
             <View style={s.statDivider} />
             <View style={s.statCell}>
-              <Text style={s.statVal}>{fmtCurrency(trip.estimatedFuel)}</Text>
+              <Text style={s.statVal}>{fmtCurrency(fuelEst || null)}</Text>
               <Text style={s.statLabel}>Est. Fuel</Text>
             </View>
             <View style={s.statDivider} />
             <View style={s.statCell}>
-              <Text style={s.statVal}>{fmtCurrency(totalCamp || null)}</Text>
+              <Text style={s.statVal}>{fmtCurrency(totalCampEst || null)}</Text>
               <Text style={s.statLabel}>Est. Camping</Text>
             </View>
             <View style={s.statDivider} />
             <View style={s.statCell}>
-              <Text style={[s.statVal, { fontSize: 16 }]}>{fmtCurrency(grandTotal || null)}</Text>
-              <Text style={s.statLabel}>Total Est. Cost</Text>
+              <Text style={[s.statVal, { fontSize: 16 }]}>{fmtCurrency(plannedTotal || null)}</Text>
+              <Text style={s.statLabel}>{hasAnyActuals ? 'Planned Total' : 'Total Est. Cost'}</Text>
             </View>
           </View>
+          {/* Actual-so-far line — only when at least one actual has been
+              recorded (booked stop with actualRate, or trip.actualFuel set).
+              Renders below the stats grid so the existing 6-cell layout
+              stays intact and the "what you've actually paid" number sits
+              prominent right under the planned total. */}
+          {hasAnyActuals && (
+            <View style={{ marginTop: 6, paddingTop: 6, borderTopWidth: 0.5, borderTopColor: '#E5E7EB', flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 9, color: '#6B7280' }}>Actual so far</Text>
+              <Text style={{ fontSize: 11, fontWeight: 600, color: '#1F6F8B' }}>
+                {fmtCurrency(actualTotalSoFar || null)}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* ── Route Map ── */}

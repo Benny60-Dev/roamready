@@ -10,6 +10,7 @@ import {
   generateItinerary, saveItinerary, generateRoutes, generateActivities,
   generateRouteHighlights, getTripMapImage, getTripWeather, reassignPOIs,
   createShareToken, regenerateShareToken, revokeShareToken,
+  getTripFuelEstimate,
 } from '../controllers/trips'
 
 export const tripsRouter = Router()
@@ -40,6 +41,10 @@ tripsRouter.delete('/:id/share', requireFeature('tripSharing'), revokeShareToken
 tripsRouter.post('/:id/export/pdf', requireFeature('pdfExport'), exportPdf as any)
 tripsRouter.get('/:id/map-image', getTripMapImage as any)
 tripsRouter.get('/:id/weather', requireFeature('weatherAlerts'), getTripWeather as any)
+// Fuel-cost estimate — priced per leg by destination-state via EIA. Ungated
+// (the underlying EIA fetch is cheap + cached 7-day) so all trip surfaces
+// can show a live regional estimate. See controllers/trips.ts → getTripFuelEstimate.
+tripsRouter.get('/:id/fuel-estimate', getTripFuelEstimate as any)
 tripsRouter.post('/:id/packing-list', requireFeature('packingListGenerator'), generatePackingList as any)
 tripsRouter.post('/:id/stops/reassign-pois', reassignPOIs as any)
 // Block 9 — three AI-calling endpoints on the trips router get

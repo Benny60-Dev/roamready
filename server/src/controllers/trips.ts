@@ -9,6 +9,7 @@ import { AppError } from '../middleware/errorHandler'
 import type { StopUpdateInput, TripUpdateInput, TripShiftDatesInput } from '../schemas'
 import { generatePackingListAI, generateTripItineraryAI, generateStopActivitiesAI, generateRouteHighlightsAI } from '../services/ai'
 import { fetchLiveForecast, fetchHistoricalWeather, isoDate } from '../services/weatherFetch'
+import { computeFuelEstimate } from '../services/fuelPrice'
 
 // ─── City name normalization ─────────────────────────────────────────────────
 // Strip ZIP, country, full state name, and trailing 2-letter state code so a
@@ -1401,5 +1402,67 @@ export async function getTripWeather(req: AuthRequest, res: Response, next: Next
     )
 
     res.json(results)
+  } catch (err) { next(err) }
+}
+
+// ─── Fuel-cost estimate ───────────────────────────────────────────────────────
+
+/**
+ * GET /api/v1/trips/:id/fuel-estimate
+ *
+ * Returns the trip's per-leg + total fuel-cost estimate, priced by each
+ * leg's destination state via the EIA regional retail price feed (with
+ * Redis cache + hardcoded fallback). The existing trip.estimatedFuel
+ * column is intentionally NOT overwritten — this endpoint is the
+ * always-fresh computed value; the column stays the planning-phase
+ * estimate set at trip creation.
+ *
+ * Rig selection: prefers trip.rigId (the rig the user assigned to this
+ * trip at promote/edit time); falls back to the user's default rig
+ * (isDefault=true) when trip.rigId is null. If neither exists, the
+ * service returns noEstimate=true with a reason — the endpoint still
+ * 200s with that shape so the client doesn't need a separate error path.
+ *
+ * Response shape — see TripFuelEstimate in services/fuelPrice.ts.
+ * Always 200 unless the trip itself is missing / not the user's.
+ */
+export async function getTripFuelEstimate(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const trip = await prisma.trip.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+      include: { stops: { orderBy: { order: 'asc' } } },
+    })
+    if (!trip) throw new AppError('Trip not found', 404)
+
+    // Two-step rig resolution: prefer the trip-assigned rig, fall back to
+    // the user's default. Both lookups scoped by userId so a malicious id
+    // probe can't lift another user's rig.
+    let rig = null
+    if (trip.rigId) {
+      rig = await prisma.rig.findFirst({
+        where: { id: trip.rigId, userId: req.user!.id },
+        select: { fuelType: true, mpg: true },
+      })
+    }
+    if (!rig) {
+      rig = await prisma.rig.findFirst({
+        where: { userId: req.user!.id, isDefault: true },
+        select: { fuelType: true, mpg: true },
+      })
+    }
+
+    // Map Stop rows to the duck-typed shape computeFuelEstimate expects —
+    // explicit field selection keeps this resilient to future Stop
+    // column additions and trims the closure capture.
+    const stops = trip.stops.map(s => ({
+      order: s.order,
+      locationState: s.locationState,
+      latitude: s.latitude,
+      longitude: s.longitude,
+      driveDistanceMiles: s.driveDistanceMiles,
+    }))
+
+    const estimate = await computeFuelEstimate(stops, rig)
+    res.json(estimate)
   } catch (err) { next(err) }
 }

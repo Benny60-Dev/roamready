@@ -145,6 +145,10 @@ export const tripsApi = {
   generateRouteHighlights: (id: string, stopId: string) => api.post(`/trips/${id}/stops/${stopId}/highlights`),
   getMapImage: (id: string) => api.get(`/trips/${id}/map-image`),
   getWeather:  (id: string) => api.get(`/trips/${id}/weather`),
+  // Per-leg fuel-cost estimate priced via the EIA regional retail feed (pass 2
+  // of the fuel-budget feature). Returns total + perLeg + freshness metadata;
+  // see TripFuelEstimate in types/index.ts.
+  getFuelEstimate: (id: string) => api.get<import('../types').TripFuelEstimate>(`/trips/${id}/fuel-estimate`),
 }
 
 // Planning Sessions

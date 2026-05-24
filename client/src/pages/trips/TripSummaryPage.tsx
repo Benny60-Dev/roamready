@@ -4,13 +4,13 @@ import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import {
   Download, Share2, Sparkles, Car, Tent, Star, Bed,
   MapPin, XCircle, Plus, Check, RefreshCw, ArrowRight, Clock,
-  Pencil, Trash2, Wand2,
+  Pencil, Trash2, Wand2, Fuel, ChevronDown, ChevronUp,
 } from 'lucide-react'
 const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel'))
 import EditStopModal from '../../components/trip/EditStopModal'
 import ConfirmModal from '../../components/ui/ConfirmModal'
 import { tripsApi, aiApi } from '../../services/api'
-import { Trip, Stop, ItineraryDay, ItineraryActivity, StopWeather, POI } from '../../types'
+import { Trip, Stop, ItineraryDay, ItineraryActivity, StopWeather, POI, TripFuelEstimate } from '../../types'
 import { useAuthStore } from '../../store/authStore'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge, StopBadge } from '../../utils/stopBadge'
 import { format, addDays } from 'date-fns'
@@ -480,6 +480,24 @@ export default function TripSummaryPage() {
   const [addAfterOrder, setAddAfterOrder] = useState<number | null>(null)
   const [mutating, setMutating] = useState(false)
   const [modifyPanelOpen, setModifyPanelOpen] = useState(false)
+  // "Log actual fuel" state — a small running-total input in the Cost
+  // Breakdown card. Mirrors the notes-editor pattern in StayContent: open/
+  // close + draft text + saving + brief Saved-confirm. The value persists
+  // to trip.actualFuel via PUT /trips/:id (TripUpdateSchema already
+  // allowlists actualFuel since the very first migration).
+  const [fuelOpen, setFuelOpen] = useState(false)
+  const [fuelInput, setFuelInput] = useState('')
+  const [savingFuel, setSavingFuel] = useState(false)
+  const [fuelSaveConfirm, setFuelSaveConfirm] = useState(false)
+  // Pass-3: regional fuel-cost estimate fetched async from GET /trips/:id/fuel-estimate.
+  // null = still loading / not yet attempted. Successful response sets the
+  // full object (including the noEstimate flag for when no rig MPG is set);
+  // we never block the page render on this fetch.
+  const [fuelEstimate, setFuelEstimate] = useState<TripFuelEstimate | null>(null)
+  // Per-instance toggle for the expandable per-leg fuel detail in the Cost
+  // Breakdown — collapsed by default so the breakdown stays compact, but
+  // one click reveals the leg-by-leg "how did the $X get there?" detail.
+  const [fuelLegsExpanded, setFuelLegsExpanded] = useState(false)
   const itinerarySaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const activityGenAttempted = useRef(false)
   const [itineraryPending, setItineraryPending] = useState(false)
@@ -557,6 +575,22 @@ export default function TripSummaryPage() {
         })
       })
   }, [trip?.id])
+
+  // Fetch the regional fuel-cost estimate once the trip is loaded. Async,
+  // non-blocking — the page renders immediately with fuelEstimate=null (the
+  // Cost Breakdown shows "—" until this resolves). Errors silently log;
+  // a failed fetch leaves fuelEstimate null which the UI treats the same
+  // as still-loading (safer than rendering $NaN). Re-runs only when the
+  // trip id changes — fuel pricing is stable within a session.
+  useEffect(() => {
+    if (!id || !trip?.id) return
+    tripsApi.getFuelEstimate(id)
+      .then(res => setFuelEstimate(res.data))
+      .catch(err => {
+        console.warn('[TripSummaryPage] fuel estimate fetch failed:', err?.message ?? err)
+        setFuelEstimate(null)
+      })
+  }, [id, trip?.id])
 
   // Auto-generate activities when page loads (once, if any ACTIVITY rows have no activities)
   useEffect(() => {
@@ -676,7 +710,7 @@ export default function TripSummaryPage() {
         import('@react-pdf/renderer'),
         import('../../components/pdf/TripPDF'),
       ])
-      const blob = await pdf(<TripPDF trip={tripWithEntries} mapImageBase64={mapBlobUrl} />).toBlob()
+      const blob = await pdf(<TripPDF trip={tripWithEntries} mapImageBase64={mapBlobUrl} fuelEstimate={fuelEstimate} />).toBlob()
       if (mapBlobUrl) URL.revokeObjectURL(mapBlobUrl)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -964,6 +998,46 @@ export default function TripSummaryPage() {
     setAddingPOIDuration(prev => ({ ...prev, [entryIdx]: 30 }))
   }
 
+  // Pre-fill the fuel input with the current trip.actualFuel (as a string,
+  // since the input is controlled text) and open the editor. Separate from
+  // saveFuel so a re-open re-syncs to whatever the latest persisted value
+  // is — avoids showing a stale draft after an external update.
+  const openFuelEditor = () => {
+    setFuelInput(trip?.actualFuel != null ? String(trip.actualFuel) : '')
+    setFuelOpen(true)
+  }
+
+  // Save the actualFuel running total. Treat blank as cancel (don't clear
+  // existing values — a user who wants to clear can save 0). Non-numeric /
+  // negative inputs silently close without persisting. Optimistically
+  // updates the in-memory trip state so the displayed value flips instantly
+  // on save without waiting for a full reloadTrip().
+  const saveFuel = async () => {
+    if (!trip || !id) return
+    const trimmed = fuelInput.trim()
+    if (trimmed === '') {
+      setFuelOpen(false)
+      return
+    }
+    const n = Number(trimmed)
+    if (!Number.isFinite(n) || n < 0) {
+      setFuelOpen(false)
+      return
+    }
+    setSavingFuel(true)
+    try {
+      await tripsApi.update(id, { actualFuel: n })
+      setTrip(t => (t ? { ...t, actualFuel: n } : t))
+      setFuelOpen(false)
+      setFuelSaveConfirm(true)
+      setTimeout(() => setFuelSaveConfirm(false), 2500)
+    } catch (e) {
+      console.error('[saveFuel] failed:', e)
+    } finally {
+      setSavingFuel(false)
+    }
+  }
+
   if (loading) return (
     <div className="flex justify-center py-20">
       <div className="w-6 h-6 border-2 border-[#1F6F8B] border-t-transparent rounded-full animate-spin" />
@@ -1170,11 +1244,95 @@ export default function TripSummaryPage() {
         </button>
       </div>
 
-      {/* Cost Breakdown */}
+      {/* ─── Cost Breakdown — Planned vs Actual (Block fuel-budget pass 3) ──
+          Per-stop camp rows show actual cost when CONFIRMED+actualRate, else
+          the est. The Fuel row is a single line using the EIA-priced
+          estimate (with expandable per-leg detail and freshness caption).
+          The bottom totals collapse to one "Estimated total" line when no
+          actuals exist yet, and split into Planned / Actual-so-far the
+          moment any actual lands. All money values guarded against null /
+          NaN — loading fuel renders "—", never "$null". */}
+      {(() => {
+        // Per-stop computation. campCost is what shows for the row;
+        // isActualCamp drives the pine "actual" tag vs the gray "est." tag.
+        const stopRows = sortedStops
+          .map(stop => {
+            const isBooked = stop.bookingStatus === 'CONFIRMED'
+            const hasActual = isBooked && stop.actualRate != null
+            const estCamp = (stop.siteRate ?? 0) * stop.nights
+            const actualCamp = hasActual
+              ? (stop.actualRate ?? 0) * stop.nights + (stop.actualFees ?? 0)
+              : null
+            const displayCamp = hasActual ? actualCamp! : estCamp
+            // Skip rows with literally no cost data at all (neither est
+            // nor actual). These are typically HOME stops or 0-night returns.
+            if (displayCamp <= 0) return null
+            return { stop, displayCamp, isActualCamp: hasActual, estCamp, actualCamp }
+          })
+          .filter((r): r is NonNullable<typeof r> => r !== null)
+
+        const totalCampEst = stopRows.reduce((sum, r) => sum + r.estCamp, 0)
+        const totalCampActual = stopRows.reduce((sum, r) => sum + r.displayCamp, 0)
+
+        // Fuel: prefer the live endpoint result; fall back to trip.estimatedFuel
+        // (the legacy column, usually 0). Loading state stays null.
+        const fuelEst = fuelEstimate?.noEstimate
+          ? null
+          : fuelEstimate?.total ?? null
+        const fuelActual = trip.actualFuel ?? null
+
+        // Aggregate totals. Actual-so-far uses real where known + estimate
+        // for everything else; loading fuel leaves total = camp + 0 rather
+        // than NaN-propagating into the displayed number.
+        const plannedTotal = totalCampEst + (fuelEst ?? 0)
+        const actualTotalSoFar =
+          totalCampActual + (fuelActual ?? fuelEst ?? 0)
+
+        // Collapse-when-equal: ONE "Estimated total" line until at least one
+        // actual exists. An "actual" = any booked stop with actualRate set,
+        // OR a logged trip.actualFuel.
+        const hasAnyActuals =
+          stopRows.some(r => r.isActualCamp) || fuelActual != null
+
+        // Caption strings — guard against null asOf when source==='fallback'.
+        const fuelCaption = (() => {
+          if (!fuelEstimate || fuelEstimate.noEstimate) return null
+          if (fuelEstimate.source === 'fallback') {
+            return 'estimate uses fallback prices'
+          }
+          if (fuelEstimate.asOf) {
+            try {
+              const d = parseTripDate(fuelEstimate.asOf)
+              if (d) return `EIA regional prices · wk of ${format(d, 'MMM d')}`
+            } catch { /* fall through */ }
+          }
+          return 'EIA regional prices'
+        })()
+
+        // Build an order→stop-name lookup for the expanded per-leg detail.
+        // Endpoints are labeled with the stop's locationName when available,
+        // else fall back to "Stop {order}". Same dataset that powers the
+        // per-row badge so legs feel rooted in the itinerary.
+        const stopNameByOrder = new Map<number, string>()
+        for (const s of sortedStops) stopNameByOrder.set(s.order, s.locationName)
+        const legLabel = (order: number, fallbackState: string | null): string => {
+          const name = stopNameByOrder.get(order)
+          if (name) return name
+          if (fallbackState) return fallbackState
+          return `Stop ${order}`
+        }
+
+        // Money formatter — integer-clean when whole-dollar, 2dp otherwise.
+        // Matches the formatter convention used in RateLine (Block 13) so
+        // the trip-level total reads consistently with the per-card rates.
+        const fmtMoney = (n: number): string =>
+          Number.isInteger(n) ? n.toLocaleString() : n.toFixed(2)
+
+        return (
       <div className="card-lg">
         <h2 className="font-medium text-gray-900 mb-4">Cost Breakdown</h2>
         <div className="space-y-2">
-          {sortedStops.filter(s => s.siteRate || s.estimatedFuel).map(stop => (
+          {stopRows.map(({ stop, displayCamp, isActualCamp }) => (
             <div key={stop.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
               <div className="flex items-center gap-2">
                 <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${isHomeBadge(stopDisplayNumbers[stop.id]) ? 'bg-gray-100 text-gray-500' : 'bg-[#E0F0F4] text-[#1F6F8B]'}`}>
@@ -1182,18 +1340,168 @@ export default function TripSummaryPage() {
                 </div>
                 <span className="text-sm text-gray-700">{stop.locationName}</span>
               </div>
-              <div className="text-right text-sm space-x-2">
-                {stop.siteRate && <span className="text-gray-600">${(stop.siteRate * stop.nights).toLocaleString()} camp</span>}
-                {stop.estimatedFuel && <span className="text-gray-400">${stop.estimatedFuel.toLocaleString()} fuel</span>}
+              <div className="flex items-baseline gap-2 text-right">
+                <span className="text-sm text-gray-700">${fmtMoney(Math.round(displayCamp * 100) / 100)}</span>
+                <span className="text-xs text-gray-400">camp</span>
+                {isActualCamp ? (
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-[#3E5540]">actual</span>
+                ) : (
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">est.</span>
+                )}
               </div>
             </div>
           ))}
-          <div className="flex items-center justify-between pt-2 font-medium">
-            <span className="text-gray-900">Total</span>
-            <span className="text-[#1F6F8B]">${grandTotal.toLocaleString()}</span>
+
+          {/* ── Fuel row — single line with expandable per-leg detail ─────── */}
+          <div className="py-2 border-b border-gray-50 last:border-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-full flex items-center justify-center bg-[#E0F0F4] text-[#1F6F8B]">
+                  <Fuel size={11} />
+                </div>
+                <span className="text-sm text-gray-700">Fuel</span>
+                {/* Expand toggle — only shown when there ARE legs to expand
+                    (loading + noEstimate states have empty perLeg). */}
+                {fuelEstimate && !fuelEstimate.noEstimate && fuelEstimate.perLeg.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setFuelLegsExpanded(o => !o)}
+                    className="text-xs text-[#1F6F8B] hover:text-[#134756] font-medium transition-colors flex items-center gap-0.5"
+                  >
+                    {fuelLegsExpanded ? <>Hide legs <ChevronUp size={11} /></> : <>Show legs <ChevronDown size={11} /></>}
+                  </button>
+                )}
+              </div>
+              <div className="flex items-baseline gap-2 text-right">
+                {fuelEstimate?.noEstimate ? (
+                  <span className="text-xs italic text-gray-400">Add a rig with MPG to estimate fuel</span>
+                ) : fuelEst == null ? (
+                  // Still loading — never render $null / $NaN.
+                  <span className="text-sm text-gray-400">—</span>
+                ) : (
+                  <>
+                    <span className="text-sm text-gray-700">${fmtMoney(Math.round(fuelEst))}</span>
+                    <span className="text-xs text-gray-400">fuel</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">est.</span>
+                  </>
+                )}
+                {fuelActual != null && (
+                  <>
+                    <span className="text-xs text-gray-300">·</span>
+                    <span className="text-sm text-[#3E5540] font-medium">${fmtMoney(Math.round(fuelActual))}</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[#3E5540]">actual</span>
+                  </>
+                )}
+              </div>
+            </div>
+            {fuelCaption && (
+              <div className="text-[11px] text-gray-400 mt-0.5 ml-7">{fuelCaption}</div>
+            )}
+            {/* Per-leg sub-rows — answers "how did fuel get to $X". */}
+            {fuelLegsExpanded && fuelEstimate && !fuelEstimate.noEstimate && fuelEstimate.perLeg.length > 0 && (
+              <ul className="ml-7 mt-2 space-y-1">
+                {fuelEstimate.perLeg.map((leg, i) => (
+                  <li key={i} className="flex items-center justify-between text-xs text-gray-500">
+                    <span>
+                      {legLabel(leg.fromOrder, null)} → {legLabel(leg.toOrder, leg.toState)}
+                      <span className="text-gray-400"> · {Math.round(leg.miles).toLocaleString()} mi</span>
+                    </span>
+                    <span>${fmtMoney(Math.round(leg.cost))}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* ── Totals — collapse to one line when no actuals exist yet ─── */}
+          {hasAnyActuals ? (
+            <>
+              <div className="flex items-center justify-between pt-2 text-sm">
+                <span className="text-gray-500">Planned</span>
+                <span className="text-gray-500">${fmtMoney(Math.round(plannedTotal))}</span>
+              </div>
+              <div className="flex items-center justify-between font-medium">
+                <span className="text-gray-900">Actual so far</span>
+                <span className="text-[#1F6F8B]">${fmtMoney(Math.round(actualTotalSoFar))}</span>
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1">
+                Actual so far uses your real costs where recorded, planned estimates elsewhere.
+              </p>
+            </>
+          ) : (
+            <div className="flex items-center justify-between pt-2 font-medium">
+              <span className="text-gray-900">Estimated total</span>
+              <span className="text-[#1F6F8B]">${fmtMoney(Math.round(plannedTotal))}</span>
+            </div>
+          )}
+
+          {/* Actual fuel spent — running total the user bumps up as they
+              fuel up. Saves to trip.actualFuel via PUT /trips/:id. Pass 2
+              only captures the value; the est-vs-actual display lands in
+              pass 3, which is why this sits as a quiet tracking affordance
+              for now rather than being shown alongside an estimate row. */}
+          <div className="flex items-center gap-3 pt-2 mt-2 border-t border-gray-100">
+            {fuelOpen ? (
+              <div className="flex items-center gap-2 flex-1 flex-wrap">
+                <label className="text-xs text-gray-500">Actual fuel spent</label>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-gray-400">$</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="0.01"
+                    value={fuelInput}
+                    onChange={e => setFuelInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { e.preventDefault(); saveFuel() }
+                      else if (e.key === 'Escape') {
+                        setFuelInput(trip?.actualFuel != null ? String(trip.actualFuel) : '')
+                        setFuelOpen(false)
+                      }
+                    }}
+                    placeholder="0.00"
+                    autoFocus
+                    className="text-xs border border-gray-200 rounded px-2 py-1 w-28 focus:outline-none focus:border-[#1F6F8B] bg-white"
+                  />
+                </div>
+                <button
+                  onClick={saveFuel}
+                  disabled={savingFuel}
+                  className="text-xs font-semibold text-white bg-[#F7A829] hover:bg-[#C9851A] px-3 py-1 rounded-lg disabled:opacity-60 transition-colors"
+                >
+                  {savingFuel ? 'Saving…' : 'Save'}
+                </button>
+                <button
+                  onClick={() => {
+                    setFuelInput(trip?.actualFuel != null ? String(trip.actualFuel) : '')
+                    setFuelOpen(false)
+                  }}
+                  className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <>
+                <button
+                  onClick={openFuelEditor}
+                  className="text-xs text-gray-400 hover:text-gray-600 transition-colors text-left"
+                >
+                  {trip.actualFuel != null
+                    ? `Actual fuel spent: $${trip.actualFuel.toLocaleString()} · Edit`
+                    : '+ Log actual fuel spent'}
+                </button>
+                {fuelSaveConfirm && (
+                  <span className="text-xs text-[#0F766E] font-medium">Saved ✓</span>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>
+        )
+      })()}
 
       {/* Modals */}
       {editingStop && (
