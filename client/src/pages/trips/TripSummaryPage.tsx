@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import {
-  Download, Share2, Sparkles, Car, Tent, Star, Moon,
+  Download, Share2, Sparkles, Car, Tent, Star, Bed,
   MapPin, XCircle, Plus, Check, RefreshCw, ArrowRight, Clock,
   Pencil, Trash2, Wand2,
 } from 'lucide-react'
@@ -1332,6 +1332,15 @@ function DayCard({
   onDeletePOI, onAddingPOIChange, onAddingPOIDurationChange, onAddPOI,
   onEdit, onDelete,
 }: DayCardProps) {
+  // Per-DayCard weather collapse — used by the STAY_GROUP branch's
+  // "View weather for your destination" toggle. Hoisted here (not into
+  // the branch) because hooks must be called unconditionally at the top
+  // of the component. Each DayCard instance is per-group so this state
+  // is correctly scoped to one card; the other branches simply don't
+  // consume it. Mirrors the inline `weatherOpen` pattern that lives
+  // inside StayContent and OvernightContent for their own collapses.
+  const [weatherOpen, setWeatherOpen] = useState(false)
+
   const EditDeleteButtons = () => (
     <div className="flex items-center gap-1 flex-shrink-0">
       {onEdit && (
@@ -1579,9 +1588,13 @@ function DayCard({
     const anyAdding = group.indices.some(idx => (addingActivity[idx] ?? '') !== '')
 
     return (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-amber-200">
+      <div className="rounded-lg border border-gray-400 bg-white overflow-hidden">
+        {/* Header — pale-gold tinted band mirrors the drive card's blue
+            tinted header. Card body switched to bg-white so the tint
+            reads as a distinct top band rather than disappearing into a
+            full amber-50 card. Border strengthened to gray-400 to match
+            the drive card. */}
+        <div className="flex items-center justify-between px-4 py-2.5 bg-[#FAEEDA] border-b border-gray-400">
           <div className="flex items-center gap-2 flex-wrap min-w-0">
             <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide flex-shrink-0">{dayLabel}</span>
             <span className="text-sm font-medium text-gray-700 truncate">
@@ -1589,17 +1602,42 @@ function DayCard({
             </span>
             {dateLabel && <span className="text-xs text-gray-400 flex-shrink-0">· {dateLabel}</span>}
           </div>
-          <EditDeleteButtons />
+          {/* Right slot: "N-night stay" tag + edit/delete buttons, same
+              shape as the drive card's "Drive day" tag + buttons pattern.
+              Singular handled with explicit "1-night stay" branch. */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-[#854F0B]">
+              {group.entries.length === 1 ? '1-night stay' : `${group.entries.length}-night stay`}
+            </span>
+            <EditDeleteButtons />
+          </div>
         </div>
 
-        {/* Sub-header: campground + weather */}
+        {/* Sub-header: bold campground name with dark-gold Tent inline
+            (destination icon per the Block 12 icon-language convention),
+            and the weather block wrapped in the same expand/collapse
+            pattern used by the drive-day card's StayContent/OvernightContent.
+            "Staying at" prefix dropped — the tent + bold name already
+            communicates the role, no need for the verbal frame. */}
         {(stop.campgroundName || (stop.latitude && stop.longitude)) && (
           <div className="px-4 pt-2.5 pb-0 space-y-1.5">
             {stop.campgroundName && (
-              <p className="text-sm text-gray-500">Staying at {stop.campgroundName}</p>
+              <div className="flex items-center gap-1.5">
+                <Tent size={13} className="text-[#C9851A] flex-shrink-0" />
+                <span className="text-sm font-semibold text-gray-800">{stop.campgroundName}</span>
+              </div>
             )}
             {stop.latitude && stop.longitude && (
-              <StopWeatherCard stop={stop} weather={weather} compact />
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setWeatherOpen(o => !o)}
+                  className="text-xs text-[#1F6F8B] hover:text-[#134756] font-medium transition-colors"
+                >
+                  {weatherOpen ? 'Hide weather ↑' : 'View weather for your destination ↓'}
+                </button>
+                {weatherOpen && <StopWeatherCard stop={stop} weather={weather} compact />}
+              </div>
             )}
           </div>
         )}
@@ -1654,8 +1692,8 @@ function DayCard({
         </div>
         <div className="px-4 py-3">
           <div className="flex items-center gap-1.5 mb-2">
-            <Moon size={13} className="text-purple-600" />
-            <span className="text-xs font-semibold uppercase tracking-wide text-purple-600">Overnight Stop</span>
+            <Bed size={13} className="text-slate-500" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Overnight Stop</span>
           </div>
           <OvernightContent entry={entry} weather={weather} />
         </div>
@@ -2040,9 +2078,15 @@ function ActivityContent({ entry, generatingActivities, suppressHeader, onToggle
               <span className={`flex-1 text-sm leading-snug ${act.checked ? 'line-through text-gray-400' : 'text-gray-700'}`}>
                 {act.name}
               </span>
+              {/* Delete affordance — always visible on touch-sized screens
+                  (no hover event there), hover-revealed at md and up so
+                  the desktop row stays uncluttered until you mouse over.
+                  Color stays muted (gray-300 → red-400 on hover) so the
+                  always-visible variant on mobile reads as a quiet
+                  affordance rather than a destructive shout. */}
               <button
                 onClick={() => onDeleteActivity(i)}
-                className="opacity-0 group-hover:opacity-100 flex-shrink-0 text-gray-300 hover:text-red-400 transition-all mt-0.5"
+                className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex-shrink-0 text-gray-300 hover:text-red-400 transition-all mt-0.5"
                 aria-label="Remove activity"
               >
                 <XCircle size={13} />
@@ -2111,19 +2155,18 @@ function OvernightContent({ entry, weather }: {
       <div className="space-y-0.5">
         {/* City/location header removed — the ARRIVE row above already
             shows the destination city, and the campground line below (with
-            its purple Moon) is the section's primary identity. No
-            return-home variant for OVERNIGHT, so no conditional branch
-            needs to survive (StayContent keeps an isReturnHome-only
-            variant for "Arrived home in …"). */}
-        {/* Campground name — promoted to a bold dark-gray line with the moon
-            icon inline immediately before it, so the name reads as the
-            primary identity of the overnight stop. The section-level Moon
-            above (next to the city) stays as the row marker; this inline
-            moon is a smaller accent specifically beside the campground name.
-            Overnight-only — StayContent keeps its plain campground line. */}
+            its slate Bed waypoint marker) is the section's primary
+            identity. No return-home variant for OVERNIGHT, so no
+            conditional branch needs to survive (StayContent keeps an
+            isReturnHome-only variant for "Arrived home in …"). */}
+        {/* Campground name — promoted to a bold dark-gray line with the Bed
+            icon (waypoint marker per the Block 12 icon-language convention)
+            inline immediately before it. The earlier purple Moon was retired
+            in Block 12; tent = destination (multi-night), bed = waypoint
+            (single-night pass-through), label rows = MapPin. */}
         {stop.campgroundName && (
           <div className="flex items-center gap-1.5 ml-4">
-            <Moon size={13} className="text-purple-500 flex-shrink-0" />
+            <Bed size={13} className="text-slate-500 flex-shrink-0" />
             <span className="text-sm font-semibold text-gray-800">{stop.campgroundName}</span>
           </div>
         )}
