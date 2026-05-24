@@ -1389,16 +1389,30 @@ function DayCard({
     const driveHours = parseDurationToHours(driveEntry.driveDuration) ?? driveEntry.driveHours
     const poiMinutes = (driveEntry.pointsOfInterest ?? []).reduce((s, p) => s + p.durationMinutes, 0)
     const arrival = driveHours ? calcArrival(driveEntry.departureTime, driveHours + poiMinutes / 60) : null
+    // From/to city strings, lifted up from DriveContent so the drive-section
+    // header can consolidate icon + label + cities + duration on a single row.
+    const fromName = driveEntry.prevStop
+      ? `${driveEntry.prevStop.locationName}${driveEntry.prevStop.locationState ? ', ' + driveEntry.prevStop.locationState : ''}`
+      : '—'
+    const toName = driveEntry.stop
+      ? `${driveEntry.stop.locationName}${driveEntry.stop.locationState ? ', ' + driveEntry.stop.locationState : ''}`
+      : '—'
 
     return (
-      <div className="rounded-lg border border-gray-200 overflow-hidden bg-white">
-        {/* Card header */}
-        <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+      <div className="rounded-lg border border-gray-400 overflow-hidden bg-white">
+        {/* Card header — pale RV-blue tint marks this as a travel-day card,
+            with a quiet "Drive day" tag on the right to match the visual
+            idiom used for other section labels in this file. Header tint
+            only — the card body stays white. */}
+        <div className="flex items-center justify-between px-4 py-2.5 bg-[#E0F0F4] border-b border-gray-400">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Day {startDay}</span>
             {headerDate && <span className="text-sm font-medium text-gray-700">{format(headerDate, 'EEE MMM d')}</span>}
           </div>
-          <EditDeleteButtons />
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-[#1F6F8B]">Drive day</span>
+            <EditDeleteButtons />
+          </div>
         </div>
 
         {/* Depart row — HOME or prior stop — with inline time selector */}
@@ -1418,26 +1432,47 @@ function DayCard({
             </div>
           )
         })() : driveEntry.prevStop ? (
+          // Mid-trip depart row — restructured to mirror the home-flavor
+          // START row above: leading MapPin in RV-blue, then an uppercase
+          // tracking-wide RV-blue "DEPART" label (literal "Depart" rendered
+          // uppercase via the same class string the START branch uses), then
+          // the city name in plain gray-700, then the TimePicker. The
+          // previous "<city, bold> · Depart <time>" arrangement put the
+          // label in the middle and bolded the city, which didn't line up
+          // with the START and ARRIVE rows' left-aligned bold labels.
           <div className="px-4 py-3">
             <div className="flex items-center gap-1.5 flex-wrap">
               <MapPin size={12} className="text-[#1F6F8B]" />
-              <span className="text-sm font-semibold text-gray-700">
+              <span className="text-xs font-semibold uppercase tracking-wide text-[#1F6F8B]">Depart</span>
+              <span className="text-sm text-gray-700">
                 {driveEntry.prevStop.locationName}{driveEntry.prevStop.locationState ? `, ${driveEntry.prevStop.locationState}` : ''}
               </span>
-              <span className="text-xs text-gray-400">·</span>
-              <span className="text-xs text-gray-500">Depart</span>
               <TimePicker value={driveEntry.departureTime} onChange={onDriveDepart} />
             </div>
           </div>
         ) : null}
 
-        {/* Drive section */}
-        <div className="px-4 py-3 border-t border-gray-100">
-          <div className="flex items-center gap-1.5 mb-2">
-            <Car size={13} className="text-blue-600" />
+        {/* Drive section — border-t dropped so Start/Depart flows directly
+            into the drive without an internal line. The card now relies on
+            the tinted-header border-b (above) and a single floating divider
+            (after the route block, below) to structure: header rule splits
+            tinted header from body, floating rule splits "journey" (start
+            + drive + route + POIs) from "arrival" (arrive + campground). */}
+        <div className="px-4 py-3">
+          {/* Drive header — one row: [Car] DRIVE · {from} → {to} [duration]
+              Cities were lifted out of DriveContent (which used to render
+              them as a separate row) so the section reads as a single
+              consolidated line; DriveContent keeps the highway route line
+              and the "Tell me more about this route" disclosure as-is. */}
+          <div className="flex items-center gap-1.5 flex-wrap mb-2">
+            <Car size={13} className="text-blue-600 flex-shrink-0" />
             <span className="text-xs font-semibold uppercase tracking-wide text-blue-600">Drive</span>
+            <span className="text-xs text-gray-400">·</span>
+            <span className="text-sm font-medium text-gray-700">{fromName}</span>
+            <ArrowRight size={12} className="text-gray-400 flex-shrink-0" />
+            <span className="text-sm font-medium text-gray-700">{toName}</span>
             {driveEntry.driveDuration && (
-              <span className="flex items-center gap-1 text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full ml-1">
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full ml-1">
                 <Clock size={10} />{driveEntry.driveDuration}
               </span>
             )}
@@ -1453,17 +1488,74 @@ function DayCard({
           />
         </div>
 
-        {/* Check-in section */}
-        {arrivalEntry?.type === 'STAY' && arrivalStop && (
-          <div className="px-4 py-3 border-t border-gray-100">
-            <StayContent entry={arrivalEntry} weather={weather} arrival={arrival} poiMinutes={poiMinutes} />
+        {/* Floating mid-card divider — `mx-4` keeps a visible gap between the
+            line's ends and the card border so it reads as a separator inside
+            the card, not a full-width section wall. This is the ONE internal
+            rule splitting the upper "journey" block from the lower "arrival"
+            block; everything above and below flows together without further
+            lines. */}
+        <div className="mx-4 border-t border-gray-400" />
+
+        {/* Arrive row — mirrors the Depart/Start row at the top of the card
+            to bookend the drive. The inline "Arrive HH:MM" pill and the late-
+            arrival warning chips used to render inside StayContent /
+            OvernightContent; both moved up here so the "when you arrive" info
+            lives next to "where you arrive", and the campground block below
+            is just about the campground. Renders city even when `arrival` is
+            null (no drive hours yet) so the row never disappears. */}
+        {arrivalStop && (
+          <div className="px-4 py-3">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <MapPin size={12} className="text-[#1F6F8B]" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-[#1F6F8B]">Arrive</span>
+              <span className="text-sm text-gray-700">
+                {arrivalStop.locationName}{arrivalStop.locationState ? `, ${arrivalStop.locationState}` : ''}
+              </span>
+              {arrival && (
+                <>
+                  <span className="text-xs text-gray-400">·</span>
+                  <span className={`text-sm font-semibold ${
+                    arrival.level === 'red' ? 'text-red-700'
+                    : arrival.level === 'amber' ? 'text-amber-700'
+                    : 'text-gray-700'}`}>
+                    Arrive {arrival.timeStr}
+                  </span>
+                  {arrival.nextDay && <span className="text-xs text-gray-400">(+1 day)</span>}
+                  {arrival.level === 'amber' && (
+                    <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                      Late arrival — confirm after-hours check-in
+                    </span>
+                  )}
+                  {arrival.level === 'red' && (
+                    <span className="text-xs font-medium text-red-700 bg-red-100 px-2 py-0.5 rounded-full">
+                      Very late arrival — consider an earlier departure
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+            {arrival && (poiMinutes ?? 0) > 0 && (
+              <div className="text-xs text-gray-400 ml-4 mt-1">Includes {poiMinutes} min for stops along the way</div>
+            )}
           </div>
         )}
 
-        {/* Overnight section */}
+        {/* Check-in / Overnight section — wrappers intentionally have NO
+            border-t. The ARRIVE row above already carries the only divider
+            in this region (its own border-t), and ARRIVE+campground are
+            meant to read as ONE visual block ("you arrived, here's where
+            you're staying"). Dropping the border-t that used to sit at the
+            top of these wrappers eliminates the doubled hairline that
+            visually boxed ARRIVE off from its own destination content. */}
+        {arrivalEntry?.type === 'STAY' && arrivalStop && (
+          <div className="px-4 py-3">
+            <StayContent entry={arrivalEntry} weather={weather} />
+          </div>
+        )}
+
         {arrivalEntry?.type === 'OVERNIGHT' && arrivalStop && (
-          <div className="px-4 py-3 border-t border-gray-100">
-            <OvernightContent entry={arrivalEntry} weather={weather} arrival={arrival} poiMinutes={poiMinutes} />
+          <div className="px-4 py-3">
+            <OvernightContent entry={arrivalEntry} weather={weather} />
           </div>
         )}
       </div>
@@ -1591,13 +1683,10 @@ function DriveContent({
   const [highlights, setHighlights] = useState<string | null>(entry.routeHighlights ?? null)
   const [loadingHighlights, setLoadingHighlights] = useState(false)
   const [isCustomDuration, setIsCustomDuration] = useState(false)
-
-  const fromName = entry.prevStop
-    ? `${entry.prevStop.locationName}${entry.prevStop.locationState ? ', ' + entry.prevStop.locationState : ''}`
-    : '—'
-  const toName = entry.stop
-    ? `${entry.stop.locationName}${entry.stop.locationState ? ', ' + entry.stop.locationState : ''}`
-    : '—'
+  // Note: fromName/toName used to be computed here for the now-removed cities
+  // row. The drive-section header in DayCard renders them inline alongside the
+  // Car icon and duration chip, so DriveContent only owns the highway route
+  // line, the "Tell me more about this route" disclosure, and the POI block.
 
   const handleToggle = async () => {
     const opening = !expanded
@@ -1628,12 +1717,6 @@ function DriveContent({
 
   return (
     <div>
-      <div className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1.5">
-        <MapPin size={12} className="text-gray-400 flex-shrink-0" />
-        <span className="truncate">{fromName}</span>
-        <ArrowRight size={12} className="text-gray-400 flex-shrink-0" />
-        <span className="truncate">{toName}</span>
-      </div>
       {entry.highwayRoute && (
         <p className="text-xs text-gray-400 mb-1.5 ml-4">{entry.highwayRoute}</p>
       )}
@@ -1747,11 +1830,12 @@ function DriveContent({
 
 // ─── StayContent ──────────────────────────────────────────────────────────────
 
-function StayContent({ entry, weather, arrival, poiMinutes }: {
+// `arrival` / `poiMinutes` props removed in Block 11 pass 1 — the inline
+// arrival pill they fed moved up to DayCard's new ARRIVE row. Re-add if a
+// future variant needs the time inline here.
+function StayContent({ entry, weather }: {
   entry: TimelineEntry
   weather?: StopWeather | null
-  arrival?: ArrivalInfo | null
-  poiMinutes?: number
 }) {
   const stop = entry.stop!
   const navigate = useNavigate()
@@ -1761,6 +1845,11 @@ function StayContent({ entry, weather, arrival, poiMinutes }: {
   const [savedNotes, setSavedNotes] = useState(stop.notes ?? '')
   const [savingNotes, setSavingNotes] = useState(false)
   const [saveConfirm, setSaveConfirm] = useState(false)
+  // Weather is collapsed by default — most users glance at the itinerary
+  // without needing the forecast inline. Per-instance state so each
+  // arrival card opens independently (DayCard renders one StayContent
+  // per drive-day, each with its own collapse).
+  const [weatherOpen, setWeatherOpen] = useState(false)
 
   const handleSaveNotes = async () => {
     setSavingNotes(true)
@@ -1777,44 +1866,38 @@ function StayContent({ entry, weather, arrival, poiMinutes }: {
 
   return (
     <div className="space-y-2.5">
-      {/* Location + campground name */}
+      {/* Location + campground name. The inline "· Arrive HH:MM" pill and
+          its late-arrival warning chips moved up to the new ARRIVE row in
+          DayCard, so this block now just covers the destination identity:
+          city + (optionally) campground name. `arrival` and `poiMinutes`
+          are still in the prop signature so the call site doesn't change;
+          they're intentionally unused here. */}
       <div className="space-y-0.5">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <Tent size={12} className="text-gray-500 flex-shrink-0" />
-          <span className="text-sm font-semibold text-gray-800">
-            {entry.isReturnHome
-              ? `Arrived home in ${stop.locationName}${stop.locationState ? `, ${stop.locationState}` : ''}`
-              : `${stop.locationName}${stop.locationState ? `, ${stop.locationState}` : ''}`}
-          </span>
-          {arrival && (
-            <>
-              <span className="text-xs text-gray-400">·</span>
-              <span className="text-xs text-gray-500">Arrive</span>
-              <span className={`text-sm font-semibold ${
-                arrival.level === 'red' ? 'text-red-700'
-                : arrival.level === 'amber' ? 'text-amber-700'
-                : 'text-gray-700'}`}>
-                {arrival.timeStr}
-              </span>
-              {arrival.nextDay && <span className="text-xs text-gray-400">(+1 day)</span>}
-              {arrival.level === 'amber' && (
-                <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
-                  Late arrival — confirm after-hours check-in
-                </span>
-              )}
-              {arrival.level === 'red' && (
-                <span className="text-xs font-medium text-red-700 bg-red-100 px-2 py-0.5 rounded-full">
-                  Very late arrival — consider an earlier departure
-                </span>
-              )}
-            </>
-          )}
-        </div>
-        {(poiMinutes ?? 0) > 0 && arrival && (
-          <div className="text-xs text-gray-400 ml-4">Includes {poiMinutes} min for stops along the way</div>
+        {/* City/location header — for NORMAL arrivals this line duplicated
+            the city already shown in the ARRIVE row above, so it's been
+            dropped. The return-home variant is preserved: "Arrived home
+            in …" isn't a redundant city, it's a special-case message the
+            ARRIVE row doesn't carry, so we keep that branch and only that
+            branch. Normal arrivals now lead with the campground name (the
+            bold + gold-tent line just below). */}
+        {entry.isReturnHome && (
+          <div className="text-sm font-semibold text-gray-800">
+            Arrived home in {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
+          </div>
         )}
+        {/* Campground name — promoted to bold dark-gray with a dark-gold
+            Tent icon inline. The tent mirrors OvernightContent's purple-
+            moon-beside-bold-name treatment but in a stay-flavored palette:
+            multi-night STAY arrival = gold tent + bold name, OVERNIGHT
+            arrival = purple moon + bold name. The section-level Tent icon
+            at the top of StayContent (next to the city) is intentionally
+            left in place — Block 12's territory still owns that header.
+            Block 12 will revisit if the two tents read as redundant. */}
         {stop.campgroundName && (
-          <div className="text-sm text-gray-500 ml-4">{stop.campgroundName}</div>
+          <div className="flex items-center gap-1.5 ml-4">
+            <Tent size={13} className="text-[#C9851A] flex-shrink-0" />
+            <span className="text-sm font-semibold text-gray-800">{stop.campgroundName}</span>
+          </div>
         )}
       </div>
 
@@ -1840,7 +1923,7 @@ function StayContent({ entry, weather, arrival, poiMinutes }: {
       ) : (
         <button
           onClick={() => navigate(`/trips/${stop.tripId}/booking?stopId=${stop.id}`)}
-          className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#F7A829] hover:bg-[#C9851A] px-3 py-1.5 rounded-lg transition-colors"
+          className="flex items-center gap-1.5 text-xs font-semibold text-[#F7A829] border border-[#F7A829] hover:bg-[#F7A829]/10 px-3 py-1.5 rounded-lg transition-colors"
         >
           Let's book it! →
         </button>
@@ -1889,9 +1972,21 @@ function StayContent({ entry, weather, arrival, poiMinutes }: {
         )}
       </div>
 
-      {/* Weather card */}
+      {/* Weather — collapsed by default behind a small RV-blue link; only
+          renders the link when coords exist so there's no dead affordance
+          on coord-less stops. StopWeatherCard's internals are untouched —
+          we just toggle whether it mounts at the call site. */}
       {stop.latitude && stop.longitude && (
-        <StopWeatherCard stop={stop} weather={weather} compact />
+        <div>
+          <button
+            type="button"
+            onClick={() => setWeatherOpen(o => !o)}
+            className="text-xs text-[#1F6F8B] hover:text-[#134756] font-medium transition-colors"
+          >
+            {weatherOpen ? 'Hide weather ↑' : 'View weather for your destination ↓'}
+          </button>
+          {weatherOpen && <StopWeatherCard stop={stop} weather={weather} compact />}
+        </div>
       )}
     </div>
   )
@@ -1990,55 +2085,54 @@ function ActivityContent({ entry, generatingActivities, suppressHeader, onToggle
 
 // ─── OvernightContent ─────────────────────────────────────────────────────────
 
-function OvernightContent({ entry, weather, arrival, poiMinutes }: {
+// Same prop-shape trim as StayContent above — the arrival pill and POI hint
+// moved up to DayCard's ARRIVE row in the TRAVEL_DAY branch. OVERNIGHT_SOLO
+// (DayCard line ~1568) never passed these props in the first place, so
+// dropping them from the signature has no behavioral effect there.
+function OvernightContent({ entry, weather }: {
   entry: TimelineEntry
   weather?: StopWeather | null
-  arrival?: ArrivalInfo | null
-  poiMinutes?: number
 }) {
   const stop = entry.stop!
   const navigate = useNavigate()
+  // Per-instance collapse for the weather block — same pattern as StayContent.
+  // OvernightContent is shared with the OVERNIGHT_SOLO card (DayCard ~line
+  // 1568); the collapse behavior intentionally applies there too for
+  // consistent overnight styling.
+  const [weatherOpen, setWeatherOpen] = useState(false)
   return (
     <div className="space-y-2">
+      {/* Location + campground name. The inline arrival pill + late-arrival
+          warning chips + "Includes X min" hint moved up to the new ARRIVE
+          row in DayCard's TRAVEL_DAY branch (Block 11 pass 1). For the
+          OVERNIGHT_SOLO call site (DayCard line ~1568) `arrival` and
+          `poiMinutes` were never passed, so this block was already a no-op
+          there — the removal is purely dead-code cleanup for that path. */}
       <div className="space-y-0.5">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <Moon size={12} className="text-purple-500 flex-shrink-0" />
-          <span className="text-sm font-semibold text-gray-800">
-            {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
-          </span>
-          {arrival && (
-            <>
-              <span className="text-xs text-gray-400">·</span>
-              <span className="text-xs text-gray-500">Arrive</span>
-              <span className={`text-sm font-semibold ${
-                arrival.level === 'red' ? 'text-red-700'
-                : arrival.level === 'amber' ? 'text-amber-700'
-                : 'text-gray-700'}`}>
-                {arrival.timeStr}
-              </span>
-              {arrival.nextDay && <span className="text-xs text-gray-400">(+1 day)</span>}
-              {arrival.level === 'amber' && (
-                <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
-                  Late arrival — confirm after-hours check-in
-                </span>
-              )}
-              {arrival.level === 'red' && (
-                <span className="text-xs font-medium text-red-700 bg-red-100 px-2 py-0.5 rounded-full">
-                  Very late arrival — consider an earlier departure
-                </span>
-              )}
-            </>
-          )}
-        </div>
-        {(poiMinutes ?? 0) > 0 && arrival && (
-          <div className="text-xs text-gray-400 ml-4">Includes {poiMinutes} min for stops along the way</div>
+        {/* City/location header removed — the ARRIVE row above already
+            shows the destination city, and the campground line below (with
+            its purple Moon) is the section's primary identity. No
+            return-home variant for OVERNIGHT, so no conditional branch
+            needs to survive (StayContent keeps an isReturnHome-only
+            variant for "Arrived home in …"). */}
+        {/* Campground name — promoted to a bold dark-gray line with the moon
+            icon inline immediately before it, so the name reads as the
+            primary identity of the overnight stop. The section-level Moon
+            above (next to the city) stays as the row marker; this inline
+            moon is a smaller accent specifically beside the campground name.
+            Overnight-only — StayContent keeps its plain campground line. */}
+        {stop.campgroundName && (
+          <div className="flex items-center gap-1.5 ml-4">
+            <Moon size={13} className="text-purple-500 flex-shrink-0" />
+            <span className="text-sm font-semibold text-gray-800">{stop.campgroundName}</span>
+          </div>
         )}
-        {stop.campgroundName && <div className="text-sm text-gray-500 ml-4">{stop.campgroundName}</div>}
+        {/* Rate only — "Early departure" trailing text removed in Block 11
+            pass 2 (the overnight context already implies a short stay) and
+            the rate-null variant is suppressed entirely so we don't render
+            an italic placeholder when there's nothing to show. */}
         {stop.siteRate != null && (
-          <div className="text-xs text-gray-400 ml-4">${stop.siteRate}/night · Early departure</div>
-        )}
-        {stop.siteRate == null && (
-          <div className="text-xs text-gray-400 ml-4 italic">Early departure planned</div>
+          <div className="text-xs text-gray-400 ml-4">${stop.siteRate}/night</div>
         )}
       </div>
 
@@ -2063,14 +2157,26 @@ function OvernightContent({ entry, weather, arrival, poiMinutes }: {
       ) : (
         <button
           onClick={() => navigate(`/trips/${stop.tripId}/booking?stopId=${stop.id}`)}
-          className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#F7A829] hover:bg-[#C9851A] px-3 py-1.5 rounded-lg transition-colors"
+          className="flex items-center gap-1.5 text-xs font-semibold text-[#F7A829] border border-[#F7A829] hover:bg-[#F7A829]/10 px-3 py-1.5 rounded-lg transition-colors"
         >
           Let's book it! →
         </button>
       )}
 
+      {/* Weather — same collapse pattern as StayContent. Renders only when
+          coords exist; StopWeatherCard internals are untouched, just gated
+          at the call site. */}
       {stop.latitude && stop.longitude && (
-        <StopWeatherCard stop={stop} weather={weather} compact />
+        <div>
+          <button
+            type="button"
+            onClick={() => setWeatherOpen(o => !o)}
+            className="text-xs text-[#1F6F8B] hover:text-[#134756] font-medium transition-colors"
+          >
+            {weatherOpen ? 'Hide weather ↑' : 'View weather for your destination ↓'}
+          </button>
+          {weatherOpen && <StopWeatherCard stop={stop} weather={weather} compact />}
+        </div>
       )}
     </div>
   )
