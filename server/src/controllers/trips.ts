@@ -1412,10 +1412,23 @@ export async function getTripWeather(req: AuthRequest, res: Response, next: Next
  *
  * Returns the trip's per-leg + total fuel-cost estimate, priced by each
  * leg's destination state via the EIA regional retail price feed (with
- * Redis cache + hardcoded fallback). The existing trip.estimatedFuel
- * column is intentionally NOT overwritten — this endpoint is the
- * always-fresh computed value; the column stays the planning-phase
- * estimate set at trip creation.
+ * Redis cache + hardcoded fallback). Also persists the computed total
+ * back to trip.estimatedFuel as a fire-and-forget side effect, so list
+ * surfaces (dashboard cards, public share view) can read a real stored
+ * number without fanning out per-card fuel-estimate API calls of their
+ * own. Mirrors the getTripWeather precedent: GET that caches the
+ * computed value into the DB on the way out.
+ *
+ * Refresh cadence: every itinerary open or map-page open. EIA publishes
+ * weekly, so a user who views their trip at least once a week effectively
+ * stays current. Trips never re-opened can go stale; that's accepted —
+ * list surfaces just show "what the owner last saw," which is honest.
+ *
+ * The persist is guarded by !noEstimate so we don't clobber a real prior
+ * value with $0 when the rig has no MPG, and by Number.isFinite as a
+ * belt-and-suspenders against a bad upstream number. NOT awaited — the
+ * response shouldn't block on the cache write; a Prisma hiccup logs and
+ * the user still gets their estimate JSON immediately.
  *
  * Rig selection: prefers trip.rigId (the rig the user assigned to this
  * trip at promote/edit time); falls back to the user's default rig
@@ -1463,6 +1476,23 @@ export async function getTripFuelEstimate(req: AuthRequest, res: Response, next:
     }))
 
     const estimate = await computeFuelEstimate(stops, rig)
+
+    // Cache the computed total back to trip.estimatedFuel so list surfaces
+    // (dashboard, share view) can read a real stored number without their
+    // own API call. Fire-and-forget — never await; the response goes back
+    // immediately. Skip when noEstimate so a rig-missing-MPG case can't
+    // clobber a previously-good value. Number.isFinite double-checks the
+    // upstream computeFuelEstimate's contract.
+    if (!estimate.noEstimate && Number.isFinite(estimate.total)) {
+      prisma.trip.update({
+        where: { id: trip.id },
+        data: { estimatedFuel: estimate.total },
+      }).catch(err => console.warn(
+        '[getTripFuelEstimate] persist failed for tripId=%s: %s',
+        trip.id, err?.message ?? 'unknown',
+      ))
+    }
+
     res.json(estimate)
   } catch (err) { next(err) }
 }

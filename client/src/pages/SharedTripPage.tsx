@@ -32,15 +32,18 @@ export default function SharedTripPage() {
   const sortedStops        = [...(trip.stops || [])].sort((a, b) => a.order - b.order)
   // No homeLocation available in public shared view — last stop always gets 'F'
   const stopDisplayNumbers = buildStopBadges(sortedStops)
-  // Camp-only on the share view: this page is public (token-auth, not
-  // user-auth), so it can't call the auth-required GET /trips/:id/fuel-estimate
-  // endpoint. Show the camp number labeled honestly as "Est. camp" rather
-  // than a fuel-inclusive "Est. cost" the page can't actually produce here.
-  // Also retires the stale trip.estimatedFuel + trip.estimatedCamp combo
-  // that this page used before — those are the AI-set fields driving the
-  // inter-surface drift the helper exists to fix.
-  const tripTotals = computeTripTotals(trip)
-  const campTotal = tripTotals.campEst
+  // Full cost on the share view. This page is public (token-auth) and
+  // can't itself call the auth-required GET /trips/:id/fuel-estimate, but
+  // it CAN read the stored trip.estimatedFuel that's persisted whenever
+  // the trip's owner opens the itinerary or map page (server-side
+  // side-effect write in getTripFuelEstimate). So the share viewer sees
+  // the owner's last-known full total — not stale enough to matter for
+  // weekly EIA pricing, and it correctly retires the misleading
+  // "Est. camp" label this page used to show.
+  const tripTotals = computeTripTotals(trip, { fuelEstimate: trip.estimatedFuel })
+  const costTotal = tripTotals.hasAnyActuals
+    ? tripTotals.actualTotal
+    : tripTotals.plannedTotal
 
   return (
     <div className="min-h-screen bg-rr-bg">
@@ -67,7 +70,7 @@ export default function SharedTripPage() {
             { icon: MapPin, label: 'Miles', value: trip.totalMiles?.toLocaleString() || '–' },
             { icon: Tent, label: 'Nights', value: trip.totalNights || '–' },
             { icon: MapPin, label: 'Stops', value: sortedStops.filter(s => s.type !== 'HOME').length },
-            { icon: DollarSign, label: 'Est. camp', value: campTotal > 0 ? `$${Math.round(campTotal).toLocaleString()}` : '–' },
+            { icon: DollarSign, label: 'Est. cost', value: costTotal > 0 ? `$${Math.round(costTotal).toLocaleString()}` : '–' },
           ].map(({ icon: Icon, label, value }) => (
             <div key={label} className="card text-center">
               <Icon size={15} className="text-[#1F6F8B] mx-auto mb-1" />

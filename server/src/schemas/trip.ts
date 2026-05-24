@@ -24,8 +24,14 @@ import { z } from 'zod'
  *     controller (server/src/controllers/ai.ts). Not client-writable here.
  *   - itinerary — owned by the dedicated PUT /trips/:id/itinerary route
  *     (saveItinerary controller). Not client-writable here.
- *   - estimatedFuel, estimatedCamp — set at trip creation; no live caller
- *     updates them. Closed off until a real use case appears.
+ *   - estimatedCamp — set at trip creation from the AI's planning itinerary;
+ *     no live caller updates it. Closed off until a real use case appears.
+ *   - estimatedFuel — set at trip creation AND refreshed on every itinerary /
+ *     map-page load by the getTripFuelEstimate controller (see
+ *     controllers/trips.ts) as a server-side fire-and-forget side effect.
+ *     The write goes through Prisma directly, NOT through this client PUT
+ *     path, so the field stays closed at the schema layer while the
+ *     server's fuel-estimate endpoint owns the refresh.
  *   - id, createdAt, updatedAt — never client-writable.
  */
 export const TripUpdateSchema = z

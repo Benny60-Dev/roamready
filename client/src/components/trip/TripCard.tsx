@@ -68,16 +68,29 @@ export default function TripCard({
   const effectiveShowRoute = showRoute ?? !isCompact
 
   const statusClass = STATUS_BADGE[trip.status]
-  // Camp-only on the dashboard / trips list / continue-planning card —
-  // these are list surfaces that render many cards at once and MUST NOT
-  // fan out per-card fuel-estimate API calls. Label the number "camp" so
-  // it can't be mistaken for the full Cost Breakdown total on the
-  // itinerary page. The legacy `(estimatedFuel || 0) + (estimatedCamp || 0)`
-  // combo (which produced the ~$10,090 dashboard number that contradicted
-  // every other surface) is retired here too.
-  const tripTotals = computeTripTotals(trip)
-  const cost = tripTotals.hasAnyActuals ? tripTotals.campActual : tripTotals.campEst
+  // Full trip cost using the stored fuel total persisted by the
+  // getTripFuelEstimate side-effect: every time the owner opens the
+  // itinerary or map page, trip.estimatedFuel is refreshed to the
+  // current EIA-derived value, so this surface reads a real stored
+  // number without firing a per-card API call.
+  //
+  // `cost` is the prominent primary number; `campPart` / `fuelPart` feed
+  // the secondary breakdown line. fuelPart is null OR 0 on brand-new
+  // trips that haven't been opened yet (estimatedFuel not yet populated)
+  // — in that degraded case we hide the breakdown line entirely and the
+  // primary cost equals the camp number, which is still honest (we just
+  // don't claim to know fuel until the owner opens the itinerary once).
+  const tt = computeTripTotals(trip, { fuelEstimate: trip.estimatedFuel })
+  const cost = tt.hasAnyActuals ? tt.actualTotal : tt.plannedTotal
+  const campPart = tt.hasAnyActuals ? tt.campActual : tt.campEst
+  const fuelPart = tt.hasFuel
+    ? (tt.hasAnyActuals ? (tt.fuelActual ?? tt.fuelEst) : tt.fuelEst)
+    : null
   const hasCost = cost > 0
+  const showBreakdown = hasCost && fuelPart != null && fuelPart > 0 && campPart > 0
+  // Estimate-vs-actual prefix on the primary number. Only the actual side
+  // drops the "~" — an estimate stays clearly flagged.
+  const costPrefix = tt.hasAnyActuals ? '' : '~'
 
   if (variant === 'row') {
     // ── Horizontal list-row layout ─ matches TripsPage.tsx:96-131 exactly.
@@ -104,13 +117,13 @@ export default function TripCard({
               </span>
             )}
             {trip.totalNights && (
-              <span className="flex items-center gap-1">
+              <span className="flex items-center gap-1 font-semibold text-gray-900">
                 <Tent size={11} />
                 {trip.totalNights} nights
               </span>
             )}
             {trip.totalMiles && (
-              <span className="flex items-center gap-1">
+              <span className="flex items-center gap-1 font-semibold text-gray-900">
                 <Map size={11} />
                 {trip.totalMiles.toLocaleString()} mi
               </span>
@@ -124,11 +137,17 @@ export default function TripCard({
         </div>
         <div className="flex items-center gap-3 ml-4">
           {effectiveShowCost && hasCost && (
-            <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
-              <DollarSign size={13} />
-              {Math.round(cost).toLocaleString()}
-              <span className="text-xs text-gray-400 ml-0.5">camp</span>
-            </span>
+            <div className="flex flex-col items-end leading-tight">
+              <span className="text-sm font-semibold text-gray-900 flex items-center gap-1">
+                <DollarSign size={13} />
+                {costPrefix}{Math.round(cost).toLocaleString()}
+              </span>
+              {showBreakdown && (
+                <span className="text-[10px] text-gray-400 mt-0.5">
+                  ${Math.round(campPart).toLocaleString()} camp · ${Math.round(fuelPart!).toLocaleString()} fuel
+                </span>
+              )}
+            </div>
           )}
           {onDelete && (
             <button
@@ -176,21 +195,25 @@ export default function TripCard({
             </span>
           )}
           {trip.totalNights != null && (
-            <span className="flex items-center gap-1">
+            <span className="flex items-center gap-1 font-semibold text-gray-900">
               <Tent size={11} />
               {trip.totalNights}n
             </span>
           )}
           {trip.totalMiles != null && (
-            <span className="flex items-center gap-1">
+            <span className="flex items-center gap-1 font-semibold text-gray-900">
               <Map size={11} />
               {trip.totalMiles.toLocaleString()}mi
             </span>
           )}
+          {/* Compact variant — total only, no breakdown beneath.
+              The Continue-planning strip is space-constrained; the
+              prominent total is the priority. Row + grid variants get
+              the secondary "$X camp · $Y fuel" breakdown line. */}
           {effectiveShowCost && hasCost && (
-            <span className="flex items-center gap-1">
+            <span className="flex items-center gap-1 font-semibold text-gray-900">
               <DollarSign size={11} />
-              ~${Math.round(cost).toLocaleString()} camp
+              {costPrefix}${Math.round(cost).toLocaleString()}
             </span>
           )}
           {showRelative && trip.updatedAt && (
@@ -255,21 +278,21 @@ export default function TripCard({
           </span>
         )}
         {trip.totalNights && (
-          <span className="flex items-center gap-1">
+          <span className="flex items-center gap-1 font-semibold text-gray-900">
             <Tent size={12} />
             {trip.totalNights}n
           </span>
         )}
         {trip.totalMiles && (
-          <span className="flex items-center gap-1">
+          <span className="flex items-center gap-1 font-semibold text-gray-900">
             <Map size={12} />
             {trip.totalMiles.toLocaleString()}mi
           </span>
         )}
         {effectiveShowCost && hasCost && (
-          <span className="flex items-center gap-1">
+          <span className="flex items-center gap-1 font-semibold text-gray-900">
             <DollarSign size={12} />
-            ~${Math.round(cost).toLocaleString()} camp
+            {costPrefix}${Math.round(cost).toLocaleString()}
           </span>
         )}
         {showRelative && trip.updatedAt && (
@@ -278,6 +301,16 @@ export default function TripCard({
           </span>
         )}
       </div>
+      {/* Cost breakdown sub-line — "$X camp · $Y fuel" — only when both
+          pieces are positive. Brand-new trips that haven't had their
+          itinerary opened yet have estimatedFuel=null/0; the breakdown
+          stays hidden so we never render "$0 fuel" or imply fuel is free.
+          The primary cost (above) still shows the camp total honestly. */}
+      {effectiveShowCost && showBreakdown && (
+        <div className="text-[11px] text-gray-400 mt-0.5">
+          ${Math.round(campPart).toLocaleString()} camp · ${Math.round(fuelPart!).toLocaleString()} fuel
+        </div>
+      )}
       {/* Secondary meta line — "N stops · M booked" — only when stops exist;
           a trip with no stops simply omits the line rather than showing 0/0. */}
       {showStopsLine && (
