@@ -1019,14 +1019,26 @@ export default function TripSummaryPage() {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="card-lg !p-3 sm:!p-6">
-        <h2 className="text-xs sm:text-base font-medium text-gray-500 sm:text-gray-900 mb-2 sm:mb-4">Trip at a Glance</h2>
-        <div className="grid grid-cols-4 gap-1 sm:gap-4 divide-x divide-gray-200 sm:divide-x-0">
-          <StatCell value={liveTotalMiles > 0 ? liveTotalMiles.toLocaleString() : (trip.totalMiles?.toLocaleString() || '–')} label="Total miles" shortLabel="miles" />
-          <StatCell value={String(trip.totalNights || sortedStops.reduce((s, st) => s + st.nights, 0))} label="Nights" shortLabel="nights" />
-          <StatCell value={String(sortedStops.length)} label="Stops" shortLabel="stops" />
-          <StatCell value={`$${grandTotal.toLocaleString()}`} label="Est. total" shortLabel="est." />
+      {/* Stats — single-line strip. Heading dropped (the values speak for
+          themselves at strip size); padding tightened from p-3/sm:p-6 to
+          py-2.5/px-4 (sm:py-3/px-5) so the card is ~1/5 its old height.
+          Each cell is wrapped in a flex-1 + justify-center slot so the
+          divide-x dividers fall on even quarters of the row and the four
+          StatCells stay balanced regardless of label width. */}
+      <div className="card-lg !py-2.5 !px-4 sm:!py-3 sm:!px-5">
+        <div className="flex items-center divide-x divide-gray-200">
+          <div className="flex-1 flex justify-center">
+            <StatCell value={liveTotalMiles > 0 ? liveTotalMiles.toLocaleString() : (trip.totalMiles?.toLocaleString() || '–')} label="Total miles" shortLabel="miles" />
+          </div>
+          <div className="flex-1 flex justify-center">
+            <StatCell value={String(trip.totalNights || sortedStops.reduce((s, st) => s + st.nights, 0))} label="Nights" shortLabel="nights" />
+          </div>
+          <div className="flex-1 flex justify-center">
+            <StatCell value={String(sortedStops.length)} label="Stops" shortLabel="stops" />
+          </div>
+          <div className="flex-1 flex justify-center">
+            <StatCell value={`$${grandTotal.toLocaleString()}`} label="Est. total" shortLabel="est." />
+          </div>
         </div>
       </div>
 
@@ -1268,14 +1280,22 @@ function TimePicker({ value, onChange, className }: {
 
 // ─── StatCell ─────────────────────────────────────────────────────────────────
 
+// Inline horizontal layout — value and unit on a single baseline, no stacking.
+// Was a centered two-line column (text-base/sm:text-2xl number stacked over a
+// text-[10px]/sm:text-xs label with mt-0.5); the Block 10 redesign collapsed
+// the whole stats card into a slim strip, so the cell goes side-by-side with
+// a uniform text-lg (18px) number — no breakpoint bump, so the strip stays
+// the same height on mobile and desktop. The short/full label swap is
+// preserved verbatim: mobile shows "miles / nights / stops / est." inline,
+// desktop swaps to the full "Total miles / Nights / Stops / Est. total".
 function StatCell({ value, label, shortLabel }: { value: string; label: string; shortLabel: string }) {
   return (
-    <div className="text-center">
-      <div className="text-base sm:text-2xl font-medium text-[#1F6F8B]">{value}</div>
-      <div className="text-[10px] sm:text-xs text-gray-500 mt-0.5">
+    <div className="flex items-baseline gap-1.5">
+      <span className="text-lg font-medium text-[#1F6F8B]">{value}</span>
+      <span className="text-xs text-gray-500">
         <span className="sm:hidden">{shortLabel}</span>
         <span className="hidden sm:inline">{label}</span>
-      </div>
+      </span>
     </div>
   )
 }
