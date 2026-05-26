@@ -5,6 +5,7 @@ import {
   Download, Share2, Sparkles, Car, Tent, Star, Bed,
   MapPin, XCircle, Plus, Check, RefreshCw, ArrowRight, Clock,
   Pencil, Trash2, Wand2, Fuel, ChevronDown, ChevronRight, Info,
+  Loader2,
 } from 'lucide-react'
 const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel'))
 import EditStopModal from '../../components/trip/EditStopModal'
@@ -2320,16 +2321,31 @@ function DayCard({
             still working. Both old- and new-shape rendering live unchanged
             inside the (ii)/(iii) branches below. */}
         {stayActivitiesLoading ? (
-          <div className="px-4 pb-3 pt-2.5 space-y-2">
-            <p className="text-xs font-semibold text-amber-700">Things to do during your stay</p>
-            <p className="text-xs text-gray-400 italic">Finding things to do…</p>
-            <div className="space-y-2 py-1" aria-hidden="true">
-              {[1, 2, 3].map(n => (
-                <div key={n} className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded border border-gray-200 bg-gray-100 flex-shrink-0 animate-pulse" />
-                  <div className={`h-3 bg-gray-100 rounded animate-pulse ${n === 1 ? 'w-48' : n === 2 ? 'w-40' : 'w-44'}`} />
-                </div>
-              ))}
+          // Block 15 (loading state, polish pass) — visually prominent "AI is
+          // working" block. RV-blue brand accent (#1F6F8B) on the spinner and
+          // message + a tinted bordered container so the whole region clearly
+          // reads as "in progress" rather than empty space. The "Things to do
+          // during your stay" header stays above the container so the card
+          // doesn't visually jump when the loading state resolves into the
+          // shared list. Logic is untouched — stayActivitiesLoading is the
+          // same derived flag from itineraryPending + generatingActivities.
+          <div className="px-4 pb-3 pt-2.5">
+            <p className="text-xs font-semibold text-amber-700 mb-1.5">Things to do during your stay</p>
+            <div className="rounded-lg border border-[#1F6F8B]/30 bg-[#E0F0F4]/60 px-3 py-3 space-y-2.5">
+              <div className="flex items-center gap-2">
+                <Loader2 size={17} className="text-[#1F6F8B] animate-spin flex-shrink-0" />
+                <p className="text-sm font-medium text-[#1F6F8B] leading-snug">
+                  Generating activity suggestions… this takes a moment
+                </p>
+              </div>
+              <div className="space-y-1.5 pt-0.5" aria-hidden="true">
+                {[1, 2, 3].map(n => (
+                  <div key={n} className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded border border-[#1F6F8B]/20 bg-[#1F6F8B]/5 flex-shrink-0 animate-pulse" />
+                    <div className={`h-3 bg-[#1F6F8B]/10 rounded animate-pulse ${n === 1 ? 'w-48' : n === 2 ? 'w-40' : 'w-44'}`} />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         ) : (
