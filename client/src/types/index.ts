@@ -265,6 +265,15 @@ export interface Stop {
   routeHighlights?: string | null
   pointsOfInterest?: POI[]
   campgroundCandidates?: string[]
+  // Block 15 — one shared "things to do during your stay" list per stop,
+  // replacing the prior N per-day duplicate lists rendered from Trip.itinerary.
+  // Optional + nullable: null on existing trips that haven't been backfilled
+  // (Step 4) or on stops where no AI activities were ever generated. The
+  // renderer in TripSummaryPage falls back to the per-day shape in
+  // Trip.itinerary whenever this is null, so old trips keep working unchanged.
+  // Value can be an ItineraryActivity[] (post-edit) or string[] (initial AI
+  // write); normalizeActivities() in TripSummaryPage handles both shapes.
+  stayActivities?: ItineraryActivity[] | string[] | null
   journalEntry?: JournalEntry
 }
 

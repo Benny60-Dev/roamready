@@ -471,6 +471,10 @@ export default function TripSummaryPage() {
   const [generatingActivities, setGeneratingActivities] = useState(false)
   const [entries, setEntries] = useState<TimelineEntry[]>([])
   const [addingActivity, setAddingActivity] = useState<Record<number, string>>({})
+  // Block 15 — per-stop "add activity" draft text for the new-shape shared
+  // stay-activities list. Keyed by stopId (vs. entryIdx for addingActivity
+  // above) because the shared list is per-stop, not per-day.
+  const [addingStayActivity, setAddingStayActivity] = useState<Record<string, string>>({})
   const [addingPOI, setAddingPOI] = useState<Record<number, string>>({})
   const [addingPOIDuration, setAddingPOIDuration] = useState<Record<number, number>>({})
   const [weatherData, setWeatherData] = useState<Record<string, StopWeather | null | undefined>>({})
@@ -504,6 +508,10 @@ export default function TripSummaryPage() {
   const [campGroupExpanded, setCampGroupExpanded] = useState(false)
   const [fuelGroupExpanded, setFuelGroupExpanded] = useState(false)
   const itinerarySaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Block 15 — one debounce timer per stopId for stayActivities saves. Keyed
+  // by stopId so simultaneous edits to two different stops don't clobber each
+  // other's pending PUT. Mirrors the 600ms cadence of itinerarySaveTimer.
+  const stopActivitySaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const activityGenAttempted = useRef(false)
   const [itineraryPending, setItineraryPending] = useState(false)
   const [itineraryError, setItineraryError] = useState(false)
@@ -756,6 +764,22 @@ export default function TripSummaryPage() {
     }, 600)
   }, [id])
 
+  // Block 15 — debounced persistence for Stop.stayActivities edits. Keyed by
+  // stopId so two-stop edits don't clobber. Sends only the stayActivities
+  // field through the partial-update PUT — StopUpdateSchema on the server
+  // accepts it via the new field added to schemas/stop.ts. Old-path saves
+  // (persistItinerary above) continue to write Trip.itinerary verbatim and
+  // are NOT affected by this helper.
+  const persistStopStayActivities = useCallback((stopId: string, activities: ItineraryActivity[]) => {
+    if (!id) return
+    const timers = stopActivitySaveTimers.current
+    if (timers[stopId]) clearTimeout(timers[stopId])
+    timers[stopId] = setTimeout(() => {
+      tripsApi.updateStop(id, stopId, { stayActivities: activities }).catch(() => {})
+      delete timers[stopId]
+    }, 600)
+  }, [id])
+
   // ── Date cascade ────────────────────────────────────────────────────────────
   // Walks every stop in order, computes correct arrivalDate / departureDate from
   // the anchor (trip.startDate if set, otherwise today), saves each one to the DB,
@@ -975,6 +999,55 @@ export default function TripSummaryPage() {
       )
       persistItinerary(next)
       return next
+    })
+  }
+
+  // Block 15 — handlers for the new-shape shared stayActivities list. They
+  // mutate the in-memory `stop` object inside every entry that shares that
+  // stopId (so all per-day timeline rows for the stay see the same updated
+  // list), then debounce-persist via Stop.stayActivities. They do NOT touch
+  // entry.activities or Trip.itinerary — the old per-day shape stays exactly
+  // as the AI generated it, which keeps the PDF export and any other reader
+  // that still walks the day-by-day arrays from regressing on new trips.
+  const toggleStayActivity = (stopId: string, actIdx: number) => {
+    setEntries(prev => {
+      const target = prev.find(e => e.stop?.id === stopId)
+      if (!target?.stop) return prev
+      const current = normalizeActivities(target.stop.stayActivities as any)
+      const next = current.map((a, i) => i === actIdx ? { ...a, checked: !a.checked } : a)
+      persistStopStayActivities(stopId, next)
+      return prev.map(e => e.stop?.id === stopId
+        ? { ...e, stop: { ...e.stop!, stayActivities: next } }
+        : e)
+    })
+  }
+
+  const addStayActivity = (stopId: string) => {
+    const name = (addingStayActivity[stopId] ?? '').trim()
+    if (!name) return
+    setEntries(prev => {
+      const target = prev.find(e => e.stop?.id === stopId)
+      if (!target?.stop) return prev
+      const current = normalizeActivities(target.stop.stayActivities as any)
+      const next = [...current, { name, checked: false, isCustom: true }]
+      persistStopStayActivities(stopId, next)
+      return prev.map(e => e.stop?.id === stopId
+        ? { ...e, stop: { ...e.stop!, stayActivities: next } }
+        : e)
+    })
+    setAddingStayActivity(prev => ({ ...prev, [stopId]: '' }))
+  }
+
+  const deleteStayActivity = (stopId: string, actIdx: number) => {
+    setEntries(prev => {
+      const target = prev.find(e => e.stop?.id === stopId)
+      if (!target?.stop) return prev
+      const current = normalizeActivities(target.stop.stayActivities as any)
+      const next = current.filter((_, i) => i !== actIdx)
+      persistStopStayActivities(stopId, next)
+      return prev.map(e => e.stop?.id === stopId
+        ? { ...e, stop: { ...e.stop!, stayActivities: next } }
+        : e)
     })
   }
 
@@ -1224,6 +1297,11 @@ export default function TripSummaryPage() {
                   generatingActivities={generatingActivities}
                   weatherData={weatherData}
                   addingActivity={addingActivity}
+                  addingStayActivity={addingStayActivity}
+                  onToggleStayActivity={toggleStayActivity}
+                  onDeleteStayActivity={deleteStayActivity}
+                  onAddingStayActivityChange={(stopId, text) => setAddingStayActivity(prev => ({ ...prev, [stopId]: text }))}
+                  onAddStayActivity={addStayActivity}
                   addingPOI={addingPOI}
                   onDriveDepart={driveIdx >= 0 ? (time) => updateDriveDepart(driveIdx, time) : () => {}}
                   onToggleActivity={(li, actIdx) => toggleActivity(group.indices[li], actIdx)}
@@ -1841,6 +1919,15 @@ interface DayCardProps {
   generatingActivities: boolean
   weatherData: Record<string, StopWeather | null | undefined>
   addingActivity: Record<number, string>
+  // Block 15 — per-stop "add activity" draft text and callbacks for the
+  // new-shape shared stayActivities list. Used by the STAY_GROUP branch when
+  // group.entries[0].stop.stayActivities is non-null; the old per-day callbacks
+  // above continue to drive the fallback path for trips where it's null.
+  addingStayActivity: Record<string, string>
+  onToggleStayActivity: (stopId: string, actIdx: number) => void
+  onDeleteStayActivity: (stopId: string, actIdx: number) => void
+  onAddingStayActivityChange: (stopId: string, text: string) => void
+  onAddStayActivity: (stopId: string) => void
   addingPOI: Record<number, string>
   addingPOIDuration: Record<number, number>
   onDriveDepart: (time: string) => void
@@ -1859,6 +1946,8 @@ interface DayCardProps {
 function DayCard({
   group, startDay, badges, generatingActivities, weatherData,
   addingActivity, addingPOI, addingPOIDuration,
+  addingStayActivity,
+  onToggleStayActivity, onDeleteStayActivity, onAddingStayActivityChange, onAddStayActivity,
   onDriveDepart,
   onToggleActivity, onDeleteActivity, onAddingActivityChange, onAddActivity,
   onDeletePOI, onAddingPOIChange, onAddingPOIDurationChange, onAddPOI,
@@ -2116,8 +2205,25 @@ function DayCard({
     const dateLabel = isMulti && firstEntry.date && lastEntry.date
       ? `${format(firstEntry.date, 'MMM d')} – ${format(lastEntry.date, 'MMM d')}`
       : firstEntry.date ? format(firstEntry.date, 'EEE MMM d') : undefined
-    const hasAnyActivities = group.entries.some(e => e.activities.length > 0)
-    const anyAdding = group.indices.some(idx => (addingActivity[idx] ?? '') !== '')
+
+    // Block 15 — shape detection for the activities section. New trips (and
+    // any trip that's been regenerated since Step 2 shipped) carry a single
+    // shared list on stop.stayActivities. Old trips have it as null and keep
+    // rendering the per-day entry.activities arrays exactly as before. Both
+    // hasAnyActivities and anyAdding switch source accordingly so the
+    // "Rest day · No activities planned" fallback and the post-add UI behave
+    // correctly under whichever shape is active.
+    const sharedRawActivities = stop.stayActivities
+    const usesSharedStayActivities = sharedRawActivities != null
+    const sharedStayActivities = usesSharedStayActivities
+      ? normalizeActivities(sharedRawActivities as any)
+      : []
+    const hasAnyActivities = usesSharedStayActivities
+      ? sharedStayActivities.length > 0
+      : group.entries.some(e => e.activities.length > 0)
+    const anyAdding = usesSharedStayActivities
+      ? (addingStayActivity[stop.id] ?? '') !== ''
+      : group.indices.some(idx => (addingActivity[idx] ?? '') !== '')
 
     return (
       <div className="rounded-lg border border-gray-400 bg-white overflow-hidden">
@@ -2185,31 +2291,53 @@ function DayCard({
           <p className="px-4 py-2 text-xs text-amber-600 italic">Rest day · No activities planned</p>
         )}
 
-        {/* Per-day activity sub-sections */}
-        <div className="px-4 pb-3 space-y-3 pt-2.5">
-          {group.entries.map((entry, li) => {
-            const flatIdx = group.indices[li]
-            return (
-              <div key={li} className={isMulti ? 'pt-2 border-t border-amber-100 first:border-0 first:pt-0' : ''}>
-                {isMulti && (
-                  <p className="text-xs font-semibold text-amber-700 mb-1.5">
-                    {entry.date ? format(entry.date, 'EEE, MMM d') : `Night ${entry.nightNum}`}
-                  </p>
-                )}
-                <ActivityContent
-                  entry={entry}
-                  generatingActivities={generatingActivities}
-                  suppressHeader
-                  onToggleActivity={(actIdx) => onToggleActivity(li, actIdx)}
-                  onDeleteActivity={(actIdx) => onDeleteActivity(li, actIdx)}
-                  addingText={addingActivity[flatIdx] ?? ''}
-                  onAddingChange={(text) => onAddingActivityChange(li, text)}
-                  onAddActivity={() => onAddActivity(li)}
-                />
-              </div>
-            )
-          })}
-        </div>
+        {/* Block 15 — activities section. New-shape (Stop.stayActivities
+            non-null): render ONE consolidated "Things to do during your
+            stay" list — no per-night sub-sections, no duplicate AI lists.
+            Old-shape (stayActivities === null on every pre-Step-2 trip):
+            fall through to the per-day rendering loop EXACTLY as it worked
+            before this change. The ActivityContent component is shape-
+            agnostic; only the data it's handed differs between branches. */}
+        {usesSharedStayActivities ? (
+          <div className="px-4 pb-3 pt-2.5">
+            <p className="text-xs font-semibold text-amber-700 mb-1.5">Things to do during your stay</p>
+            <ActivityContent
+              entry={{ ...firstEntry, activities: sharedStayActivities }}
+              generatingActivities={generatingActivities}
+              suppressHeader
+              onToggleActivity={(actIdx) => onToggleStayActivity(stop.id, actIdx)}
+              onDeleteActivity={(actIdx) => onDeleteStayActivity(stop.id, actIdx)}
+              addingText={addingStayActivity[stop.id] ?? ''}
+              onAddingChange={(text) => onAddingStayActivityChange(stop.id, text)}
+              onAddActivity={() => onAddStayActivity(stop.id)}
+            />
+          </div>
+        ) : (
+          <div className="px-4 pb-3 space-y-3 pt-2.5">
+            {group.entries.map((entry, li) => {
+              const flatIdx = group.indices[li]
+              return (
+                <div key={li} className={isMulti ? 'pt-2 border-t border-amber-100 first:border-0 first:pt-0' : ''}>
+                  {isMulti && (
+                    <p className="text-xs font-semibold text-amber-700 mb-1.5">
+                      {entry.date ? format(entry.date, 'EEE, MMM d') : `Night ${entry.nightNum}`}
+                    </p>
+                  )}
+                  <ActivityContent
+                    entry={entry}
+                    generatingActivities={generatingActivities}
+                    suppressHeader
+                    onToggleActivity={(actIdx) => onToggleActivity(li, actIdx)}
+                    onDeleteActivity={(actIdx) => onDeleteActivity(li, actIdx)}
+                    addingText={addingActivity[flatIdx] ?? ''}
+                    onAddingChange={(text) => onAddingActivityChange(li, text)}
+                    onAddActivity={() => onAddActivity(li)}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     )
   }

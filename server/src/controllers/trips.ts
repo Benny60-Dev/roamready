@@ -1301,6 +1301,27 @@ export async function generateActivities(req: AuthRequest, res: Response, next: 
 
     const results = await generateStopActivitiesAI(destStops, { userId: req.user!.id, tripId: trip.id })
 
+    // Block 15 (Step 3 consistency) — persist per-stop activities to
+    // Stop.stayActivities so the renderer's new read path stays in sync after
+    // regeneration. Mirrors the write that generateItinerary performs at the
+    // end of an initial AI run. Same "only-write-when-non-empty" guard so a
+    // no-results stop stays null (Step 4's backfill can still distinguish
+    // "never generated" from "intentionally emptied"). Runs in parallel
+    // before the response so the next /trips/:id GET on this trip sees the
+    // updated stayActivities.
+    await Promise.all(
+      results
+        .filter(r => Array.isArray(r.activities) && r.activities.length > 0)
+        .map(r => {
+          const stopId = destStops[r.stopIdx]?.stopId
+          if (!stopId) return Promise.resolve()
+          return prisma.stop.update({
+            where: { id: stopId },
+            data: { stayActivities: r.activities },
+          })
+        })
+    )
+
     // Return { stopId, activities }[] so client can match by stop id
     const withIds = results.map(r => ({
       stopId: destStops[r.stopIdx]?.stopId,

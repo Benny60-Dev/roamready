@@ -64,6 +64,14 @@ export const StopUpdateSchema = z
     driveDistanceMiles: z.number().min(0).nullable().optional(),
     routeHighlights: z.string().nullable().optional(),
     pointsOfInterest: z.array(z.any()).optional(),
+    // Block 15 — the shared "things to do during your stay" list. See the
+    // Stop model in prisma/schema.prisma and the Stop interface in
+    // client/src/types/index.ts. Validated as z.array(z.any()) matching the
+    // existing JSON-array field convention (alternates, weatherForecast,
+    // pointsOfInterest above); contents are ItineraryActivity-shaped objects
+    // ({name, checked, isCustom?}) post-edit, plain strings on initial AI
+    // write. Nullable so the client can explicitly clear the list.
+    stayActivities: z.array(z.any()).nullable().optional(),
     order: z.number().int().min(0).optional(),
   })
   .strict()
