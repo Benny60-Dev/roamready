@@ -237,6 +237,10 @@ export interface Stop {
   // recorded at booking time. Optional + nullable so partial saves work.
   actualRate?: number | null
   actualFees?: number | null
+  // Per-leg actual fuel for the drive that arrived at this stop. Optional
+  // + nullable; null on the first/HOME stop (no leg arrives at it) and
+  // on un-recorded legs. Replaces Trip.actualFuel for totals math.
+  actualFuel?: number | null
   estimatedFuel?: number
   hookupType?: string
   checkInTime?: string

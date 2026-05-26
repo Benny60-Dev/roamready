@@ -359,6 +359,14 @@ model Stop {
   // and a booked stop can record one without the other.
   actualRate             Float?
   actualFees             Float?
+  // Per-leg actual fuel: the real fuel cost the USER recorded for the drive
+  // that ARRIVED at this stop (parallel to actualRate for lodging — the
+  // arriving stop is the leg's anchor, same way driveDistanceMiles already
+  // hangs here). Nullable: the first/HOME stop has none (no leg arrives
+  // at it), and un-driven / un-recorded legs carry none. Replaces the
+  // legacy trip-level Trip.actualFuel for totals math; that column stays
+  // for now but the per-leg sum is the new source of truth.
+  actualFuel             Float?
   estimatedFuel          Float?
   checkInTime            String?
   checkOutTime           String?

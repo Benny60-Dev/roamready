@@ -3,53 +3,89 @@
  * surface that renders a trip's cost — itinerary stat-strip + Cost Breakdown
  * + PDF, map page, share view, dashboard card, planning-session card.
  *
- * THE PROBLEM THIS REPLACES
+ * CAMP MATH (unchanged across passes)
  *
- * Before this helper, six surfaces each rolled their own inline math using
- * three different field combinations:
- *   - Cost Breakdown (correct):  Σ(siteRate × nights) + live EIA fuel
- *   - Header strip + Map:        Σ(siteRate × nights) + trip.estimatedFuel
- *   - Dashboard + Share + Sess.: trip.estimatedCamp + trip.estimatedFuel
+ * Camp = Σ(siteRate × nights) over all stops, with the actual-when-booked
+ * override pulled from Block 13's actualRate/actualFees. Deliberately does
+ * NOT read trip.estimatedCamp — that's a stale AI guess that contradicts
+ * the per-stop siteRates by 2-5×. Standardize on the per-stop walk.
  *
- * The AI populates `trip.estimatedCamp` / `trip.estimatedFuel` at promote
- * time with trip-level guesses that disagree (often by 2-5×) with the
- * per-stop `siteRate` values the same AI also writes. Surfaces reading the
- * trip-level fields show one number; surfaces reading the per-stop sum
- * show a very different number; same trip, three answers.
+ * FUEL MATH (per-leg actual rework)
  *
- * THE FIX
+ * fuelEst (the planning-side fuel total) comes from opts.fuelEstimate — a
+ * single number the caller fetched from GET /trips/:id/fuel-estimate.
  *
- * Standardize on the per-stop walk everywhere. Camp = Σ(siteRate × nights)
- * over all stops (matching the Cost Breakdown's per-row display), with the
- * actual-when-booked override pulled from Block 13's actualRate/actualFees.
- * Fuel is the live EIA estimate when the caller passes it; null otherwise
- * (camp-only context — list cards, unauthed share view). This helper
- * deliberately does NOT read trip.estimatedCamp or trip.estimatedFuel —
- * those are the stale fields we're retiring from the totals path.
+ * fuelActual (the "what you've actually spent so far" fuel number) is now
+ * computed by BLENDING per-leg actuals with per-leg estimates:
+ *
+ *   for each leg in opts.fuelPerLeg:
+ *     arriving stop = stops.find(s => s.order === leg.toOrder)
+ *     if arrivingStop.actualFuel is finite → use it
+ *     else                                   → use leg.cost (the estimate)
+ *
+ * So a user who logs $245 against the Mesa→Bakersfield leg sees that ONE
+ * leg's estimate replaced by $245 in actualTotal — the other N-1 legs
+ * keep contributing their estimates. The pre-rework "trip.actualFuel
+ * replaces the whole estimate" bug (logging $245 made actualTotal show
+ * just $245 of fuel) is gone.
+ *
+ * `fuelActual` only becomes a real "actual" (non-null, contributes to
+ * hasAnyActuals) when at least one leg has actualFuel set. A trip with
+ * zero logged legs returns fuelActual=null and the actualTotal falls
+ * through to the planning estimate — same behavior as the pre-rework
+ * "no actuals yet" case.
+ *
+ * BACK-COMPAT FALLBACK
+ *
+ * Surfaces that DON'T pass opts.fuelPerLeg (TripCard, SharedTripPage —
+ * list surfaces that read the stored Trip.estimatedFuel for fuelEst but
+ * have no perLeg array) fall back to the LEGACY path: fuelActual reads
+ * trip.actualFuel directly. That column stays for now as a legacy
+ * fallback; the per-leg sum on Stop.actualFuel is the new source of
+ * truth for the surfaces that have the data to compute it.
  *
  * INPUT SHAPE
  *
  * Duck-typed. Accepts either a saved Trip from the DB or the AI-generated
  * planning itinerary object — both have `stops` with `siteRate` + `nights`
- * + (for saved trips) `bookingStatus` / `actualRate` / `actualFees`. Stops
- * without a siteRate contribute 0, so HOME stops and return-home zero-night
- * stops fall out of the sum naturally.
+ * + (for saved trips) `bookingStatus` / `actualRate` / `actualFees` /
+ * `actualFuel`. Stops without a siteRate contribute 0 to camp; stops
+ * without an actualFuel fall back to their leg's estimate.
  *
  * Numbers come back raw (not rounded) — callers round at display time so
  * the math stays composable.
  */
 
 export interface TripTotalsInputStop {
+  /** Used to match this stop to a per-leg estimate (leg.toOrder === order).
+   *  Only required when opts.fuelPerLeg is supplied; ignored otherwise. */
+  order?: number | null
   siteRate?: number | null
   nights?: number | null
   bookingStatus?: string | null
   actualRate?: number | null
   actualFees?: number | null
+  /** Per-leg actual fuel — the real cost the user recorded for the drive
+   *  that arrived at THIS stop. Pass 1 of the per-leg-fuel rework added
+   *  this column to Stop. Null on the first/HOME stop and un-recorded
+   *  legs; finite when the user logged a value. */
+  actualFuel?: number | null
 }
 
 export interface TripTotalsInput {
   stops?: TripTotalsInputStop[] | null
+  /** Legacy trip-level actual fuel. Read only in the back-compat fallback
+   *  path (when opts.fuelPerLeg is NOT supplied) — the per-leg blend
+   *  supersedes this for surfaces that have the perLeg array in hand. */
   actualFuel?: number | null
+}
+
+/** Minimal per-leg estimate shape the blender needs. Structurally compatible
+ *  with the FuelLegEstimate the server returns, so callers can pass
+ *  `fuelEstimate.perLeg` directly without re-mapping. */
+export interface FuelLegInput {
+  toOrder: number
+  cost: number
 }
 
 export interface TripTotalsResult {
@@ -66,9 +102,13 @@ export interface TripTotalsResult {
    *  view) or the supplied value wasn't a finite number. NEVER reads
    *  trip.estimatedFuel — that's the stale AI guess we're retiring. */
   fuelEst: number | null
-  /** trip.actualFuel when set, else null. Source of truth for "what the
-   *  user actually paid for fuel so far" (logged via the Cost Breakdown's
-   *  Log-fuel input). */
+  /** Per-leg blended fuel actual when opts.fuelPerLeg is supplied AND at
+   *  least one leg's arriving stop has Stop.actualFuel set: blended sum =
+   *  Σ(actualFuel if logged, else leg.cost). When NO leg is logged, this
+   *  is null (so the actualTotal falls through to the estimate — same
+   *  posture as pre-rework). In the back-compat fallback path (no
+   *  fuelPerLeg supplied), this reads trip.actualFuel directly as the
+   *  legacy single-number actual. */
   fuelActual: number | null
   /** campEst + (fuelEst ?? 0). The planning-side total. */
   plannedTotal: number
@@ -77,9 +117,10 @@ export interface TripTotalsResult {
    *  "real where known, estimate elsewhere" rather than "ignore everything
    *  not actually paid for." */
   actualTotal: number
-  /** True when at least one booked stop has actualRate set OR the user
-   *  has logged any trip.actualFuel. Drives the collapse-vs-split display
-   *  in the Cost Breakdown and the stat-strip label flip. */
+  /** True when at least one booked stop has actualRate set OR at least one
+   *  drive leg has actualFuel logged (per-leg path) OR trip.actualFuel is
+   *  set (legacy fallback path). Drives the collapse-vs-split display in
+   *  the Cost Breakdown and the stat-strip label flip. */
   hasAnyActuals: boolean
   /** True when fuelEst is a finite number. Surfaces that show a camp-only
    *  total (list cards, share view) use this to decide whether to label
@@ -89,7 +130,16 @@ export interface TripTotalsResult {
 
 export function computeTripTotals(
   trip: TripTotalsInput | null | undefined,
-  opts?: { fuelEstimate?: number | null },
+  opts?: {
+    fuelEstimate?: number | null
+    /** Per-leg fuel estimates from the live fuel-estimate endpoint. When
+     *  supplied, fuelActual becomes a blend of per-leg actuals (from
+     *  Stop.actualFuel on each leg's arriving stop) and per-leg estimates
+     *  (for un-logged legs). When omitted, the helper falls back to the
+     *  legacy trip.actualFuel single-number behavior — used by surfaces
+     *  (list cards, share view) that don't have a perLeg array. */
+    fuelPerLeg?: FuelLegInput[] | null
+  },
 ): TripTotalsResult {
   const stops = trip?.stops ?? []
 
@@ -123,17 +173,75 @@ export function computeTripTotals(
       ? opts.fuelEstimate
       : null
 
-  const rawActualFuel = trip?.actualFuel
-  const fuelActual =
-    typeof rawActualFuel === 'number' && Number.isFinite(rawActualFuel)
-      ? rawActualFuel
-      : null
+  // ── Fuel actual ──────────────────────────────────────────────────────────
+  // Two paths:
+  //  (A) Per-leg blend — opts.fuelPerLeg supplied. Walk legs; each leg's
+  //      arriving stop (matched by order === leg.toOrder) contributes its
+  //      actualFuel if finite, otherwise the leg's estimate (leg.cost).
+  //      hasAnyLegActual tracks whether at least one leg was logged. If
+  //      none were, the blended sum collapses back to estimate-only and
+  //      we return fuelActual=null (so actualTotal falls through to fuelEst,
+  //      matching the pre-rework "no actuals yet" behavior).
+  //  (B) Legacy fallback — no fuelPerLeg supplied. Read trip.actualFuel
+  //      directly. Used by list surfaces (TripCard, SharedTripPage) that
+  //      don't have the perLeg array; per-leg blend is only meaningful
+  //      where the live estimate is available.
+  // Either path: each leg contributes EITHER an actual OR an estimate,
+  // never both — no double-counting. NaN/non-finite guards on every input.
+  let fuelActual: number | null = null
+  let hasAnyLegActual = false
+
+  if (Array.isArray(opts?.fuelPerLeg)) {
+    // Build an order → stop lookup once so the inner loop is O(L) not O(L*N).
+    const stopByOrder = new Map<number, TripTotalsInputStop>()
+    for (const s of stops) {
+      if (typeof s.order === 'number') stopByOrder.set(s.order, s)
+    }
+    let blendedSum = 0
+    for (const leg of opts.fuelPerLeg) {
+      const arrivingStop = stopByOrder.get(leg.toOrder)
+      const legActual = arrivingStop?.actualFuel
+      if (typeof legActual === 'number' && Number.isFinite(legActual)) {
+        // This leg has a user-logged actual — use it, ignore the estimate.
+        blendedSum += legActual
+        hasAnyLegActual = true
+      } else if (typeof leg.cost === 'number' && Number.isFinite(leg.cost)) {
+        // Un-logged leg: fall back to its estimate so the blend remains a
+        // full-trip total ("real where known, estimate elsewhere").
+        blendedSum += leg.cost
+      }
+      // else: leg has neither finite actual nor finite estimate → 0
+      // contribution. Defensive against malformed inputs.
+    }
+    // Only present the blend as a real "actual" when at least one leg was
+    // logged. With zero logged legs the blend equals fuelEst exactly, and
+    // returning that as fuelActual would falsely flip hasAnyActuals → true
+    // and split the totals display when nothing is yet recorded.
+    fuelActual = hasAnyLegActual ? blendedSum : null
+  } else {
+    // Legacy back-compat path — no perLeg array supplied. Read the trip-
+    // level field directly. List surfaces (TripCard, SharedTripPage) take
+    // this path; everything else passes fuelPerLeg and gets the blend.
+    const rawActualFuel = trip?.actualFuel
+    fuelActual =
+      typeof rawActualFuel === 'number' && Number.isFinite(rawActualFuel)
+        ? rawActualFuel
+        : null
+  }
 
   const plannedTotal = campEst + (fuelEst ?? 0)
-  // Actual-side: prefer logged actualFuel, fall back to the estimate, fall
-  // back to 0 (camp-only context). Mirrors the Cost Breakdown's display
-  // logic so the helper and the breakdown agree to the cent.
+  // Actual-side: prefer the blended/logged actual, fall back to the
+  // estimate, fall back to 0 (camp-only context). Mirrors the Cost
+  // Breakdown's display logic so helper and breakdown agree to the cent.
   const actualTotal = campActual + (fuelActual ?? fuelEst ?? 0)
+
+  // hasAnyActuals signals "should the display split Planned vs Actual?":
+  //   - per-leg path → ANY leg logged counts (hasAnyLegActual)
+  //   - legacy path → trip.actualFuel set counts (fuelActual != null)
+  //   - either path → any booked camp counts (hasActualCamp)
+  const hasAnyFuelActual = Array.isArray(opts?.fuelPerLeg)
+    ? hasAnyLegActual
+    : fuelActual != null
 
   return {
     campEst,
@@ -142,7 +250,7 @@ export function computeTripTotals(
     fuelActual,
     plannedTotal,
     actualTotal,
-    hasAnyActuals: hasActualCamp || fuelActual != null,
+    hasAnyActuals: hasActualCamp || hasAnyFuelActual,
     hasFuel: fuelEst != null,
   }
 }

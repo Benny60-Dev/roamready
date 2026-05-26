@@ -873,8 +873,12 @@ export default function TripMapPage() {
   // AI guess driving the prior inter-surface drift.
   const { totalCost, nonHomeStops, bookedStops } = useMemo(() => {
     const stops = trip?.stops || []
+    // fuelPerLeg passed so the per-leg actual blend is in effect on the
+    // map page too — totals match the itinerary's stat-strip when the
+    // user has logged per-leg actuals.
     const totals = computeTripTotals(trip, {
       fuelEstimate: fuelEstimate?.noEstimate ? null : (fuelEstimate?.total ?? null),
+      fuelPerLeg: fuelEstimate?.noEstimate ? null : (fuelEstimate?.perLeg ?? null),
     })
     // Badge-based: catches return-home loops where the closing stop is typed
     // DESTINATION but badged 'H'. Mirrors TripBookingPage's bookableStops so

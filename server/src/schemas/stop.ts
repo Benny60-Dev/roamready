@@ -41,6 +41,12 @@ export const StopUpdateSchema = z
     // these here would 400 every booking save that includes them.
     actualRate: z.number().min(0).nullable().optional(),
     actualFees: z.number().min(0).nullable().optional(),
+    // Per-leg actual fuel — the real cost the user recorded for the drive
+    // that arrived at THIS stop. Same shape as actualRate/actualFees so the
+    // existing updateStop PUT path accepts it on the same partial-update
+    // semantics. Replaces the trip-level Trip.actualFuel for totals math
+    // (sum-of-stops); the trip column stays for legacy reads.
+    actualFuel: z.number().min(0).nullable().optional(),
     estimatedFuel: z.number().min(0).nullable().optional(),
     checkInTime: z.string().max(20).nullable().optional(),
     checkOutTime: z.string().max(20).nullable().optional(),

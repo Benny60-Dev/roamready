@@ -482,8 +482,13 @@ export function TripPDF({ trip, mapImageBase64, fuelEstimate }: Props) {
   // as a prop from the page that triggered the PDF (the page already
   // fetched it async); when null/noEstimate, the helper returns camp-only
   // and the stats grid renders fuel as "—".
+  //
+  // fuelPerLeg passed too so the PDF's "actual so far" line reflects
+  // per-leg actuals (Stop.actualFuel sum) instead of the legacy trip-
+  // level number — matches what the on-screen Cost Breakdown shows.
   const totals = computeTripTotals(trip, {
     fuelEstimate: fuelEstimate?.noEstimate ? null : (fuelEstimate?.total ?? null),
+    fuelPerLeg: fuelEstimate?.noEstimate ? null : (fuelEstimate?.perLeg ?? null),
   })
   const totalCampEst = totals.campEst
   const fuelEst = totals.fuelEst

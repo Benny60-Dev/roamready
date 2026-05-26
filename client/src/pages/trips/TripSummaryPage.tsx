@@ -481,15 +481,15 @@ export default function TripSummaryPage() {
   const [addAfterOrder, setAddAfterOrder] = useState<number | null>(null)
   const [mutating, setMutating] = useState(false)
   const [modifyPanelOpen, setModifyPanelOpen] = useState(false)
-  // "Log actual fuel" state — a small running-total input in the Cost
-  // Breakdown card. Mirrors the notes-editor pattern in StayContent: open/
-  // close + draft text + saving + brief Saved-confirm. The value persists
-  // to trip.actualFuel via PUT /trips/:id (TripUpdateSchema already
-  // allowlists actualFuel since the very first migration).
-  const [fuelOpen, setFuelOpen] = useState(false)
-  const [fuelInput, setFuelInput] = useState('')
-  const [savingFuel, setSavingFuel] = useState(false)
-  const [fuelSaveConfirm, setFuelSaveConfirm] = useState(false)
+  // Per-leg actual-fuel editor state. Identifies which leg is currently
+  // being edited by its arriving-stop `order` (leg.toOrder), so opening a
+  // second editor naturally closes any prior one without bookkeeping. The
+  // legacy single trip.actualFuel input was retired here — actuals now
+  // live per-leg on Stop.actualFuel (Pass 1 added the column) and the
+  // per-leg blend in computeTripTotals (Pass 2) drives the displayed total.
+  const [editingLegToOrder, setEditingLegToOrder] = useState<number | null>(null)
+  const [legInput, setLegInput] = useState('')
+  const [savingLeg, setSavingLeg] = useState(false)
   // Pass-3: regional fuel-cost estimate fetched async from GET /trips/:id/fuel-estimate.
   // null = still loading / not yet attempted. Successful response sets the
   // full object (including the noEstimate flag for when no rig MPG is set);
@@ -999,43 +999,59 @@ export default function TripSummaryPage() {
     setAddingPOIDuration(prev => ({ ...prev, [entryIdx]: 30 }))
   }
 
-  // Pre-fill the fuel input with the current trip.actualFuel (as a string,
-  // since the input is controlled text) and open the editor. Separate from
-  // saveFuel so a re-open re-syncs to whatever the latest persisted value
-  // is — avoids showing a stale draft after an external update.
-  const openFuelEditor = () => {
-    setFuelInput(trip?.actualFuel != null ? String(trip.actualFuel) : '')
-    setFuelOpen(true)
+  // Open the per-leg actual-fuel editor for the leg arriving at `toOrder`.
+  // Pre-fills the input from the arriving stop's current actualFuel so a
+  // re-open shows the persisted value, not a stale draft. Setting
+  // editingLegToOrder to a new value implicitly closes any prior open
+  // editor — only one row is in edit state at a time.
+  const openLegEditor = (toOrder: number, current: number | null) => {
+    setEditingLegToOrder(toOrder)
+    setLegInput(current != null ? String(current) : '')
   }
 
-  // Save the actualFuel running total. Treat blank as cancel (don't clear
-  // existing values — a user who wants to clear can save 0). Non-numeric /
-  // negative inputs silently close without persisting. Optimistically
-  // updates the in-memory trip state so the displayed value flips instantly
-  // on save without waiting for a full reloadTrip().
-  const saveFuel = async () => {
-    if (!trip || !id) return
-    const trimmed = fuelInput.trim()
+  // Save the per-leg actual fuel. Writes via the same updateStop PUT path
+  // the booking form already uses for actualRate/actualFees (Pass 1 added
+  // actualFuel to StopUpdateSchema). Optimistically updates the in-memory
+  // trip.stops so computeTripTotals re-blends immediately and the header
+  // + grand totals reflect the new actual without a reloadTrip().
+  //
+  // Empty input clears the actual (sends null) — un-logs the leg, the
+  // displayed estimate replaces it on the next render. Non-numeric /
+  // negative inputs silently close without persisting.
+  const saveLegFuel = async (stopId: string | undefined, _toOrder: number) => {
+    if (!stopId || !id || !trip) return
+    const trimmed = legInput.trim()
+    let value: number | null
     if (trimmed === '') {
-      setFuelOpen(false)
-      return
+      value = null
+    } else {
+      const n = Number(trimmed)
+      if (!Number.isFinite(n) || n < 0) {
+        setEditingLegToOrder(null)
+        setLegInput('')
+        return
+      }
+      value = n
     }
-    const n = Number(trimmed)
-    if (!Number.isFinite(n) || n < 0) {
-      setFuelOpen(false)
-      return
-    }
-    setSavingFuel(true)
+    setSavingLeg(true)
     try {
-      await tripsApi.update(id, { actualFuel: n })
-      setTrip(t => (t ? { ...t, actualFuel: n } : t))
-      setFuelOpen(false)
-      setFuelSaveConfirm(true)
-      setTimeout(() => setFuelSaveConfirm(false), 2500)
+      await tripsApi.updateStop(id, stopId, { actualFuel: value })
+      setTrip(t =>
+        t
+          ? {
+              ...t,
+              stops: t.stops?.map(s =>
+                s.id === stopId ? { ...s, actualFuel: value } : s,
+              ),
+            }
+          : t,
+      )
+      setEditingLegToOrder(null)
+      setLegInput('')
     } catch (e) {
-      console.error('[saveFuel] failed:', e)
+      console.error('[saveLegFuel] failed:', e)
     } finally {
-      setSavingFuel(false)
+      setSavingLeg(false)
     }
   }
 
@@ -1054,8 +1070,15 @@ export default function TripSummaryPage() {
   // the source of the inter-surface total drift the helper was extracted
   // to fix. Fuel is passed only when fuelEstimate has loaded AND isn't a
   // noEstimate result.
+  //
+  // fuelPerLeg is passed alongside fuelEstimate.total so the helper can
+  // blend per-leg actuals (Stop.actualFuel) with per-leg estimates for
+  // the "actual so far" math. Without this, the helper would fall back
+  // to the legacy trip.actualFuel single-number behavior — fine for list
+  // surfaces but wrong on this page where individual legs can be logged.
   const tripTotals = computeTripTotals(trip, {
     fuelEstimate: fuelEstimate?.noEstimate ? null : (fuelEstimate?.total ?? null),
+    fuelPerLeg: fuelEstimate?.noEstimate ? null : (fuelEstimate?.perLeg ?? null),
   })
 
   // Live total miles: prefer Routes API driveDistanceMiles per stop, fall back to Haversine.
@@ -1397,16 +1420,122 @@ export default function TripSummaryPage() {
             )}
             {/* Per-leg sub-rows — answers "how did fuel get to $X". */}
             {fuelLegsExpanded && fuelEstimate && !fuelEstimate.noEstimate && fuelEstimate.perLeg.length > 0 && (
-              <ul className="ml-7 mt-2 space-y-1">
-                {fuelEstimate.perLeg.map((leg, i) => (
-                  <li key={i} className="flex items-center justify-between text-xs text-gray-500">
-                    <span>
-                      {legLabel(leg.fromOrder, null)} → {legLabel(leg.toOrder, leg.toState)}
-                      <span className="text-gray-400"> · {Math.round(leg.miles).toLocaleString()} mi</span>
-                    </span>
-                    <span>${fmtMoney(Math.round(leg.cost))}</span>
-                  </li>
-                ))}
+              <ul className="ml-7 mt-2 space-y-1.5">
+                {fuelEstimate.perLeg.map((leg, i) => {
+                  // Each leg's actual fuel lives on its ARRIVING stop
+                  // (Stop.actualFuel where stop.order === leg.toOrder).
+                  // The save path is tripsApi.updateStop using that stop's
+                  // id — match it here so we have the id ready for the
+                  // editor's save call. Falls back to undefined if no
+                  // stop matches (shouldn't happen in practice; legs are
+                  // derived from the trip's own stops).
+                  const arrivingStop = trip.stops?.find(s => s.order === leg.toOrder)
+                  const arrivingStopId = arrivingStop?.id
+                  const legActual = arrivingStop?.actualFuel
+                  const isLogged =
+                    typeof legActual === 'number' && Number.isFinite(legActual)
+                  const isEditing = editingLegToOrder === leg.toOrder
+
+                  return (
+                    <li key={i} className="flex items-center justify-between gap-2 text-xs text-gray-500">
+                      <span className="flex-shrink-0">
+                        {legLabel(leg.fromOrder, null)} → {legLabel(leg.toOrder, leg.toState)}
+                        <span className="text-gray-400"> · {Math.round(leg.miles).toLocaleString()} mi</span>
+                      </span>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {isEditing ? (
+                          // STATE B — inline editor. Shows the estimate
+                          // struck through with a → to the user-entered
+                          // value, plus Save / Cancel. Enter saves;
+                          // Escape cancels.
+                          <>
+                            <span className="text-gray-400 line-through">${fmtMoney(Math.round(leg.cost))}</span>
+                            <span className="text-gray-300">→</span>
+                            <span className="text-gray-400">$</span>
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              min={0}
+                              step="0.01"
+                              value={legInput}
+                              onChange={e => setLegInput(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault()
+                                  saveLegFuel(arrivingStopId, leg.toOrder)
+                                } else if (e.key === 'Escape') {
+                                  setEditingLegToOrder(null)
+                                  setLegInput('')
+                                }
+                              }}
+                              placeholder="0.00"
+                              autoFocus
+                              disabled={!arrivingStopId || savingLeg}
+                              className="text-xs border border-gray-200 rounded px-1.5 py-0.5 w-20 focus:outline-none focus:border-[#1F6F8B] bg-white"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => saveLegFuel(arrivingStopId, leg.toOrder)}
+                              disabled={savingLeg || !arrivingStopId}
+                              className="text-xs font-semibold text-white bg-[#F7A829] hover:bg-[#C9851A] px-2 py-0.5 rounded disabled:opacity-60 transition-colors"
+                            >
+                              {savingLeg ? '…' : 'Save'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingLegToOrder(null)
+                                setLegInput('')
+                              }}
+                              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : isLogged ? (
+                          // STATE C — logged. Estimate is shown struck-
+                          // through for context; the actual sits beside
+                          // it in pine green (#3E5540) with an "actual"
+                          // tag. Pine = "this is a real recorded cost"
+                          // (consistent with booked camp). NO over/under
+                          // framing — same treatment whether the actual
+                          // is higher or lower than the estimate; no
+                          // "saved $X" calculation, no red/green delta.
+                          <>
+                            <span className="text-gray-400 line-through">${fmtMoney(Math.round(leg.cost))}</span>
+                            <span className="text-[#3E5540] font-medium">${fmtMoney(Math.round(legActual as number))}</span>
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-[#3E5540]">actual</span>
+                            <button
+                              type="button"
+                              onClick={() => openLegEditor(leg.toOrder, legActual as number)}
+                              className="text-xs text-[#1F6F8B] hover:text-[#134756] font-medium transition-colors"
+                            >
+                              Edit
+                            </button>
+                          </>
+                        ) : (
+                          // STATE A — not logged. Show the estimate with
+                          // a small "est." tag and a quiet "+ Log actual"
+                          // affordance. Disabled when we can't resolve
+                          // the arriving stop (defensive — shouldn't
+                          // happen in practice).
+                          <>
+                            <span>${fmtMoney(Math.round(leg.cost))}</span>
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">est.</span>
+                            <button
+                              type="button"
+                              onClick={() => openLegEditor(leg.toOrder, null)}
+                              disabled={!arrivingStopId}
+                              className="text-xs text-[#1F6F8B] hover:text-[#134756] font-medium transition-colors disabled:opacity-40"
+                            >
+                              + Log actual
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>
@@ -1433,69 +1562,14 @@ export default function TripSummaryPage() {
             </div>
           )}
 
-          {/* Actual fuel spent — running total the user bumps up as they
-              fuel up. Saves to trip.actualFuel via PUT /trips/:id. Pass 2
-              only captures the value; the est-vs-actual display lands in
-              pass 3, which is why this sits as a quiet tracking affordance
-              for now rather than being shown alongside an estimate row. */}
-          <div className="flex items-center gap-3 pt-2 mt-2 border-t border-gray-100">
-            {fuelOpen ? (
-              <div className="flex items-center gap-2 flex-1 flex-wrap">
-                <label className="text-xs text-gray-500">Actual fuel spent</label>
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-gray-400">$</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min={0}
-                    step="0.01"
-                    value={fuelInput}
-                    onChange={e => setFuelInput(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') { e.preventDefault(); saveFuel() }
-                      else if (e.key === 'Escape') {
-                        setFuelInput(trip?.actualFuel != null ? String(trip.actualFuel) : '')
-                        setFuelOpen(false)
-                      }
-                    }}
-                    placeholder="0.00"
-                    autoFocus
-                    className="text-xs border border-gray-200 rounded px-2 py-1 w-28 focus:outline-none focus:border-[#1F6F8B] bg-white"
-                  />
-                </div>
-                <button
-                  onClick={saveFuel}
-                  disabled={savingFuel}
-                  className="text-xs font-semibold text-white bg-[#F7A829] hover:bg-[#C9851A] px-3 py-1 rounded-lg disabled:opacity-60 transition-colors"
-                >
-                  {savingFuel ? 'Saving…' : 'Save'}
-                </button>
-                <button
-                  onClick={() => {
-                    setFuelInput(trip?.actualFuel != null ? String(trip.actualFuel) : '')
-                    setFuelOpen(false)
-                  }}
-                  className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <>
-                <button
-                  onClick={openFuelEditor}
-                  className="text-xs text-gray-400 hover:text-gray-600 transition-colors text-left"
-                >
-                  {trip.actualFuel != null
-                    ? `Actual fuel spent: $${trip.actualFuel.toLocaleString()} · Edit`
-                    : '+ Log actual fuel spent'}
-                </button>
-                {fuelSaveConfirm && (
-                  <span className="text-xs text-[#0F766E] font-medium">Saved ✓</span>
-                )}
-              </>
-            )}
-          </div>
+          {/* Legacy trip-level "Log actual fuel spent" input was retired in
+              Pass 3 of the per-leg-fuel rework. Logging now happens per
+              leg in the expanded fuel breakdown above — each leg row has
+              its own "+ Log actual" affordance that writes to the
+              arriving stop's actualFuel. The Trip.actualFuel column and
+              type still exist as a legacy fallback that list surfaces
+              (TripCard, SharedTripPage) read via computeTripTotals's
+              non-perLeg path; nothing on this page writes it anymore. */}
         </div>
       </div>
         )
