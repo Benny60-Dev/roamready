@@ -121,7 +121,17 @@ export async function deleteMe(req: AuthRequest, res: Response, next: NextFuncti
 
 export async function getRigs(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const rigs = await prisma.rig.findMany({ where: { userId: req.user!.id } })
+    // Default rig pinned to the top via `isDefault: 'desc'` (true sorts above
+    // false); `createdAt: 'asc'` is the stable tiebreaker for the rest so
+    // non-default rigs render in a predictable oldest-first order rather than
+    // Postgres's heap-scan / row-visibility default (which can shift after
+    // any UPDATE — e.g. the Set-as-default transaction in updateRig). One
+    // source of truth so every consumer (RigPage today, trip-create flow,
+    // dashboard, etc.) sees the same order without re-implementing it.
+    const rigs = await prisma.rig.findMany({
+      where: { userId: req.user!.id },
+      orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+    })
     res.json(rigs)
   } catch (err) { next(err) }
 }
