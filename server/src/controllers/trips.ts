@@ -1450,17 +1450,40 @@ export async function getTripFuelEstimate(req: AuthRequest, res: Response, next:
     // Two-step rig resolution: prefer the trip-assigned rig, fall back to
     // the user's default. Both lookups scoped by userId so a malicious id
     // probe can't lift another user's rig.
+    //
+    // SELECT widened (towing-aware fuel estimate, Pass 1 of 3): the fuel
+    // service now needs the towing-related rig fields to decide which MPG
+    // to apply and which fuel type to price. Both findFirst selects must
+    // stay in sync so the trip-assigned and default-rig paths feed the
+    // service the same shape.
+    //   · mpgTowing      — towing-regime mpg (new column, Pass 1 migration)
+    //   · vehicleType    — discriminates TRAILER (rig is towed; tow
+    //                      vehicle's mpg/fuel matter) vs MOTORHOME
+    //                      (own mpg/fuel; towing only when toad is along)
+    //   · isTowing       — motorhome's profile says "I tow a toad/trailer"
+    //   · towedType      — VEHICLE | TRAILER, kept for Pass 3's disclosure
+    //   · towedFuelType  — the tow vehicle's fuel type (used by the
+    //                      service to price gallons for trailered rigs)
+    const rigSelect = {
+      fuelType: true,
+      mpg: true,
+      mpgTowing: true,
+      vehicleType: true,
+      isTowing: true,
+      towedType: true,
+      towedFuelType: true,
+    } as const
     let rig = null
     if (trip.rigId) {
       rig = await prisma.rig.findFirst({
         where: { id: trip.rigId, userId: req.user!.id },
-        select: { fuelType: true, mpg: true },
+        select: rigSelect,
       })
     }
     if (!rig) {
       rig = await prisma.rig.findFirst({
         where: { userId: req.user!.id, isDefault: true },
-        select: { fuelType: true, mpg: true },
+        select: rigSelect,
       })
     }
 
@@ -1475,7 +1498,14 @@ export async function getTripFuelEstimate(req: AuthRequest, res: Response, next:
       driveDistanceMiles: s.driveDistanceMiles,
     }))
 
-    const estimate = await computeFuelEstimate(stops, rig)
+    // Pass trip.bringingTowed into the service so motorhome rigs with a
+    // toad can flip between solo and towing mpg per trip. The whole Trip
+    // row is loaded (no narrow select above), so this field is already
+    // hydrated — no extra round-trip. Trailer rigs ignore this flag
+    // entirely; the service knows to always treat trailers as towing.
+    const estimate = await computeFuelEstimate(stops, rig, {
+      bringingTowed: trip.bringingTowed,
+    })
 
     // Cache the computed total back to trip.estimatedFuel so list surfaces
     // (dashboard, share view) can read a real stored number without their

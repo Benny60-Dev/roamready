@@ -417,6 +417,24 @@ export interface TripFuelEstimate {
    *  this case — it's 0 to satisfy the type but doesn't mean "$0 fuel". */
   noEstimate?: boolean
   noEstimateReason?: string
+  /** The MPG figure actually used in the formula (miles / mpgUsed). For
+   *  trailers this is mpgTowing (or solo mpg as fallback); for motorhomes
+   *  it's mpgTowing when the toad's along and isTowing, else solo mpg.
+   *  Null in the noEstimate path. Pass 3 surfaces this in the disclosure
+   *  ("Estimated at 12 MPG, towing"). */
+  mpgUsed: number | null
+  /** Why mpgUsed is what it is — drives the disclosure copy in Pass 3.
+   *   'towing' → trailer rig OR motorhome with toad attached this trip
+   *   'solo'   → motorhome without toad (or trailer that has no mpgTowing
+   *              and is using solo mpg as the fallback)
+   *  Null in the noEstimate path. */
+  mpgBasis: 'solo' | 'towing' | null
+  /** Resolved fuel grade — same as `fuelType` above. Repeated under this
+   *  name so Pass 3 doesn't have to know which field is "the one used"
+   *  vs "the rig's nominal fuelType"; for trailers these can differ
+   *  (e.g. a diesel truck pulling a gasoline-stove travel trailer where
+   *  the trailer's `fuelType` is irrelevant to the burn). */
+  fuelTypeUsed: FuelGrade
 }
 
 /**
@@ -462,9 +480,61 @@ interface StopShape {
   longitude: number | null
   driveDistanceMiles: number | null
 }
+// ─── Vehicle-type taxonomy ────────────────────────────────────────────────────
+//
+// Rig.vehicleType is an enum on the DB side (VehicleType in schema.prisma).
+// The values are inlined as a string-literal union here so this service never
+// has to import from @prisma/client (kept duck-typed for testability and so a
+// schema-side rename surfaces as a typecheck failure in the right place).
+//
+// The taxonomy drives two decisions:
+//   1. WHICH MPG to use (solo vs towing) — see effectiveMpg below.
+//   2. WHICH FUEL TYPE to price the gallons at — trailer rigs price at the
+//      tow vehicle's fuel (towedFuelType), since the trailer has no engine;
+//      motorhomes price at their own fuel.
+//
+// TRAILER types ARE the thing being towed (no engine of their own); they
+// are ALWAYS effectively in a "towing" mileage regime — the user reports
+// mpgTowing as "how does my truck do with this trailer hitched."
+// MOTORHOME types drive solo by default and only enter the towing regime
+// when isTowing && bringingTowed (toad along for this trip).
+// CAR_CAMPING is treated motorhome-like — drives solo, has its own fuel,
+// no towing concept supported in the UI today.
+const TRAILER_TYPES = new Set<string>([
+  'FIFTH_WHEEL', 'TRAVEL_TRAILER', 'TOY_HAULER', 'POP_UP',
+])
+
+/** True when the rig itself IS the towed unit (no engine). The relevant
+ *  drive-physics for fuel cost is then the tow vehicle, not the trailer. */
+function isTrailerType(vehicleType: string | null | undefined): boolean {
+  if (!vehicleType) return false
+  return TRAILER_TYPES.has(vehicleType)
+}
+
 interface RigShape {
   fuelType: string | null
   mpg: number | null
+  /** Towing-adjusted MPG. For TRAILER rigs this is the primary figure (the
+   *  tow vehicle's mpg with the trailer hitched). For MOTORHOMES it's the
+   *  mpg while flat-towing a toad. Null → fall back to solo `mpg`. */
+  mpgTowing: number | null
+  /** Discriminator for the trailer-vs-motorhome decision. String-typed
+   *  (not the Prisma enum) to keep this service un-coupled from generated
+   *  types — passes through whatever the controller selects. */
+  vehicleType: string | null
+  /** True when a motorhome is flat-towing a toad/trailer on this rig as
+   *  configured in the user's profile. Trailers leave this false (they
+   *  ARE the towed thing). Combined with trip.bringingTowed to decide
+   *  whether the motorhome's towing-mpg applies to a given trip. */
+  isTowing: boolean | null
+  /** VEHICLE | TRAILER | null — only meaningful when isTowing is true.
+   *  Currently informational; kept on the shape because the controller
+   *  selects it and Pass 3's disclosure may use it. */
+  towedType: string | null
+  /** The TOW VEHICLE's fuel type (the truck pulling a trailered rig).
+   *  Used for fuel pricing when isTrailerType — falls back to fuelType
+   *  if the user didn't capture this field on their trailered rig. */
+  towedFuelType: string | null
 }
 
 /**
@@ -487,11 +557,62 @@ interface RigShape {
 export async function computeFuelEstimate(
   stops: StopShape[],
   rig: RigShape | null | undefined,
+  opts?: {
+    /** Per-trip "am I bringing the toad" answer from the
+     *  ConfirmVehiclesModal (Block 8). Only consulted for motorhome rigs
+     *  with isTowing=true — combined with that flag to decide whether the
+     *  towing-mpg regime applies to THIS trip. null = not asked / unknown;
+     *  the helper treats null as "yes" to match the modal's default
+     *  selection ("if you set up your rig as a tower, assume you're
+     *  bringing the toad unless you said otherwise"). Trailer rigs ignore
+     *  this entirely — they're always in the towing regime. */
+    bringingTowed?: boolean | null
+  },
 ): Promise<TripFuelEstimate> {
-  const fuelType = normalizeFuelType(rig?.fuelType)
-  const mpg = rig?.mpg
+  // ─── Determine the towing regime for THIS trip ────────────────────────────
+  // Two questions:
+  //   1. WHICH MPG to use (solo `mpg` vs `mpgTowing`)?
+  //   2. WHICH FUEL TYPE to price (the rig's own vs the tow-vehicle's)?
+  // Trailers are ALWAYS effectively towing (the rig itself has no engine, so
+  // the relevant figures are the tow vehicle's). Motorhomes are conditional:
+  // towing applies only when their profile says isTowing AND the user said
+  // "yes, I'm bringing the toad" on this trip (bringingTowed=true or null —
+  // null defaults to yes to match the modal's UX).
+  const trailer = isTrailerType(rig?.vehicleType)
+  const motorhomeTowing = !!(rig?.isTowing) && (opts?.bringingTowed ?? true)
+  const towing = trailer || motorhomeTowing
 
-  if (!mpg || mpg <= 0) {
+  // Effective MPG:
+  //   · trailer: prefer mpgTowing, fall back to solo mpg (lets a user who
+  //     only filled in the legacy mpg field still get a non-null estimate).
+  //   · motorhome towing: prefer mpgTowing, fall back to solo mpg.
+  //   · motorhome solo: use solo mpg.
+  // Truthy-check (>0) on each candidate so a 0 / negative value behaves
+  // like "not set" rather than divide-by-zero further down.
+  const mpgTowingVal =
+    typeof rig?.mpgTowing === 'number' && rig.mpgTowing > 0 ? rig.mpgTowing : null
+  const mpgSoloVal =
+    typeof rig?.mpg === 'number' && rig.mpg > 0 ? rig.mpg : null
+  const effectiveMpg = towing ? (mpgTowingVal ?? mpgSoloVal) : mpgSoloVal
+  // Was the FINAL pick actually the towing figure? When a trailer has only
+  // solo mpg set, we used solo as a fallback — basis is 'solo' in that
+  // case (honest disclosure: "we used your solo mpg because no towing
+  // mpg was set"). Pass 3's disclosure copy depends on this distinction.
+  const mpgBasis: 'solo' | 'towing' | null =
+    effectiveMpg == null ? null : (towing && effectiveMpg === mpgTowingVal ? 'towing' : 'solo')
+
+  // Effective fuel type:
+  //   · trailer: prefer towedFuelType (the tow vehicle's), fall back to
+  //     the rig's own fuelType. A trailered rig's own fuelType is usually
+  //     irrelevant (propane stove, etc.) but is a safe fallback so we
+  //     don't price diesel-when-actually-gas just because the user
+  //     skipped the towed-fuel field.
+  //   · motorhome: use the rig's own fuelType, same as pre-rework.
+  const fuelType: FuelGrade = trailer
+    ? normalizeFuelType(rig?.towedFuelType ?? rig?.fuelType)
+    : normalizeFuelType(rig?.fuelType)
+
+  if (!effectiveMpg || effectiveMpg <= 0) {
     return {
       total: 0,
       fuelType,
@@ -500,6 +621,9 @@ export async function computeFuelEstimate(
       asOf: null,
       noEstimate: true,
       noEstimateReason: rig ? 'Rig MPG not set' : 'No rig assigned to trip',
+      mpgUsed: null,
+      mpgBasis: null,
+      fuelTypeUsed: fuelType,
     }
   }
 
@@ -513,6 +637,9 @@ export async function computeFuelEstimate(
       asOf: null,
       noEstimate: true,
       noEstimateReason: 'Trip needs at least 2 stops to compute legs',
+      mpgUsed: null,
+      mpgBasis: null,
+      fuelTypeUsed: fuelType,
     }
   }
 
@@ -533,7 +660,7 @@ export async function computeFuelEstimate(
     const price = await getFuelPrice(to.locationState, fuelType)
     // miles=0 (no coords + no Routes API distance) gracefully contributes
     // $0 to the total rather than failing. Same for miles<0 (defensive).
-    const cost = miles > 0 ? (miles / mpg) * price.pricePerGallon : 0
+    const cost = miles > 0 ? (miles / effectiveMpg) * price.pricePerGallon : 0
     perLeg.push({
       fromOrder: from.order,
       toOrder: to.order,
@@ -567,6 +694,9 @@ export async function computeFuelEstimate(
     perLeg,
     source: overallSource,
     asOf,
+    mpgUsed: effectiveMpg,
+    mpgBasis,
+    fuelTypeUsed: fuelType,
   }
 }
 

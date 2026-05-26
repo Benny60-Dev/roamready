@@ -92,6 +92,21 @@ model Rig {
   height         Float?
   fuelType       String?
   mpg            Float?
+  // Towing-adjusted MPG. Nullable so back-compat is preserved — when null
+  // the fuel service falls back to the solo `mpg` above. Semantics depend
+  // on rig type:
+  //   · TRAILER types (FIFTH_WHEEL, TRAVEL_TRAILER, TOY_HAULER, POP_UP):
+  //     this is the TOW VEHICLE's mpg with the trailer hitched — the only
+  //     mileage that matters for a trailered rig, since the rig itself has
+  //     no engine. `mpg` (solo) is mostly inert for trailers and exists
+  //     only as the safety fallback when towing mpg isn't set.
+  //   · MOTORHOME types (RV_CLASS_A/B/C, VAN): mpg while flat-towing a
+  //     toad. Applies only when isTowing && (trip.bringingTowed ?? true).
+  //     `mpg` remains the solo figure for trips without the toad.
+  //   · CAR_CAMPING: not towing-relevant; this column is ignored.
+  // Added in migration 20260525120000_add_rig_mpg_towing — towing-aware
+  // fuel estimate, Pass 1 of 3 (schema + service wiring).
+  mpgTowing      Float?
   tankSize       Float?
   slideouts      String?
   electricalAmps String?

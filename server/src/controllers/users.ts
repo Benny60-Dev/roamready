@@ -137,7 +137,11 @@ function pickRigInput(body: any) {
     vehicleType,
     year, make, model,
     length, height,
-    fuelType, mpg, tankSize,
+    // mpgTowing added in Pass 1 of the towing-aware fuel estimate (May 2026).
+    // The fuel service reads it from the rig to pick towing vs solo mileage;
+    // it MUST be on this allowlist or it silently won't persist from the
+    // rig-profile form. See server/src/services/fuelPrice.ts effectiveMpg.
+    fuelType, mpg, mpgTowing, tankSize,
     slideouts, electricalAmps,
     isToyHauler, garageLength, gvwr, toys, terrainTypes,
     isVan, vanLength,
@@ -155,7 +159,7 @@ function pickRigInput(body: any) {
     vehicleType,
     year, make, model,
     length, height,
-    fuelType, mpg, tankSize,
+    fuelType, mpg, mpgTowing, tankSize,
     slideouts, electricalAmps,
     isToyHauler, garageLength, gvwr, toys, terrainTypes,
     isVan, vanLength,

@@ -108,6 +108,12 @@ export interface Rig {
   height?: number
   fuelType?: string
   mpg?: number
+  // Towing-adjusted MPG (towing-aware fuel estimate, Pass 1). For TRAILER
+  // rigs this is the tow vehicle's mpg with the trailer hitched — the only
+  // mileage that matters since the rig has no engine. For MOTORHOMES it's
+  // the rig's mpg while flat-towing a toad (used when Trip.bringingTowed).
+  // Falls back to solo `mpg` when null. See server/src/services/fuelPrice.ts.
+  mpgTowing?: number
   tankSize?: number
   slideouts?: string
   electricalAmps?: string
@@ -290,6 +296,18 @@ export interface TripFuelEstimate {
   asOf: string | null
   noEstimate?: boolean
   noEstimateReason?: string
+  // ── Towing-aware fuel estimate, Pass 1 of 3 ────────────────────────────────
+  // Server now returns the effective MPG figure it ACTUALLY used in the
+  // (miles / mpgUsed) × $/gal formula, plus a basis tag explaining why it
+  // picked solo vs towing mpg. Pass 3 will render these in the Fuel-group
+  // disclosure line ("Estimated at 12 MPG, towing — terrain and load
+  // affect real mileage"). Null in the noEstimate path (no MPG, <2 stops).
+  // fuelTypeUsed is the grade priced — for trailers this can differ from
+  // the rig's own fuelType (the trailer's stove/propane is irrelevant;
+  // the tow vehicle's diesel/gas is what's actually burned).
+  mpgUsed: number | null
+  mpgBasis: 'solo' | 'towing' | null
+  fuelTypeUsed: 'gas' | 'diesel'
 }
 
 export interface JournalEntry {

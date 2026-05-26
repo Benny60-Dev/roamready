@@ -4,7 +4,7 @@ import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import {
   Download, Share2, Sparkles, Car, Tent, Star, Bed,
   MapPin, XCircle, Plus, Check, RefreshCw, ArrowRight, Clock,
-  Pencil, Trash2, Wand2, Fuel, ChevronDown, ChevronRight,
+  Pencil, Trash2, Wand2, Fuel, ChevronDown, ChevronRight, Info,
 } from 'lucide-react'
 const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel'))
 import EditStopModal from '../../components/trip/EditStopModal'
@@ -1522,6 +1522,32 @@ export default function TripSummaryPage() {
                         so the prices have provenance before the legs. */}
                     {fuelCaption && (
                       <p className="text-xs text-gray-400 pl-6 pb-1">{fuelCaption}</p>
+                    )}
+                    {/* MPG disclosure (Pass 3 of towing-aware fuel estimate,
+                        May 2026). Shows the actual divisor the server used
+                        in (miles / mpgUsed) × $/gal, plus the basis tag
+                        ('towing' vs 'solo') so the user knows WHICH of
+                        their rig's MPG figures drove this trip's number.
+                        Honest caveat about terrain & load — the estimate
+                        doesn't model either, and trailers + climbs are
+                        where the divergence between estimated and real
+                        mileage gets ugly. Gated on a finite mpgUsed so
+                        the noEstimate path (no rig MPG set) doesn't
+                        render this — that path shows the "Add a rig
+                        with MPG" hint inline on the group header instead.
+                        mpgBasis=null falls back to no parenthetical so a
+                        future code path that returns mpgUsed without a
+                        basis tag (shouldn't happen today, but the type
+                        allows it) still renders cleanly. */}
+                    {!fuelEstimate!.noEstimate && typeof fuelEstimate!.mpgUsed === 'number' && Number.isFinite(fuelEstimate!.mpgUsed) && (
+                      <p className="text-xs text-gray-400 pl-6 pb-1 flex items-center gap-1">
+                        <Info size={11} className="text-gray-300 flex-shrink-0" />
+                        <span>
+                          Estimated at {Math.round(fuelEstimate!.mpgUsed)} MPG
+                          {fuelEstimate!.mpgBasis === 'towing' ? ' (towing)' : fuelEstimate!.mpgBasis === 'solo' ? ' (solo)' : ''}
+                          {' · terrain & load affect real mileage'}
+                        </span>
+                      </p>
                     )}
                     {/* Per-leg rows — text-sm to match the camp rows above.
                         Same row chrome (py-2 pl-6 border-b). All 3-state

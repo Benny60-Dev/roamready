@@ -391,25 +391,63 @@ export default function RigPage() {
                 <input type="number" step="0.1" min="0" className="input" {...register('height', { valueAsNumber: true })} />
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="label">Fuel type</label>
-                <select className="input" {...register('fuelType')}>
-                  <option value="">Any</option>
-                  <option value="Gas">Gas</option>
-                  <option value="Diesel">Diesel</option>
-                  <option value="Electric">Electric</option>
-                </select>
-              </div>
-              <div>
-                <label className="label">MPG</label>
-                <input type="number" step="0.1" min="0" className="input" {...register('mpg', { valueAsNumber: true })} />
-              </div>
-              <div>
-                <label className="label">Tank (gal)</label>
-                <input type="number" step="0.1" min="0" className="input" {...register('tankSize', { valueAsNumber: true })} />
-              </div>
-            </div>
+            {/* ── Fuel / MPG section — adapts to rig type (Pass 2 of towing-
+                aware fuel estimate, May 2026). TRAILERS get ONE MPG bound
+                to mpgTowing (the rig itself has no engine; only the tow
+                vehicle's mileage matters); the rig's own fuelType row is
+                omitted because pricing uses towedFuelType captured in the
+                second-vehicle section below. MOTORHOMES / VANS / CAR
+                CAMPING get TWO MPG fields — solo + towing-a-toad — plus
+                the rig's own fuel type. See computeFuelEstimate in
+                server/src/services/fuelPrice.ts for the consumer side. */}
+            {isTowVehicleDirection ? (
+              <>
+                <p className="text-xs text-gray-500 italic">
+                  Your {VEHICLE_LABELS[vehicleType as VehicleType]?.toLowerCase() ?? 'trailer'} is towed,
+                  so we just need your tow vehicle's mileage with it hitched.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label">MPG — towing this trailer</label>
+                    <input type="number" step="0.1" min="0" className="input" placeholder="11" {...register('mpgTowing', { valueAsNumber: true })} />
+                    <p className="mt-1 text-xs text-gray-400">What your tow vehicle gets pulling this rig.</p>
+                  </div>
+                  <div>
+                    <label className="label">Tank (gal)</label>
+                    <input type="number" step="0.1" min="0" className="input" {...register('tankSize', { valueAsNumber: true })} />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="label">Fuel type</label>
+                    <select className="input" {...register('fuelType')}>
+                      <option value="">Any</option>
+                      <option value="Gas">Gas</option>
+                      <option value="Diesel">Diesel</option>
+                      <option value="Electric">Electric</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">MPG — solo</label>
+                    <input type="number" step="0.1" min="0" className="input" placeholder="9" {...register('mpg', { valueAsNumber: true })} />
+                  </div>
+                  <div>
+                    <label className="label">Tank (gal)</label>
+                    <input type="number" step="0.1" min="0" className="input" {...register('tankSize', { valueAsNumber: true })} />
+                  </div>
+                </div>
+                <div>
+                  <label className="label">MPG — towing a toad</label>
+                  <input type="number" step="0.1" min="0" className="input" placeholder="7" {...register('mpgTowing', { valueAsNumber: true })} />
+                  <p className="mt-1 text-xs text-gray-400">
+                    Trips use the towing figure when you're bringing the toad, solo otherwise. Leave blank to always use solo.
+                  </p>
+                </div>
+              </>
+            )}
             <div>
               <label className="label">Electrical amps</label>
               <select className="input" {...register('electricalAmps')}>
