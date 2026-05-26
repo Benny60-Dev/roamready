@@ -1295,6 +1295,7 @@ export default function TripSummaryPage() {
                   startDay={startDay}
                   badges={stopDisplayNumbers}
                   generatingActivities={generatingActivities}
+                  itineraryPending={itineraryPending}
                   weatherData={weatherData}
                   addingActivity={addingActivity}
                   addingStayActivity={addingStayActivity}
@@ -1917,6 +1918,13 @@ interface DayCardProps {
   startDay: number
   badges: Record<string, StopBadge>
   generatingActivities: boolean
+  // Block 15 — true while the server is still building Trip.itinerary for a
+  // brand-new trip (the page polls `/trips/:id` until itinerary lands). The
+  // STAY_GROUP branch combines this with `generatingActivities` to drive the
+  // "Finding things to do…" placeholder on multi-night stay cards. Always
+  // false for old trips opened fresh (their itinerary is already populated),
+  // so the placeholder never shows on them.
+  itineraryPending: boolean
   weatherData: Record<string, StopWeather | null | undefined>
   addingActivity: Record<number, string>
   // Block 15 — per-stop "add activity" draft text and callbacks for the
@@ -1944,7 +1952,7 @@ interface DayCardProps {
 }
 
 function DayCard({
-  group, startDay, badges, generatingActivities, weatherData,
+  group, startDay, badges, generatingActivities, itineraryPending, weatherData,
   addingActivity, addingPOI, addingPOIDuration,
   addingStayActivity,
   onToggleStayActivity, onDeleteStayActivity, onAddingStayActivityChange, onAddStayActivity,
@@ -2225,6 +2233,26 @@ function DayCard({
       ? (addingStayActivity[stop.id] ?? '') !== ''
       : group.indices.some(idx => (addingActivity[idx] ?? '') !== '')
 
+    // Block 15 (loading state) — three render states for the activities region:
+    //   (i)   loading       → itinerary still being built OR /activities/generate
+    //                         is in flight AND this stop has nothing yet → show
+    //                         "Finding things to do…" + shimmer rows
+    //   (ii)  has content   → render the activities normally (shared list for
+    //                         new-shape, per-day loop for old-shape)
+    //   (iii) finished empty → both flags are false and there's nothing →
+    //                         existing "Rest day · No activities planned"
+    //
+    // Old trips opened fresh: itineraryPending is false (their itinerary is
+    // already populated when fetched) and generatingActivities is false
+    // (auto-generate doesn't fire when per-day entries already carry their
+    // activities). So stayActivitiesLoading evaluates to false → they go
+    // through the (ii)/(iii) branches unchanged from Step 3.
+    const stayActivitiesLoading =
+      stop.type === 'DESTINATION' &&
+      (stop.nights ?? 0) > 0 &&
+      !hasAnyActivities &&
+      (itineraryPending || generatingActivities)
+
     return (
       <div className="rounded-lg border border-gray-400 bg-white overflow-hidden">
         {/* Header — pale-gold tinted band mirrors the drive card's blue
@@ -2286,33 +2314,56 @@ function DayCard({
           </div>
         )}
 
-        {/* Layover fallback */}
-        {!hasAnyActivities && !generatingActivities && !anyAdding && (
-          <p className="px-4 py-2 text-xs text-amber-600 italic">Rest day · No activities planned</p>
-        )}
-
-        {/* Block 15 — activities section. New-shape (Stop.stayActivities
-            non-null): render ONE consolidated "Things to do during your
-            stay" list — no per-night sub-sections, no duplicate AI lists.
-            Old-shape (stayActivities === null on every pre-Step-2 trip):
-            fall through to the per-day rendering loop EXACTLY as it worked
-            before this change. The ActivityContent component is shape-
-            agnostic; only the data it's handed differs between branches. */}
-        {usesSharedStayActivities ? (
-          <div className="px-4 pb-3 pt-2.5">
-            <p className="text-xs font-semibold text-amber-700 mb-1.5">Things to do during your stay</p>
-            <ActivityContent
-              entry={{ ...firstEntry, activities: sharedStayActivities }}
-              generatingActivities={generatingActivities}
-              suppressHeader
-              onToggleActivity={(actIdx) => onToggleStayActivity(stop.id, actIdx)}
-              onDeleteActivity={(actIdx) => onDeleteStayActivity(stop.id, actIdx)}
-              addingText={addingStayActivity[stop.id] ?? ''}
-              onAddingChange={(text) => onAddingStayActivityChange(stop.id, text)}
-              onAddActivity={() => onAddStayActivity(stop.id)}
-            />
+        {/* Block 15 (loading state) — the 3-way branch described where
+            stayActivitiesLoading is computed above. Loading takes precedence
+            so the user never sees the "Rest day" fallback while the AI is
+            still working. Both old- and new-shape rendering live unchanged
+            inside the (ii)/(iii) branches below. */}
+        {stayActivitiesLoading ? (
+          <div className="px-4 pb-3 pt-2.5 space-y-2">
+            <p className="text-xs font-semibold text-amber-700">Things to do during your stay</p>
+            <p className="text-xs text-gray-400 italic">Finding things to do…</p>
+            <div className="space-y-2 py-1" aria-hidden="true">
+              {[1, 2, 3].map(n => (
+                <div key={n} className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded border border-gray-200 bg-gray-100 flex-shrink-0 animate-pulse" />
+                  <div className={`h-3 bg-gray-100 rounded animate-pulse ${n === 1 ? 'w-48' : n === 2 ? 'w-40' : 'w-44'}`} />
+                </div>
+              ))}
+            </div>
           </div>
         ) : (
+          <>
+            {/* Layover fallback — only when there's genuinely nothing AND
+                nothing is in flight AND the user isn't mid-type. Identical
+                trigger condition to before; loading branch above already
+                covers the in-flight case. */}
+            {!hasAnyActivities && !generatingActivities && !anyAdding && (
+              <p className="px-4 py-2 text-xs text-amber-600 italic">Rest day · No activities planned</p>
+            )}
+
+            {/* Block 15 — activities section. New-shape (Stop.stayActivities
+                non-null): render ONE consolidated "Things to do during your
+                stay" list — no per-night sub-sections, no duplicate AI lists.
+                Old-shape (stayActivities === null on every pre-Step-2 trip):
+                fall through to the per-day rendering loop EXACTLY as it worked
+                before this change. The ActivityContent component is shape-
+                agnostic; only the data it's handed differs between branches. */}
+            {usesSharedStayActivities ? (
+              <div className="px-4 pb-3 pt-2.5">
+                <p className="text-xs font-semibold text-amber-700 mb-1.5">Things to do during your stay</p>
+                <ActivityContent
+                  entry={{ ...firstEntry, activities: sharedStayActivities }}
+                  generatingActivities={generatingActivities}
+                  suppressHeader
+                  onToggleActivity={(actIdx) => onToggleStayActivity(stop.id, actIdx)}
+                  onDeleteActivity={(actIdx) => onDeleteStayActivity(stop.id, actIdx)}
+                  addingText={addingStayActivity[stop.id] ?? ''}
+                  onAddingChange={(text) => onAddingStayActivityChange(stop.id, text)}
+                  onAddActivity={() => onAddStayActivity(stop.id)}
+                />
+              </div>
+            ) : (
           <div className="px-4 pb-3 space-y-3 pt-2.5">
             {group.entries.map((entry, li) => {
               const flatIdx = group.indices[li]
@@ -2337,6 +2388,8 @@ function DayCard({
               )
             })}
           </div>
+            )}
+          </>
         )}
       </div>
     )
