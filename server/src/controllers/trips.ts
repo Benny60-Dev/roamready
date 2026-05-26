@@ -1193,10 +1193,30 @@ export async function generateItinerary(req: AuthRequest, res: Response, next: N
       include: { rigs: { where: { isDefault: true } }, travelProfile: true },
     })
 
-    // Run itinerary AI and real Google Maps route fetching in parallel
-    const [itinerary, routes] = await Promise.all([
+    // Block 15 (Step 2) — build the per-stop "things to do during your stay"
+    // payload. Same shape and filter (DESTINATION + nights > 0) used by the
+    // existing /activities/generate endpoint below; routing through the same
+    // AI helper (generateStopActivitiesAI) keeps the day-by-day prompt risk
+    // at zero — generateTripItineraryAI is unchanged.
+    const destStops = trip.stops
+      .filter((s: any) => s.type === 'DESTINATION' && s.nights > 0)
+      .map((s: any, i: number) => ({
+        stopIdx: i,
+        stopId: s.id,
+        locationName: s.locationName,
+        locationState: s.locationState || undefined,
+        nights: s.nights || 1,
+      }))
+
+    // Run itinerary AI, Google Maps route fetching, and per-stop stay-activities AI in parallel.
+    // Skipping the third call when no qualifying stops exist saves a roundtrip
+    // on edge-case trips (e.g. all-overnight transit routes).
+    const [itinerary, routes, stayActivitiesResults] = await Promise.all([
       generateTripItineraryAI(trip, user, { userId: req.user!.id, tripId: trip.id }),
       fetchAllSegmentRoutes(trip),
+      destStops.length > 0
+        ? generateStopActivitiesAI(destStops, { userId: req.user!.id, tripId: trip.id })
+        : Promise.resolve([] as { stopIdx: number; activities: string[] }[]),
     ])
 
     // Always use the real Directions API route — overwrite anything the AI generated
@@ -1208,7 +1228,30 @@ export async function generateItinerary(req: AuthRequest, res: Response, next: N
       return { ...day, highwayRoute: realRoute || day.highwayRoute || null }
     })
 
-    await prisma.trip.update({ where: { id: trip.id }, data: { itinerary: itineraryWithRoutes } })
+    // Block 15 (Step 2) — write per-stop activities to Stop.stayActivities. Only
+    // write when the AI actually returned a non-empty array for that stop; a
+    // null/empty result leaves stayActivities as null so Step 4's backfill can
+    // still distinguish "AI never produced one" from "intentionally empty []".
+    // Per-day `activities` arrays inside Trip.itinerary are STILL populated by
+    // generateTripItineraryAI (unchanged) — Step 3 will swap the renderer to
+    // read from Stop.stayActivities; until then both shapes coexist so no new
+    // or existing trip visibly regresses.
+    const stayActivityWrites = stayActivitiesResults
+      .filter(r => Array.isArray(r.activities) && r.activities.length > 0)
+      .map(r => {
+        const stopId = destStops[r.stopIdx]?.stopId
+        if (!stopId) return Promise.resolve()
+        return prisma.stop.update({
+          where: { id: stopId },
+          data: { stayActivities: r.activities },
+        })
+      })
+
+    // Parallelize the writes — Trip.itinerary and Stop.stayActivities are independent rows.
+    await Promise.all([
+      prisma.trip.update({ where: { id: trip.id }, data: { itinerary: itineraryWithRoutes } }),
+      ...stayActivityWrites,
+    ])
 
     res.json(itineraryWithRoutes)
   } catch (err) { next(err) }
