@@ -47,6 +47,11 @@ export default function MembershipsPage() {
     setMemberships(memberships.map(m => m.id === membership.id ? { ...m, autoApply: !m.autoApply } : m))
   }
 
+  async function toggleActive(membership: Membership) {
+    await usersApi.updateMembership(membership.id, { isActive: !membership.isActive })
+    setMemberships(memberships.map(m => m.id === membership.id ? { ...m, isActive: !m.isActive } : m))
+  }
+
   return (
     <div className="space-y-4 max-w-2xl">
       <div className="flex items-center justify-between">
@@ -61,7 +66,7 @@ export default function MembershipsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {MEMBERSHIP_TYPES.map(type => {
           const membership = memberships.find(m => m.type === type.id)
-          const active = !!membership
+          const active = membership?.isActive ?? false
           return (
             <div key={type.id} className={`card flex items-start justify-between ${active ? 'border-[#1F6F8B]/30' : ''}`}>
               <div className="flex items-start gap-2">
@@ -78,8 +83,14 @@ export default function MembershipsPage() {
                   )}
                 </div>
               </div>
-              {active && membership && (
+              {membership && (
                 <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => toggleActive(membership)}
+                    className={`text-xs px-2 py-1 rounded ${membership.isActive ? 'text-[#1F6F8B]' : 'text-gray-400'}`}
+                  >
+                    Active {membership.isActive ? 'on' : 'off'}
+                  </button>
                   <button
                     onClick={() => toggleAutoApply(membership)}
                     className={`text-xs px-2 py-1 rounded ${membership.autoApply ? 'text-[#1F6F8B]' : 'text-gray-400'}`}
