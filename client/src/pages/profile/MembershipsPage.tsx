@@ -43,6 +43,21 @@ export default function MembershipsPage() {
       setShowForm(false)
       setSelectedType('')
       reset()
+    } catch (err: any) {
+      // 409 means the server (endpoint guard or DB @@unique([userId, type])
+      // constraint) blocked the create because a row already exists for this
+      // (userId, type). Refresh the list so the existing membership is
+      // visible and close the form — leaving the form open with no feedback
+      // would just confuse the user into clicking Add again.
+      if (err?.response?.status === 409) {
+        const refreshed = await usersApi.getMemberships()
+        setMemberships(refreshed.data)
+        setShowForm(false)
+        setSelectedType('')
+        reset()
+      } else {
+        throw err
+      }
     } finally {
       setSaving(false)
     }

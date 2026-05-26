@@ -2,25 +2,32 @@
 setlocal
 
 echo.
-echo === RoamReady Restart ===
+echo === RoamReady - Quick dev-server restart ===
 echo.
 
-REM -- 1. Schedule the relaunch in a DETACHED cmd BEFORE we call stop.
-REM    stop-roamready.bat force-kills the saved WindowsTerminal.exe PID, which
-REM    on Win11 can take down every WT-hosted window. We run from a desktop
-REM    shortcut (own cmd window, outside the WT), but the detached spawn here
-REM    is belt-and-suspenders: it survives the WT teardown no matter what.
-REM    The 6s wait gives stop time to: kill ports 3000/3001, close the WT
-REM    window, and run `docker-compose stop` before start-roamready.bat tries
-REM    to bring everything back up.
-echo Scheduling relaunch of start-roamready.bat in ~6s...
-start "RoamReady Relaunch" cmd /c "timeout /t 6 /nobreak >nul && call C:\Users\aylie\roamready\start-roamready.bat"
+REM -- Kill the backend node process (port 3001). The cmd /k window hosting it
+REM    stays alive at a prompt — see start-roamready.bat. Docker stays running.
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :3001 ^| findstr LISTENING') do (
+    echo Killing PID %%a on port 3001 (backend)
+    taskkill /F /PID %%a >nul 2>&1
+)
 
-REM -- 2. Brief pause so the detached relauncher is fully spawned before stop --
-timeout /t 1 /nobreak >nul
+REM -- Kill the frontend node process (port 3000). Same window-survives behavior.
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :3000 ^| findstr LISTENING') do (
+    echo Killing PID %%a on port 3000 (frontend)
+    taskkill /F /PID %%a >nul 2>&1
+)
 
-REM -- 3. Tear everything down (kills :3000/:3001, closes WT, docker-compose stop) --
-echo Calling stop-roamready.bat...
-call "C:\Users\aylie\roamready\stop-roamready.bat"
+echo.
+echo ============================================
+echo  Dev servers stopped. Database still running.
+echo.
+echo  To restart:
+echo   1. Switch to the BACKEND tab in Windows Terminal
+echo   2. Press UP-ARROW then ENTER (re-runs npm run dev)
+echo   3. Switch to the FRONTEND tab
+echo   4. Press UP-ARROW then ENTER
+echo ============================================
 
+timeout /t 3 /nobreak >nul
 exit /b 0

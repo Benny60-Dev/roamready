@@ -294,11 +294,35 @@ export async function createMembership(req: AuthRequest, res: Response, next: Ne
     // client tried to inject one, .strict() on the schema would have
     // already rejected the request with a 400.
     const data: MembershipCreateInput = req.body
+
+    // Dedupe guard — endpoint layer. Catches the common case (single
+    // sequential POST) with a clean 409 + friendly message. The real
+    // integrity guarantee against concurrent inserts is the DB-level
+    // @@unique([userId, type]) constraint on the Membership model; the
+    // catch block below translates Prisma's P2002 unique-violation to
+    // the same 409 contract so callers see one error shape regardless
+    // of which layer fired. Mirrors the AppError pattern used in
+    // updateMembership above and the P2002 detection in
+    // trips.ts:mintUniqueShareToken.
+    const existing = await prisma.membership.findFirst({
+      where: { userId: req.user!.id, type: data.type },
+    })
+    if (existing) throw new AppError('You already have this membership saved', 409)
+
     const membership = await prisma.membership.create({
       data: { ...data, userId: req.user!.id },
     })
     res.status(201).json(membership)
-  } catch (err) { next(err) }
+  } catch (err: any) {
+    // DB-level unique-constraint race fallback: if two concurrent POSTs
+    // slipped past the findFirst above, Prisma rejects the second with
+    // P2002. Translate to the same 409 the endpoint guard returns so
+    // the client only has to handle one error shape.
+    if (err?.code === 'P2002') {
+      return next(new AppError('You already have this membership saved', 409))
+    }
+    next(err)
+  }
 }
 
 export async function updateMembership(req: AuthRequest, res: Response, next: NextFunction) {

@@ -282,6 +282,14 @@ model Membership {
   autoApply    Boolean   @default(true)
   isActive     Boolean   @default(true)
   createdAt    DateTime  @default(now())
+
+  // One membership per (user, type). Mirrors the @@unique([userId, isDefault])
+  // pattern on TravelParty. The createMembership controller does a findFirst
+  // pre-check for a friendly 409, then translates Prisma's P2002 to the same
+  // 409 if a concurrent insert slips through. Verified zero duplicate
+  // (userId, type) rows in the DB before adding this — additive constraint,
+  // no data loss.
+  @@unique([userId, type])
 }
 
 model Trip {
