@@ -9,6 +9,7 @@ import { tripsApi, campgroundsApi, usersApi } from '../../services/api'
 import { Trip, Stop, Campground, Rig } from '../../types'
 import { formatTripDate } from '../../utils/dates'
 import { useAuthStore } from '../../store/authStore'
+import { MEMBERSHIP_TYPES } from '../../constants/memberships'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge } from '../../utils/stopBadge'
 import { useUIStore } from '../../store/uiStore'
 import ConfirmModal from '../../components/ui/ConfirmModal'
@@ -47,6 +48,18 @@ function reservationLinkLabel(url: string): string {
   if (lower.includes('recreation.gov')) return 'Recreation.gov'
   if (lower.includes('google.com/maps')) return 'Find on Google Maps'
   return 'Website'
+}
+
+// Reservation Honesty: gentle membership reminder rendered under the booking
+// CTA when the user has saved any active, non-expired memberships. Never
+// claims a discount IS applied — it's a prompt to ask the campground, not a
+// price promise. No siteRate math, no percentages, no dollar amounts.
+function formatMembershipNudge(labels: string[]): string {
+  if (labels.length === 0) return ''
+  if (labels.length === 1) return `You have ${labels[0]} — ask if it saves you money here.`
+  if (labels.length === 2) return `You have ${labels[0]} and ${labels[1]} — ask if any save you money here.`
+  const joined = labels.slice(0, -1).join(', ') + ', and ' + labels[labels.length - 1]
+  return `You have ${joined} — ask if any save you money here.`
 }
 
 // ─── Reservation & Notes collapsible section ─────────────────────────────────
@@ -332,6 +345,7 @@ function RecommendedCampgroundCard({
   onUnbook,
   onOpenRigInfo,
   isTowing,
+  membershipLabels,
 }: {
   cg: Campground
   stop: Stop
@@ -347,6 +361,11 @@ function RecommendedCampgroundCard({
   // My-rig-info link. Passed in (vs read from auth) so the campground card
   // doesn't need its own data dependency on the rig fetch.
   isTowing: boolean
+  // Human-readable labels for the user's active, non-expired memberships
+  // (e.g. ["Good Sam Club", "Thousand Trails"]). Computed at the page level
+  // from user.memberships and MEMBERSHIP_TYPES; passed in here so this card
+  // doesn't need its own auth dependency. Empty array → nudge is hidden.
+  membershipLabels: string[]
 }) {
   const isConfirmed = stop.campgroundId === cg.id && stop.bookingStatus === 'CONFIRMED'
   const mapQuery = [cg.name, cg.address].filter(Boolean).join(' ')
@@ -431,6 +450,14 @@ function RecommendedCampgroundCard({
               <p className="text-xs text-gray-500 text-center mt-1.5 leading-snug">
                 Opens the campground's site — you book directly with them.
               </p>
+              {/* Reservation Honesty: membership reminder. Names what the user has
+                  saved but never claims the discount applies — that's the
+                  campground's call, not ours. No price math touches this line. */}
+              {membershipLabels.length > 0 && (
+                <p className="text-xs text-gray-500 text-center mt-1 leading-snug">
+                  {formatMembershipNudge(membershipLabels)}
+                </p>
+              )}
             </div>
           )}
           <button
@@ -504,6 +531,7 @@ function AlternateCampgroundCard({
   primary,
   draftMode,
   onSelectCampground,
+  membershipLabels,
 }: {
   cg: Campground
   stop: Stop
@@ -515,6 +543,8 @@ function AlternateCampgroundCard({
   // defensive — kept to mirror the primary card's draftMode visibility logic.
   draftMode: boolean
   onSelectCampground: () => void
+  // Same shape/source as on the primary card — see RecommendedCampgroundCard.
+  membershipLabels: string[]
 }) {
   const isConfirmed = stop.campgroundId === cg.id && stop.bookingStatus === 'CONFIRMED'
   const dist = calcDistance(primary?.latitude, primary?.longitude, cg.latitude, cg.longitude)
@@ -600,15 +630,26 @@ function AlternateCampgroundCard({
           Label differs from the primary card on purpose: on an alt this action *promotes*
           the campground to the recommended slot, not just opens the form. */}
       {!isConfirmed && !draftMode && (
-        <button
-          onClick={() => {
-            if (cg.reservationUrl) window.open(cg.reservationUrl, '_blank', 'noopener,noreferrer')
-            onSelectCampground()
-          }}
-          className="bg-rr-gold hover:bg-rr-gold-dark text-white rounded-lg font-medium transition-colors text-sm w-full flex items-center justify-center gap-1.5 py-2.5 mt-3"
-        >
-          Choose this campground instead
-        </button>
+        <>
+          <button
+            onClick={() => {
+              if (cg.reservationUrl) window.open(cg.reservationUrl, '_blank', 'noopener,noreferrer')
+              onSelectCampground()
+            }}
+            className="bg-rr-gold hover:bg-rr-gold-dark text-white rounded-lg font-medium transition-colors text-sm w-full flex items-center justify-center gap-1.5 py-2.5 mt-3"
+          >
+            Choose this campground instead
+          </button>
+          {/* Reservation Honesty: membership reminder — same copy/treatment as on
+              the primary card. The alt card has no "Opens the campground's site"
+              helper line above it, so the nudge sits directly under the gold
+              button. Never claims a discount applies. */}
+          {membershipLabels.length > 0 && (
+            <p className="text-xs text-gray-500 text-center mt-1.5 leading-snug">
+              {formatMembershipNudge(membershipLabels)}
+            </p>
+          )}
+        </>
       )}
     </div>
   )
@@ -649,6 +690,21 @@ export default function TripBookingPage() {
   const contentRef = useRef<HTMLDivElement>(null)
   const { hasAccess, user } = useAuthStore()
   const { openPaywall } = useUIStore()
+
+  // Active, non-expired memberships → human labels via MEMBERSHIP_TYPES. The
+  // server's /auth/me already filters to isActive:true (controllers/auth.ts
+  // getMe), so the isActive check below is defense-in-depth; the expiresAt
+  // check is NOT redundant because the server does not filter on expiry.
+  // De-duped via Set so a user with two records of the same type (e.g. two
+  // GOOD_SAM rows) doesn't see the label printed twice in the nudge.
+  // Used by both campground cards to render the "you have these — ask if any
+  // save you money here" nudge. Empty array hides the nudge entirely.
+  const membershipLabels: string[] = [...new Set(
+    (user?.memberships ?? [])
+      .filter(m => m.isActive && (!m.expiresAt || new Date(m.expiresAt) > new Date()))
+      .map(m => MEMBERSHIP_TYPES.find(t => t.id === m.type)?.label)
+      .filter((l): l is string => !!l)
+  )]
 
   // Pull the user's default rig once. If they have no rig (or no default flag
   // set), we still render the modal but it shows an empty state with a link
@@ -968,6 +1024,7 @@ export default function TripBookingPage() {
             onUnbook={(stop) => setUnbookTarget(stop)}
             onOpenRigInfo={() => setRigInfoOpen(true)}
             isTowing={defaultRig?.isTowing === true}
+            membershipLabels={membershipLabels}
           />
         ) : cgs?.length === 0 ? (
           // Reservation Honesty: when RIDB returns nothing for this location, surface
@@ -1027,6 +1084,7 @@ export default function TripBookingPage() {
                       // stay clickable so the user can switch drafts before committing.
                       draftMode={draftSelections[stop.id]?.id === cg.id}
                       onSelectCampground={() => handleSelectCampground(stop, cg)}
+                      membershipLabels={membershipLabels}
                     />
                   ))}
                 </div>

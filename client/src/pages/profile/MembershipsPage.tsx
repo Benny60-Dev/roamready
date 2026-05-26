@@ -3,17 +3,7 @@ import { useForm } from 'react-hook-form'
 import { PlusCircle, Trash2, CheckCircle } from 'lucide-react'
 import { usersApi } from '../../services/api'
 import { Membership } from '../../types'
-
-const MEMBERSHIP_TYPES = [
-  { id: 'ATB', label: 'America the Beautiful Pass', sub: 'Federal recreation lands' },
-  { id: 'GOOD_SAM', label: 'Good Sam Club', sub: '10% off campgrounds' },
-  { id: 'THOUSAND_TRAILS', label: 'Thousand Trails', sub: 'Preserve network' },
-  { id: 'COAST_TO_COAST', label: 'Coast to Coast', sub: 'Private campground network' },
-  { id: 'ESCAPEES', label: 'Escapees RV Club', sub: 'RVers support network' },
-  { id: 'FMCA', label: 'FMCA', sub: 'Family Motor Coach Association' },
-  { id: 'HARVEST_HOSTS', label: 'Harvest Hosts', sub: 'Farm, winery & museum stays' },
-  { id: 'BOONDOCKERS_WELCOME', label: 'Boondockers Welcome', sub: 'Driveway camping network' },
-]
+import { MEMBERSHIP_TYPES } from '../../constants/memberships'
 
 // Module-level so it survives page unmount/remount. Tracks isActive toggles that
 // have been optimistically applied but whose PUT may still be in flight (or may
