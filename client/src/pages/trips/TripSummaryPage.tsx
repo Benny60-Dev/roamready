@@ -2872,34 +2872,49 @@ function ActivityContent({ entry, generatingActivities, suppressHeader, onToggle
         </div>
       )}
 
-      {/* Activities list */}
+      {/* Activities list — polish pass: clearly visible square checkbox (RV-blue
+          when checked) + always-visible trash icon for delete (gray default →
+          red on hover with light red bg). The toggle/delete *behavior* is
+          unchanged; onToggleActivity / onDeleteActivity wire to the same Step 3
+          handlers (per-day for old-shape trips, shared for new-shape trips). */}
       {entry.activities.length > 0 ? (
         <ul className="space-y-1.5">
           {entry.activities.map((act, i) => (
-            <li key={i} className="flex items-start gap-2 group">
+            <li key={i} className="flex items-start gap-2">
               <button
                 onClick={() => onToggleActivity(i)}
-                className={`mt-0.5 w-4 h-4 rounded flex-shrink-0 flex items-center justify-center border transition-colors ${
-                  act.checked ? 'bg-amber-500 border-amber-500 text-white' : 'border-gray-300 bg-white hover:border-amber-400'
+                // Inline borderRadius is belt-and-suspenders: it wins over any
+                // class-based or global rule that might later try to round this
+                // button to a circle. Confirmed via audit that no current CSS
+                // is fighting Tailwind's `rounded-[4px]` (the only border-radius
+                // rules in client/src CSS files are scoped to .card/.btn-*/.input/
+                // .badge and never applied here) — the inline style is purely a
+                // future-proof guarantee against a perfect-square-with-soft-corners
+                // never silently becoming a circle again.
+                style={{ borderRadius: '4px' }}
+                className={`mt-0.5 w-[18px] h-[18px] rounded-[4px] flex-shrink-0 flex items-center justify-center border-[1.5px] transition-colors ${
+                  act.checked
+                    ? 'bg-[#1F6F8B] border-[#1F6F8B] text-white'
+                    : 'border-gray-400 bg-white hover:border-[#1F6F8B]/60'
                 }`}
+                aria-label={act.checked ? 'Mark activity not done' : 'Mark activity done'}
               >
-                {act.checked && <Check size={10} />}
+                {act.checked && <Check size={12} strokeWidth={3} />}
               </button>
-              <span className={`flex-1 text-sm leading-snug ${act.checked ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+              <span className={`flex-1 text-sm leading-snug ${act.checked ? 'line-through text-gray-500' : 'text-gray-700'}`}>
                 {act.name}
               </span>
-              {/* Delete affordance — always visible on touch-sized screens
-                  (no hover event there), hover-revealed at md and up so
-                  the desktop row stays uncluttered until you mouse over.
-                  Color stays muted (gray-300 → red-400 on hover) so the
-                  always-visible variant on mobile reads as a quiet
-                  affordance rather than a destructive shout. */}
+              {/* Delete — always visible (no hover-reveal). Default mid-gray so
+                  the affordance reads at a glance; hover turns to the same
+                  red-600 on red-50 treatment used by the page-level edit/delete
+                  buttons above (DayCard EditDeleteButtons), so deletion across
+                  the page has one consistent visual language. */}
               <button
                 onClick={() => onDeleteActivity(i)}
-                className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex-shrink-0 text-gray-300 hover:text-red-400 transition-all mt-0.5"
+                className="flex-shrink-0 mt-0.5 p-1 rounded text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
                 aria-label="Remove activity"
               >
-                <XCircle size={13} />
+                <Trash2 size={14} />
               </button>
             </li>
           ))}
