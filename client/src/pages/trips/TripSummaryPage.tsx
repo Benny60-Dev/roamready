@@ -4,7 +4,7 @@ import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import {
   Download, Share2, Sparkles, Car, Tent, Star, Bed,
   MapPin, XCircle, Plus, Check, RefreshCw, ArrowRight, Clock,
-  Pencil, Trash2, Wand2, Fuel, ChevronDown, ChevronUp,
+  Pencil, Trash2, Wand2, Fuel, ChevronDown, ChevronRight,
 } from 'lucide-react'
 const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel'))
 import EditStopModal from '../../components/trip/EditStopModal'
@@ -495,10 +495,14 @@ export default function TripSummaryPage() {
   // full object (including the noEstimate flag for when no rig MPG is set);
   // we never block the page render on this fetch.
   const [fuelEstimate, setFuelEstimate] = useState<TripFuelEstimate | null>(null)
-  // Per-instance toggle for the expandable per-leg fuel detail in the Cost
-  // Breakdown — collapsed by default so the breakdown stays compact, but
-  // one click reveals the leg-by-leg "how did the $X get there?" detail.
-  const [fuelLegsExpanded, setFuelLegsExpanded] = useState(false)
+  // Per-instance collapse toggles for the two Cost-Breakdown groups —
+  // Camping (per-stop site costs) and Fuel (per-leg drive costs). Both
+  // default to collapsed so the breakdown card stays compact at first
+  // paint; the user expands a group to drill into per-row detail (and,
+  // in the Fuel group's case, log per-leg actuals via the 3-state row
+  // editor — that behavior is unchanged by the group collapse).
+  const [campGroupExpanded, setCampGroupExpanded] = useState(false)
+  const [fuelGroupExpanded, setFuelGroupExpanded] = useState(false)
   const itinerarySaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const activityGenAttempted = useRef(false)
   const [itineraryPending, setItineraryPending] = useState(false)
@@ -1312,8 +1316,25 @@ export default function TripSummaryPage() {
         // Trip totals — single source of truth via the shared helper.
         // Camp values match Σ over stopRows exactly (rows with displayCamp<=0
         // contribute 0 anyway, so filtering them out for display vs. summing
-        // them all is mathematically identical).
-        const { fuelEst, fuelActual, plannedTotal, actualTotal, hasAnyActuals } = tripTotals
+        // them all is mathematically identical). Per-group sums (campEst,
+        // campActual, fuelEst, fuelActual) feed the collapsed group headers
+        // below as their subtotal values — no new summation logic, all of
+        // these are pre-computed inside computeTripTotals.
+        const {
+          campEst,
+          campActual,
+          fuelEst,
+          fuelActual,
+          plannedTotal,
+          actualTotal,
+          hasAnyActuals,
+        } = tripTotals
+        // Per-group "has any actuals" flags — derived from already-computed
+        // row/leg state, NOT new sums. hasActualCamp asks "did any stop row
+        // tagged isActualCamp survive the filter"; hasActualFuel uses the
+        // helper's signal that the per-leg blend supplanted the estimate.
+        const hasActualCamp = stopRows.some(r => r.isActualCamp)
+        const hasActualFuel = fuelActual != null
 
         // Caption strings — guard against null asOf when source==='fallback'.
         const fuelCaption = (() => {
@@ -1351,216 +1372,321 @@ export default function TripSummaryPage() {
 
         return (
       <div className="card-lg">
-        <h2 className="font-medium text-gray-900 mb-4">Cost Breakdown</h2>
+        {/* Section heading — larger weight + bottom rule so it reads as
+            a proper section header, not a row label. Sentence case ("Cost
+            breakdown") matches the rest of the page's heading style. */}
+        <h2 className="text-lg font-medium text-gray-900 pb-2 mb-4 border-b border-gray-200">
+          Cost breakdown
+        </h2>
+
         <div className="space-y-2">
-          {stopRows.map(({ stop, displayCamp, isActualCamp }) => (
-            <div key={stop.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-              <div className="flex items-center gap-2">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${isHomeBadge(stopDisplayNumbers[stop.id]) ? 'bg-gray-100 text-gray-500' : 'bg-[#E0F0F4] text-[#1F6F8B]'}`}>
-                  {formatStopBadgeMarker(stopDisplayNumbers[stop.id])}
-                </div>
-                <span className="text-sm text-gray-700">{stop.locationName}</span>
+          {/* ─── Camping group (collapsible) ────────────────────────────────
+              Tappable header row shows the per-group SUBTOTAL on the right
+              (campActual when any stop is logged actual, else campEst —
+              both come from computeTripTotals; no new sums). Collapsed by
+              default (campGroupExpanded=false). When expanded, the
+              per-stop rows render beneath at text-sm and the same row
+              chrome as the fuel-leg rows below — they read as siblings.
+              A "Camping subtotal" foot row repeats the subtotal because
+              the list can run 16+ rows and the header scrolls away. */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setCampGroupExpanded(o => !o)}
+              className="w-full flex items-center justify-between py-2 hover:bg-gray-50 rounded transition-colors text-left"
+              aria-expanded={campGroupExpanded}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                {campGroupExpanded
+                  ? <ChevronDown size={14} className="text-gray-400 flex-shrink-0" />
+                  : <ChevronRight size={14} className="text-gray-400 flex-shrink-0" />}
+                <Tent size={14} className="text-[#C9851A] flex-shrink-0" />
+                <span className="text-sm font-medium text-[#854F0B]">Camping</span>
+                <span className="text-xs text-gray-400">
+                  · {stopRows.length} {stopRows.length === 1 ? 'stop' : 'stops'}
+                </span>
               </div>
-              <div className="flex items-baseline gap-2 text-right">
-                <span className="text-sm text-gray-700">${fmtMoney(Math.round(displayCamp * 100) / 100)}</span>
-                <span className="text-xs text-gray-400">camp</span>
-                {isActualCamp ? (
-                  <span className="text-[10px] font-semibold uppercase tracking-wide text-[#3E5540]">actual</span>
-                ) : (
-                  <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">est.</span>
-                )}
+              <div className="flex items-baseline gap-2 flex-shrink-0">
+                <span className={`text-sm ${hasActualCamp ? 'text-[#3E5540] font-medium' : 'text-gray-700'}`}>
+                  ${fmtMoney(Math.round(hasActualCamp ? campActual : campEst))}
+                </span>
+                <span className={`text-[10px] font-semibold uppercase tracking-wide ${hasActualCamp ? 'text-[#3E5540]' : 'text-gray-400'}`}>
+                  {hasActualCamp ? 'actual' : 'est.'}
+                </span>
               </div>
-            </div>
-          ))}
-
-          {/* ── Fuel row — single line with expandable per-leg detail ─────── */}
-          <div className="py-2 border-b border-gray-50 last:border-0">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-full flex items-center justify-center bg-[#E0F0F4] text-[#1F6F8B]">
-                  <Fuel size={11} />
-                </div>
-                <span className="text-sm text-gray-700">Fuel</span>
-                {/* Expand toggle — only shown when there ARE legs to expand
-                    (loading + noEstimate states have empty perLeg). */}
-                {fuelEstimate && !fuelEstimate.noEstimate && fuelEstimate.perLeg.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setFuelLegsExpanded(o => !o)}
-                    className="text-xs text-[#1F6F8B] hover:text-[#134756] font-medium transition-colors flex items-center gap-0.5"
-                  >
-                    {fuelLegsExpanded ? <>Hide legs <ChevronUp size={11} /></> : <>Show legs <ChevronDown size={11} /></>}
-                  </button>
-                )}
-              </div>
-              <div className="flex items-baseline gap-2 text-right">
-                {fuelEstimate?.noEstimate ? (
-                  <span className="text-xs italic text-gray-400">Add a rig with MPG to estimate fuel</span>
-                ) : fuelEst == null ? (
-                  // Still loading — never render $null / $NaN.
-                  <span className="text-sm text-gray-400">—</span>
-                ) : (
-                  <>
-                    <span className="text-sm text-gray-700">${fmtMoney(Math.round(fuelEst))}</span>
-                    <span className="text-xs text-gray-400">fuel</span>
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">est.</span>
-                  </>
-                )}
-                {fuelActual != null && (
-                  <>
-                    <span className="text-xs text-gray-300">·</span>
-                    <span className="text-sm text-[#3E5540] font-medium">${fmtMoney(Math.round(fuelActual))}</span>
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[#3E5540]">actual</span>
-                  </>
-                )}
-              </div>
-            </div>
-            {fuelCaption && (
-              <div className="text-[11px] text-gray-400 mt-0.5 ml-7">{fuelCaption}</div>
-            )}
-            {/* Per-leg sub-rows — answers "how did fuel get to $X". */}
-            {fuelLegsExpanded && fuelEstimate && !fuelEstimate.noEstimate && fuelEstimate.perLeg.length > 0 && (
-              <ul className="ml-7 mt-2 space-y-1.5">
-                {fuelEstimate.perLeg.map((leg, i) => {
-                  // Each leg's actual fuel lives on its ARRIVING stop
-                  // (Stop.actualFuel where stop.order === leg.toOrder).
-                  // The save path is tripsApi.updateStop using that stop's
-                  // id — match it here so we have the id ready for the
-                  // editor's save call. Falls back to undefined if no
-                  // stop matches (shouldn't happen in practice; legs are
-                  // derived from the trip's own stops).
-                  const arrivingStop = trip.stops?.find(s => s.order === leg.toOrder)
-                  const arrivingStopId = arrivingStop?.id
-                  const legActual = arrivingStop?.actualFuel
-                  const isLogged =
-                    typeof legActual === 'number' && Number.isFinite(legActual)
-                  const isEditing = editingLegToOrder === leg.toOrder
-
-                  return (
-                    <li key={i} className="flex items-center justify-between gap-2 text-xs text-gray-500">
-                      <span className="flex-shrink-0">
-                        {legLabel(leg.fromOrder, null)} → {legLabel(leg.toOrder, leg.toState)}
-                        <span className="text-gray-400"> · {Math.round(leg.miles).toLocaleString()} mi</span>
-                      </span>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {isEditing ? (
-                          // STATE B — inline editor. Shows the estimate
-                          // struck through with a → to the user-entered
-                          // value, plus Save / Cancel. Enter saves;
-                          // Escape cancels.
-                          <>
-                            <span className="text-gray-400 line-through">${fmtMoney(Math.round(leg.cost))}</span>
-                            <span className="text-gray-300">→</span>
-                            <span className="text-gray-400">$</span>
-                            <input
-                              type="number"
-                              inputMode="decimal"
-                              min={0}
-                              step="0.01"
-                              value={legInput}
-                              onChange={e => setLegInput(e.target.value)}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault()
-                                  saveLegFuel(arrivingStopId, leg.toOrder)
-                                } else if (e.key === 'Escape') {
-                                  setEditingLegToOrder(null)
-                                  setLegInput('')
-                                }
-                              }}
-                              placeholder="0.00"
-                              autoFocus
-                              disabled={!arrivingStopId || savingLeg}
-                              className="text-xs border border-gray-200 rounded px-1.5 py-0.5 w-20 focus:outline-none focus:border-[#1F6F8B] bg-white"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => saveLegFuel(arrivingStopId, leg.toOrder)}
-                              disabled={savingLeg || !arrivingStopId}
-                              className="text-xs font-semibold text-white bg-[#F7A829] hover:bg-[#C9851A] px-2 py-0.5 rounded disabled:opacity-60 transition-colors"
-                            >
-                              {savingLeg ? '…' : 'Save'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingLegToOrder(null)
-                                setLegInput('')
-                              }}
-                              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                            >
-                              Cancel
-                            </button>
-                          </>
-                        ) : isLogged ? (
-                          // STATE C — logged. Estimate is shown struck-
-                          // through for context; the actual sits beside
-                          // it in pine green (#3E5540) with an "actual"
-                          // tag. Pine = "this is a real recorded cost"
-                          // (consistent with booked camp). NO over/under
-                          // framing — same treatment whether the actual
-                          // is higher or lower than the estimate; no
-                          // "saved $X" calculation, no red/green delta.
-                          <>
-                            <span className="text-gray-400 line-through">${fmtMoney(Math.round(leg.cost))}</span>
-                            <span className="text-[#3E5540] font-medium">${fmtMoney(Math.round(legActual as number))}</span>
-                            <span className="text-[10px] font-semibold uppercase tracking-wide text-[#3E5540]">actual</span>
-                            <button
-                              type="button"
-                              onClick={() => openLegEditor(leg.toOrder, legActual as number)}
-                              className="text-xs text-[#1F6F8B] hover:text-[#134756] font-medium transition-colors"
-                            >
-                              Edit
-                            </button>
-                          </>
-                        ) : (
-                          // STATE A — not logged. Show the estimate with
-                          // a small "est." tag and a quiet "+ Log actual"
-                          // affordance. Disabled when we can't resolve
-                          // the arriving stop (defensive — shouldn't
-                          // happen in practice).
-                          <>
-                            <span>${fmtMoney(Math.round(leg.cost))}</span>
-                            <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">est.</span>
-                            <button
-                              type="button"
-                              onClick={() => openLegEditor(leg.toOrder, null)}
-                              disabled={!arrivingStopId}
-                              className="text-xs text-[#1F6F8B] hover:text-[#134756] font-medium transition-colors disabled:opacity-40"
-                            >
-                              + Log actual
-                            </button>
-                          </>
-                        )}
+            </button>
+            {campGroupExpanded && (
+              <div>
+                {stopRows.map(({ stop, displayCamp, isActualCamp }) => (
+                  <div key={stop.id} className="flex items-center justify-between py-2 pl-6 border-b border-gray-50 last:border-0">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${isHomeBadge(stopDisplayNumbers[stop.id]) ? 'bg-gray-100 text-gray-500' : 'bg-[#E0F0F4] text-[#1F6F8B]'}`}>
+                        {formatStopBadgeMarker(stopDisplayNumbers[stop.id])}
                       </div>
-                    </li>
-                  )
-                })}
-              </ul>
+                      <span className="text-sm text-gray-700">{stop.locationName}</span>
+                    </div>
+                    <div className="flex items-baseline gap-2 text-right">
+                      <span className="text-sm text-gray-700">${fmtMoney(Math.round(displayCamp * 100) / 100)}</span>
+                      {isActualCamp ? (
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[#3E5540]">actual</span>
+                      ) : (
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">est.</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {/* Foot subtotal — repeats the header value so a user who's
+                    scrolled past 10+ stop rows can still see what the group
+                    sums to without scrolling back up. Same source values
+                    (campEst/campActual) the header used. */}
+                <div className="flex items-center justify-between pt-2 pl-6 border-t border-gray-100">
+                  <span className="text-[13px] text-gray-500">Camping subtotal</span>
+                  <div className="flex items-baseline gap-2">
+                    <span className={`text-[13px] ${hasActualCamp ? 'text-[#3E5540] font-medium' : 'text-gray-500'}`}>
+                      ${fmtMoney(Math.round(hasActualCamp ? campActual : campEst))}
+                    </span>
+                    <span className={`text-[10px] font-semibold uppercase tracking-wide ${hasActualCamp ? 'text-[#3E5540]' : 'text-gray-400'}`}>
+                      {hasActualCamp ? 'actual' : 'est.'}
+                    </span>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
 
-          {/* ── Totals — collapse to one line when no actuals exist yet ─── */}
-          {hasAnyActuals ? (
-            <>
-              <div className="flex items-center justify-between pt-2 text-sm">
-                <span className="text-gray-500">Planned</span>
-                <span className="text-gray-500">${fmtMoney(Math.round(plannedTotal))}</span>
+          {/* ─── Fuel group (collapsible, symmetric with Camping) ──────────
+              Same header pattern: tappable, chevron + Fuel icon + label +
+              leg count on the left, subtotal + est./actual tag on the
+              right. Subtotal: fuelActual (per-leg blend, pine) if any leg
+              is logged, else fuelEst (gray). When expanded, the EIA
+              freshness caption sits at the top, then per-leg rows, then a
+              "Fuel subtotal" foot row. Edge cases preserved verbatim:
+                · No fuel estimate at all → group is non-expandable, shows
+                  em-dash subtotal, no chevron.
+                · noEstimate (rig missing MPG) → non-expandable, shows the
+                  "Add a rig with MPG to estimate fuel" hint inline.
+              All 3-state per-leg editor logic (estimate/editing/logged)
+              and one-editor-at-a-time gate is unchanged below. */}
+          {(() => {
+            const fuelExpandable = !!(fuelEstimate && !fuelEstimate.noEstimate && fuelEstimate.perLeg.length > 0)
+            const legCount = fuelExpandable ? fuelEstimate!.perLeg.length : 0
+            // Subtotal value: prefer the per-leg actual blend (already
+            // computed by the helper), fall back to the trip-level
+            // estimate. Either may be null in degenerate states.
+            const fuelSubtotal = hasActualFuel ? fuelActual : fuelEst
+            const fuelHasNumber = typeof fuelSubtotal === 'number' && Number.isFinite(fuelSubtotal)
+            return (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => { if (fuelExpandable) setFuelGroupExpanded(o => !o) }}
+                  disabled={!fuelExpandable}
+                  className={`w-full flex items-center justify-between py-2 rounded transition-colors text-left ${fuelExpandable ? 'hover:bg-gray-50 cursor-pointer' : 'cursor-default'}`}
+                  aria-expanded={fuelExpandable ? fuelGroupExpanded : undefined}
+                >
+                  <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                    {fuelExpandable
+                      ? (fuelGroupExpanded
+                          ? <ChevronDown size={14} className="text-gray-400 flex-shrink-0" />
+                          : <ChevronRight size={14} className="text-gray-400 flex-shrink-0" />)
+                      : <span className="w-[14px] flex-shrink-0" aria-hidden="true" />}
+                    <Fuel size={14} className="text-[#1F6F8B] flex-shrink-0" />
+                    <span className="text-sm font-medium text-[#185FA5]">Fuel</span>
+                    {legCount > 0 && (
+                      <span className="text-xs text-gray-400">
+                        · {legCount} {legCount === 1 ? 'leg' : 'legs'}
+                      </span>
+                    )}
+                    {fuelEstimate?.noEstimate && (
+                      <span className="text-xs italic text-gray-400">· Add a rig with MPG to estimate fuel</span>
+                    )}
+                  </div>
+                  <div className="flex items-baseline gap-2 flex-shrink-0">
+                    {fuelHasNumber ? (
+                      <>
+                        <span className={`text-sm ${hasActualFuel ? 'text-[#3E5540] font-medium' : 'text-gray-700'}`}>
+                          ${fmtMoney(Math.round(fuelSubtotal as number))}
+                        </span>
+                        <span className={`text-[10px] font-semibold uppercase tracking-wide ${hasActualFuel ? 'text-[#3E5540]' : 'text-gray-400'}`}>
+                          {hasActualFuel ? 'actual' : 'est.'}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-sm text-gray-400">—</span>
+                    )}
+                  </div>
+                </button>
+                {fuelExpandable && fuelGroupExpanded && (
+                  <div>
+                    {/* EIA freshness caption — top of the expanded section
+                        so the prices have provenance before the legs. */}
+                    {fuelCaption && (
+                      <p className="text-xs text-gray-400 pl-6 pb-1">{fuelCaption}</p>
+                    )}
+                    {/* Per-leg rows — text-sm to match the camp rows above.
+                        Same row chrome (py-2 pl-6 border-b). All 3-state
+                        editor logic preserved verbatim:
+                          STATE A — estimate + "Log actual" affordance
+                          STATE B — inline input + Save / Cancel
+                          STATE C — struck estimate + pine-green actual + Edit
+                        One-editor-at-a-time gated by editingLegToOrder. */}
+                    {fuelEstimate!.perLeg.map((leg, i) => {
+                      const arrivingStop = trip.stops?.find(s => s.order === leg.toOrder)
+                      const arrivingStopId = arrivingStop?.id
+                      const legActual = arrivingStop?.actualFuel
+                      const isLogged =
+                        typeof legActual === 'number' && Number.isFinite(legActual)
+                      const isEditing = editingLegToOrder === leg.toOrder
+
+                      return (
+                        <div key={i} className="flex items-center justify-between gap-2 py-2 pl-6 border-b border-gray-50 last:border-0">
+                          <span className="text-sm text-gray-700 flex-shrink-0">
+                            {legLabel(leg.fromOrder, null)} → {legLabel(leg.toOrder, leg.toState)}
+                            <span className="text-xs text-gray-400"> · {Math.round(leg.miles).toLocaleString()} mi</span>
+                          </span>
+                          <div className="flex items-center gap-1.5 flex-shrink-0 text-sm">
+                            {isEditing ? (
+                              <>
+                                <span className="text-gray-400 line-through">${fmtMoney(Math.round(leg.cost))}</span>
+                                <span className="text-gray-300">→</span>
+                                <span className="text-gray-400">$</span>
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  min={0}
+                                  step="0.01"
+                                  value={legInput}
+                                  onChange={e => setLegInput(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault()
+                                      saveLegFuel(arrivingStopId, leg.toOrder)
+                                    } else if (e.key === 'Escape') {
+                                      setEditingLegToOrder(null)
+                                      setLegInput('')
+                                    }
+                                  }}
+                                  placeholder="0.00"
+                                  autoFocus
+                                  disabled={!arrivingStopId || savingLeg}
+                                  className="text-sm border border-gray-200 rounded px-1.5 py-0.5 w-24 focus:outline-none focus:border-[#1F6F8B] bg-white"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => saveLegFuel(arrivingStopId, leg.toOrder)}
+                                  disabled={savingLeg || !arrivingStopId}
+                                  className="text-xs font-semibold text-white bg-[#F7A829] hover:bg-[#C9851A] px-2 py-0.5 rounded disabled:opacity-60 transition-colors"
+                                >
+                                  {savingLeg ? '…' : 'Save'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingLegToOrder(null)
+                                    setLegInput('')
+                                  }}
+                                  className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : isLogged ? (
+                              <>
+                                <span className="text-gray-400 line-through">${fmtMoney(Math.round(leg.cost))}</span>
+                                <span className="text-[#3E5540] font-medium">${fmtMoney(Math.round(legActual as number))}</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-[#3E5540]">actual</span>
+                                <button
+                                  type="button"
+                                  onClick={() => openLegEditor(leg.toOrder, legActual as number)}
+                                  className="text-xs text-[#1F6F8B] hover:text-[#134756] font-medium transition-colors"
+                                >
+                                  Edit
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-gray-700">${fmtMoney(Math.round(leg.cost))}</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">est.</span>
+                                <button
+                                  type="button"
+                                  onClick={() => openLegEditor(leg.toOrder, null)}
+                                  disabled={!arrivingStopId}
+                                  className="text-xs text-[#1F6F8B] hover:text-[#134756] font-medium transition-colors disabled:opacity-40"
+                                >
+                                  + Log actual
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {/* Foot subtotal — when an actual exists we show BOTH
+                        the blended actual AND the regional estimate so the
+                        user can see the delta inline; when no actual yet,
+                        just the estimate. Same fields used in the header. */}
+                    <div className="flex items-center justify-between pt-2 pl-6 border-t border-gray-100">
+                      <span className="text-[13px] text-gray-500">Fuel subtotal</span>
+                      <div className="flex items-baseline gap-2">
+                        {hasActualFuel ? (
+                          <>
+                            <span className="text-[13px] text-[#3E5540] font-medium">
+                              ${fmtMoney(Math.round(fuelActual as number))}
+                            </span>
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-[#3E5540]">actual</span>
+                            {typeof fuelEst === 'number' && Number.isFinite(fuelEst) && (
+                              <span className="text-[11px] text-gray-400">
+                                · ${fmtMoney(Math.round(fuelEst))} est.
+                              </span>
+                            )}
+                          </>
+                        ) : fuelHasNumber ? (
+                          <>
+                            <span className="text-[13px] text-gray-500">
+                              ${fmtMoney(Math.round(fuelEst as number))}
+                            </span>
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">est.</span>
+                          </>
+                        ) : (
+                          <span className="text-[13px] text-gray-400">—</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
+            )
+          })()}
+
+          {/* ─── Combined totals ───────────────────────────────────────────
+              Top border separates the per-group subtotals above from the
+              trip-wide totals here. Logic unchanged from the prior pass:
+              Planned vs Actual-so-far split when actuals exist, single
+              "Estimated total" line otherwise. Values straight from
+              computeTripTotals (plannedTotal, actualTotal) — same numbers
+              the header stat-strip and every other surface uses. */}
+          <div className="pt-3 border-t border-gray-200">
+            {hasAnyActuals ? (
+              <>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">Planned total</span>
+                  <span className="text-gray-500">${fmtMoney(Math.round(plannedTotal))}</span>
+                </div>
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-gray-900 font-medium">Actual so far</span>
+                  <span className="text-lg font-medium text-[#3E5540]">${fmtMoney(Math.round(actualTotal))}</span>
+                </div>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Actual so far uses your real costs where recorded, planned estimates elsewhere.
+                </p>
+              </>
+            ) : (
               <div className="flex items-center justify-between font-medium">
-                <span className="text-gray-900">Actual so far</span>
-                <span className="text-[#1F6F8B]">${fmtMoney(Math.round(actualTotal))}</span>
+                <span className="text-gray-900">Estimated total</span>
+                <span className="text-[#1F6F8B]">${fmtMoney(Math.round(plannedTotal))}</span>
               </div>
-              <p className="text-[11px] text-gray-400 mt-1">
-                Actual so far uses your real costs where recorded, planned estimates elsewhere.
-              </p>
-            </>
-          ) : (
-            <div className="flex items-center justify-between pt-2 font-medium">
-              <span className="text-gray-900">Estimated total</span>
-              <span className="text-[#1F6F8B]">${fmtMoney(Math.round(plannedTotal))}</span>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Legacy trip-level "Log actual fuel spent" input was retired in
               Pass 3 of the per-leg-fuel rework. Logging now happens per
