@@ -407,6 +407,13 @@ model Stop {
   driveDistanceMiles     Float?
   routeHighlights        String?
   pointsOfInterest       Json                  @default("[]")
+  // Block 15 — one shared "things to do during your stay" list per multi-night stop.
+  // Replaces the current per-day duplicated activity arrays in Trip.itinerary
+  // (where a 3-night stay emits 3 near-identical lists). Nullable with no
+  // default so existing rows stay null — backfill script can distinguish
+  // "not yet migrated" from "intentionally empty []". Read/write code lands
+  // in later Block 15 steps; this column is unused until then.
+  stayActivities         Json?
   campgroundCandidates   Json?
   createdAt              DateTime      @default(now())
   updatedAt              DateTime      @updatedAt
