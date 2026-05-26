@@ -1,5 +1,5 @@
 @echo off
-setlocal EnableDelayedExpansion
+setlocal
 
 echo.
 echo === RoamReady Restart ===
@@ -17,25 +17,13 @@ for /f "tokens=5" %%a in ('netstat -ano ^| findstr :3000 ^| findstr LISTENING') 
     taskkill /F /PID %%a >nul 2>&1
 )
 
+REM -- 3. Brief pause to let the OS fully release the ports --
 timeout /t 2 /nobreak >nul
 
-REM -- 3. Close the existing RoamReadyDev Windows Terminal window via saved PID --
-if exist "%TEMP%\roamready-wt.pid" (
-    set /p WT_PID=<"%TEMP%\roamready-wt.pid"
-    if defined WT_PID (
-        echo Stopping Windows Terminal PID !WT_PID!
-        taskkill /F /PID !WT_PID! >nul 2>&1
-        del "%TEMP%\roamready-wt.pid" >nul 2>&1
-    )
-)
-
-REM -- 4. Wait for the OS to fully release the killed window before relaunching --
-timeout /t 3 /nobreak >nul
-
-REM -- 5. Re-launch start-roamready.bat in this same cmd session --
+REM -- 4. Relaunch the stack. No detached cmd needed: we no longer kill the
+REM    Windows Terminal host, so this script's own window survives and a plain
+REM    `call` works.
 echo Launching start-roamready.bat...
 call "C:\Users\aylie\roamready\start-roamready.bat"
 
-REM -- Auto-close this restart window once start-roamready returns --
-timeout /t 2 /nobreak >nul
 exit /b 0

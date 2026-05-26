@@ -45,7 +45,7 @@ echo Database containers started.
 
 REM -- 4. Open Backend + Frontend + Shell as three tabs in one Windows Terminal --
 echo Opening Windows Terminal with Backend, Frontend, and Shell tabs...
-start "" wt.exe --window RoamReadyDev --title "BACKEND :3001" --tabColor "#4682B4" cmd /k "color 1F && cd /d C:\Users\aylie\roamready\server && npm run dev" ^; new-tab --title "FRONTEND :3000" --tabColor "#3CB371" cmd /k "color 2F && cd /d C:\Users\aylie\roamready\client && npm run dev" ^; new-tab --title "SHELL" --tabColor "#A9A9A9" powershell.exe -NoExit -Command "cd C:\Users\aylie\roamready"
+start "" wt.exe --window RoamReadyDev --title "BACKEND :3001" --tabColor "#4682B4" cmd /c "title BACKEND :3001 && color 1F && cd /d C:\Users\aylie\roamready\server && npm run dev" ^; new-tab --title "FRONTEND :3000" --tabColor "#3CB371" cmd /c "title FRONTEND :3000 && color 2F && cd /d C:\Users\aylie\roamready\client && npm run dev" ^; new-tab --title "SHELL" --tabColor "#A9A9A9" powershell.exe -NoExit -Command "cd C:\Users\aylie\roamready"
 
 REM -- 4b. Capture the new Windows Terminal host PID for restart-dev.bat to find later --
 echo Capturing Windows Terminal PID...
