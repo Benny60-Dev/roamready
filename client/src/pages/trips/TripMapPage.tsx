@@ -5,7 +5,7 @@ import {
   Layers, X, Plus, Minus, DollarSign, Calendar, AlertTriangle,
   Wind, Droplets, Snowflake, Thermometer, ExternalLink,
   Pencil, Trash2, Check, BookOpen, Package, Share2, Download, CheckCircle, Clock, XCircle, CloudRain, Wand2,
-  Maximize2, Minimize2, Play, Tent, List,
+  Maximize2, Minimize2, Play, Tent,
 } from 'lucide-react'
 import { formatTripDate } from '../../utils/dates'
 import { tripsApi } from '../../services/api'
@@ -1200,18 +1200,6 @@ export default function TripMapPage() {
           redundant. Tab bar lives only on this page; other trip pages
           render their own layouts. */}
       <div className="flex-shrink-0 bg-white border-b border-gray-100 px-2 flex flex-wrap lg:flex-nowrap items-center gap-0.5">
-        {/* C2 — View itinerary moved here from the action stack. The prior
-            placement (prominent gold-solid button) was load-bearing while
-            the booking path was buried; with "Book campgrounds (X/N)" in
-            the action stack now, the day-by-day view is one of several
-            auxiliary surfaces and reads naturally with Journal / Packing /
-            Share / PDF. Anchored leftmost as the most-used of these. */}
-        <Link
-          to={`/trips/${id}/itinerary`}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1F6F8B] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
-        >
-          <List size={13} /> View itinerary
-        </Link>
         <Link
           to={`/trips/${id}/journal`}
           className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1F6F8B] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
@@ -1354,20 +1342,43 @@ export default function TripMapPage() {
                 )
               })()}
 
-              {/* Action buttons stack */}
+              {/* Action buttons stack. Two CTAs at the top establish the
+                  user's primary actions on this page, both gold but using
+                  solid/outline to communicate hierarchy:
+                    1. View itinerary (gold solid) — most-frequent, top.
+                    2. Book campgrounds (gold outline) — important, second.
+                  The pre-C2 all-booked → pine-"Booked"-pill swap on the
+                  View itinerary slot is intentionally NOT restored — Book
+                  campgrounds carries the completion signal on its own pine-
+                  outline variant now, and a second pine pill on the
+                  itinerary slot would be a redundant duplicate. */}
               <div className="flex flex-col gap-2 mt-3">
-                {/* C2 — Book campgrounds CTA. Primary visual action in the
-                    column, matching the booking page's Book button vocabulary
-                    (gold outline, transparent fill). Swaps to a pine-outline
-                    "All campgrounds booked" variant when every bookable stop
-                    has bookingStatus: 'CONFIRMED' — preserves the completion-
-                    state signal commit ab17c1f introduced on the prior pine
-                    "Booked" pill, just attached to the new CTA. Both variants
-                    route to /trips/:id/booking so the user can still revisit
-                    to record actuals or edit details after completion.
-                    Denominator uses nonHomeStops.length — the same
-                    isHomeBadge-filtered count the booking page reports, so
-                    "X of Y" agrees across pages on the same trip. */}
+                {/* View itinerary — gold solid, the most-frequent action on
+                    this page (users return to review their day-by-day plan
+                    repeatedly across the life of a trip). Restored to the
+                    top of the stack from a brief C2 detour into the corner
+                    tab bar — placement there demoted it too far. */}
+                {nonHomeStops.length > 0 && (
+                  <Link
+                    to={`/trips/${id}/itinerary`}
+                    className="bg-[#F7A829] text-white hover:bg-[#C9851A] active:bg-[#8A5A0E] text-sm font-medium px-4 py-2.5 rounded-md text-center transition-colors"
+                  >
+                    View itinerary ›
+                  </Link>
+                )}
+
+                {/* C2 — Book campgrounds CTA. Gold outline matching the
+                    booking page's Book button vocabulary so the visual
+                    language stays consistent across pages. Swaps to a pine-
+                    outline "All campgrounds booked (N/N)" variant when every
+                    bookable stop has bookingStatus: 'CONFIRMED' — preserves
+                    the completion-state signal commit ab17c1f introduced
+                    on the prior pine "Booked" pill, now carried by this
+                    CTA. Both variants route to /trips/:id/booking so the
+                    user can revisit after completion to record actuals or
+                    edit details. Denominator uses nonHomeStops.length —
+                    the same isHomeBadge-filtered count the booking page
+                    reports, so "X of Y" agrees across pages. */}
                 {nonHomeStops.length > 0 && (
                   bookedStops === nonHomeStops.length ? (
                     <Link
