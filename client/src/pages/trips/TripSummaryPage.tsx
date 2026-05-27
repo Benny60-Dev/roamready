@@ -2314,6 +2314,7 @@ function DayCard({
     const lastEntry = group.entries[group.entries.length - 1]
     const stop = firstEntry.stop!
     const weather = weatherData[stop.id]
+    const cgInfo = getDisplayCampgroundName(stop)
     const isMulti = group.entries.length > 1
     const endDay = startDay + group.entries.length - 1
 
@@ -2393,12 +2394,15 @@ function DayCard({
             pattern used by the drive-day card's StayContent/OvernightContent.
             "Staying at" prefix dropped — the tent + bold name already
             communicates the role, no need for the verbal frame. */}
-        {(stop.campgroundName || (stop.latitude && stop.longitude)) && (
+        {(cgInfo || (stop.latitude && stop.longitude)) && (
           <div className="px-4 pt-2.5 pb-0 space-y-1.5">
-            {stop.campgroundName && (
+            {cgInfo && (
               <div className="flex items-center gap-1.5">
                 <Tent size={13} className="text-[#C9851A] flex-shrink-0" />
-                <span className="text-sm font-semibold text-gray-800">{stop.campgroundName}</span>
+                <span className="text-sm font-semibold text-gray-800">{cgInfo.name}</span>
+                {cgInfo.source === 'suggested' && (
+                  <span className="text-xs text-gray-400">AI pick</span>
+                )}
               </div>
             )}
             {/* Block 13 — rate + booked-detail line on the multi-night
@@ -2903,6 +2907,40 @@ function DriveContent({
  * cents render with two decimals. Matches user expectation for typical
  * campground pricing.
  */
+/**
+ * Display-time campground-name resolver. The Stop row carries two related
+ * fields:
+ *   - `campgroundName`        — set only after the user confirms a booking
+ *                               (TripBookingPage's save path writes it
+ *                               alongside bookingStatus: 'CONFIRMED').
+ *   - `campgroundCandidates`  — a string[] of AI-recommended campgrounds
+ *                               populated at trip-build time; the same field
+ *                               the booking flow surfaces as picks.
+ *
+ * Before a stop is booked, `campgroundName` is empty but candidates are
+ * populated. Falling back to the first candidate here lets the itinerary's
+ * arrive block render the recommendation as the visual anchor of the
+ * arrival instead of dropping the row entirely. After the user books, the
+ * row transitions seamlessly because the same call now returns
+ * `campgroundName` (the user's confirmed pick) and the "AI pick" tag drops.
+ *
+ * Returns null when neither field has a usable value — render sites gate
+ * on this so a stop with no candidates and no booking renders nothing
+ * (no "undefined", no broken empty row).
+ */
+function getDisplayCampgroundName(stop: Stop): { name: string; source: 'booked' | 'suggested' } | null {
+  if (stop.campgroundName?.trim()) {
+    return { name: stop.campgroundName.trim(), source: 'booked' }
+  }
+  if (Array.isArray(stop.campgroundCandidates) && stop.campgroundCandidates.length > 0) {
+    const first = stop.campgroundCandidates[0]
+    if (typeof first === 'string' && first.trim()) {
+      return { name: first.trim(), source: 'suggested' }
+    }
+  }
+  return null
+}
+
 function RateLine({ stop }: { stop: Stop }) {
   const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2))
   const isBooked = stop.bookingStatus === 'CONFIRMED'
@@ -2962,6 +3000,9 @@ function StayContent({ entry, weather }: {
 }) {
   const stop = entry.stop!
   const navigate = useNavigate()
+  // Pre-booking → AI candidate, post-booking → confirmed name. Source flag
+  // drives the inline "AI pick" tag rendered next to the name below.
+  const cgInfo = getDisplayCampgroundName(stop)
 
   const [notesOpen, setNotesOpen] = useState(false)
   const [notesText, setNotesText] = useState(stop.notes ?? '')
@@ -3016,10 +3057,13 @@ function StayContent({ entry, weather }: {
             at the top of StayContent (next to the city) is intentionally
             left in place — Block 12's territory still owns that header.
             Block 12 will revisit if the two tents read as redundant. */}
-        {stop.campgroundName && (
+        {cgInfo && (
           <div className="flex items-center gap-1.5 ml-4">
             <Tent size={13} className="text-[#C9851A] flex-shrink-0" />
-            <span className="text-sm font-semibold text-gray-800">{stop.campgroundName}</span>
+            <span className="text-sm font-semibold text-gray-800">{cgInfo.name}</span>
+            {cgInfo.source === 'suggested' && (
+              <span className="text-xs text-gray-400">AI pick</span>
+            )}
           </div>
         )}
         {/* Block 13 — estimate-vs-actual rate + booked-detail line.
@@ -3247,6 +3291,9 @@ function OvernightContent({ entry, weather }: {
 }) {
   const stop = entry.stop!
   const navigate = useNavigate()
+  // Pre-booking → AI candidate, post-booking → confirmed name. Source flag
+  // drives the inline "AI pick" tag rendered next to the name below.
+  const cgInfo = getDisplayCampgroundName(stop)
   // Per-instance collapse for the weather block — same pattern as StayContent.
   // OvernightContent is shared with the OVERNIGHT_SOLO card (DayCard ~line
   // 1568); the collapse behavior intentionally applies there too for
@@ -3272,10 +3319,13 @@ function OvernightContent({ entry, weather }: {
             inline immediately before it. The earlier purple Moon was retired
             in Block 12; tent = destination (multi-night), bed = waypoint
             (single-night pass-through), label rows = MapPin. */}
-        {stop.campgroundName && (
+        {cgInfo && (
           <div className="flex items-center gap-1.5 ml-4">
             <Bed size={13} className="text-slate-500 flex-shrink-0" />
-            <span className="text-sm font-semibold text-gray-800">{stop.campgroundName}</span>
+            <span className="text-sm font-semibold text-gray-800">{cgInfo.name}</span>
+            {cgInfo.source === 'suggested' && (
+              <span className="text-xs text-gray-400">AI pick</span>
+            )}
           </div>
         )}
         {/* Rate + booked-detail summary — both via shared helpers so the
