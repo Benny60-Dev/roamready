@@ -335,6 +335,13 @@ export default function SessionPage() {
   const [adHocModel, setAdHocModel] = useState('')
   const [adHocLength, setAdHocLength] = useState('')
   const rigChipRef = useRef<HTMLSpanElement>(null)
+  // Viewport coordinates of the chip's bottom-left, recomputed on open and
+  // on scroll/resize. Used to position the dropdown panel via position:fixed
+  // so it escapes the overflow:hidden on the canvas's parent containers
+  // (line ~639, "flex flex-1 gap-4 overflow-hidden min-h-0") — those parents
+  // would otherwise clip a position:absolute panel before the maxHeight cap
+  // could take effect. Null while the dropdown is closed.
+  const [chipRect, setChipRect] = useState<{ top: number; left: number } | null>(null)
 
   // Close the dropdown on outside click and Escape. Listeners only attach
   // while the dropdown is open so they don't tax every page render.
@@ -353,6 +360,35 @@ export default function SessionPage() {
     return () => {
       document.removeEventListener('mousedown', onDocMouseDown)
       document.removeEventListener('keydown', onEsc)
+    }
+  }, [rigDropdownOpen])
+
+  // Track the chip's viewport-coordinate bottom-left so the position:fixed
+  // dropdown panel stays anchored to the chip as the page scrolls or resizes.
+  // Fixed positioning is required because the canvas's parent containers use
+  // overflow:hidden (see comment on chipRect state above); position:absolute
+  // would get clipped by those parents before maxHeight could take effect.
+  // The capture-phase scroll listener picks up scroll events on any ancestor,
+  // not just window — necessary because the chat column has its own internal
+  // scroll. While not open we leave chipRect as null and don't render the
+  // panel, so initial-mount measurement isn't needed.
+  useEffect(() => {
+    if (!rigDropdownOpen) {
+      setChipRect(null)
+      return
+    }
+    function update() {
+      const el = rigChipRef.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      setChipRect({ top: r.bottom + 4, left: r.left })
+    }
+    update()
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('resize', update)
     }
   }, [rigDropdownOpen])
 
@@ -750,15 +786,31 @@ export default function SessionPage() {
                         </span>
                       )}
 
-                      {rigDropdownOpen && hasMultipleRigs && (
+                      {rigDropdownOpen && hasMultipleRigs && chipRect && (
                         <div
                           role="listbox"
                           aria-label="Pick a rig for this trip"
                           style={{
-                            position: 'absolute',
-                            top: 'calc(100% + 4px)',
-                            left: 0,
+                            // position:fixed instead of absolute so the panel
+                            // escapes the overflow:hidden on the canvas's
+                            // parent containers (which clipped the original
+                            // absolute version regardless of maxHeight). top
+                            // and left come from the chip's bounding rect,
+                            // recomputed on scroll/resize so the panel tracks
+                            // the chip rather than floating off-screen when
+                            // the page moves under it.
+                            position: 'fixed',
+                            top: chipRect.top,
+                            left: chipRect.left,
                             minWidth: 260,
+                            // Cap the panel height so the ad-hoc form's
+                            // Cancel / Use-for-this-trip buttons never spill
+                            // past the viewport — the panel scrolls
+                            // internally when the content exceeds the cap.
+                            // Effective now that the parent's overflow:hidden
+                            // is no longer doing the clipping.
+                            maxHeight: 'calc(100vh - 200px)',
+                            overflowY: 'auto',
                             background: 'white',
                             border: '0.5px solid #E8E4DA',
                             borderRadius: 6,
