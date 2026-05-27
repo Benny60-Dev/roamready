@@ -6,6 +6,7 @@
 //   - pages/trips/TripBookingPage.tsx    (booking-card "have your card ready" nudge)
 // If you add a type here, the server will accept it without any code change.
 
+// Keep in sync with server/src/constants/memberships.ts (intentionally independent — no shared package).
 export const MEMBERSHIP_TYPES = [
   { id: 'ATB', label: 'America the Beautiful Pass', sub: 'Federal recreation lands' },
   { id: 'GOOD_SAM', label: 'Good Sam Club', sub: '10% off campgrounds' },

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { MEMBERSHIP_TYPES } from '../constants/memberships'
 
 /**
  * Membership update payload — the request body for PUT /api/users/me/memberships/:id.
@@ -13,7 +14,7 @@ import { z } from 'zod'
  */
 export const MembershipUpdateSchema = z
   .object({
-    type: z.string().min(1).max(100).optional(),
+    type: z.enum(MEMBERSHIP_TYPES).optional(),
     memberNumber: z.string().max(100).nullable().optional(),
     planTier: z.string().max(100).nullable().optional(),
     expiresAt: z.coerce.date().nullable().optional(),
@@ -41,7 +42,7 @@ export type MembershipUpdateInput = z.infer<typeof MembershipUpdateSchema>
  */
 export const MembershipCreateSchema = z
   .object({
-    type: z.string().min(1).max(100),
+    type: z.enum(MEMBERSHIP_TYPES),
     memberNumber: z.string().max(100).nullable().optional(),
     planTier: z.string().max(100).nullable().optional(),
     expiresAt: z.coerce.date().nullable().optional(),
