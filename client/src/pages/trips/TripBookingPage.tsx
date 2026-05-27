@@ -3,7 +3,7 @@ import { useParams, useSearchParams, Link } from 'react-router-dom'
 import {
   CheckCircle, AlertTriangle, ExternalLink,
   Phone, MapPin, Globe, ChevronDown, ChevronUp, Loader, Check,
-  Calendar, BadgeInfo, Bed, Tent, X,
+  BadgeInfo, Bed, Tent, X,
 } from 'lucide-react'
 import { tripsApi, campgroundsApi, usersApi } from '../../services/api'
 import { Trip, Stop, Campground, Rig } from '../../types'
@@ -28,12 +28,10 @@ function calcDistance(lat1?: number | null, lng1?: number | null, lat2?: number 
   return (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1)
 }
 
-function formatDate(iso?: string): string {
-  if (!iso) return '—'
-  // Routes through parseTripDate so the displayed calendar day matches the
-  // stored UTC date instead of shifting back a day in negative-offset TZs.
-  return formatTripDate(iso, 'MMM d, yyyy') || '—'
-}
+// B3 — formatDate() helper removed. Its only consumer was the old
+// destination header above the card, which now lives inside the card via
+// StopHeaderBlock. The header block uses formatTripDate directly with a
+// shorter 'MMM d' format (e.g. "May 28 → May 29") matching the redesign.
 
 function truncateName(name: string): string {
   return name.length > 35 ? name.slice(0, 30) + '...' : name
@@ -334,46 +332,164 @@ function ReservationSection({
   )
 }
 
+// ─── StopHeaderBlock — shared header row for the recommended card + fallback ──
+// B3 — the destination header that used to live above the card (city + dates
+// + booking-status pill in renderStopContent) is folded into the cards
+// themselves. This helper renders the new header for the recommended card,
+// the "no campgrounds found" fallback, and the "no compatible" fallback, so
+// users still see destination context whether or not a recommendation exists.
+//
+// Layout: numbered circle (RV-blue for overnight, gold for stay) + type icon
+// (Bed gray for overnight, Tent gold for stay) + center column (lead name
+// inline with date range + nights count; city/mileage subline) + right-side
+// type pill ("Overnight" / "N-night stay").
+
+function StopHeaderBlock({
+  stop,
+  prevStop,
+  marker,
+  leadName,
+}: {
+  stop: Stop
+  prevStop?: Stop
+  marker: string
+  // The bold lead text. For the recommended card this is the campground name;
+  // for fallback cards it's the "No campgrounds found near {city}" headline.
+  leadName: string
+}) {
+  const isOvernight = stop.type === 'OVERNIGHT_ONLY'
+  const driveDistance = prevStop
+    ? calcDistance(prevStop.latitude, prevStop.longitude, stop.latitude, stop.longitude)
+    : null
+  const arr = stop.arrivalDate ? formatTripDate(stop.arrivalDate, 'MMM d') : null
+  const dep = stop.departureDate ? formatTripDate(stop.departureDate, 'MMM d') : null
+  const dateRange = arr ? (dep && dep !== arr ? `${arr} → ${dep}` : arr) : null
+  const nightsLabel = stop.nights === 1 ? '1 night' : `${stop.nights} nights`
+  const typeLabel = isOvernight ? 'Overnight' : `${stop.nights}-night stay`
+
+  return (
+    <div className="flex items-start gap-3">
+      {/* Numbered circle — 26×26, pale RV-blue (overnight) or pale gold (stay) */}
+      <div
+        className="flex items-center justify-center flex-shrink-0 rounded-full"
+        style={{
+          width: 26,
+          height: 26,
+          background: isOvernight ? '#E0F0F4' : '#FAEEDA',
+          color: isOvernight ? '#134756' : '#854F0B',
+          fontSize: 13,
+          fontWeight: 500,
+        }}
+      >
+        {marker}
+      </div>
+      {/* Type icon */}
+      {isOvernight
+        ? <Bed size={17} className="flex-shrink-0" style={{ color: '#5F5E5A', marginTop: 4 }} />
+        : <Tent size={17} className="flex-shrink-0" style={{ color: '#BA7517', marginTop: 4 }} />
+      }
+      {/* Center — bold name lead + date range inline, city subline */}
+      <div className="flex-1 min-w-0">
+        <p className="text-gray-900" style={{ fontSize: 18, fontWeight: 500, lineHeight: 1.25 }}>
+          {leadName}
+          {dateRange && (
+            <span className="text-gray-500 font-normal" style={{ fontSize: 14 }}>
+              {' · '}{dateRange}
+              {stop.nights > 0 && <>{' · '}{nightsLabel}</>}
+            </span>
+          )}
+        </p>
+        <p className="text-gray-500" style={{ fontSize: 12, marginTop: 4 }}>
+          {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
+          {driveDistance && <span className="text-gray-400">{' · '}~{driveDistance} mi from previous stop</span>}
+        </p>
+      </div>
+      {/* Right-side type pill — informational about stop type only. Booking
+          state is signaled elsewhere (sidebar dot, B4 collapsed row). */}
+      <span
+        className="flex-shrink-0"
+        style={{
+          background: isOvernight ? '#F1EFE8' : '#FAEEDA',
+          color: isOvernight ? '#5F5E5A' : '#854F0B',
+          fontSize: 11,
+          fontWeight: 500,
+          padding: '3px 9px',
+          borderRadius: 6,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {typeLabel}
+      </span>
+    </div>
+  )
+}
+
 // ─── Recommended campground card (primary recommendation per stop) ───────────
 
 function RecommendedCampgroundCard({
   cg,
   stop,
+  prevStop,
+  marker,
   draftMode,
   onSelectCampground,
   onStopUpdated,
   onUnbook,
   membershipLabels,
+  altCount,
+  altsExpanded,
+  onToggleAlts,
 }: {
   cg: Campground
   stop: Stop
+  // Previous stop in the trip — used for "~N mi from previous stop" line.
+  prevStop?: Stop
+  // The display marker ("1"–"N") for the numbered circle in the card header.
+  // Computed at the page level via stopDisplayNumbers / formatStopBadgeMarker.
+  marker: string
   draftMode: boolean
   onSelectCampground: () => void
   onStopUpdated: (stopId: string, data: Partial<Stop>) => void
   onUnbook: (stop: Stop) => void
-  // Human-readable labels for the user's active, non-expired memberships
-  // (e.g. ["Good Sam Club", "Thousand Trails"]). Computed at the page level
-  // from user.memberships and MEMBERSHIP_TYPES; passed in here so this card
-  // doesn't need its own auth dependency. Empty array → nudge is hidden.
   membershipLabels: string[]
-  // B1 — onOpenRigInfo and isTowing dropped from the props: the per-card
-  // "My rig info" trigger and the towing advisory both lifted to the new
-  // page-level header strip so they're stated once, not repeated under
-  // every campground card.
+  // B3 — alternates toggle moved from below the card into the card's contact
+  // row, right-aligned. altCount is altOptions.length at the page level; the
+  // page still owns the expand state and renders the animated list below the
+  // card so the toggle action stays a one-liner here.
+  altCount: number
+  altsExpanded: boolean
+  onToggleAlts: () => void
 }) {
   const isConfirmed = stop.campgroundId === cg.id && stop.bookingStatus === 'CONFIRMED'
-  const mapQuery = [cg.name, cg.address].filter(Boolean).join(' ')
-  const mapUrl = cg.latitude && cg.longitude
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cg.name)}&ll=${cg.latitude},${cg.longitude}`
-    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`
+  // B3 — Directions URL replaces the old "Map" link. Switches Google Maps'
+  // mode from /search/ to /dir/?api=1&destination= so a click drops the user
+  // straight into turn-by-turn navigation from their current location.
+  const directionsUrl = cg.latitude && cg.longitude
+    ? `https://www.google.com/maps/dir/?api=1&destination=${cg.latitude},${cg.longitude}`
+    : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent([cg.name, cg.address].filter(Boolean).join(' '))}`
+
+  // B3 — composed description line: "~$N/night · full hookups · fits your rig".
+  // Each part is gated independently so the line gracefully omits whatever
+  // isn't reliably populated (no "·" with nothing after). Spec acknowledged
+  // these signals may not always be present.
+  const descParts: string[] = []
+  if (cg.siteRate != null && cg.siteRate > 0) descParts.push(`~$${cg.siteRate}/night`)
+  if (cg.hookupTypes?.some(h => /full/i.test(h))) descParts.push('full hookups')
+  if (cg.isCompatible !== false) descParts.push('fits your rig')
 
   return (
-    <div className={`card mb-3 transition-colors ${
-      isConfirmed ? 'border-[#3E5540]/40 bg-[#DCE5D5]/20' : 'border-[#1F6F8B]/20 bg-[#E0F0F4]/10'
-    }`}>
-      {/* Booked banner — single-state pill driven only by bookingStatus. The gray
-          "Enter confirmation to book" interim state is gone: until the user clicks Save,
-          the stop is genuinely not booked and the pill stays absent. */}
+    <div
+      className="bg-white mb-3"
+      style={{
+        border: '1px solid #E8E4DA',
+        borderRadius: 8,
+        padding: '16px 18px',
+      }}
+    >
+      {/* Booked banner — preserved from prior design; B4 will replace this
+          entire branch with the pale-green collapsed row. Until then booked
+          stops still render this full card with the banner on top so the
+          Unbook affordance stays reachable. */}
       {isConfirmed && (
         <div className="flex items-center gap-1.5 text-xs font-semibold rounded-lg px-3 py-2 mb-3 border text-[#2F4030] bg-[#DCE5D5] border-[#3E5540]/30">
           <CheckCircle size={13} />
@@ -387,84 +503,132 @@ function RecommendedCampgroundCard({
         </div>
       )}
 
-      {/* Name + rate */}
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <div className="flex-1 min-w-0">
-          <h4 className="text-sm font-semibold text-gray-900 leading-snug">{cg.name}</h4>
-          {cg.rating != null && (
-            <div className="text-xs text-amber-500 mt-0.5">
-              {'★'.repeat(Math.round(cg.rating))}
-              <span className="text-gray-400 ml-1">{cg.rating.toFixed(1)}</span>
-            </div>
-          )}
-          {cg.address && (
-            <div className="flex items-center gap-1 mt-1 text-xs text-gray-400">
-              <MapPin size={10} className="flex-shrink-0" />{cg.address}
-            </div>
-          )}
-        </div>
-        {cg.siteRate != null && (
-          <div className="text-right flex-shrink-0">
-            <p className="text-sm font-semibold text-gray-900">
-              ${cg.siteRate}<span className="text-xs font-normal text-gray-400">/nt</span>
-            </p>
-            <p className="text-[11px] text-gray-400">${cg.siteRate * stop.nights} total</p>
-          </div>
+      {/* Header row — numbered circle + type icon + name-led title + type pill */}
+      <StopHeaderBlock stop={stop} prevStop={prevStop} marker={marker} leadName={cg.name} />
+
+      {/* Body — indented to align past the 26px circle + 12px gap (≈38px).
+          Carries the rating, description, action row, and contact row. */}
+      <div style={{ marginLeft: 38, marginTop: 12 }}>
+        {/* Rating + address row — "Rating 4.1/5 · address" */}
+        {(cg.rating != null || cg.address) && (
+          <p className="text-gray-500" style={{ fontSize: 12 }}>
+            {cg.rating != null && (
+              <>
+                Rating <span className="text-gray-800 font-medium">{cg.rating.toFixed(1)}</span>
+                <span className="text-gray-400">/5</span>
+              </>
+            )}
+            {cg.rating != null && cg.address && <span className="text-gray-300">{' · '}</span>}
+            {cg.address && <span>{cg.address}</span>}
+          </p>
         )}
-      </div>
 
-      {/* Tags */}
-      <div className="flex flex-wrap gap-1.5 mb-3">
-        {cg.hookupTypes?.map(h => <span key={h} className="badge-green text-xs">{h}</span>)}
-        {cg.isPetFriendly && <span className="badge-blue text-xs">🐾 Pets OK</span>}
-        {cg.maxRigLength && <span className="badge text-xs bg-gray-100 text-gray-600">Max {cg.maxRigLength}ft</span>}
-        {cg.isMilitaryOnly && <span className="badge text-xs bg-blue-50 text-blue-700">🎖️ Military</span>}
-      </div>
+        {/* Composed description — graceful omission per spec */}
+        {descParts.length > 0 && (
+          <p className="text-gray-500" style={{ fontSize: 13, marginTop: 6 }}>
+            {descParts.join(' · ')}
+          </p>
+        )}
 
-      {/* Reservation Honesty: split into two distinct actions so users see the truth —
-          (1) the gold button opens Recreation.gov in a new tab and does NOT touch local
-          state; the actual booking happens on Recreation.gov, not here. (2) the subtle
-          link below it opens the local form so users can record a confirmation # AFTER
-          they've booked elsewhere. Both hidden when already booked or while the form is
-          already open. */}
-      {!isConfirmed && !draftMode && (
-        <div className="space-y-2">
-          {cg.reservationUrl && (
-            <div>
+        {/* Action row — outline gold Book button + RV-blue "Already booked?"
+            sibling. Gated by !isConfirmed && !draftMode same as before; the
+            click handlers are unchanged from prior design (Book opens the
+            reservation URL in a new tab without touching local state; Already
+            booked opens the inline ReservationSection draft). */}
+        {!isConfirmed && !draftMode && (
+          <>
+            <div className="flex items-center gap-3 flex-wrap" style={{ marginTop: 12 }}>
+              {cg.reservationUrl && (
+                <button
+                  onClick={() => window.open(cg.reservationUrl!, '_blank', 'noopener,noreferrer')}
+                  className="inline-flex items-center gap-1.5 transition-colors hover:bg-[#BA7517]/5"
+                  style={{
+                    color: '#BA7517',
+                    border: '1px solid #BA7517',
+                    background: 'transparent',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    padding: '7px 14px',
+                    borderRadius: 6,
+                  }}
+                >
+                  <ExternalLink size={13} />
+                  Book at {truncateName(cg.name)}
+                </button>
+              )}
               <button
-                onClick={() => window.open(cg.reservationUrl!, '_blank', 'noopener,noreferrer')}
-                className="bg-rr-gold hover:bg-rr-gold-dark text-white rounded-lg font-medium transition-colors text-sm w-full flex items-center justify-center gap-1.5 py-2.5"
+                onClick={onSelectCampground}
+                className="hover:underline underline-offset-2 transition-colors"
+                style={{ color: '#185FA5', fontSize: 13 }}
               >
-                <ExternalLink size={13} /> Book at {truncateName(cg.name)}
+                Already booked? Record conf #
               </button>
-              {/* Reservation Honesty: always-visible subtext under the gold button so first-time
-                  users see the truth before they click. The fuller line lives inside the expanded
-                  ReservationSection ("RoamReady doesn't make reservations for you...") and stays
-                  there as the more thorough explanation when they come back to record a conf #. */}
-              <p className="text-xs text-gray-500 text-center mt-1.5 leading-snug">
+            </div>
+            {cg.reservationUrl && (
+              <p className="text-xs text-gray-500 mt-2 leading-snug">
                 Opens the campground's site — you book directly with them.
               </p>
-              {/* Reservation Honesty: membership reminder. Names what the user has
-                  saved but never claims the discount applies — that's the
-                  campground's call, not ours. No price math touches this line. */}
-              {membershipLabels.length > 0 && (
-                <p className="text-xs text-gray-500 text-center mt-1 leading-snug">
-                  {formatMembershipNudge(membershipLabels)}
-                </p>
-              )}
-            </div>
+            )}
+            {membershipLabels.length > 0 && (
+              <p className="text-xs text-gray-500 mt-1 leading-snug">
+                {formatMembershipNudge(membershipLabels)}
+              </p>
+            )}
+          </>
+        )}
+
+        {/* Contact row — Phone + Website + Directions (replaces the duplicate
+            reservationUrl link) + (right-aligned) See other campgrounds toggle */}
+        <div
+          className="flex items-center gap-x-4 gap-y-1 flex-wrap mt-3 pt-2.5 border-t border-gray-100"
+          style={{ borderTopWidth: '0.5px' }}
+        >
+          {cg.phone && (
+            <a
+              href={`tel:${cg.phone}`}
+              className="flex items-center gap-1.5 transition-colors hover:underline"
+              style={{ color: '#185FA5', fontSize: 12 }}
+            >
+              <Phone size={11} />{cg.phone}
+            </a>
           )}
-          <button
-            onClick={onSelectCampground}
-            className="text-xs text-[#1F6F8B] hover:text-[#134756] underline underline-offset-2 transition-colors w-full text-center py-1"
+          {cg.website && (
+            <a
+              href={cg.website}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 transition-colors hover:underline"
+              style={{ color: '#185FA5', fontSize: 12 }}
+            >
+              <Globe size={11} /> Website
+            </a>
+          )}
+          <a
+            href={directionsUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1.5 transition-colors hover:underline"
+            style={{ color: '#185FA5', fontSize: 12 }}
           >
-            Already booked? Record your confirmation #
-          </button>
-          {/* B1 — per-card "My rig info" and towing advisory both lifted to
-              the page-level header strip so they're stated once on the page,
-              not repeated under every campground card. */}
+            <MapPin size={11} /> Directions
+          </a>
+          {altCount > 0 && (
+            <button
+              onClick={onToggleAlts}
+              className="ml-auto flex items-center gap-1 transition-colors hover:underline"
+              style={{ color: '#185FA5', fontSize: 12 }}
+            >
+              {altsExpanded
+                ? 'Hide other options'
+                : `See other campgrounds (${altCount} option${altCount !== 1 ? 's' : ''}) →`
+              }
+            </button>
+          )}
         </div>
-      )}
+      </div>
+
+      {/* ReservationSection — draft form for "Already booked? Record conf #".
+          Kept outside the indented body so the form has full card width. */}
       <ReservationSection
         key={stop.id}
         stop={stop}
@@ -472,28 +636,6 @@ function RecommendedCampgroundCard({
         draftMode={draftMode}
         onSaved={data => onStopUpdated(stop.id, data)}
       />
-
-      {/* Links */}
-      <div className="flex items-center gap-4 mt-3 pt-2.5 border-t border-gray-100" style={{ borderTopWidth: '0.5px' }}>
-        {cg.phone && (
-          <a href={`tel:${cg.phone}`} className="flex items-center gap-1 text-xs text-[#1F6F8B] hover:text-[#134756] transition-colors">
-            <Phone size={11} />{cg.phone}
-          </a>
-        )}
-        {cg.website && (
-          <a href={cg.website} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-[#1F6F8B] hover:text-[#134756] transition-colors">
-            <Globe size={11} /> Website
-          </a>
-        )}
-        {cg.reservationUrl && (
-          <a href={cg.reservationUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-[#1F6F8B] hover:text-[#134756] transition-colors">
-            <ExternalLink size={11} /> {reservationLinkLabel(cg.reservationUrl)}
-          </a>
-        )}
-        <a href={mapUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#1F6F8B] transition-colors ml-auto">
-          <MapPin size={11} /> Map
-        </a>
-      </div>
     </div>
   )
 }
@@ -974,7 +1116,13 @@ export default function TripBookingPage() {
     )
   }
 
-  // ── Per-stop content: destination header + recommended card + expandable alts ──
+  // ── Per-stop content: recommended card + animated alternates list ──
+  // B3 — the standalone destination header above the card was folded into
+  // RecommendedCampgroundCard (and into the StopHeaderBlock used by the
+  // fallback cards), and the standalone "See other campgrounds" toggle was
+  // folded into the card's contact row. The animated alternates list still
+  // renders here below the card, gated on the page-level expandedAlts state
+  // that the in-card toggle button mutates.
   function renderStopContent(stop: Stop, prevStop?: Stop) {
     const cgs       = campgrounds[stop.id]
     const isLoaded  = cgs !== undefined
@@ -999,59 +1147,18 @@ export default function TripBookingPage() {
     // Was the first returned campground incompatible? (means we promoted an alternative)
     const originalWasIncompat = !confirmed && (cgs ?? []).length > 0 && cgs![0].isCompatible === false
 
-    // Drive distance from previous stop
-    const driveDistance = prevStop
-      ? calcDistance(prevStop.latitude, prevStop.longitude, stop.latitude, stop.longitude)
-      : null
+    // B3 — marker for the numbered circle in the card header. Pulled from the
+    // page-level stopDisplayNumbers map and formatted to the literal "1"–"N"
+    // letter/number used everywhere else on this page.
+    const marker = formatStopBadgeMarker(stopDisplayNumbers[stop.id])
 
     return (
       <>
-        {/* ── Destination header ── */}
-        <div className="flex items-start gap-3 mb-4">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0 shadow-sm ${
-            stop.type === 'HOME' ? 'bg-gray-400' :
-            stop.type === 'OVERNIGHT_ONLY' ? 'bg-[#7F77DD]' : 'bg-[#1F6F8B]'
-          }`}>
-            {formatStopBadgeMarker(stopDisplayNumbers[stop.id])}
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="text-base font-semibold text-gray-900 leading-tight">
-              {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
-            </h3>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 text-xs text-gray-400">
-              {stop.arrivalDate && (
-                <span className="flex items-center gap-1">
-                  <Calendar size={10} />
-                  {formatDate(stop.arrivalDate)}{stop.departureDate ? ` → ${formatDate(stop.departureDate)}` : ''}
-                </span>
-              )}
-              {stop.type !== 'HOME' && <span>{stop.nights} night{stop.nights !== 1 ? 's' : ''}</span>}
-              {driveDistance && <span>~{driveDistance} mi from previous stop</span>}
-            </div>
-          </div>
-          {stop.type === 'HOME' ? (
-            <span className="badge text-xs flex-shrink-0 bg-gray-100 text-gray-500">Departure</span>
-          ) : confirmed ? (
-            // Single-state header pill — green "Booked" whenever bookingStatus is CONFIRMED.
-            // Reservation Honesty: there's no longer a half-state where the stop is "booked"
-            // without a user-saved commit, so the pill no longer needs the gray interim copy.
-            <span className="flex-shrink-0 inline-flex items-center gap-1 text-xs font-semibold rounded-lg px-2 py-0.5 border text-[#2F4030] bg-[#DCE5D5] border-[#3E5540]/30">
-              <CheckCircle size={11} />
-              Booked
-            </span>
-          ) : (
-            <span className={`badge text-xs flex-shrink-0 ${
-              stop.bookingStatus === 'PENDING' || stop.bookingStatus === 'WAITLISTED' ? 'badge-amber' :
-              stop.type === 'OVERNIGHT_ONLY' ? 'bg-purple-100 text-purple-700' :
-              'bg-gray-100 text-gray-500'
-            }`}>
-              {stop.bookingStatus === 'PENDING' ? 'Pending' :
-               stop.type === 'OVERNIGHT_ONLY' ? 'Overnight' : 'Not booked'}
-            </span>
-          )}
-        </div>
-
-        {/* ── Incompatibility promotion note ── */}
+        {/* Incompatibility promotion note — preserved from prior design;
+            sits above the card as a one-time alert about how the AI ended
+            up picking this alternative over its original (rig-incompatible)
+            first choice. Not folded into the card itself because it's a
+            meta-explanation about the recommendation, not content of it. */}
         {originalWasIncompat && recommended && (
           <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3 text-xs text-amber-700">
             <AlertTriangle size={13} className="flex-shrink-0 mt-0.5 text-amber-500" />
@@ -1059,81 +1166,111 @@ export default function TripBookingPage() {
           </div>
         )}
 
-        {/* ── Recommended campground card ── */}
+        {/* Recommended campground card OR fallback — both wear the new
+            StopHeaderBlock so users see destination context regardless of
+            whether a recommendation exists. */}
         {!isLoaded ? (
           <div className="rounded-xl border border-gray-100 bg-gray-50 h-[140px] animate-pulse mb-3" />
         ) : recommended ? (
           <RecommendedCampgroundCard
             cg={recommended}
             stop={stop}
+            prevStop={prevStop}
+            marker={marker}
             draftMode={stopDraftMode}
             onSelectCampground={() => handleSelectCampground(stop, recommended)}
             onStopUpdated={handleStopUpdated}
             onUnbook={(stop) => setUnbookTarget(stop)}
             membershipLabels={membershipLabels}
+            altCount={altOptions.length}
+            altsExpanded={showAlts}
+            onToggleAlts={() => setExpandedAlts(prev => ({ ...prev, [stop.id]: !(prev[stop.id] ?? false) }))}
           />
         ) : cgs?.length === 0 ? (
           // Reservation Honesty: when RIDB returns nothing for this location, surface
           // the gap honestly and link the user to Google Maps so they can keep moving.
-          // Same card chrome as a populated card to avoid layout shift.
-          <div className="card mb-3 border-[#1F6F8B]/20 bg-[#E0F0F4]/10">
-            <h4 className="text-sm font-semibold text-gray-900 leading-snug">
-              No campgrounds found near {stop.locationName}
-            </h4>
-            <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-              We couldn't find verified campgrounds near this stop. Try Google
-              Maps for private RV parks, BLM dispersed camping, or other options.
-            </p>
-            <a
-              href={`https://www.google.com/maps/search/${encodeURIComponent(`campgrounds near ${stop.locationName}${stop.locationState ? ', ' + stop.locationState : ''}`)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-rr-gold hover:bg-rr-gold-dark text-white rounded-lg font-medium transition-colors text-sm w-full flex items-center justify-center gap-1.5 py-2.5 mt-3"
-            >
-              <MapPin size={13} /> Search Google Maps for campgrounds near {stop.locationName}
-            </a>
+          // Same card chrome as a populated card to avoid layout shift; the new
+          // StopHeaderBlock keeps the city + dates + type visible.
+          <div
+            className="bg-white mb-3"
+            style={{ border: '1px solid #E8E4DA', borderRadius: 8, padding: '16px 18px' }}
+          >
+            <StopHeaderBlock
+              stop={stop}
+              prevStop={prevStop}
+              marker={marker}
+              leadName={`No campgrounds found near ${stop.locationName}`}
+            />
+            <div style={{ marginLeft: 38, marginTop: 12 }}>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                We couldn't find verified campgrounds near this stop. Try Google
+                Maps for private RV parks, BLM dispersed camping, or other options.
+              </p>
+              <a
+                href={`https://www.google.com/maps/search/${encodeURIComponent(`campgrounds near ${stop.locationName}${stop.locationState ? ', ' + stop.locationState : ''}`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 transition-colors hover:bg-[#BA7517]/5 mt-3"
+                style={{
+                  color: '#BA7517',
+                  border: '1px solid #BA7517',
+                  background: 'transparent',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  padding: '7px 14px',
+                  borderRadius: 6,
+                }}
+              >
+                <MapPin size={13} /> Search Google Maps near {stop.locationName}
+              </a>
+            </div>
           </div>
         ) : (
-          <div className="card py-6 text-center text-xs text-gray-400 mb-3">
-            No campgrounds compatible with your rig were found near this stop.
+          <div
+            className="bg-white mb-3"
+            style={{ border: '1px solid #E8E4DA', borderRadius: 8, padding: '16px 18px' }}
+          >
+            <StopHeaderBlock
+              stop={stop}
+              prevStop={prevStop}
+              marker={marker}
+              leadName="No compatible campgrounds found"
+            />
+            <div style={{ marginLeft: 38, marginTop: 12 }}>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                None of the campgrounds we found near this stop are compatible
+                with your rig (length, height, or other constraints). Update
+                your rig profile or search Google Maps for alternatives.
+              </p>
+            </div>
           </div>
         )}
 
-        {/* ── See other campgrounds link + animated alternatives ── */}
-        {/* Visible whether or not the stop is booked: a user might commit to one campground,
-            then call Recreation.gov, find their dates aren't available, and need to compare
-            other options without unbooking first. */}
+        {/* Animated alternates list — toggle button moved into the card's
+            contact row; the list itself still renders here below the card
+            so its expand/collapse animation has full content-area width.
+            Visible whether or not the stop is booked: the user comment on
+            the prior implementation noted that a user might commit to one
+            campground then need to compare other options without unbooking
+            first (e.g. Recreation.gov dates fall through). */}
         {isLoaded && altOptions.length > 0 && (
-          <div>
-            <button
-              onClick={() => setExpandedAlts(prev => ({ ...prev, [stop.id]: !(prev[stop.id] ?? false) }))}
-              className="text-xs text-[#1F6F8B] underline underline-offset-2 hover:text-[#134756] transition-colors"
-            >
-              {showAlts
-                ? 'Hide other options'
-                : `See other campgrounds near ${stop.locationName} (${altOptions.length} option${altOptions.length !== 1 ? 's' : ''})`
-              }
-            </button>
-
-            {/* Smooth expand/collapse via CSS grid trick */}
-            <div className={`grid transition-all duration-300 ease-in-out ${showAlts ? 'grid-rows-[1fr] mt-3' : 'grid-rows-[0fr]'}`}>
-              <div className="overflow-hidden">
-                <div className="space-y-2">
-                  {altOptions.map(cg => (
-                    <AlternateCampgroundCard
-                      key={cg.id}
-                      cg={cg}
-                      stop={stop}
-                      primary={recommended}
-                      // Per-alt draft check (not stopDraftMode): only THIS alt should suppress
-                      // its gold button while it's the active draft. Other alts in the list
-                      // stay clickable so the user can switch drafts before committing.
-                      draftMode={draftSelections[stop.id]?.id === cg.id}
-                      onSelectCampground={() => handleSelectCampground(stop, cg)}
-                      membershipLabels={membershipLabels}
-                    />
-                  ))}
-                </div>
+          <div className={`grid transition-all duration-300 ease-in-out ${showAlts ? 'grid-rows-[1fr] mb-3' : 'grid-rows-[0fr]'}`}>
+            <div className="overflow-hidden">
+              <div className="space-y-2">
+                {altOptions.map(cg => (
+                  <AlternateCampgroundCard
+                    key={cg.id}
+                    cg={cg}
+                    stop={stop}
+                    primary={recommended}
+                    // Per-alt draft check (not stopDraftMode): only THIS alt should suppress
+                    // its gold button while it's the active draft. Other alts in the list
+                    // stay clickable so the user can switch drafts before committing.
+                    draftMode={draftSelections[stop.id]?.id === cg.id}
+                    onSelectCampground={() => handleSelectCampground(stop, cg)}
+                    membershipLabels={membershipLabels}
+                  />
+                ))}
               </div>
             </div>
           </div>
