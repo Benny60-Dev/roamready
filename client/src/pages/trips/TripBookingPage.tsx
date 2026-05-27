@@ -472,8 +472,20 @@ function RecommendedCampgroundCard({
   // Each part is gated independently so the line gracefully omits whatever
   // isn't reliably populated (no "·" with nothing after). Spec acknowledged
   // these signals may not always be present.
+  //
+  // Rate fallback: cg.siteRate is unreliable for AI-only candidates — the
+  // campground search endpoint can't always produce a published rate (no
+  // RIDB/Places hit with pricing). Stop.siteRate IS reliably populated
+  // by AI generation as a typical-for-this-location estimate and is also
+  // what feeds the header's trip-total — so when cg.siteRate is missing
+  // we read stop.siteRate so the price doesn't vanish from the card.
+  // After booking, Stop.siteRate is the actual chosen campground's rate
+  // (the booking save copies it from cg), so the fallback stays correct.
+  const ratePerNight = (cg.siteRate != null && cg.siteRate > 0)
+    ? cg.siteRate
+    : (stop.siteRate != null && stop.siteRate > 0 ? stop.siteRate : null)
   const descParts: string[] = []
-  if (cg.siteRate != null && cg.siteRate > 0) descParts.push(`~$${cg.siteRate}/night`)
+  if (ratePerNight != null) descParts.push(`~$${ratePerNight}/night`)
   if (cg.hookupTypes?.some(h => /full/i.test(h))) descParts.push('full hookups')
   if (cg.isCompatible !== false) descParts.push('fits your rig')
 
