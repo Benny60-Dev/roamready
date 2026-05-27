@@ -5,7 +5,7 @@ import {
   Layers, X, Plus, Minus, DollarSign, Calendar, AlertTriangle,
   Wind, Droplets, Snowflake, Thermometer, ExternalLink,
   Pencil, Trash2, Check, BookOpen, Package, Share2, Download, CheckCircle, Clock, XCircle, CloudRain, Wand2,
-  Maximize2, Minimize2, Play,
+  Maximize2, Minimize2, Play, Tent, List,
 } from 'lucide-react'
 import { formatTripDate } from '../../utils/dates'
 import { tripsApi } from '../../services/api'
@@ -1200,6 +1200,18 @@ export default function TripMapPage() {
           redundant. Tab bar lives only on this page; other trip pages
           render their own layouts. */}
       <div className="flex-shrink-0 bg-white border-b border-gray-100 px-2 flex flex-wrap lg:flex-nowrap items-center gap-0.5">
+        {/* C2 — View itinerary moved here from the action stack. The prior
+            placement (prominent gold-solid button) was load-bearing while
+            the booking path was buried; with "Book campgrounds (X/N)" in
+            the action stack now, the day-by-day view is one of several
+            auxiliary surfaces and reads naturally with Journal / Packing /
+            Share / PDF. Anchored leftmost as the most-used of these. */}
+        <Link
+          to={`/trips/${id}/itinerary`}
+          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1F6F8B] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
+        >
+          <List size={13} /> View itinerary
+        </Link>
         <Link
           to={`/trips/${id}/journal`}
           className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1F6F8B] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
@@ -1344,21 +1356,52 @@ export default function TripMapPage() {
 
               {/* Action buttons stack */}
               <div className="flex flex-col gap-2 mt-3">
-                {/* Primary CTA from the map — sends the user to the day-by-day plan,
-                    NOT bookings. Bookings stays reachable via the secondary nav. The
-                    "all booked" state still shows the pine confirmation pill since
-                    that's a completion signal, not a navigation prompt. */}
+                {/* C2 — Book campgrounds CTA. Primary visual action in the
+                    column, matching the booking page's Book button vocabulary
+                    (gold outline, transparent fill). Swaps to a pine-outline
+                    "All campgrounds booked" variant when every bookable stop
+                    has bookingStatus: 'CONFIRMED' — preserves the completion-
+                    state signal commit ab17c1f introduced on the prior pine
+                    "Booked" pill, just attached to the new CTA. Both variants
+                    route to /trips/:id/booking so the user can still revisit
+                    to record actuals or edit details after completion.
+                    Denominator uses nonHomeStops.length — the same
+                    isHomeBadge-filtered count the booking page reports, so
+                    "X of Y" agrees across pages on the same trip. */}
                 {nonHomeStops.length > 0 && (
                   bookedStops === nonHomeStops.length ? (
-                    <div className="bg-[#DCE5D5] text-[#2F4030] text-sm font-medium px-4 py-2.5 rounded-md text-center flex items-center justify-center gap-1.5">
-                      <CheckCircle size={14} /> Booked
-                    </div>
+                    <Link
+                      to={`/trips/${id}/booking`}
+                      className="flex items-center justify-center gap-1.5 transition-colors hover:bg-[#3E5540]/5"
+                      style={{
+                        color: '#2F4030',
+                        border: '1px solid #3E5540',
+                        background: 'transparent',
+                        fontSize: 14,
+                        fontWeight: 500,
+                        padding: '9px 14px',
+                        borderRadius: 6,
+                      }}
+                    >
+                      <CheckCircle size={15} />
+                      All campgrounds booked ({nonHomeStops.length}/{nonHomeStops.length})
+                    </Link>
                   ) : (
                     <Link
-                      to={`/trips/${id}/itinerary`}
-                      className="bg-[#F7A829] text-white hover:bg-[#C9851A] active:bg-[#8A5A0E] text-sm font-medium px-4 py-2.5 rounded-md text-center transition-colors"
+                      to={`/trips/${id}/booking`}
+                      className="flex items-center justify-center gap-1.5 transition-colors hover:bg-[#BA7517]/5"
+                      style={{
+                        color: '#BA7517',
+                        border: '1px solid #BA7517',
+                        background: 'transparent',
+                        fontSize: 14,
+                        fontWeight: 500,
+                        padding: '9px 14px',
+                        borderRadius: 6,
+                      }}
                     >
-                      View itinerary ›
+                      <Tent size={15} />
+                      Book campgrounds ({bookedStops}/{nonHomeStops.length})
                     </Link>
                   )
                 )}
