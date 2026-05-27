@@ -60,8 +60,12 @@ export default function LandingPage() {
           <div className="flex items-center gap-3">
             <Link to="/pricing" className="hidden sm:inline text-sm text-gray-600 hover:text-gray-900">Pricing</Link>
             <Link to="/roadmap" className="hidden sm:inline text-sm text-gray-600 hover:text-gray-900">Roadmap</Link>
-            <Link to="/login" className="text-sm text-gray-600 hover:text-gray-900">Sign in</Link>
-            <Link to="/signup" className="btn-primary text-sm">Get started free</Link>
+            {/* Nav now owns "returning users" exclusively — the duplicate gold
+                "Get started free" was removed in favor of the hero's single
+                signup CTA. Sign-in gets the existing btn-outline treatment
+                (subtle teal border on white) so it reads as a real CTA for
+                returning members without competing with the hero's gold. */}
+            <Link to="/login" className="btn-outline">Sign in</Link>
           </div>
         </div>
       </header>
@@ -80,15 +84,19 @@ export default function LandingPage() {
           AI-powered trip planning for RV travelers, van lifers, and car campers.
           Rig-compatible campgrounds, weather alerts, packing lists, and more.
         </p>
-        <div className="flex items-center justify-center gap-3 flex-wrap">
-          <Link to="/signup" className="btn-primary px-6 py-3 text-base flex items-center gap-2">
+        {/* Single primary CTA — the hero owns "new users" exclusively. The
+            duplicate "Already have an account? Sign in" affordance that used
+            to sit below the trial text moved to the top nav (now styled as a
+            btn-outline). The earlier "Try the AI planner" outline button is
+            gone too — it pointed at /sessions/new behind PrivateRoute and
+            bounced logged-out visitors to /login, promising a no-account demo
+            that doesn't exist today. */}
+        <div className="flex items-center justify-center">
+          <Link to="/signup" className="btn-primary px-7 py-3.5 text-base flex items-center gap-2">
             Start planning free <ChevronRight size={16} />
           </Link>
-          <Link to="/sessions/new" className="btn-outline px-6 py-3 text-base">
-            Try the AI planner
-          </Link>
         </div>
-        <p className="text-xs text-gray-400 mt-3">7-day free trial • No credit card required</p>
+        <p className="text-xs text-gray-400 mt-4">7-day free trial • No credit card required</p>
       </section>
 
       {/* Vehicle type selector */}
