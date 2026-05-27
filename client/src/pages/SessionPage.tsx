@@ -1,9 +1,10 @@
 import { useCallback, useState, useRef, useEffect } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { MapPin, Tent, Users, Loader, Plus, X, Sparkles, ChevronDown, ChevronUp, ChevronRight } from 'lucide-react'
+import { MapPin, Tent, Users, Loader, Plus, X, Sparkles, ChevronDown, ChevronUp, ChevronRight, Check } from 'lucide-react'
 import { aiApi, sessionsApi, tripsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
-import { ChatMessage, Trip } from '../types'
+import { ChatMessage, Trip, Rig } from '../types'
+import { VEHICLE_LABELS } from './profile/RigPage'
 import BottomSheet from '../components/ui/BottomSheet'
 import ConfirmModal from '../components/ui/ConfirmModal'
 import ConfirmVehiclesModal, { type ConfirmVehiclesResult } from '../components/trip/ConfirmVehiclesModal'
@@ -25,6 +26,24 @@ function deriveTitle(text: string): string {
   const slice = trimmed.slice(0, 40)
   const lastSpace = slice.lastIndexOf(' ')
   return (lastSpace > 20 ? slice.slice(0, lastSpace) : slice).trim()
+}
+
+// Per-trip rig override types. selectedRig on SessionPage can hold either a
+// real Rig from user.rigs (has a real id, persisted via /users/me) or an
+// AdHocRig the user filled out via "Add a different rig" in the chip
+// dropdown. Ad-hoc rigs ride into the promote payload via the adHocVehicle
+// slot (existing per-trip vehicle field) and rigId: null — they are never
+// written to the Rig table or to the profile.
+type AdHocRig = {
+  isAdHoc: true
+  year?: number
+  make?: string
+  model?: string
+  length?: number
+}
+type SelectedRig = Rig | AdHocRig | null
+function isAdHocRig(r: SelectedRig): r is AdHocRig {
+  return r != null && 'isAdHoc' in r && r.isAdHoc === true
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -277,14 +296,66 @@ export default function SessionPage() {
     return () => { cancelled = true }
   }, [])
 
-  // The rig chip must show the user's actual default rig, not whatever
-  // happens to land at heap index 0 of user.rigs. /users/me's prisma
-  // include doesn't impose an order, so [0] is unstable and was showing
-  // the wrong rig for any user whose default rig wasn't physically first
-  // in the table. Mirror the defaultRig derivation below — find by
-  // isDefault, fall back to [0] only for legacy accounts where no rig
-  // has been flagged yet.
-  const rig      = user?.rigs?.find(r => r.isDefault) ?? user?.rigs?.[0]
+  // The default rig is the seed for the per-trip picker below. After Phase A
+  // the prisma include on /users/me orders rigs by isDefault desc, so
+  // find(isDefault) reliably returns the user's flagged default; the [0]
+  // fallback only kicks in for legacy accounts where no rig has been flagged.
+  const defaultRig = user?.rigs?.find(r => r.isDefault) ?? user?.rigs?.[0] ?? null
+
+  // Per-trip rig override. Seeded from defaultRig but the user can pick a
+  // different rig (or an ad-hoc rig — see AdHocRig type) for just this trip
+  // via the chip dropdown below. Selecting a per-trip rig does NOT write
+  // isDefault on any rig; the only thing it changes is which rigId — or
+  // adHocVehicle — gets attached to the Trip when buildItinerary fires.
+  const [selectedRig, setSelectedRig] = useState<SelectedRig>(() =>
+    user?.rigs?.find(r => r.isDefault) ?? user?.rigs?.[0] ?? null
+  )
+
+  // Reconcile selectedRig when user.rigs changes (e.g. after a rehydrate
+  // following Set-as-default on the rig profile page, or after a delete).
+  // If the previously selected rig is no longer in the list, fall back to
+  // the current default. Ad-hoc rigs aren't in user.rigs and are preserved.
+  useEffect(() => {
+    if (!user?.rigs) return
+    if (!selectedRig) {
+      setSelectedRig(defaultRig)
+      return
+    }
+    if (isAdHocRig(selectedRig)) return
+    if (!user.rigs.some(r => r.id === selectedRig.id)) {
+      setSelectedRig(defaultRig)
+    }
+  }, [user?.rigs, defaultRig, selectedRig])
+
+  // Rig chip dropdown state — open flag plus the inline ad-hoc-rig form draft.
+  const [rigDropdownOpen, setRigDropdownOpen] = useState(false)
+  const [adHocFormOpen, setAdHocFormOpen] = useState(false)
+  const [adHocYear, setAdHocYear] = useState('')
+  const [adHocMake, setAdHocMake] = useState('')
+  const [adHocModel, setAdHocModel] = useState('')
+  const [adHocLength, setAdHocLength] = useState('')
+  const rigChipRef = useRef<HTMLSpanElement>(null)
+
+  // Close the dropdown on outside click and Escape. Listeners only attach
+  // while the dropdown is open so they don't tax every page render.
+  useEffect(() => {
+    if (!rigDropdownOpen) return
+    function onDocMouseDown(e: MouseEvent) {
+      if (rigChipRef.current && !rigChipRef.current.contains(e.target as Node)) {
+        setRigDropdownOpen(false)
+      }
+    }
+    function onEsc(e: KeyboardEvent) {
+      if (e.key === 'Escape') setRigDropdownOpen(false)
+    }
+    document.addEventListener('mousedown', onDocMouseDown)
+    document.addEventListener('keydown', onEsc)
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown)
+      document.removeEventListener('keydown', onEsc)
+    }
+  }, [rigDropdownOpen])
+
   const profile  = user?.travelProfile
 
   async function sendMessage(overrideText?: string) {
@@ -335,24 +406,35 @@ export default function SessionPage() {
     inputRef.current?.focus()
   }
 
-  // Block 8 — resolve the user's primary rig once. Prefer the explicitly-
-  // flagged default; fall back to the first if no default is marked. Null
-  // means "no rig on file", in which case onBuildItineraryClick skips the
-  // ConfirmVehiclesModal and promotes straight through.
-  const defaultRig = user?.rigs?.find(r => r.isDefault) ?? user?.rigs?.[0] ?? null
-
   function onBuildItineraryClick() {
     if (!itinerary || !sessionId || creating) return
-    // No rig on file → no toad question to ask, no rigId to attach, no
+    // No rig at all → no toad question to ask, no rigId to attach, no
     // ad-hoc vehicle UI useful (the user hasn't set up their profile yet).
     // Promote with empty vehicle data — matches pre-Block-8 behavior so
     // the canvas stays usable for un-onboarded users.
-    if (!defaultRig) {
+    if (!selectedRig) {
       buildItinerary({ bringingTowed: null, adHocVehicle: null })
       return
     }
-    // Rig on file → open the modal. It will call buildItinerary with the
-    // captured vehicle decisions once the user confirms.
+    // Phase B — ad-hoc rig picked from the chip dropdown. The
+    // ConfirmVehiclesModal expects a real Rig object (with vehicleType,
+    // tow fields, etc.) so we skip it here and ride the ad-hoc fields
+    // through the adHocVehicle slot. rigId stays null; bringingTowed
+    // stays null because there's no toad question to ask for an ad-hoc.
+    if (isAdHocRig(selectedRig)) {
+      buildItinerary({
+        bringingTowed: null,
+        adHocVehicle: {
+          year: selectedRig.year,
+          make: selectedRig.make,
+          model: selectedRig.model,
+          length: selectedRig.length,
+        },
+      })
+      return
+    }
+    // Real rig on file → open the modal. It will call buildItinerary with
+    // the captured vehicle decisions once the user confirms.
     setConfirmVehiclesOpen(true)
   }
 
@@ -382,7 +464,12 @@ export default function SessionPage() {
         //   user's default). We have the rig in hand here, so populate it.
         // bringingTowed + adHocVehicle: collected by the ConfirmVehiclesModal
         //   (or both null when the modal was skipped — no rig on file).
-        rigId: defaultRig?.id ?? null,
+        // Phase B — rigId comes from the per-trip selectedRig (which the user
+        // may have overridden via the chip dropdown). Ad-hoc selections route
+        // through onBuildItineraryClick above, never through this modal-confirm
+        // path, so by the time we get here selectedRig is guaranteed to be a
+        // real Rig with a stable id (or null on the no-rig path).
+        rigId: selectedRig && !isAdHocRig(selectedRig) ? selectedRig.id : null,
         bringingTowed: vehicleData.bringingTowed,
         adHocVehicle: vehicleData.adHocVehicle,
       })
@@ -467,14 +554,18 @@ export default function SessionPage() {
   const isEmptyState = !messages.some(m => m.role === 'user')
 
   // ── Rig context chip strip pieces (only rendered in empty state) ───────────
-  const rigName = rig
-    ? [rig.year, rig.make, rig.model].filter(Boolean).join(' ').trim()
+  // Phase B — the chip reads selectedRig (per-trip override), not the user's
+  // global default. selectedRig may be a real Rig or an AdHocRig; both have
+  // year/make/model/length so the same derivation works for either.
+  const rigName = selectedRig
+    ? [selectedRig.year, selectedRig.make, selectedRig.model].filter(Boolean).join(' ').trim()
     : ''
   const rigChipText = rigName
-    ? rig?.length
-      ? `${rigName} (${rig.length}ft)`
+    ? selectedRig?.length
+      ? `${rigName} (${selectedRig.length}ft)`
       : rigName
     : ''
+  const hasMultipleRigs = (user?.rigs?.length ?? 0) > 1
   const partyChipText = profile
     ? `${profile.adults} adult${profile.adults !== 1 ? 's' : ''}${profile.hasPets ? ', pets' : ''}`
     : ''
@@ -616,10 +707,340 @@ export default function SessionPage() {
                     color: '#134756',
                   }}
                 >
+                  {/* Phase B — rig chip becomes a tappable dropdown for users
+                      with multiple rigs. Single-rig users get the static span
+                      with no chevron, identical to the original look. The
+                      dropdown lets the user pick a different rig (or define
+                      an ad-hoc one) for THIS trip without changing the global
+                      default — selecting only updates selectedRig in local
+                      state, which flows into the promote payload's rigId (or
+                      adHocVehicle) and never writes Rig.isDefault. */}
                   {rigChipText && (
-                    <span className="inline-flex items-center" style={{ gap: 6 }}>
-                      <MapPin size={14} aria-hidden="true" color="#1F6F8B" />
-                      {rigChipText}
+                    <span
+                      ref={rigChipRef}
+                      className="inline-flex items-center"
+                      style={{ position: 'relative', gap: 6 }}
+                    >
+                      {hasMultipleRigs ? (
+                        <button
+                          type="button"
+                          onClick={() => setRigDropdownOpen(o => !o)}
+                          aria-haspopup="listbox"
+                          aria-expanded={rigDropdownOpen}
+                          className="inline-flex items-center transition-colors"
+                          style={{
+                            gap: 6,
+                            padding: '6px 12px',
+                            borderRadius: 6,
+                            background: rigDropdownOpen ? '#E0F0F4' : 'white',
+                            border: rigDropdownOpen ? '0.5px solid #1F6F8B' : '0.5px solid #E8E4DA',
+                            color: '#134756',
+                            fontSize: 12,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <MapPin size={14} aria-hidden="true" color="#1F6F8B" />
+                          {rigChipText}
+                          {rigDropdownOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center" style={{ gap: 6 }}>
+                          <MapPin size={14} aria-hidden="true" color="#1F6F8B" />
+                          {rigChipText}
+                        </span>
+                      )}
+
+                      {rigDropdownOpen && hasMultipleRigs && (
+                        <div
+                          role="listbox"
+                          aria-label="Pick a rig for this trip"
+                          style={{
+                            position: 'absolute',
+                            top: 'calc(100% + 4px)',
+                            left: 0,
+                            minWidth: 260,
+                            background: 'white',
+                            border: '0.5px solid #E8E4DA',
+                            borderRadius: 6,
+                            padding: 4,
+                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+                            zIndex: 50,
+                            textAlign: 'left',
+                          }}
+                        >
+                          <div
+                            style={{
+                              padding: '6px 10px',
+                              fontSize: 11,
+                              fontWeight: 600,
+                              letterSpacing: 0.3,
+                              textTransform: 'uppercase',
+                              color: '#888',
+                            }}
+                          >
+                            Which rig are you taking?
+                          </div>
+
+                          {user?.rigs?.map(r => {
+                            const isSelected =
+                              selectedRig != null && !isAdHocRig(selectedRig) && selectedRig.id === r.id
+                            const display =
+                              [r.year, r.make, r.model].filter(Boolean).join(' ').trim() ||
+                              VEHICLE_LABELS[r.vehicleType]
+                            const secondary: string[] = [VEHICLE_LABELS[r.vehicleType]]
+                            if (r.length) secondary.push(`${r.length}ft`)
+                            if (r.isDefault) secondary.push('default')
+                            return (
+                              <button
+                                key={r.id}
+                                type="button"
+                                role="option"
+                                aria-selected={isSelected}
+                                onClick={() => {
+                                  setSelectedRig(r)
+                                  setRigDropdownOpen(false)
+                                  setAdHocFormOpen(false)
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'flex-start',
+                                  gap: 8,
+                                  width: '100%',
+                                  padding: '8px 10px',
+                                  borderRadius: 4,
+                                  background: isSelected ? '#E0F0F4' : 'transparent',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  textAlign: 'left',
+                                  color: '#134756',
+                                }}
+                              >
+                                <span style={{ width: 14, flexShrink: 0, paddingTop: 2 }}>
+                                  {isSelected && <Check size={14} color="#1F6F8B" />}
+                                </span>
+                                <span style={{ flex: 1, minWidth: 0 }}>
+                                  <span style={{ display: 'block', fontSize: 13, fontWeight: 500 }}>{display}</span>
+                                  <span
+                                    style={{
+                                      display: 'block',
+                                      fontSize: 11,
+                                      color: '#5F6B57',
+                                      marginTop: 1,
+                                    }}
+                                  >
+                                    {secondary.join(' · ')}
+                                  </span>
+                                </span>
+                              </button>
+                            )
+                          })}
+
+                          {/* Add a different rig — inline form for an ad-hoc
+                              rig that's used for this trip only and never
+                              saved to /users/me. Matches the AdHocVehicle
+                              pattern in ConfirmVehiclesModal. */}
+                          {!adHocFormOpen ? (
+                            <button
+                              type="button"
+                              onClick={() => setAdHocFormOpen(true)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: 8,
+                                width: '100%',
+                                padding: '8px 10px',
+                                borderRadius: 4,
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                              }}
+                            >
+                              <span style={{ width: 14, flexShrink: 0 }} />
+                              <span style={{ flex: 1, minWidth: 0 }}>
+                                <span
+                                  style={{
+                                    display: 'block',
+                                    fontSize: 13,
+                                    fontWeight: 500,
+                                    color: '#1F6F8B',
+                                  }}
+                                >
+                                  Add a different rig
+                                </span>
+                                <span
+                                  style={{
+                                    display: 'block',
+                                    fontSize: 11,
+                                    color: '#5F6B57',
+                                    marginTop: 1,
+                                  }}
+                                >
+                                  Just for this trip, won't save to profile.
+                                </span>
+                              </span>
+                              <Plus size={14} color="#1F6F8B" style={{ flexShrink: 0, marginTop: 2 }} />
+                            </button>
+                          ) : (
+                            <div
+                              style={{
+                                padding: '8px 10px',
+                                margin: '4px 0',
+                                background: '#F9F7F2',
+                                borderRadius: 4,
+                              }}
+                            >
+                              <p
+                                style={{
+                                  fontSize: 11,
+                                  color: '#5F6B57',
+                                  marginBottom: 6,
+                                  fontStyle: 'italic',
+                                }}
+                              >
+                                Just for this trip — not saved to your profile.
+                              </p>
+                              <div
+                                style={{
+                                  display: 'grid',
+                                  gridTemplateColumns: 'repeat(3, 1fr)',
+                                  gap: 4,
+                                  marginBottom: 4,
+                                }}
+                              >
+                                <input
+                                  className="input"
+                                  style={{ fontSize: 11, padding: '4px 6px' }}
+                                  placeholder="Year"
+                                  type="number"
+                                  value={adHocYear}
+                                  onChange={e => setAdHocYear(e.target.value)}
+                                />
+                                <input
+                                  className="input"
+                                  style={{ fontSize: 11, padding: '4px 6px' }}
+                                  placeholder="Make"
+                                  value={adHocMake}
+                                  onChange={e => setAdHocMake(e.target.value)}
+                                />
+                                <input
+                                  className="input"
+                                  style={{ fontSize: 11, padding: '4px 6px' }}
+                                  placeholder="Model"
+                                  value={adHocModel}
+                                  onChange={e => setAdHocModel(e.target.value)}
+                                />
+                              </div>
+                              <input
+                                className="input"
+                                style={{
+                                  fontSize: 11,
+                                  padding: '4px 6px',
+                                  marginBottom: 6,
+                                  width: '100%',
+                                }}
+                                placeholder="Length (ft)"
+                                type="number"
+                                step="0.1"
+                                value={adHocLength}
+                                onChange={e => setAdHocLength(e.target.value)}
+                              />
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  gap: 4,
+                                  justifyContent: 'flex-end',
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAdHocFormOpen(false)
+                                    setAdHocYear('')
+                                    setAdHocMake('')
+                                    setAdHocModel('')
+                                    setAdHocLength('')
+                                  }}
+                                  style={{
+                                    fontSize: 11,
+                                    padding: '4px 8px',
+                                    borderRadius: 4,
+                                    background: 'transparent',
+                                    border: '0.5px solid #E8E4DA',
+                                    color: '#5F6B57',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    // Build the ad-hoc rig from the form
+                                    // fields. Require at least one populated
+                                    // field so an empty Cancel-by-accident
+                                    // doesn't replace the selection with a
+                                    // blank rig.
+                                    const adHoc: AdHocRig = { isAdHoc: true }
+                                    if (adHocYear.trim()) {
+                                      const y = parseInt(adHocYear.trim(), 10)
+                                      if (!isNaN(y)) adHoc.year = y
+                                    }
+                                    if (adHocMake.trim()) adHoc.make = adHocMake.trim()
+                                    if (adHocModel.trim()) adHoc.model = adHocModel.trim()
+                                    if (adHocLength.trim()) {
+                                      const l = parseFloat(adHocLength.trim())
+                                      if (!isNaN(l)) adHoc.length = l
+                                    }
+                                    if (
+                                      adHoc.year == null &&
+                                      !adHoc.make &&
+                                      !adHoc.model &&
+                                      adHoc.length == null
+                                    ) {
+                                      return
+                                    }
+                                    setSelectedRig(adHoc)
+                                    setRigDropdownOpen(false)
+                                    setAdHocFormOpen(false)
+                                  }}
+                                  style={{
+                                    fontSize: 11,
+                                    padding: '4px 8px',
+                                    borderRadius: 4,
+                                    background: '#1F6F8B',
+                                    border: 'none',
+                                    color: 'white',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  Use for this trip
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          <div style={{ height: 1, background: '#E8E4DA', margin: '4px 0' }} />
+
+                          <Link
+                            to="/profile/rig"
+                            onClick={() => setRigDropdownOpen(false)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              padding: '8px 10px',
+                              fontSize: 12,
+                              color: '#1F6F8B',
+                              textDecoration: 'none',
+                              borderRadius: 4,
+                            }}
+                          >
+                            <span style={{ width: 14, flexShrink: 0 }} />
+                            Manage rigs in Profile ↗
+                          </Link>
+                        </div>
+                      )}
                     </span>
                   )}
                   {partyChipText && (
@@ -945,15 +1366,16 @@ export default function SessionPage() {
         isConfirming={isProcessing}
       />
 
-      {/* Block 8 — confirm-vehicles modal. Renders only when the user has a
-          rig on file (defaultRig truthy); for users without a rig, the
-          modal is skipped and buildItinerary runs straight through. The
-          modal collects bringingTowed + adHocVehicle and passes them into
-          the promote payload via buildItinerary's vehicleData arg. */}
-      {defaultRig && (
+      {/* Block 8 — confirm-vehicles modal. Renders only when the per-trip
+          selectedRig is a real Rig on file. For users without a rig the
+          modal is skipped (handled in onBuildItineraryClick); for ad-hoc
+          rigs picked from the chip dropdown the modal is also skipped
+          because it expects a real Rig with vehicleType + tow fields,
+          which an ad-hoc entry doesn't have. */}
+      {selectedRig && !isAdHocRig(selectedRig) && (
         <ConfirmVehiclesModal
           isOpen={confirmVehiclesOpen}
-          rig={defaultRig}
+          rig={selectedRig}
           isConfirming={creating}
           onCancel={() => setConfirmVehiclesOpen(false)}
           onConfirm={vehicleData => {
