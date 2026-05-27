@@ -316,14 +316,26 @@ function ReservationSection({
               onChange={e => set('notes', e.target.value)}
             />
           </div>
+          {/* Gold outline — same shape as the Book button on the unbooked
+              card. Last solid-orange "billboard" CTA on the redesigned
+              page gets the same calm treatment as everything else. */}
           <button
             onClick={save}
             disabled={saving}
-            className="btn-primary text-xs w-full flex items-center justify-center gap-1.5"
+            className="inline-flex items-center gap-1.5 transition-colors hover:bg-[#BA7517]/5 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              color: '#BA7517',
+              border: '1px solid #BA7517',
+              background: 'transparent',
+              fontSize: 13,
+              fontWeight: 500,
+              padding: '7px 14px',
+              borderRadius: 6,
+            }}
           >
             {saving
-              ? <><Loader size={12} className="animate-spin" /> Saving…</>
-              : <><Check size={12} /> Save reservation info</>
+              ? <><Loader size={13} className="animate-spin" /> Saving…</>
+              : <><CheckCircle size={13} /> Save reservation info</>
             }
           </button>
         </div>
@@ -470,7 +482,14 @@ function BookedRowCard({
   const dep = stop.departureDate ? formatTripDate(stop.departureDate, 'MMM d') : null
   const dateLabel = arr ? (dep && dep !== arr ? `${arr} → ${dep}` : arr) : null
   const nightsLabel = stop.nights === 1 ? '1 night' : `${stop.nights} nights`
-  const totalCost = (stop.siteRate ?? 0) * stop.nights
+  // Show what the user actually paid when actuals are entered; fall back to
+  // the AI estimate for the rare case of a CONFIRMED stop without recorded
+  // actuals. Fees only count when actualRate is set (no phantom fees from
+  // a still-estimated stop).
+  const hasActuals = stop.actualRate != null
+  const ratePerNight = hasActuals ? stop.actualRate! : stop.siteRate
+  const fees = hasActuals ? (stop.actualFees ?? 0) : 0
+  const totalCost = ratePerNight != null ? ratePerNight * stop.nights + fees : 0
 
   return (
     <div
@@ -1275,7 +1294,22 @@ export default function TripBookingPage() {
   const bookableStops = sortedStops.filter(s => !isHomeBadge(stopDisplayNumbers[s.id]))
   const bookedCount   = sortedStops.filter(s => s.bookingStatus === 'CONFIRMED').length
   const incompatCount = sortedStops.filter(s => !s.isCompatible).length
-  const totalCampCost = sortedStops.reduce((sum, s) => s.siteRate ? sum + s.siteRate * s.nights : sum, 0)
+  // Trip total — uses actuals when available, falls back to the AI estimate
+  // for unbooked stops. Fees are only added for stops where the user has
+  // actually entered them (actualRate present); never inflated by phantom
+  // fees on still-estimated stops. Mirrors the estimate→actual pattern
+  // used by the itinerary drive-day card's RateLine helper.
+  const totalCampCost = sortedStops.reduce((sum, s) => {
+    const ratePerNight = s.actualRate ?? s.siteRate
+    if (!ratePerNight) return sum
+    const fees = s.actualRate != null ? (s.actualFees ?? 0) : 0
+    return sum + ratePerNight * s.nights + fees
+  }, 0)
+  // Label switches to "camp total" once any booked stop has an actualRate
+  // entered — the number now reflects real costs as the user records them
+  // and "est." would understate that honesty.
+  const anyActuals = sortedStops.some(s => s.actualRate != null)
+  const totalLabel = anyActuals ? 'camp total' : 'est. camp total'
 
   // ── Home endpoint row: Start / Finish header, no campground card ──
   // Home stops are now visible on this page for symmetry with the Map and
@@ -1518,7 +1552,7 @@ export default function TripBookingPage() {
               <p className="font-medium text-gray-900" style={{ fontSize: 16, lineHeight: 1.2 }}>
                 ${totalCampCost.toLocaleString()}
               </p>
-              <p className="text-[11px] text-gray-400 mt-0.5">est. camp total</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">{totalLabel}</p>
             </div>
           )}
         </div>
