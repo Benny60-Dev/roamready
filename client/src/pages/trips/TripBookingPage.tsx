@@ -1293,7 +1293,12 @@ export default function TripBookingPage() {
   // DESTINATION but the helper flags it 'H' via homeCity match.
   const bookableStops = sortedStops.filter(s => !isHomeBadge(stopDisplayNumbers[s.id]))
   const bookedCount   = sortedStops.filter(s => s.bookingStatus === 'CONFIRMED').length
-  const incompatCount = sortedStops.filter(s => !s.isCompatible).length
+  // B5 — incompatCount removed. Its only consumer was the bottom sticky
+  // footer (now dropped) and the prior right-column sticky header (dropped
+  // in B1). Per-row red AlertTriangle markers on the sidebar carry the
+  // incompatibility signal; a roll-up count in the header strip would crowd
+  // the info row without adding information the user can't see by scanning
+  // the rail.
   // Trip total — uses actuals when available, falls back to the AI estimate
   // for unbooked stops. Fees are only added for stops where the user has
   // actually entered them (actualRate present); never inflated by phantom
@@ -1536,7 +1541,7 @@ export default function TripBookingPage() {
           <span className="text-gray-300">·</span>
           <Link
             to={`/trips/${id}/map`}
-            className="text-[#1F6F8B] hover:text-[#134756] transition-colors truncate max-w-[260px]"
+            className="text-[#1F6F8B] hover:text-[#134756] transition-colors truncate max-w-[200px] md:max-w-none"
           >
             {trip.name}
           </Link>
@@ -1808,26 +1813,11 @@ export default function TripBookingPage() {
             </div>
           </div>
 
-          {/* Sticky bottom summary bar */}
-          <footer className="flex-shrink-0 border-t border-gray-100 bg-white px-4 md:px-6 py-2.5 flex items-center justify-between">
-            <div className="flex items-center gap-4 text-xs text-gray-500">
-              <span className="flex items-center gap-1">
-                <CheckCircle size={12} className="text-[#3E5540]" />
-                <span className="font-medium text-gray-700">{bookedCount}</span>/{bookableStops.length} booked
-              </span>
-              {incompatCount > 0 && (
-                <span className="flex items-center gap-1 text-red-400">
-                  <AlertTriangle size={11} />
-                  {incompatCount} incompatible
-                </span>
-              )}
-            </div>
-            {totalCampCost > 0 && (
-              <div className="text-xs text-gray-500">
-                Camp est. <span className="font-semibold text-gray-800">${totalCampCost.toLocaleString()}</span>
-              </div>
-            )}
-          </footer>
+          {/* B5 — sticky bottom summary bar removed. Both pieces it carried
+              (booked-count + camp-est total) live in the page-level header
+              strip now (B1). Incompatibility roll-up was dropped per design
+              call — per-row red AlertTriangle markers on the sidebar are
+              the canonical signal. */}
         </div>
       </div>
 
