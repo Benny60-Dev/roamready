@@ -4,8 +4,8 @@ import { GoogleMap, useJsApiLoader, OverlayViewF, Circle, Polyline } from '@reac
 import {
   Layers, X, Plus, Minus, DollarSign, Calendar, AlertTriangle,
   Wind, Droplets, Snowflake, Thermometer, ExternalLink,
-  Pencil, Trash2, Check, BookOpen, Package, Share2, Download, CheckCircle, Clock, XCircle, CloudRain, Wand2,
-  Maximize2, Minimize2, Play, Tent,
+  Pencil, Trash2, Check, BookOpen, Package, Share2, Download, CheckCircle, CloudRain, Wand2,
+  Maximize2, Minimize2, Play, Tent, Bed,
 } from 'lucide-react'
 import { formatTripDate } from '../../utils/dates'
 import { tripsApi } from '../../services/api'
@@ -1180,7 +1180,10 @@ export default function TripMapPage() {
     [firstStopLat, firstStopLng],
   )
 
-  const colorForStop = (stop: Stop) => KIND_COLOR[classifyStop(stop)]
+  // C3 — colorForStop() removed. Its only consumer was the sidebar stops
+  // list marker, which now uses an inline pale RV-blue / pale gold palette
+  // tied to stop.type rather than the KIND_COLOR map (which still drives
+  // the map markers themselves elsewhere in this file).
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
@@ -1516,12 +1519,12 @@ export default function TripMapPage() {
                     return sortedStops.map((stop, i) => {
                     const badge      = stopBadges[stop.id]
                     const isEndpoint = badge === 'S' || badge === 'H' || badge === 'F'
-                    // Marker color uses badge-based detection so a return-home
-                    // loop's final stop (typed DESTINATION) still gets home color.
-                    // 'F' (one-way trip's finish elsewhere) shares the same
-                    // orange treatment as 'S'/'H' — endpoints are anchors,
-                    // not destinations.
-                    const isEndpointMarker = badge === 'S' || badge === 'H' || badge === 'F'
+                    // C3 — isEndpointMarker removed. The prior usage drove the
+                    // sidebar marker's orange home-color override; the new
+                    // marker palette (markerBg/markerText below) covers
+                    // endpoints with solid gray, so the duplicate flag is no
+                    // longer needed. The map markers themselves continue to
+                    // use isEndpoint via the marker-rendering path.
                     const hasAlert = stopHasAlerts(weatherData[stop.id])
                     const alerts   = stopAlerts(weatherData[stop.id])
 
@@ -1557,23 +1560,78 @@ export default function TripMapPage() {
                         : baseSubtitle
                     }
 
-                    const bookingEl = isEndpoint ? (
+                    // C3 — Per-row CTA replacing the old read-only booking
+                    // pill. Each non-endpoint state is a Link to the booking
+                    // page at this stop's anchor; e.stopPropagation() keeps
+                    // the card's setSelectedStop click intact for the rest
+                    // of the row. Color matches the dot for each state so
+                    // the at-a-glance scan and the actionable text speak
+                    // the same language:
+                    //   CONFIRMED   green dot + pine "Booked" pill (no link)
+                    //   NOT_BOOKED  gray dot  + RV-blue "Book →" link
+                    //   PENDING/WL  amber dot + amber "Pending →" link
+                    //   CANCELLED   red dot   + red "Cancelled →" link
+                    // Endpoint rows keep their existing Start/Finish text.
+                    const ctaEl = isEndpoint ? (
                       <span className="text-[9px] text-gray-400">{formatStopBadgeLabel(badge)}</span>
                     ) : stop.bookingStatus === 'CONFIRMED' ? (
-                      <span className="flex items-center gap-0.5 text-[9px] text-[#2F4030] font-medium">
-                        <CheckCircle size={9} /> Booked
-                      </span>
-                    ) : stop.bookingStatus === 'PENDING' || stop.bookingStatus === 'WAITLISTED' ? (
-                      <span className="flex items-center gap-0.5 text-[9px] text-amber-600 font-medium">
-                        <Clock size={9} /> Pending
-                      </span>
-                    ) : stop.bookingStatus === 'CANCELLED' ? (
-                      <span className="flex items-center gap-0.5 text-[9px] text-red-500 font-medium">
-                        <XCircle size={9} /> Cancelled
+                      <span
+                        className="rounded-md font-medium whitespace-nowrap"
+                        style={{
+                          background: '#DCE5D5',
+                          color: '#2F4030',
+                          fontSize: 10,
+                          padding: '2px 6px',
+                        }}
+                      >
+                        Booked
                       </span>
                     ) : (
-                      <span className="text-[9px] text-gray-400">Not booked</span>
+                      <Link
+                        to={`/trips/${id}/booking?stopId=${stop.id}`}
+                        onClick={e => e.stopPropagation()}
+                        className="hover:underline transition-colors whitespace-nowrap"
+                        style={{
+                          fontSize: 11,
+                          color:
+                            stop.bookingStatus === 'PENDING' || stop.bookingStatus === 'WAITLISTED' ? '#D97706'
+                            : stop.bookingStatus === 'CANCELLED' ? '#EF4444'
+                            : '#185FA5',
+                        }}
+                      >
+                        {stop.bookingStatus === 'PENDING' || stop.bookingStatus === 'WAITLISTED' ? 'Pending →'
+                          : stop.bookingStatus === 'CANCELLED' ? 'Cancelled →'
+                          : 'Book →'}
+                      </Link>
                     )
+
+                    // C3 — booking-state dot. Always rendered (8×8) so endpoint
+                    // and non-endpoint rows align at the same left edge; the
+                    // endpoint dot is transparent (it's not a "booking state"
+                    // concept for start/finish). Color matches the per-row
+                    // CTA for visual coherence — green CONFIRMED, amber
+                    // PENDING/WAITLISTED, red CANCELLED, gray NOT_BOOKED.
+                    const dotColor = isEndpoint ? 'transparent'
+                      : stop.bookingStatus === 'CONFIRMED' ? '#1D9E75'
+                      : stop.bookingStatus === 'PENDING' || stop.bookingStatus === 'WAITLISTED' ? '#D97706'
+                      : stop.bookingStatus === 'CANCELLED' ? '#EF4444'
+                      : '#E8E4DA'
+
+                    // C3 — marker circle palette swap. Pale RV-blue for
+                    // overnight stops, pale gold for multi-night stays, solid
+                    // gray for Start/Finish. Mirrors the booking page card
+                    // headers' bubble colors so the icon language is uniform.
+                    const markerBg = isEndpoint ? '#5F5E5A'
+                      : stop.type === 'OVERNIGHT_ONLY' ? '#E0F0F4'
+                      : '#FAEEDA'
+                    const markerText = isEndpoint ? '#FFFFFF'
+                      : stop.type === 'OVERNIGHT_ONLY' ? '#134756'
+                      : '#854F0B'
+
+                    // C3 — bed for overnight, tent for multi-night, nothing
+                    // for endpoints. Same predicate the booking page sidebar
+                    // uses so the language is identical across the two pages.
+                    const showTent = !isEndpoint && stop.type !== 'OVERNIGHT_ONLY'
 
                     // Outer is a <div role="button"> rather than a <button> so
                     // the per-row Edit/Delete <button>s can nest inside without
@@ -1588,12 +1646,24 @@ export default function TripMapPage() {
                         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedStop(stop) } }}
                         className="w-full text-left flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1F6F8B]/30"
                       >
+                        {/* 8px booking-state dot */}
+                        <span
+                          className="flex-shrink-0 rounded-full"
+                          style={{ width: 8, height: 8, background: dotColor }}
+                        />
+                        {/* Marker circle — pale RV-blue/gold palette */}
                         <div
-                          className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
-                          style={{ backgroundColor: isEndpointMarker ? MC.home : colorForStop(stop) }}
+                          className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                          style={{ background: markerBg, color: markerText }}
                         >
                           {formatStopBadgeMarker(badge)}
                         </div>
+                        {/* Bed/Tent type icon — skipped for endpoints */}
+                        {!isEndpoint && (
+                          showTent
+                            ? <Tent size={14} className="flex-shrink-0" style={{ color: '#BA7517' }} />
+                            : <Bed size={14} className="flex-shrink-0" style={{ color: '#5F5E5A' }} />
+                        )}
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium text-gray-900 truncate">{stop.locationName}</p>
                           <p className="text-[10px] text-gray-400 truncate">{subtitleLine1}</p>
@@ -1602,7 +1672,7 @@ export default function TripMapPage() {
                           )}
                         </div>
                         <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
-                          {bookingEl}
+                          {ctaEl}
                           {hasAlert && (
                             <span className="flex items-center gap-0.5 text-[9px] font-medium text-purple-600">
                               🟣 {alerts.length}
