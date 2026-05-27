@@ -277,7 +277,14 @@ export default function SessionPage() {
     return () => { cancelled = true }
   }, [])
 
-  const rig      = user?.rigs?.[0]
+  // The rig chip must show the user's actual default rig, not whatever
+  // happens to land at heap index 0 of user.rigs. /users/me's prisma
+  // include doesn't impose an order, so [0] is unstable and was showing
+  // the wrong rig for any user whose default rig wasn't physically first
+  // in the table. Mirror the defaultRig derivation below — find by
+  // isDefault, fall back to [0] only for legacy accounts where no rig
+  // has been flagged yet.
+  const rig      = user?.rigs?.find(r => r.isDefault) ?? user?.rigs?.[0]
   const profile  = user?.travelProfile
 
   async function sendMessage(overrideText?: string) {

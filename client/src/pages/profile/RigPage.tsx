@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { Link } from 'react-router-dom'
 import { Plus, Trash2, Star, Pencil, BadgeInfo, Car, Truck, AlertCircle } from 'lucide-react'
 import { usersApi } from '../../services/api'
+import { useAuthStore } from '../../store/authStore'
 import { Rig, VehicleType, TowedType } from '../../types'
 import { deriveSecondVehicle } from '../../utils/rigs'
 
@@ -327,6 +328,14 @@ export default function RigPage() {
     await usersApi.updateRig(id, { isDefault: true })
     const res = await usersApi.getRigs()
     setRigs(res.data)
+    // Refresh the auth-store user (which holds the rigs the SessionPage
+    // chip and other cross-page consumers read) so the chip updates
+    // immediately. Without this the rig list updates locally but the
+    // home chip stays on the old default until the next /users/me
+    // round-trip — usually a page navigation. getState() lets us avoid
+    // subscribing to the store from this component just for the
+    // post-mutation refresh.
+    useAuthStore.getState().rehydrateUser()
   }
 
   return (

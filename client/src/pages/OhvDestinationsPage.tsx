@@ -10,7 +10,12 @@ export default function OhvDestinationsPage() {
   const { hasAccess, user } = useAuthStore()
   const { openPaywall } = useUIStore()
 
-  const rig = user?.rigs?.[0]
+  // Latent same-shape bug as SessionPage's chip: /users/me returns rigs
+  // without an orderBy, so user.rigs[0] is heap-ordered and unstable.
+  // Pick the actual default so the OHV gate (isToyHauler check below)
+  // and the displayed toys list both reflect the rig the user travels
+  // with, not whichever row Postgres happened to return first.
+  const rig = user?.rigs?.find(r => r.isDefault) ?? user?.rigs?.[0]
 
   useEffect(() => {
     if (!hasAccess('ohvDestinations')) {
