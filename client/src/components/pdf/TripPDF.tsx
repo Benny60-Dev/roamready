@@ -329,6 +329,21 @@ function StopEntry({ entry }: { entry: TimelineEntry }) {
   const stop = entry.stop
   if (!stop) return null
 
+  // Block 15 — shared per-stay activity list. When Stop.stayActivities is
+  // non-null it's the canonical user-edited list and the PDF renders it
+  // ONCE on the 'STAY' entry (mirroring the web's single consolidated
+  // "Things to do during your stay" section); the per-day entry.activities
+  // path is suppressed on the subsequent 'ACTIVITY' entries of the same
+  // stop so the list isn't duplicated per night. Old-shape trips
+  // (stayActivities == null) fall through to the per-day rendering
+  // unchanged. Normalization mirrors mergeAI above — bare strings get
+  // wrapped into { name, checked: false }.
+  const sharedRaw = stop.stayActivities
+  const usesSharedStayActivities = sharedRaw != null
+  const sharedStayActivities: ItineraryActivity[] = usesSharedStayActivities && Array.isArray(sharedRaw)
+    ? (sharedRaw as any[]).map(a => typeof a === 'string' ? { name: a, checked: false } : a)
+    : []
+
   const cardStyle = entry.type === 'STAY' ? s.stayCard
     : entry.type === 'OVERNIGHT' ? s.ovCard
     : s.actCard
@@ -385,7 +400,12 @@ function StopEntry({ entry }: { entry: TimelineEntry }) {
         ) : entry.type === 'ACTIVITY' ? (
           /* ── Explore day: no nights/check-in/out ── */
           <>
-            {entry.activities?.length ? (
+            {/* Block 15 — when the stop carries a shared stayActivities
+                list the consolidated section is rendered once on the STAY
+                entry, so suppress the per-day activities block here to
+                avoid duplication across nights. Old-shape trips
+                (stayActivities == null) keep the original per-day path. */}
+            {!usesSharedStayActivities && entry.activities?.length ? (
               <>
                 <Text style={s.actTitle}>Activities</Text>
                 {entry.activities.map((act, i) => (
@@ -428,7 +448,23 @@ function StopEntry({ entry }: { entry: TimelineEntry }) {
               </View>
             ) : null}
 
-            {entry.activities?.length ? (
+            {/* Block 15 — new-shape: render the shared list once here under
+                the web's "Things to do during your stay" wording.
+                Old-shape (stayActivities == null): fall through to the
+                per-day entry.activities path exactly as before. */}
+            {usesSharedStayActivities ? (
+              sharedStayActivities.length ? (
+                <>
+                  <Text style={s.actTitle}>Things to do during your stay</Text>
+                  {sharedStayActivities.map((act, i) => (
+                    <View key={i} style={s.actItem}>
+                      <View style={s.actDot} />
+                      <Text style={s.actText}>{act.name}</Text>
+                    </View>
+                  ))}
+                </>
+              ) : null
+            ) : entry.activities?.length ? (
               <>
                 <Text style={s.actTitle}>Activities</Text>
                 {entry.activities.map((act, i) => (

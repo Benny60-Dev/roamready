@@ -681,9 +681,25 @@ export default function TripSummaryPage() {
     if (!trip) return
     setDownloadingPdf(true)
     try {
+      // Block 15 — entries[].stop.stayActivities is the live in-memory edit
+      // target for the per-stay shared list; trip.stops[] is whatever came
+      // back from the last fetch and goes stale after edits (the
+      // stayActivities handlers above mutate entries[].stop, not
+      // trip.stops). Merge the latest in-memory value into the stops array
+      // so TripPDF reads the user's current edits, not the last server
+      // payload.
+      const liveStayActivities = new Map<string, Stop['stayActivities']>()
+      for (const e of entries) {
+        if (e.stop) liveStayActivities.set(e.stop.id, e.stop.stayActivities)
+      }
+
       const tripWithEntries = {
         ...trip,
-        stops: [...(trip.stops || [])].sort((a, b) => a.order - b.order),
+        stops: [...(trip.stops || [])]
+          .sort((a, b) => a.order - b.order)
+          .map(s => liveStayActivities.has(s.id)
+            ? { ...s, stayActivities: liveStayActivities.get(s.id) ?? null }
+            : s),
         itinerary: entries.map((e, i) => ({
           dayNum: i + 1,
           type: e.type,
