@@ -3,7 +3,7 @@ import { useParams, useSearchParams, Link } from 'react-router-dom'
 import {
   CheckCircle, AlertTriangle, ExternalLink,
   Phone, MapPin, Globe, ChevronDown, ChevronUp, Loader, Check,
-  Calendar, BadgeInfo, Info,
+  Calendar, BadgeInfo, Bed, Tent, X,
 } from 'lucide-react'
 import { tripsApi, campgroundsApi, usersApi } from '../../services/api'
 import { Trip, Stop, Campground, Rig } from '../../types'
@@ -343,8 +343,6 @@ function RecommendedCampgroundCard({
   onSelectCampground,
   onStopUpdated,
   onUnbook,
-  onOpenRigInfo,
-  isTowing,
   membershipLabels,
 }: {
   cg: Campground
@@ -353,19 +351,15 @@ function RecommendedCampgroundCard({
   onSelectCampground: () => void
   onStopUpdated: (stopId: string, data: Partial<Stop>) => void
   onUnbook: (stop: Stop) => void
-  // Opens the page-level RigInfoModal. Hosted at the page so a single instance
-  // is shared across all stops' cards rather than duplicated per card.
-  onOpenRigInfo: () => void
-  // True when the user's default rig has rig.isTowing=true. Drives the
-  // "Towing? Some campgrounds count towed vehicles…" advisory below the
-  // My-rig-info link. Passed in (vs read from auth) so the campground card
-  // doesn't need its own data dependency on the rig fetch.
-  isTowing: boolean
   // Human-readable labels for the user's active, non-expired memberships
   // (e.g. ["Good Sam Club", "Thousand Trails"]). Computed at the page level
   // from user.memberships and MEMBERSHIP_TYPES; passed in here so this card
   // doesn't need its own auth dependency. Empty array → nudge is hidden.
   membershipLabels: string[]
+  // B1 — onOpenRigInfo and isTowing dropped from the props: the per-card
+  // "My rig info" trigger and the towing advisory both lifted to the new
+  // page-level header strip so they're stated once, not repeated under
+  // every campground card.
 }) {
   const isConfirmed = stop.campgroundId === cg.id && stop.bookingStatus === 'CONFIRMED'
   const mapQuery = [cg.name, cg.address].filter(Boolean).join(' ')
@@ -466,28 +460,9 @@ function RecommendedCampgroundCard({
           >
             Already booked? Record your confirmation #
           </button>
-          {/* My rig info quick-access — opens the rig modal so users can grab their plate,
-              dimensions, etc. at campground check-in without leaving this page. */}
-          <button
-            onClick={onOpenRigInfo}
-            className="text-xs text-[#1F6F8B] hover:text-[#134756] hover:underline underline-offset-2 transition-colors w-full text-center py-1 inline-flex items-center justify-center gap-1.5"
-          >
-            <BadgeInfo size={12} />
-            My rig info
-            <span className="text-[11px] text-gray-400">(license plate, dimensions)</span>
-          </button>
-          {/* Towing advisory — visible only for users whose rig has isTowing=true.
-              Some campgrounds (often national parks) count towed vehicles toward
-              site-length limits while others (often private parks) only count the
-              RV; we don't have a per-campground convention field, so the advisory
-              points users at the right question to ask rather than gating the
-              card. Not dismissable — short enough to glance past. */}
-          {isTowing && (
-            <div className="text-[11px] text-gray-500 inline-flex items-center justify-center gap-1.5 w-full text-center py-1 leading-snug">
-              <Info size={11} className="flex-shrink-0 text-gray-400" />
-              <span>Towing? Some campgrounds count towed vehicles toward site length limits — ask when you call.</span>
-            </div>
-          )}
+          {/* B1 — per-card "My rig info" and towing advisory both lifted to
+              the page-level header strip so they're stated once on the page,
+              not repeated under every campground card. */}
         </div>
       )}
       <ReservationSection
@@ -665,6 +640,79 @@ function statusBadge(status: string) {
   return { label: 'Not booked', cls: 'bg-gray-100 text-gray-500' }
 }
 
+// ─── Towing note modal ───────────────────────────────────────────────────────
+// Lifted out of the per-card advisory (formerly rendered inline under every
+// unbooked RecommendedCampgroundCard for users with rig.isTowing=true). Same
+// underlying point: campgrounds disagree on whether the towed vehicle counts
+// toward site-length limits, and we can't pre-classify them — surface the
+// nuance once so users know to ask. Matches RigInfoModal's structural pattern
+// (backdrop + centered card + escape to close).
+
+function TowingNoteModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  useEffect(() => {
+    if (!isOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isOpen, onClose])
+
+  if (!isOpen) return null
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.35)' }}
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="towing-note-modal-title"
+        className="bg-white rounded-xl w-full max-w-md overflow-hidden shadow-xl"
+        style={{ borderWidth: '0.5px', borderStyle: 'solid', borderColor: '#E8E4DA' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="p-6">
+          <div className="flex items-start justify-between mb-4">
+            <h2 id="towing-note-modal-title" className="font-medium text-gray-900 text-lg flex items-center gap-2">
+              <AlertTriangle size={18} className="text-amber-500" />
+              Towing note
+            </h2>
+            <button
+              onClick={onClose}
+              aria-label="Close"
+              className="p-1 -mt-1 -mr-1 rounded-lg hover:bg-gray-100"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <div className="text-sm text-gray-600 leading-relaxed space-y-3">
+            <p>
+              Some campgrounds (often national parks) count your towed vehicle
+              toward site-length limits. Others (often private parks) only count
+              the RV itself.
+            </p>
+            <p>
+              There's no reliable per-campground convention for which is which,
+              so it's worth asking when you call — it's the question that
+              prevents an unpleasant surprise at check-in.
+            </p>
+          </div>
+          <div className="mt-5 flex justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              className="bg-[#1F6F8B] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#134756] transition-colors"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function TripBookingPage() {
@@ -686,6 +734,9 @@ export default function TripBookingPage() {
   // Rig info modal state. The default rig is fetched once on mount and shared
   // across all stops' cards so we don't refetch per card open.
   const [rigInfoOpen, setRigInfoOpen] = useState(false)
+  // B1 — page-level towing-note modal state, replacing the per-card towing
+  // advisory that used to render inline under every unbooked card.
+  const [towingNoteOpen, setTowingNoteOpen] = useState(false)
   const [defaultRig, setDefaultRig] = useState<Rig | null>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const { hasAccess, user } = useAuthStore()
@@ -1022,8 +1073,6 @@ export default function TripBookingPage() {
             onSelectCampground={() => handleSelectCampground(stop, recommended)}
             onStopUpdated={handleStopUpdated}
             onUnbook={(stop) => setUnbookTarget(stop)}
-            onOpenRigInfo={() => setRigInfoOpen(true)}
-            isTowing={defaultRig?.isTowing === true}
             membershipLabels={membershipLabels}
           />
         ) : cgs?.length === 0 ? (
@@ -1101,11 +1150,92 @@ export default function TripBookingPage() {
     // Break out of layout padding, fill viewport like the map page
     <div className="-mx-4 -my-6 h-[calc(100dvh-3.5rem)] flex flex-col">
 
-      {/* Breadcrumb strip */}
-      <div className="flex-shrink-0 bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-1.5">
-        <Link to="/dashboard?tab=reservations" className="text-xs text-[#1F6F8B] hover:text-[#134756] transition-colors">Bookings</Link>
-        <span className="text-gray-300 text-xs">›</span>
-        <span className="text-xs text-gray-700 font-medium truncate max-w-[200px]">{trip.name}</span>
+      {/* B1 — Consolidated header strip. Replaces the old breadcrumb-only
+          strip and absorbs the right-column sticky header. Hosts:
+            · Breadcrumb (Bookings › trip name)
+            · Page title + trip-total estimate on the title row
+            · Hairline + an info strip carrying the booked-progress count,
+              the bed/tent legend that maps to the sidebar and card icons,
+              and the "My rig info" + "Towing note" triggers that used to
+              repeat under every unbooked campground card. */}
+      <div className="flex-shrink-0 bg-white border-b border-gray-100">
+        {/* Breadcrumb */}
+        <div className="px-4 md:px-6 pt-3 pb-1 flex items-center gap-1.5 text-xs">
+          <Link
+            to="/dashboard?tab=reservations"
+            className="text-[#1F6F8B] hover:text-[#134756] transition-colors"
+          >
+            Bookings
+          </Link>
+          <span className="text-gray-300">·</span>
+          <Link
+            to={`/trips/${id}/map`}
+            className="text-[#1F6F8B] hover:text-[#134756] transition-colors truncate max-w-[260px]"
+          >
+            {trip.name}
+          </Link>
+        </div>
+
+        {/* Title row */}
+        <div className="px-4 md:px-6 pb-3 flex items-start justify-between gap-4">
+          <h1 className="font-medium text-gray-900" style={{ fontSize: 20, lineHeight: 1.3 }}>
+            Book your campgrounds
+          </h1>
+          {totalCampCost > 0 && (
+            <div className="text-right flex-shrink-0">
+              <p className="font-medium text-gray-900" style={{ fontSize: 16, lineHeight: 1.2 }}>
+                ${totalCampCost.toLocaleString()}
+              </p>
+              <p className="text-[11px] text-gray-400 mt-0.5">est. camp total</p>
+            </div>
+          )}
+        </div>
+
+        {/* Hairline divider */}
+        <div className="border-t border-gray-100" style={{ borderTopWidth: '0.5px' }} />
+
+        {/* Info strip — progress, legend, references */}
+        <div className="px-4 md:px-6 py-2 flex items-center gap-x-3 gap-y-1.5 flex-wrap text-xs">
+          <span className="flex items-center gap-1.5 text-gray-500">
+            <CheckCircle size={13} className="text-[#1F6F8B]" />
+            <span>
+              <span className="font-medium text-gray-800">{bookedCount}</span>
+              <span className="text-gray-500"> of {bookableStops.length} booked</span>
+            </span>
+          </span>
+          <span className="text-gray-300">·</span>
+          <span className="flex items-center gap-1.5 text-gray-500" title="overnight stop">
+            <Bed size={13} className="flex-shrink-0" style={{ color: '#5F5E5A' }} />
+            <span>overnight stop</span>
+          </span>
+          <span className="text-gray-300">·</span>
+          <span className="flex items-center gap-1.5 text-gray-500" title="multi-night stay">
+            <Tent size={13} className="flex-shrink-0" style={{ color: '#BA7517' }} />
+            <span>multi-night stay</span>
+          </span>
+          <span className="text-gray-300">·</span>
+          <button
+            type="button"
+            onClick={() => setRigInfoOpen(true)}
+            className="flex items-center gap-1.5 text-[#1F6F8B] hover:text-[#134756] transition-colors"
+          >
+            <BadgeInfo size={13} className="flex-shrink-0" />
+            My rig info
+          </button>
+          {defaultRig?.isTowing && (
+            <>
+              <span className="text-gray-300">·</span>
+              <button
+                type="button"
+                onClick={() => setTowingNoteOpen(true)}
+                className="flex items-center gap-1.5 text-[#1F6F8B] hover:text-[#134756] transition-colors"
+              >
+                <AlertTriangle size={13} className="flex-shrink-0 text-amber-500" />
+                Towing note
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* ── MOBILE: horizontal tab bar (hidden on md+) ── */}
@@ -1206,22 +1336,11 @@ export default function TripBookingPage() {
         {/* ── Right content column ── */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
 
-          {/* Sticky right header (desktop only) */}
-          <header className="hidden md:flex flex-shrink-0 items-center justify-between px-6 py-3 bg-white border-b border-gray-100 z-10">
-            <div>
-              <h1 className="text-sm font-semibold text-gray-900">{trip.name}</h1>
-              <p className="text-xs text-gray-400 mt-0.5">
-                {bookedCount} of {bookableStops.length} stop{bookableStops.length !== 1 ? 's' : ''} booked
-                {incompatCount > 0 && <span className="text-red-400 ml-2">· {incompatCount} incompatible</span>}
-              </p>
-            </div>
-            {totalCampCost > 0 && (
-              <div className="text-right">
-                <p className="text-sm font-semibold text-gray-900">${totalCampCost.toLocaleString()}</p>
-                <p className="text-[10px] text-gray-400">est. camp total</p>
-              </div>
-            )}
-          </header>
+          {/* B1 — Sticky right-column header removed; its trip name, booked
+              count, and trip-total estimate all moved into the new page-level
+              header strip above the main row. Incompatibility count is now
+              carried by the bottom sticky footer (until B5 removes that too).
+              The scrollable content area is now the immediate first child. */}
 
           {/* Scrollable content area */}
           <div
@@ -1307,6 +1426,11 @@ export default function TripBookingPage() {
         rig={defaultRig}
         isOpen={rigInfoOpen}
         onClose={() => setRigInfoOpen(false)}
+      />
+
+      <TowingNoteModal
+        isOpen={towingNoteOpen}
+        onClose={() => setTowingNoteOpen(false)}
       />
     </div>
   )
