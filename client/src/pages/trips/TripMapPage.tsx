@@ -1258,13 +1258,17 @@ export default function TripMapPage() {
             flexShrink: 0,
           }}
         >
-            {/* Header: trip name + rename + close */}
+            {/* Header: trip name + rename + close. C1 — trip name typography
+                bumped to 15px / weight 500 / line-height 1.3 to anchor the
+                redesigned sidebar header. Rename input matches for visual
+                continuity across the rename state. */}
             <div className="p-4 border-b border-gray-100 flex-shrink-0" style={{ borderBottomWidth: '0.5px' }}>
-              <div className="flex items-start gap-2 mb-3">
+              <div className="flex items-start gap-2">
                 {renaming ? (
                   <div className="flex-1 flex items-center gap-1 min-w-0">
                     <input
-                      className="flex-1 min-w-0 text-sm font-medium text-gray-900 border border-[#1F6F8B] rounded px-2 py-1 focus:outline-none"
+                      className="flex-1 min-w-0 font-medium text-gray-900 border border-[#1F6F8B] rounded px-2 py-1 focus:outline-none"
+                      style={{ fontSize: 15, lineHeight: 1.3 }}
                       value={tripNameInput}
                       onChange={e => setTripNameInput(e.target.value)}
                       onKeyDown={e => {
@@ -1279,7 +1283,12 @@ export default function TripMapPage() {
                   </div>
                 ) : (
                   <div className="flex-1 flex items-center gap-1 min-w-0">
-                    <h2 className="font-medium text-gray-900 text-sm truncate">{trip?.name}</h2>
+                    <h2
+                      className="font-medium text-gray-900 truncate"
+                      style={{ fontSize: 15, lineHeight: 1.3 }}
+                    >
+                      {trip?.name}
+                    </h2>
                     <button
                       onClick={() => { setTripNameInput(trip?.name || ''); setRenaming(true) }}
                       className="p-1 hover:bg-gray-100 rounded flex-shrink-0"
@@ -1296,14 +1305,42 @@ export default function TripMapPage() {
                 )}
               </div>
 
-              {/* Status pill — ACTIVE or COMPLETED only */}
+              {/* Status pill — ACTIVE or COMPLETED only. Sits between the trip
+                  name and the slim stats line below; PLANNING trips skip it
+                  entirely and the stats line flows directly under the name. */}
               {(trip?.status === 'ACTIVE' || trip?.status === 'COMPLETED') && (
-                <div className="mt-1 mb-3">
+                <div className="mt-2">
                   <span className={trip.status === 'ACTIVE' ? 'badge-active' : 'badge-completed'}>
                     {trip.status === 'ACTIVE' ? 'Active' : 'Completed'}
                   </span>
                 </div>
               )}
+
+              {/* C1 — Slim stats line. Replaces the 4-card stats grid that
+                  used to live at the bottom of this header block. Same data
+                  sources (liveTotalMiles, trip.totalNights, totalCost via
+                  computeTripTotals); the Booked card is gone — that count
+                  moves into the "Book campgrounds (X/N)" CTA in C2. Each
+                  piece is gated independently so a brand-new trip with no
+                  routes computed yet doesn't render an orphan separator
+                  with nothing inside it. */}
+              {(() => {
+                const milesValue = liveTotalMiles > 0 ? liveTotalMiles : (trip?.totalMiles ?? 0)
+                const nightsValue = trip?.totalNights ?? 0
+                const parts: string[] = []
+                if (milesValue > 0) parts.push(`${milesValue.toLocaleString()} mi`)
+                if (nightsValue > 0) parts.push(`${nightsValue} night${nightsValue !== 1 ? 's' : ''}`)
+                if (totalCost > 0) parts.push(`est. $${Math.round(totalCost).toLocaleString()}`)
+                if (parts.length === 0) return null
+                return (
+                  <p
+                    className="text-gray-500 mt-3 pb-3 border-b border-gray-100"
+                    style={{ fontSize: 12, lineHeight: 1.4, borderBottomWidth: '0.5px' }}
+                  >
+                    {parts.join(' · ')}
+                  </p>
+                )
+              })()}
 
               {/* Action buttons stack */}
               <div className="flex flex-col gap-2 mt-3">
@@ -1362,27 +1399,9 @@ export default function TripMapPage() {
                 </button>
               </div>
 
-              {/* Stats — 4 across */}
-              <div className="grid grid-cols-4 gap-1.5">
-                <div className="bg-gray-50 rounded-lg px-2.5 py-2 text-center">
-                  <p className="text-[10px] text-gray-400 mb-0.5">Miles</p>
-                  <p className="text-sm font-semibold text-gray-900">
-                    {liveTotalMiles > 0 ? liveTotalMiles.toLocaleString() : (trip?.totalMiles?.toLocaleString() || '–')}
-                  </p>
-                </div>
-                <div className="bg-gray-50 rounded-lg px-2.5 py-2 text-center">
-                  <p className="text-[10px] text-gray-400 mb-0.5">Nights</p>
-                  <p className="text-sm font-semibold text-gray-900">{trip?.totalNights || '–'}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg px-2.5 py-2 text-center">
-                  <p className="text-[10px] text-gray-400 mb-0.5">Est. cost</p>
-                  <p className="text-sm font-semibold text-gray-900">{totalCost ? `$${Math.round(totalCost).toLocaleString()}` : '–'}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg px-2.5 py-2 text-center">
-                  <p className="text-[10px] text-gray-400 mb-0.5">Booked</p>
-                  <p className="text-sm font-semibold text-gray-900">{bookedStops}/{nonHomeStops.length}</p>
-                </div>
-              </div>
+              {/* C1 — 4-card stats grid removed. Miles + Nights + Est. cost
+                  moved up into the slim stats line above the action stack;
+                  Booked moves into the "Book campgrounds (X/N)" CTA in C2. */}
             </div>
 
             {/* Layer toggles */}
