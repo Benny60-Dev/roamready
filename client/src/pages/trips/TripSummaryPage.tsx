@@ -468,6 +468,13 @@ export default function TripSummaryPage() {
   const [trip, setTrip] = useState<Trip | null>(null)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
+  // Block 15 — confirmation gate for the destructive Regenerate path. The
+  // POST /trips/:id/itinerary/generate controller overwrites Trip.itinerary
+  // and every qualifying Stop.stayActivities, wiping checked states, custom
+  // user-added activities, and curated edits. Only the "Regenerate" click on
+  // an existing itinerary opens this modal — the first-time generate (no
+  // itinerary yet) and the post-error Retry button skip it.
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
   const [generatingActivities, setGeneratingActivities] = useState(false)
   const [entries, setEntries] = useState<TimelineEntry[]>([])
@@ -675,6 +682,24 @@ export default function TripSummaryPage() {
   const hasAI = entries.some(e =>
     e.routeDescription || e.terrainSummary || (e.activities?.length && e.type === 'ACTIVITY') || e.transitNote
   )
+
+  // Block 15 — destructive-action guard for the Regenerate button. When there's
+  // an existing AI itinerary (hasAI), route the click through ConfirmModal so the
+  // user sees what will be destroyed before the POST fires. First-time generate
+  // (hasAI === false: nothing to lose) and the Retry button after an error (the
+  // user has already opted in) call handleGenerate directly. The actual destruction
+  // logic lives in handleGenerate; this just gates entry.
+  const requestRegenerate = () => {
+    if (hasAI) {
+      setShowRegenerateConfirm(true)
+    } else {
+      handleGenerate()
+    }
+  }
+  const confirmRegenerate = async () => {
+    await handleGenerate()
+    setShowRegenerateConfirm(false)
+  }
 
   const handleDownloadPDF = async () => {
     console.log('Starting PDF download')
@@ -1249,14 +1274,25 @@ export default function TripSummaryPage() {
       <div className="card-lg">
         <div className="flex items-center justify-between mb-5">
           <h2 className="font-medium text-gray-900">Day-by-Day Itinerary</h2>
-          <button
-            onClick={handleGenerate}
-            disabled={generating || itineraryPending}
-            className="flex items-center gap-1.5 text-sm text-[#1F6F8B] hover:text-[#134756] disabled:opacity-50 transition-colors"
-          >
-            {generating ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
-            {generating ? 'Generating…' : hasAI ? 'Regenerate' : 'Generate AI Itinerary'}
-          </button>
+          {/* Block 15 — destructive Regenerate path is hidden from the UI
+              while we work out a safer flow. Only the first-time
+              "Generate AI Itinerary" state (hasAI === false: nothing to
+              lose) renders. handleGenerate, requestRegenerate,
+              confirmRegenerate, and the ConfirmModal block below remain
+              wired but unreachable from this surface — dropping the
+              !hasAI wrapper re-enables the destructive button (with its
+              confirm gate intact) in one line. The label ternary is left
+              in place so that re-enable is genuinely one line. */}
+          {!hasAI && (
+            <button
+              onClick={requestRegenerate}
+              disabled={generating || itineraryPending}
+              className="flex items-center gap-1.5 text-sm text-[#1F6F8B] hover:text-[#134756] disabled:opacity-50 transition-colors"
+            >
+              {generating ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
+              {generating ? 'Generating…' : hasAI ? 'Regenerate' : 'Generate AI Itinerary'}
+            </button>
+          )}
         </div>
         {itineraryPending && (
           <div className="flex items-center gap-2 text-xs text-[#1F6F8B] bg-[#E0F0F4] border border-[#1F6F8B]/10 rounded-lg px-3 py-2 mb-4">
@@ -1846,6 +1882,19 @@ export default function TripSummaryPage() {
           onCancel={() => { if (!deleting) { setPendingDeleteStop(null); setDeleteError(null) } }}
           danger
           isConfirming={deleting}
+        />
+      )}
+      {showRegenerateConfirm && (
+        <ConfirmModal
+          isOpen={true}
+          title="Regenerate this itinerary?"
+          message={"Regenerating will replace your current AI itinerary. Any activities you've added, checked off, or removed from your stay lists will be lost — there's no undo. Your bookings, confirmation numbers, and stop notes will be kept."}
+          confirmLabel="Regenerate"
+          cancelLabel="Keep my itinerary"
+          onConfirm={confirmRegenerate}
+          onCancel={() => { if (!generating) setShowRegenerateConfirm(false) }}
+          danger
+          isConfirming={generating}
         />
       )}
       {addAfterOrder !== null && (
