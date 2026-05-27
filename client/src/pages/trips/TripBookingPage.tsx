@@ -424,6 +424,178 @@ function StopHeaderBlock({
   )
 }
 
+// ─── Booked-state collapsed row ──────────────────────────────────────────────
+// B4 — replaces the full RecommendedCampgroundCard + "Booked" banner combo
+// for stops with bookingStatus === 'CONFIRMED'. Renders as a single pale-
+// green row at rest; expanding "Edit" reveals the booking-management
+// surface (pre-filled ReservationSection, alternates toggle, destructive
+// Unbook action). The alternates LIST itself still animates open below the
+// card via the same expandedAlts state — only the toggle moves.
+//
+// Spec colors locked:
+//   bg #F3F7EE  border #9FBF8A  check-icon bg #DCE5D5  check stroke #2F4030
+// Edit is one click deeper than the prior inline Unbook link — deliberately,
+// per the design call ("unbook is too punishing for the Recreation.gov-
+// dates-fell-through case; keep the collapsed row clean and let the user
+// drill into Edit when they need to manage").
+
+function BookedRowCard({
+  stop,
+  cg,
+  marker,
+  onStopUpdated,
+  onUnbook,
+  altCount,
+  altsExpanded,
+  onToggleAlts,
+}: {
+  stop: Stop
+  // The booked campground — comes from renderStopContent's bookedCg lookup
+  // (cgs.find(c => c.id === stop.campgroundId)). Required: ReservationSection
+  // inside the Edit expansion needs a campground id/name when saving.
+  cg: Campground
+  marker: string
+  onStopUpdated: (stopId: string, data: Partial<Stop>) => void
+  onUnbook: () => void
+  altCount: number
+  altsExpanded: boolean
+  onToggleAlts: () => void
+}) {
+  // Edit expansion local state. Independent from altsExpanded — the user can
+  // open Edit, browse alternates, and close Edit, leaving alternates visible
+  // below the card; or vice versa.
+  const [editOpen, setEditOpen] = useState(false)
+  const isOvernight = stop.type === 'OVERNIGHT_ONLY'
+  const arr = stop.arrivalDate ? formatTripDate(stop.arrivalDate, 'MMM d') : null
+  const dep = stop.departureDate ? formatTripDate(stop.departureDate, 'MMM d') : null
+  const dateLabel = arr ? (dep && dep !== arr ? `${arr} → ${dep}` : arr) : null
+  const nightsLabel = stop.nights === 1 ? '1 night' : `${stop.nights} nights`
+  const totalCost = (stop.siteRate ?? 0) * stop.nights
+
+  return (
+    <div
+      className="mb-3"
+      style={{
+        background: '#F3F7EE',
+        border: '1px solid #9FBF8A',
+        borderRadius: 8,
+      }}
+    >
+      {/* Collapsed row */}
+      <div className="flex items-start gap-3" style={{ padding: '12px 16px' }}>
+        {/* Check icon */}
+        <div
+          className="flex-shrink-0 flex items-center justify-center rounded-full"
+          style={{ width: 26, height: 26, background: '#DCE5D5', color: '#2F4030' }}
+        >
+          <Check size={14} strokeWidth={2.5} />
+        </div>
+        {/* Type icon */}
+        {isOvernight
+          ? <Bed size={16} className="flex-shrink-0" style={{ color: '#5F5E5A', marginTop: 5 }} />
+          : <Tent size={16} className="flex-shrink-0" style={{ color: '#BA7517', marginTop: 5 }} />
+        }
+        {/* Center — campground name bold lead inline with Stop N + city,
+            line 2 has the booked metadata. */}
+        <div className="flex-1 min-w-0">
+          <p style={{ fontSize: 14, lineHeight: 1.3 }}>
+            <span className="font-medium text-gray-900">{stop.campgroundName ?? cg.name}</span>
+            <span className="text-gray-500" style={{ fontSize: 12 }}>
+              {' · '}Stop {marker}
+              {' · '}{stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
+            </span>
+          </p>
+          <p className="text-gray-500" style={{ fontSize: 12, marginTop: 2 }}>
+            {dateLabel && <>{dateLabel}{' · '}</>}
+            {nightsLabel}
+            {totalCost > 0 && <>{' · '}${totalCost}</>}
+            {stop.confirmationNum && <>{' · '}conf. {stop.confirmationNum}</>}
+          </p>
+        </div>
+        {/* Edit toggle */}
+        <button
+          onClick={() => setEditOpen(o => !o)}
+          className="flex-shrink-0 transition-colors hover:underline"
+          style={{ color: '#185FA5', fontSize: 13 }}
+          aria-expanded={editOpen}
+        >
+          {editOpen ? 'Close' : 'Edit'}
+        </button>
+      </div>
+
+      {/* Edit expansion — animated via the same grid-rows trick used for the
+          alternates list. The ReservationSection inside auto-opens its form
+          because draftMode={editOpen} crosses false→true; for CONFIRMED
+          stops it pre-fills from the stop's existing confirmation fields
+          (form state is initialized from stop props in its useState). */}
+      <div
+        className={`grid transition-all duration-300 ease-in-out ${editOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+      >
+        <div className="overflow-hidden">
+          <div
+            style={{
+              padding: '4px 16px 16px',
+              borderTop: '0.5px solid #9FBF8A',
+            }}
+          >
+            {/* Pre-filled reservation form — same component, same save path
+                (tripsApi.updateStop). draftMode=editOpen forces the form to
+                open as the expansion opens; the save logic skips the
+                draft-commit branch for already-CONFIRMED stops so it
+                writes field updates only, not a re-commit. */}
+            <ReservationSection
+              key={stop.id}
+              stop={stop}
+              cg={cg}
+              draftMode={editOpen}
+              onSaved={data => onStopUpdated(stop.id, data)}
+            />
+
+            {/* Alternates toggle — per the design call, the affordance to
+                "see other campgrounds" survives for booked stops but lives
+                one click deep so the resting row stays clean. The list
+                itself still animates open below the card via the page-
+                level expandedAlts state — only the toggle button is here. */}
+            {altCount > 0 && (
+              <div className="pt-3 mt-3" style={{ borderTop: '0.5px solid #9FBF8A' }}>
+                <button
+                  onClick={onToggleAlts}
+                  className="transition-colors hover:underline"
+                  style={{ color: '#185FA5', fontSize: 13 }}
+                >
+                  {altsExpanded
+                    ? 'Hide other options'
+                    : `See other campgrounds (${altCount} option${altCount !== 1 ? 's' : ''}) →`}
+                </button>
+                <p className="text-xs text-gray-500 mt-1 leading-snug">
+                  Dates fell through at the campground? Compare alternates without unbooking first.
+                </p>
+              </div>
+            )}
+
+            {/* Destructive unbook — one click deeper than the prior inline
+                Unbook link, matched with explanatory subtext so accidental
+                clicks are unlikely. Same handler as before — opens the
+                page-level ConfirmModal via setUnbookTarget(stop). */}
+            <div className="pt-3 mt-3" style={{ borderTop: '0.5px solid #9FBF8A' }}>
+              <button
+                onClick={onUnbook}
+                className="text-red-600 hover:underline transition-colors"
+                style={{ fontSize: 13 }}
+              >
+                Unbook this stop
+              </button>
+              <p className="text-xs text-gray-500 mt-1 leading-snug">
+                Clears your confirmation number, site number, and times here. Doesn't cancel anything with the campground.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Recommended campground card (primary recommendation per stop) ───────────
 
 function RecommendedCampgroundCard({
@@ -434,7 +606,6 @@ function RecommendedCampgroundCard({
   draftMode,
   onSelectCampground,
   onStopUpdated,
-  onUnbook,
   membershipLabels,
   altCount,
   altsExpanded,
@@ -450,7 +621,6 @@ function RecommendedCampgroundCard({
   draftMode: boolean
   onSelectCampground: () => void
   onStopUpdated: (stopId: string, data: Partial<Stop>) => void
-  onUnbook: (stop: Stop) => void
   membershipLabels: string[]
   // B3 — alternates toggle moved from below the card into the card's contact
   // row, right-aligned. altCount is altOptions.length at the page level; the
@@ -459,7 +629,18 @@ function RecommendedCampgroundCard({
   altCount: number
   altsExpanded: boolean
   onToggleAlts: () => void
+  // B4 — onUnbook dropped: booked stops now route to BookedRowCard (a
+  // separate component in this file), which owns the unbook trigger inside
+  // its Edit expansion. RecommendedCampgroundCard only renders for unbooked
+  // stops, so an unbook handler here would be unreachable.
 }) {
+  // B4 — isConfirmed left here defensively for the edge case where a stop's
+  // bookingStatus is CONFIRMED but its campgroundId doesn't match any
+  // currently-loaded campground (so renderStopContent falls through to
+  // RecommendedCampgroundCard rather than BookedRowCard). In the common
+  // case this is always false because the parent routes confirmed stops
+  // to BookedRowCard. Used below to suppress the action row + contact row
+  // so the user isn't prompted to book again in that edge case.
   const isConfirmed = stop.campgroundId === cg.id && stop.bookingStatus === 'CONFIRMED'
   // B3 — Directions URL replaces the old "Map" link. Switches Google Maps'
   // mode from /search/ to /dir/?api=1&destination= so a click drops the user
@@ -498,22 +679,12 @@ function RecommendedCampgroundCard({
         padding: '16px 18px',
       }}
     >
-      {/* Booked banner — preserved from prior design; B4 will replace this
-          entire branch with the pale-green collapsed row. Until then booked
-          stops still render this full card with the banner on top so the
-          Unbook affordance stays reachable. */}
-      {isConfirmed && (
-        <div className="flex items-center gap-1.5 text-xs font-semibold rounded-lg px-3 py-2 mb-3 border text-[#2F4030] bg-[#DCE5D5] border-[#3E5540]/30">
-          <CheckCircle size={13} />
-          <span>Booked</span>
-          <button
-            onClick={() => onUnbook(stop)}
-            className="ml-auto underline underline-offset-2 font-medium text-[#2F4030]/70 hover:text-[#2F4030]"
-          >
-            Unbook
-          </button>
-        </div>
-      )}
+      {/* B4 — Booked banner dropped from this card. Confirmed stops route to
+          BookedRowCard now (see renderStopContent below). This component
+          only renders for unbooked stops in the common case; isConfirmed
+          stays referenced for the edge case where renderStopContent falls
+          through here due to a missing bookedCg lookup, but the banner
+          itself is gone. */}
 
       {/* Header row — numbered circle + type icon + name-led title + type pill */}
       <StopHeaderBlock stop={stop} prevStop={prevStop} marker={marker} leadName={cg.name} />
@@ -1178,11 +1349,27 @@ export default function TripBookingPage() {
           </div>
         )}
 
-        {/* Recommended campground card OR fallback — both wear the new
-            StopHeaderBlock so users see destination context regardless of
-            whether a recommendation exists. */}
+        {/* Recommended campground card OR booked collapsed row OR fallback —
+            all three share the new visual language (StopHeaderBlock for the
+            unbooked / fallback cases, dedicated pale-green collapsed layout
+            for the booked case). */}
         {!isLoaded ? (
           <div className="rounded-xl border border-gray-100 bg-gray-50 h-[140px] animate-pulse mb-3" />
+        ) : confirmed && bookedCg ? (
+          // B4 — Booked stops collapse to a single pale-green row. Edit
+          // expansion (inside BookedRowCard) hosts the pre-filled
+          // ReservationSection, the alternates toggle, and the destructive
+          // Unbook action.
+          <BookedRowCard
+            stop={stop}
+            cg={bookedCg}
+            marker={marker}
+            onStopUpdated={handleStopUpdated}
+            onUnbook={() => setUnbookTarget(stop)}
+            altCount={altOptions.length}
+            altsExpanded={showAlts}
+            onToggleAlts={() => setExpandedAlts(prev => ({ ...prev, [stop.id]: !(prev[stop.id] ?? false) }))}
+          />
         ) : recommended ? (
           <RecommendedCampgroundCard
             cg={recommended}
@@ -1192,7 +1379,6 @@ export default function TripBookingPage() {
             draftMode={stopDraftMode}
             onSelectCampground={() => handleSelectCampground(stop, recommended)}
             onStopUpdated={handleStopUpdated}
-            onUnbook={(stop) => setUnbookTarget(stop)}
             membershipLabels={membershipLabels}
             altCount={altOptions.length}
             altsExpanded={showAlts}
