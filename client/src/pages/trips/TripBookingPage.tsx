@@ -630,17 +630,15 @@ function AlternateCampgroundCard({
   )
 }
 
-// ─── Sidebar stop item status config ─────────────────────────────────────────
-
-function statusBadge(status: string) {
-  if (status === 'CONFIRMED')  return { label: 'Booked',      cls: 'bg-[#DCE5D5] text-[#2F4030]' }
-  if (status === 'PENDING')    return { label: 'Pending',     cls: 'bg-amber-100 text-amber-700' }
-  if (status === 'CANCELLED')  return { label: 'Cancelled',   cls: 'bg-red-100 text-red-500' }
-  if (status === 'WAITLISTED') return { label: 'Pending',     cls: 'bg-amber-100 text-amber-700' }
-  return { label: 'Not booked', cls: 'bg-gray-100 text-gray-500' }
-}
-
 // ─── Towing note modal ───────────────────────────────────────────────────────
+// B2 — statusBadge() removed. It only built the "Booked / Not booked /
+// Pending / Cancelled" pill for the old sidebar row. The new rail
+// communicates state via an 8px green/gray dot; richer states (PENDING,
+// CANCELLED, WAITLISTED) collapse to the unbooked dot for now since none
+// of those states are reachable from the current booking flow (we only
+// flip NOT_BOOKED ↔ CONFIRMED via tripsApi.updateStop). If/when those
+// other statuses become user-facing we can re-introduce richer signaling
+// on the dot or in a per-row aside.
 // Lifted out of the per-card advisory (formerly rendered inline under every
 // unbooked RecommendedCampgroundCard for users with rig.isTowing=true). Same
 // underlying point: campgrounds disagree on whether the towed vehicle counts
@@ -717,7 +715,7 @@ function TowingNoteModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
 
 export default function TripBookingPage() {
   const { id } = useParams<{ id: string }>()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [trip, setTrip] = useState<Trip | null>(null)
   const [campgrounds, setCampgrounds] = useState<Record<string, Campground[]>>({})
   const [loading, setLoading] = useState(true)
@@ -830,9 +828,15 @@ export default function TripBookingPage() {
     })
   }, [trip?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Scroll right panel to a stop section and update active highlight
+  // Scroll right panel to a stop section, sync internal state, and reflect
+  // the chosen stop in the URL so refresh / share keeps the user on the same
+  // stop. replace: true so each row click doesn't pollute browser history
+  // (one back-press still returns to the previous page, not the previous
+  // sidebar click). B2 — used to only update internal state; the URL update
+  // is the new piece.
   function scrollToStop(stopId: string) {
     setActiveStop(stopId)
+    setSearchParams({ stopId }, { replace: true })
     requestAnimationFrame(() => {
       const section = document.getElementById(`stop-section-${stopId}`)
       const panel   = contentRef.current
@@ -843,20 +847,13 @@ export default function TripBookingPage() {
     })
   }
 
-  // Update sidebar highlight as user scrolls right panel
-  function handleContentScroll(e: React.UIEvent<HTMLDivElement>) {
-    const panel    = e.currentTarget
-    const panelTop = panel.getBoundingClientRect().top
-    const sections = Array.from(panel.querySelectorAll<HTMLElement>('[data-stop-section]'))
-    for (const el of sections) {
-      const { top, bottom } = el.getBoundingClientRect()
-      if (top <= panelTop + 100 && bottom > panelTop + 20) {
-        const sid = el.getAttribute('data-stop-section')
-        if (sid && sid !== activeStop) setActiveStop(sid)
-        break
-      }
-    }
-  }
+  // B2 — handleContentScroll removed. Previously this updated activeStop
+  // based on which section was visible in the right panel, but the only
+  // consumer of activeStop on desktop was the sidebar's blue-highlight
+  // visual, which the redesign drops. Mobile still reads activeStop for
+  // its tab-bar active fill and single-stop content filter, both driven
+  // by click handlers — scroll position doesn't apply there (mobile
+  // renders one stop at a time, no scroll-through).
 
   // Reservation Honesty: gold button now opens the form in *draft mode* only — no DB write.
   // The user's "Save reservation info" click is the actual commit (see ReservationSection.save).
@@ -1238,18 +1235,26 @@ export default function TripBookingPage() {
         </div>
       </div>
 
-      {/* ── MOBILE: horizontal tab bar (hidden on md+) ── */}
+      {/* ── MOBILE: horizontal tab bar (hidden on md+) ── B2 — added the
+          bed/tent icon next to each non-home tab so the icon-language
+          stays consistent across the page-header legend, this mobile
+          tab bar, the desktop sidebar, and the upcoming B3 cards. The
+          active-state blue fill stays because the tab bar IS the only
+          navigation on mobile — without it the user can't tell which
+          stop they're viewing in the single-stop content area below. */}
       <div className="md:hidden flex-shrink-0 bg-white border-b border-gray-100 overflow-x-auto">
         <div className="flex gap-1.5 p-3">
           {sortedStops.map(stop => {
             const badge = stopDisplayNumbers[stop.id]
             const isHome = isHomeBadge(badge)
+            const isActive = activeStop === stop.id
+            const showTent = !isHome && stop.type !== 'OVERNIGHT_ONLY'
             return (
               <button
                 key={stop.id}
                 onClick={() => setActiveStop(stop.id)}
                 className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs border transition-colors ${
-                  activeStop === stop.id
+                  isActive
                     ? 'bg-[#1F6F8B] text-white border-[#1F6F8B]'
                     : isHome
                       ? 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
@@ -1258,15 +1263,22 @@ export default function TripBookingPage() {
                 style={{ borderWidth: '0.5px' }}
               >
                 <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-semibold ${
-                  activeStop === stop.id ? 'bg-white/20' : 'bg-gray-100 text-gray-600'
+                  isActive ? 'bg-white/20' : 'bg-gray-100 text-gray-600'
                 }`}>
                   {formatStopBadgeMarker(badge)}
                 </span>
+                {/* Bed/Tent icon — skipped on home tabs. White when the
+                    tab is active so the icon reads against the blue fill. */}
+                {!isHome && (
+                  showTent
+                    ? <Tent size={11} style={{ color: isActive ? '#FFFFFF' : '#BA7517' }} />
+                    : <Bed size={11} style={{ color: isActive ? '#FFFFFF' : '#5F5E5A' }} />
+                )}
                 <span className="max-w-[90px] truncate">
                   {isHome ? formatStopBadgeLabel(badge) : stop.locationName}
                 </span>
                 {!isHome && stop.bookingStatus === 'CONFIRMED' && (
-                  <CheckCircle size={10} className={activeStop === stop.id ? 'text-white' : 'text-[#3E5540]'} />
+                  <CheckCircle size={10} className={isActive ? 'text-white' : 'text-[#3E5540]'} />
                 )}
               </button>
             )
@@ -1277,56 +1289,95 @@ export default function TripBookingPage() {
       {/* ── Main flex row: sidebar + content ── */}
       <div className="flex flex-1 min-h-0">
 
-        {/* ── DESKTOP sidebar (hidden on mobile) ── */}
-        <aside className="hidden md:flex flex-col w-[260px] flex-shrink-0 border-r border-gray-100 bg-white overflow-hidden">
-          {/* Sidebar header */}
+        {/* ── DESKTOP sidebar (hidden on mobile) ── B2 restyle.
+            Calmer navigation rail: 200px wide, no active-state visual
+            (URL ?stopId= sync + right-column scroll do the work),
+            booking state communicated by an 8px green/gray dot instead
+            of a "Booked / Not booked" text pill, bed/tent icon next to
+            each non-home row to match the page header legend and the
+            cards in B3, finish-row separated from the numbered stops
+            by a hairline. Click handler unchanged — still calls
+            scrollToStop, which now also updates ?stopId=. */}
+        <aside className="hidden md:flex flex-col w-[200px] flex-shrink-0 border-r border-gray-100 bg-white overflow-hidden">
+          {/* Sidebar header — "N stops" only. The trip name + "Campground
+              Booking" subtitle moved to the page-level header strip in B1. */}
           <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
-            <p className="text-xs font-semibold text-gray-900 truncate">{trip.name}</p>
-            <p className="text-[11px] text-gray-400 mt-0.5">Campground Booking</p>
+            <p
+              className="text-[11px] font-semibold uppercase text-gray-400"
+              style={{ letterSpacing: '0.04em' }}
+            >
+              {sortedStops.length} stops
+            </p>
           </div>
           {/* Stop nav list */}
-          <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
+          <nav className="flex-1 overflow-y-auto py-1">
             {sortedStops.map(stop => {
               const stopBadge = stopDisplayNumbers[stop.id]
               const isHome    = isHomeBadge(stopBadge)
-              const badge     = statusBadge(stop.bookingStatus)
-              const isActive  = activeStop === stop.id
+              const marker    = formatStopBadgeMarker(stopBadge)
+              const isFinish  = marker === 'F'
+              const isBooked  = stop.bookingStatus === 'CONFIRMED'
+              const showTent  = !isHome && stop.type !== 'OVERNIGHT_ONLY'
               return (
                 <button
                   key={stop.id}
                   onClick={() => scrollToStop(stop.id)}
-                  className={`w-full text-left flex items-start gap-2.5 px-2.5 py-2.5 rounded-lg transition-colors group ${
-                    isActive
-                      ? 'bg-[#1F6F8B]/10 border-l-[3px] border-[#1F6F8B] pl-[7px]'
-                      : 'hover:bg-gray-50 border-l-[3px] border-transparent'
-                  }`}
+                  className="w-full text-left flex items-center gap-2 hover:bg-gray-50 transition-colors"
+                  style={{
+                    padding: '7px 14px',
+                    ...(isFinish ? { borderTop: '0.5px solid #E8E4DA', marginTop: 2, paddingTop: 9 } : {}),
+                  }}
                 >
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 mt-0.5 ${
-                    isHome ? 'bg-gray-400' :
-                    stop.type === 'OVERNIGHT_ONLY' ? 'bg-[#7F77DD]' : 'bg-[#1F6F8B]'
-                  }`}>
-                    {formatStopBadgeMarker(stopBadge)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-xs font-medium truncate ${isActive ? 'text-[#1F6F8B]' : isHome ? 'text-gray-500' : 'text-gray-800'}`}>
-                      {stop.locationName}
-                    </p>
-                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                      {isHome ? (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
-                          {formatStopBadgeLabel(stopBadge)}
-                        </span>
-                      ) : (
-                        <>
-                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${badge.cls}`}>
-                            {badge.label}
-                          </span>
-                          <span className="text-[10px] text-gray-400">{stop.nights}n</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  {!isHome && !stop.isCompatible && <AlertTriangle size={12} className="text-red-400 flex-shrink-0 mt-1" />}
+                  {/* 8px booking-state dot — green when CONFIRMED, secondary
+                      border gray otherwise. Skipped (held space) for home
+                      rows since "booked" doesn't apply to a departure. */}
+                  <span
+                    className="flex-shrink-0 rounded-full"
+                    style={{
+                      width: 8,
+                      height: 8,
+                      background: isHome
+                        ? 'transparent'
+                        : isBooked
+                          ? '#1D9E75'
+                          : '#E8E4DA',
+                    }}
+                  />
+                  {/* Marker — S / 1..N / F. 12px min-width keeps the column
+                      aligned regardless of single- vs double-digit values. */}
+                  <span
+                    className="text-[11px] flex-shrink-0 text-gray-400"
+                    style={{ minWidth: 12 }}
+                  >
+                    {marker}
+                  </span>
+                  {/* Bed/Tent icon — skipped on home rows so they read as
+                      structural endpoints, not stays. */}
+                  {!isHome && (
+                    showTent
+                      ? <Tent size={13} className="flex-shrink-0" style={{ color: '#BA7517' }} />
+                      : <Bed size={13} className="flex-shrink-0" style={{ color: '#5F5E5A' }} />
+                  )}
+                  {/* City name — secondary tone on home rows since they're
+                      structural endpoints, primary on real stops. */}
+                  <span
+                    className={`flex-1 text-[13px] truncate ${isHome ? 'text-gray-500' : 'text-gray-800'}`}
+                  >
+                    {isHome ? formatStopBadgeLabel(stopBadge) : stop.locationName}
+                  </span>
+                  {/* Night count — skipped on home rows. */}
+                  {!isHome && (
+                    <span className="text-[11px] text-gray-400 flex-shrink-0">
+                      {stop.nights}n
+                    </span>
+                  )}
+                  {/* Compatibility alert — preserved from prior design;
+                      campgrounds.ts still flags rig-incompatibility per
+                      stop, and that signal deserves to stay surfaced on
+                      the rail. */}
+                  {!isHome && !stop.isCompatible && (
+                    <AlertTriangle size={11} className="text-red-400 flex-shrink-0" />
+                  )}
                 </button>
               )
             })}
@@ -1342,11 +1393,11 @@ export default function TripBookingPage() {
               carried by the bottom sticky footer (until B5 removes that too).
               The scrollable content area is now the immediate first child. */}
 
-          {/* Scrollable content area */}
+          {/* Scrollable content area — onScroll handler removed in B2; see
+              the comment on the removed handleContentScroll function. */}
           <div
             ref={contentRef}
             className="flex-1 overflow-y-auto min-h-0"
-            onScroll={handleContentScroll}
           >
             {/* DESKTOP: all stops as sections */}
             <div className="hidden md:block">
