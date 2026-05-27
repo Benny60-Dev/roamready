@@ -1118,6 +1118,37 @@ export default function TripSummaryPage() {
     setAddingPOIDuration(prev => ({ ...prev, [entryIdx]: 30 }))
   }
 
+  // Block 16 — append a fully-formed POI (name + duration + optional
+  // description) to a drive day's pointsOfInterest. Used when adding from
+  // an AI route suggestion so the description rides along onto the green
+  // chip. Same persistence path as addPOI — Trip.itinerary JSON via the
+  // debounced saveItinerary PUT — so arrival recompute (in DayCard, summed
+  // from pointsOfInterest.durationMinutes) updates for free on next render.
+  const addPOIWithDetails = (entryIdx: number, poi: POI) => {
+    setEntries(prev => {
+      const next = prev.map((e, i) =>
+        i !== entryIdx ? e : { ...e, pointsOfInterest: [...(e.pointsOfInterest ?? []), poi] }
+      )
+      persistItinerary(next)
+      return next
+    })
+  }
+
+  // Block 16 — mutate an existing POI's durationMinutes. Used by the chip
+  // duration dropdown. Persists via the same debounced saveItinerary path;
+  // arrival auto-updates because DayCard recomputes poiMinutes each render.
+  const updatePOIDuration = (entryIdx: number, poiIdx: number, durationMinutes: number) => {
+    setEntries(prev => {
+      const next = prev.map((e, i) =>
+        i !== entryIdx
+          ? e
+          : { ...e, pointsOfInterest: (e.pointsOfInterest ?? []).map((p, j) => j === poiIdx ? { ...p, durationMinutes } : p) }
+      )
+      persistItinerary(next)
+      return next
+    })
+  }
+
   // Open the per-leg actual-fuel editor for the leg arriving at `toOrder`.
   // Pre-fills the input from the arriving stop's current actualFuel so a
   // re-open shows the persisted value, not a stale draft. Setting
@@ -1367,6 +1398,8 @@ export default function TripSummaryPage() {
                   onAddingPOIChange={(text) => setAddingPOI(prev => ({ ...prev, [poiIdx]: text }))}
                   onAddingPOIDurationChange={(m) => setAddingPOIDuration(prev => ({ ...prev, [poiIdx]: m }))}
                   onAddPOI={() => addPOI(poiIdx)}
+                  onUpdatePOIDuration={(idx, m) => updatePOIDuration(poiIdx, idx, m)}
+                  onAddSuggestion={(poi) => addPOIWithDetails(poiIdx, poi)}
                   onEdit={canEdit ? () => setEditingStop(editableStop!) : undefined}
                   onDelete={canDelete ? () => requestDeleteStop(editableStop!) : undefined}
                 />
@@ -2013,6 +2046,12 @@ interface DayCardProps {
   onAddingPOIChange: (text: string) => void
   onAddingPOIDurationChange: (minutes: number) => void
   onAddPOI: () => void
+  // Block 16 — added so an AI route suggestion can be turned into a real
+  // POI (onAddSuggestion) and an existing POI's duration can be edited in
+  // place (onUpdatePOIDuration). Both route through the same persistItinerary
+  // path so manual and AI-sourced stops persist identically.
+  onUpdatePOIDuration: (poiIdx: number, minutes: number) => void
+  onAddSuggestion: (poi: POI) => void
   onEdit?: () => void
   onDelete?: () => void
 }
@@ -2025,6 +2064,7 @@ function DayCard({
   onDriveDepart,
   onToggleActivity, onDeleteActivity, onAddingActivityChange, onAddActivity,
   onDeletePOI, onAddingPOIChange, onAddingPOIDurationChange, onAddPOI,
+  onUpdatePOIDuration, onAddSuggestion,
   onEdit, onDelete,
 }: DayCardProps) {
   // Per-DayCard weather collapse — used by the STAY_GROUP branch's
@@ -2189,6 +2229,8 @@ function DayCard({
             onAddingPOIChange={onAddingPOIChange}
             onAddingPOIDurationChange={onAddingPOIDurationChange}
             onAddPOI={onAddPOI}
+            onUpdatePOIDuration={onUpdatePOIDuration}
+            onAddSuggestion={onAddSuggestion}
           />
         </div>
 
@@ -2507,7 +2549,9 @@ function DayCard({
 // ─── DriveContent ─────────────────────────────────────────────────────────────
 
 function DriveContent({
-  entry, onDeletePOI, addingPOIText, addingPOIDurationVal, onAddingPOIChange, onAddingPOIDurationChange, onAddPOI,
+  entry, onDeletePOI, addingPOIText, addingPOIDurationVal,
+  onAddingPOIChange, onAddingPOIDurationChange, onAddPOI,
+  onUpdatePOIDuration, onAddSuggestion,
 }: {
   entry: TimelineEntry
   onDeletePOI: (poiIdx: number) => void
@@ -2516,15 +2560,28 @@ function DriveContent({
   onAddingPOIChange: (text: string) => void
   onAddingPOIDurationChange: (minutes: number) => void
   onAddPOI: () => void
+  // Block 16 — wires AI route suggestions through the same persistence path
+  // as a manual add (Trip.itinerary pointsOfInterest → saveItinerary PUT)
+  // and lets an existing chip's duration be edited in place. Arrival
+  // recomputes automatically from the summed durationMinutes inside
+  // DayCard each render — see line 2094.
+  onUpdatePOIDuration: (poiIdx: number, minutes: number) => void
+  onAddSuggestion: (poi: POI) => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const [highlights, setHighlights] = useState<string | null>(entry.routeHighlights ?? null)
   const [loadingHighlights, setLoadingHighlights] = useState(false)
   const [isCustomDuration, setIsCustomDuration] = useState(false)
+  // Block 16 — per-suggestion duration drafts. Keyed by visibleSuggestions
+  // index; pre-fill comes from suggestDurationMinutes() below. The user
+  // can override before clicking + Add, then the chosen value rides over
+  // into the chip via onAddSuggestion.
+  const [suggestionDurations, setSuggestionDurations] = useState<Record<number, number>>({})
   // Note: fromName/toName used to be computed here for the now-removed cities
   // row. The drive-section header in DayCard renders them inline alongside the
   // Car icon and duration chip, so DriveContent only owns the highway route
-  // line, the "Tell me more about this route" disclosure, and the POI block.
+  // line, the "Tell me more about this route" disclosure, and the
+  // "Stops along the way" section (added chips + manual add + suggestions).
 
   const handleToggle = async () => {
     const opening = !expanded
@@ -2548,17 +2605,98 @@ function DriveContent({
     }
   }
 
-  // Parse response into individual bullet lines, strip leading punctuation
-  const bullets = highlights
-    ? highlights.split('\n').map(l => l.trim()).filter(l => l.length > 0)
-    : []
+  // Block 16 — parse the raw highlights string into structured suggestions.
+  // The AI sometimes opens its reply with a markdown header line like
+  //   "# Points of Interest: Las Cruces to Carlsbad"
+  // which the previous renderer let leak through as the first bullet (the
+  // old strip regex was /^[-•*\d.]+\s*/ — no `#` in the class). The new
+  // parser strips leading markdown noise (#/-/•/*/digits/dots), drops the
+  // header-style and error-string lines explicitly, then splits on the
+  // first " — " / " - " / " · " / ":" separator to extract name +
+  // description. Lines with no separator fall back to name-only.
+  type Suggestion = { name: string; description?: string }
+  const loadFailed = highlights === 'Could not load points of interest.'
+  const parsedSuggestions: Suggestion[] = (() => {
+    if (!highlights || loadFailed) return []
+    return highlights.split('\n')
+      .map<Suggestion | null>(raw => {
+        const stripped = raw.replace(/^[#\-•*\d.\s]+/, '').trim()
+        if (!stripped) return null
+        if (/^points of interest\b/i.test(stripped)) return null
+        if (/^could not load/i.test(stripped)) return null
+        const m = stripped.match(/^(.+?)\s+[—–\-·:]\s+(.+)$/)
+        if (m) return { name: m[1].trim(), description: m[2].trim() }
+        return { name: stripped }
+      })
+      .filter((s): s is Suggestion => s != null)
+  })()
+
+  // Block 16 — heuristic duration default for an AI suggestion. Ordered so
+  // the most specific match wins, with hike/trail/waterfall above
+  // byway/scenic/drive so "scenic drive with a trail" defaults to the
+  // longer time. Default 30 min keeps parity with the manual-add fallback.
+  const suggestDurationMinutes = (text: string): number => {
+    const t = text.toLowerCase()
+    if (/(hike|trail|waterfall|loop)/.test(t)) return 120
+    if (/(museum|monument|site|landmark|historic|gallery|cave|cavern|preserve)/.test(t)) return 60
+    if (/(park|forest)/.test(t)) return 60
+    if (/(byway|scenic|overlook|vista|drive|highway|pull-?out|lookout|viewpoint)/.test(t)) return 30
+    return 30
+  }
+
+  // Block 16 — hide suggestions whose name matches an already-added POI
+  // (case- and whitespace-insensitive). This is how a suggestion visually
+  // "moves" from the suggestions list into the green added-stops list the
+  // moment the user clicks + Add.
+  const addedNames = new Set((entry.pointsOfInterest ?? []).map(p => p.name.toLowerCase().trim()))
+  const visibleSuggestions = parsedSuggestions.filter(s => !addedNames.has(s.name.toLowerCase().trim()))
+
+  // Block 16 — section header running total. Sums every added POI's
+  // durationMinutes (manual + AI). Hidden when zero. Format: <60 → "Nmin",
+  // exact hours → "Nh", mixed → "Xh Ymin". Mirrors DayCard line 2094 which
+  // uses the same sum to push out the day's arrival time.
+  const totalPOIMinutes = (entry.pointsOfInterest ?? []).reduce((s, p) => s + p.durationMinutes, 0)
+  const totalText = (() => {
+    if (totalPOIMinutes <= 0) return ''
+    const h = Math.floor(totalPOIMinutes / 60)
+    const m = totalPOIMinutes % 60
+    if (h === 0) return `${m}min`
+    if (m === 0) return `${h}h`
+    return `${h}h ${m}min`
+  })()
+
+  // Section visibility: open when any sub-block has content. The existing
+  // `addingPOIText === ' '` (single-space) trick from the empty-state CTA
+  // is intentionally preserved — the CTA below sets addingPOIText to a
+  // space to "open" the section without a separate isOpen flag.
+  const hasAddedStops = (entry.pointsOfInterest?.length ?? 0) > 0
+  const sectionVisible = hasAddedStops || addingPOIText !== '' || expanded
+
+  // Block 16 — shared chip-side duration dropdown. Always offers the four
+  // standards (15/30/60/120) plus the current value if non-standard, so a
+  // custom 45-min manual add still re-renders correctly when re-edited.
+  const renderChipDurationSelect = (current: number, onChange: (m: number) => void) => {
+    const options = Array.from(new Set([15, 30, 60, 120, current])).sort((a, b) => a - b)
+    return (
+      <select
+        value={String(current)}
+        onChange={e => onChange(parseInt(e.target.value))}
+        className="text-[11px] rounded px-1.5 py-0.5 bg-white focus:outline-none"
+        style={{ color: '#2F4030', borderColor: '#9FBF8A', borderWidth: 1 }}
+      >
+        {options.map(m => <option key={m} value={m}>{m} min</option>)}
+      </select>
+    )
+  }
 
   return (
     <div>
       {entry.highwayRoute && (
         <p className="text-xs text-gray-400 mb-1.5 ml-4">{entry.highwayRoute}</p>
       )}
-      {/* Tell me more */}
+      {/* Tell me more — load-on-demand trigger that also surfaces the (c)
+          suggestions sub-block inside the "Stops along the way" section
+          below (block 16). */}
       <button
         onClick={handleToggle}
         className="mt-2 text-xs text-[#1F6F8B] hover:text-[#134756] transition-colors font-medium"
@@ -2566,30 +2704,67 @@ function DriveContent({
         {expanded ? 'Show less ↑' : 'Tell me more about this route ↓'}
       </button>
 
-      {/* Stops along the way — POI pills + add input */}
-      {((entry.pointsOfInterest?.length ?? 0) > 0 || addingPOIText !== '') && (
+      {/* Block 16 — Stops along the way. Three vertical sub-blocks:
+            (a) Added stops list — pale-green chips, editable duration, ×
+            (b) Add-your-own field — text input + duration select + Add
+            (c) Suggested along this route — visible while expanded, each
+                row has a duration <select> pre-filled by the heuristic and
+                a blue "+ Add" that routes through onAddSuggestion.
+          Manual-added and AI-added stops are indistinguishable in (a)
+          because (c)'s + Add appends the full POI object (incl. its
+          optional description) into the same pointsOfInterest array. */}
+      {sectionVisible && (
         <div className="mt-3 pt-2.5 border-t border-blue-100">
-          <p className="text-xs font-semibold text-amber-700 mb-2 flex items-center gap-1">
+          <p className="text-xs font-semibold text-amber-700 mb-2 flex items-center gap-1 flex-wrap">
             <Star size={11} className="text-amber-500" />
             Stops along the way
+            {totalText && (
+              <span className="text-[11px] font-normal text-amber-600">
+                · adds {totalText} to your drive
+              </span>
+            )}
           </p>
-          {(entry.pointsOfInterest?.length ?? 0) > 0 && (
+
+          {/* (a) Added stops — pale-green chips. Colors per spec:
+                 bg #EDF3E6, border #9FBF8A, text #2F4030, secondary #5F6B57.
+                 Distinct from the campground "Booked" pine-green pills. */}
+          {hasAddedStops && (
             <div className="flex flex-col gap-1.5 mb-2">
               {entry.pointsOfInterest!.map((poi, i) => (
-                <span key={i} className="inline-flex items-center gap-1 text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">
-                  <span>{poi.name}</span>
-                  <span className="text-amber-400">· {poi.durationMinutes} min</span>
-                  <button
-                    onClick={() => onDeletePOI(i)}
-                    className="hover:text-amber-900 flex-shrink-0 ml-0.5"
-                    title="Remove stop"
-                  >
-                    <XCircle size={11} />
-                  </button>
-                </span>
+                <div
+                  key={i}
+                  className="rounded-md border px-2.5 py-1.5"
+                  style={{ backgroundColor: '#EDF3E6', borderColor: '#9FBF8A' }}
+                >
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium" style={{ color: '#2F4030' }}>{poi.name}</p>
+                      {poi.description && (
+                        <p className="text-[11px] leading-snug mt-0.5" style={{ color: '#5F6B57' }}>
+                          {poi.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {renderChipDurationSelect(poi.durationMinutes, m => onUpdatePOIDuration(i, m))}
+                      <button
+                        onClick={() => onDeletePOI(i)}
+                        className="p-0.5 hover:bg-white/60 rounded transition-colors"
+                        title="Remove stop"
+                        style={{ color: '#5F6B57' }}
+                      >
+                        <XCircle size={13} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
           )}
+
+          {/* (b) Manual add — unchanged data path: pressing Enter or
+                 clicking Add fires onAddPOI which addPOIs the current
+                 addingPOIText with addingPOIDurationVal. */}
           <div className="flex items-center gap-1 flex-wrap">
             <input
               className="text-xs border border-gray-200 rounded px-2 py-1 flex-1 min-w-[120px] focus:outline-none focus:border-amber-400 bg-white"
@@ -2631,36 +2806,79 @@ function DriveContent({
               Add
             </button>
           </div>
+
+          {/* (c) Suggestions — visible only while expanded. Loading state
+                 reuses the same shimmer style the previous expanded block
+                 used; error state shows the cached "Could not load…"
+                 message; "all consumed" shows a quiet hint; otherwise the
+                 list renders. The + Add button routes through
+                 onAddSuggestion which calls addPOIWithDetails (same
+                 persistItinerary path as the manual add). */}
+          {expanded && (
+            <div className="mt-3 pt-2 border-t border-blue-100">
+              <p className="text-[11px] font-semibold text-[#1F6F8B] mb-2">Suggested along this route</p>
+              {loadingHighlights ? (
+                <div className="space-y-1.5">
+                  {[60, 80, 70].map((w, i) => (
+                    <div key={i} className="h-4 bg-blue-100 rounded animate-pulse" style={{ width: `${w}%` }} />
+                  ))}
+                </div>
+              ) : loadFailed ? (
+                <p className="text-xs text-gray-500 italic">Could not load points of interest.</p>
+              ) : visibleSuggestions.length === 0 ? (
+                parsedSuggestions.length > 0 ? (
+                  <p className="text-xs text-gray-400 italic">All suggestions added.</p>
+                ) : null
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {visibleSuggestions.map((s, i) => {
+                    const dur = suggestionDurations[i] ?? suggestDurationMinutes(`${s.name} ${s.description ?? ''}`)
+                    return (
+                      <div key={i} className="flex items-start gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-gray-700">{s.name}</p>
+                          {s.description && (
+                            <p className="text-[11px] text-gray-500 leading-snug mt-0.5">{s.description}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
+                          <select
+                            value={String(dur)}
+                            onChange={e => setSuggestionDurations(prev => ({ ...prev, [i]: parseInt(e.target.value) }))}
+                            className="text-[11px] border border-gray-200 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:border-[#1F6F8B]"
+                          >
+                            <option value="15">15 min</option>
+                            <option value="30">30 min</option>
+                            <option value="60">60 min</option>
+                            <option value="120">120 min</option>
+                          </select>
+                          <button
+                            onClick={() => onAddSuggestion({ name: s.name, durationMinutes: dur, description: s.description })}
+                            className="text-[11px] px-2 py-0.5 bg-[#E0F0F4] text-[#1F6F8B] rounded hover:bg-[#BFDBFE] transition-colors whitespace-nowrap font-medium"
+                          >
+                            + Add
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
-      {(entry.pointsOfInterest?.length ?? 0) === 0 && addingPOIText === '' && (
+
+      {/* Empty-state CTA — preserves the existing addingPOIText = ' '
+          trick to "open" the section. Per scope, no refactor to an
+          isOpen flag here; this is intentional. */}
+      {!sectionVisible && (
         <button
           onClick={() => onAddingPOIChange(' ')}
           className="mt-2 text-xs text-amber-600 hover:text-amber-800 transition-colors"
         >
           + Add stops along the way
         </button>
-      )}
-
-      {expanded && (
-        <div className="mt-2 pl-3 border-l-2 border-[#1F6F8B]/20">
-          {loadingHighlights ? (
-            <div className="space-y-1.5 py-1">
-              {[60, 80, 70].map((w, i) => (
-                <div key={i} className={`h-3 bg-blue-100 rounded animate-pulse`} style={{ width: `${w}%` }} />
-              ))}
-            </div>
-          ) : (
-            <ul className="space-y-1.5 py-0.5">
-              {bullets.map((line, i) => (
-                <li key={i} className="flex gap-2 text-xs text-gray-600 leading-snug">
-                  <span className="text-[#1F6F8B] flex-shrink-0 mt-0.5">•</span>
-                  <span>{line.replace(/^[-•*\d.]+\s*/, '')}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
       )}
     </div>
   )

@@ -444,6 +444,14 @@ export type StopWeather = HistoricalWeather | LiveForecast
 export interface POI {
   name: string
   durationMinutes: number
+  // Block 16 — optional short description carried over when a POI was added
+  // from an AI route suggestion. Manual-add POIs leave this undefined. The
+  // server-side Trip.itinerary JSON column accepts the field unchanged
+  // (saveItinerary persists whatever shape the client sends) and the Zod
+  // schema on the Stop table's parallel pointsOfInterest column already
+  // accepts arbitrary objects (z.array(z.any())), so no server change is
+  // required to round-trip the description.
+  description?: string
 }
 
 export interface ItineraryActivity {
