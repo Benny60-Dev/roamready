@@ -721,13 +721,12 @@ export default function TripMapPage() {
   }, [trip?.stops, user?.homeLat, user?.homeLng])
 
   // Push routePath changes imperatively to the underlying polyline. Bypasses
-  // the @react-google-maps/api v2.19.3 declarative path-prop handling. The
-  // TEMPORARY console.log is a verification aid — confirms setPath fires on
-  // every Modify-with-AI / delete that should redraw the route. Remove the
-  // log once verified.
+  // the @react-google-maps/api v2.19.3 declarative path-prop handling, which
+  // empirically wasn't propagating setRoutePath updates to the on-map
+  // polyline even with a content-derived key forcing remount. Verified via
+  // the Cheyenne add-stop test — see commit b5d4282.
   useEffect(() => {
     if (routePath && polylineRef.current) {
-      console.log('[polyline] setPath fired, points:', routePath.length)
       polylineRef.current.setPath(routePath)
     }
   }, [routePath])
@@ -1804,7 +1803,6 @@ export default function TripMapPage() {
                   onLoad={pl => {
                     polylineRef.current = pl
                     pl.setPath(routePath)
-                    console.log('[polyline] mounted + initial setPath, points:', routePath.length)
                   }}
                   onUnmount={() => { polylineRef.current = null }}
                   options={{ strokeColor: '#F97316', strokeWeight: 2.5, strokeOpacity: 0.85 }}
