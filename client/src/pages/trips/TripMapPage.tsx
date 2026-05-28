@@ -676,12 +676,20 @@ export default function TripMapPage() {
     setWeatherLoading(true)
     tripsApi.getWeather(id)
       .then(res => setWeatherData(prev => ({ ...prev, ...res.data })))
-      .catch(() => {
-        setWeatherData(prev => {
-          const next = { ...prev }
-          for (const k of Object.keys(next)) if (next[k] === undefined) next[k] = null
-          return next
-        })
+      .catch(err => {
+        // Fetch-level failure (network, 5xx, 403 FEATURE_GATED, etc.) —
+        // leave slots as `undefined` so SidebarWeatherTab's
+        // "Weather unavailable" hint can fire after loading flips false.
+        // The previous behavior promoted every undefined slot to `null`,
+        // which made fetch failures visually identical to "this stop has
+        // no forecast available" (a per-stop server response) — the
+        // server bug that returned { stopId: null } for every stop on
+        // live-mode trips therefore rendered as a silently-blank tab.
+        // Keep `null` reserved for the legitimate per-stop response.
+        console.error(
+          '[TripMapPage] weather fetch failed:',
+          err?.response?.status, err?.response?.data?.code, err?.message,
+        )
       })
       .finally(() => setWeatherLoading(false))
   }, [trip?.stops])
