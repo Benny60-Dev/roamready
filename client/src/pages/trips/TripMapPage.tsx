@@ -446,6 +446,13 @@ export default function TripMapPage() {
   const [weatherLoading, setWeatherLoading] = useState(false)
   const [geocoding, setGeocoding]           = useState(false)
   const [routePath, setRoutePath]           = useState<google.maps.LatLng[] | null>(null)
+  // Imperative handle to the underlying google.maps.Polyline. Captured via
+  // <Polyline onLoad>; used by the useEffect below to push setRoutePath
+  // changes directly to the on-map polyline. Bypasses the declarative
+  // path-prop handling in @react-google-maps/api v2.19.3, which empirically
+  // wasn't propagating subsequent setRoutePath calls even with a key-driven
+  // remount. See the scout notes in the polyline fix commit.
+  const polylineRef = useRef<google.maps.Polyline | null>(null)
   const [mapInstance, setMapInstance]       = useState<google.maps.Map | null>(null)
   const [renaming, setRenaming]             = useState(false)
   const [tripNameInput, setTripNameInput]   = useState('')
@@ -712,6 +719,18 @@ export default function TripMapPage() {
       ),
     } : prev)
   }, [trip?.stops, user?.homeLat, user?.homeLng])
+
+  // Push routePath changes imperatively to the underlying polyline. Bypasses
+  // the @react-google-maps/api v2.19.3 declarative path-prop handling. The
+  // TEMPORARY console.log is a verification aid — confirms setPath fires on
+  // every Modify-with-AI / delete that should redraw the route. Remove the
+  // log once verified.
+  useEffect(() => {
+    if (routePath && polylineRef.current) {
+      console.log('[polyline] setPath fired, points:', routePath.length)
+      polylineRef.current.setPath(routePath)
+    }
+  }, [routePath])
 
   // ── Routes API (replaces deprecated DirectionsService) ────────────────────────
   useEffect(() => {
@@ -1771,26 +1790,23 @@ export default function TripMapPage() {
               options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false, mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID' }}
               onLoad={onMapLoad}
             >
-              {/* Driving route. The composite key forces React to unmount
-                  and remount the Polyline whenever the route geometry
-                  changes — necessary because @react-google-maps/api v2.19.3's
-                  declarative <Polyline> doesn't reliably propagate path-prop
-                  changes to the underlying google.maps.Polyline's setPath()
-                  after mount. Without this, Modify-with-AI add/remove and
-                  the trash-delete flow both fail to redraw the polyline,
-                  even though Routes API runs and setRoutePath gets called
-                  with the new coords (proven by trip.totalMiles + per-stop
-                  driveDistanceMiles updating correctly via the same handler
-                  that calls setRoutePath).
-                  Key composition — length + first lat + last lat — catches
-                  add/remove (length changes) AND stop-swap edge cases where
-                  the coordinate count would stay the same but the geography
-                  changes (the endpoint or starting position would shift).
-                  Length alone misses that swap case at no extra cost. */}
+              {/* Driving route. The library's declarative path-prop wasn't
+                  propagating setRoutePath changes to the on-map polyline
+                  reliably (and a content-derived key didn't fix it either),
+                  so we capture the underlying google.maps.Polyline via
+                  onLoad and push path updates imperatively from the
+                  useEffect on routePath below. No path prop, no key — the
+                  component mounts once and the polyline instance lives as
+                  long as routePath is truthy; subsequent setRoutePath calls
+                  flow through setPath() directly on the captured instance. */}
               {routePath && (
                 <Polyline
-                  key={`${routePath.length}-${routePath[0]?.lat()}-${routePath[routePath.length - 1]?.lat()}`}
-                  path={routePath}
+                  onLoad={pl => {
+                    polylineRef.current = pl
+                    pl.setPath(routePath)
+                    console.log('[polyline] mounted + initial setPath, points:', routePath.length)
+                  }}
+                  onUnmount={() => { polylineRef.current = null }}
                   options={{ strokeColor: '#F97316', strokeWeight: 2.5, strokeOpacity: 0.85 }}
                 />
               )}
