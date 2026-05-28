@@ -14,7 +14,6 @@ import { computeTripTotals } from '../../utils/tripTotals'
 import { StopWeatherCard, ALERT_STYLES } from '../../components/weather/StopWeatherCard'
 const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel'))
 import ConfirmModal from '../../components/ui/ConfirmModal'
-import EditStopModal from '../../components/trip/EditStopModal'
 import ShareModal from '../../components/trip/ShareModal'
 import { useAuthStore } from '../../store/authStore'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge } from '../../utils/stopBadge'
@@ -464,8 +463,7 @@ export default function TripMapPage() {
   // Itinerary page's day cards (commit df75a17). Modals + handlers follow
   // the same pattern; server guards (commit 1ab72ad) catch HOME / min-stops
   // violations on the AI modify path even when the UI hides the option.
-  const [editingStop, setEditingStop] = useState<Stop | null>(null)
-  const [savingStop, setSavingStop] = useState(false)
+  // editingStop / savingStop state retired with the Edit Stop modal.
   const [pendingDeleteStop, setPendingDeleteStop] = useState<Stop | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -1023,25 +1021,19 @@ export default function TripMapPage() {
     setSelectedStop(prev => prev?.id === stopId ? { ...prev, nights } : prev)
   }
 
-  // ── Sidebar stop edit/delete (parity with Itinerary) ─────────────────────────
-  async function handleSaveEditStop(stop: Stop, data: Partial<Stop>) {
-    if (!id) return
-    setSavingStop(true)
-    try {
-      await tripsApi.updateStop(id, stop.id, data)
-      const res = await tripsApi.get(id)
-      setTrip(res.data)
-      setEditingStop(null)
-    } finally {
-      setSavingStop(false)
-    }
-  }
+  // ── Sidebar stop delete (parity with Itinerary) ──────────────────────────────
+  // handleSaveEditStop retired with the Edit Stop modal — see scout audit:
+  // the modal's fields each had a canonical writer elsewhere (booking page
+  // for campgroundName, inline notes editor for notes, inline nights
+  // stepper for nights, Modify-with-AI for location/type), and locationName
+  // edits silently desynced lat/lng/driveDistanceMiles from the displayed
+  // string. Real-world data showed 0 of 51 stops on the active accounts
+  // had been edited via the modal.
 
-  // Step 1 of the manual-delete flow: close the edit modal (if open) and queue
-  // the stop for confirmation. ConfirmModal asks first and surfaces any
-  // cascading-delete warnings (e.g. confirmed booking).
+  // Step 1 of the manual-delete flow: queue the stop for confirmation.
+  // ConfirmModal asks first and surfaces any cascading-delete warnings
+  // (e.g. confirmed booking).
   function requestDeleteStop(stop: Stop) {
-    setEditingStop(null)
     setDeleteError(null)
     setPendingDeleteStop(stop)
   }
@@ -1078,11 +1070,9 @@ export default function TripMapPage() {
     return parts.join('\n\n')
   }
 
-  // Mirrors the server's min-stops floor (commit 1ab72ad) AND the type guard.
-  // Shown vs. hidden Delete button reflects what the server would actually allow.
-  function canDeleteStopFn(stop: Stop): boolean {
-    return stop.type !== 'HOME' && (trip?.stops?.length ?? 0) > 2
-  }
+  // canDeleteStopFn retired with the Edit Stop modal (its sole consumer).
+  // The row-level showDelete (computed inline in the stops list) carries
+  // the same min-stops + HOME-guard logic.
 
   async function handleRename() {
     const trimmed = tripNameInput.trim()
@@ -1528,11 +1518,11 @@ export default function TripMapPage() {
                     const hasAlert = stopHasAlerts(weatherData[stop.id])
                     const alerts   = stopAlerts(weatherData[stop.id])
 
-                    // Parity with Itinerary: HIDE both icons on HOME stops.
-                    // HIDE only Delete when removing this stop would leave the
-                    // trip below the 2-stop floor (matches server guard 4).
-                    const showEdit = stop.type !== 'HOME'
-                    const showDelete = showEdit && sortedStops.length > 2
+                    // Delete affordance hidden on HOME stops AND when removing
+                    // would leave the trip below the 2-stop floor (matches
+                    // server guard 4). showEdit retired with the Edit Stop
+                    // modal — pencil icon no longer rendered on this row.
+                    const showDelete = stop.type !== 'HOME' && sortedStops.length > 2
 
                     // Subtitle layout:
                     //   Start (badge 'S'):       single line "Start" — no previous stop, no mileage
@@ -1680,31 +1670,21 @@ export default function TripMapPage() {
                           )}
                           {!stop.isCompatible && <AlertTriangle size={11} className="text-red-400" />}
                         </div>
-                        {/* Edit + Delete affordances. stopPropagation prevents the
+                        {/* Delete affordance. stopPropagation prevents the
                             row's popup-open click from firing when the user
-                            actually wants to edit or delete. */}
-                        {(showEdit || showDelete) && (
+                            actually wants to remove the stop. Pencil icon
+                            (Edit Stop modal trigger) retired — see commit
+                            retiring the modal. */}
+                        {showDelete && (
                           <div className="flex items-center gap-0.5 flex-shrink-0">
-                            {showEdit && (
-                              <button
-                                type="button"
-                                onClick={e => { e.stopPropagation(); setEditingStop(stop) }}
-                                title="Edit stop"
-                                className="p-1 text-gray-300 hover:text-gray-600 hover:bg-gray-100 transition-colors rounded"
-                              >
-                                <Pencil size={14} />
-                              </button>
-                            )}
-                            {showDelete && (
-                              <button
-                                type="button"
-                                onClick={e => { e.stopPropagation(); requestDeleteStop(stop) }}
-                                title="Remove stop"
-                                className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors rounded"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={e => { e.stopPropagation(); requestDeleteStop(stop) }}
+                              title="Remove stop"
+                              className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors rounded"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </div>
                         )}
                       </div>
@@ -1887,20 +1867,7 @@ export default function TripMapPage() {
         </Suspense>
       )}
 
-      {/* Edit stop modal — opened from sidebar Pencil icon */}
-      {editingStop && (
-        <EditStopModal
-          stop={editingStop}
-          onSave={data => handleSaveEditStop(editingStop, data)}
-          onClose={() => setEditingStop(null)}
-          saving={savingStop}
-          onDelete={() => requestDeleteStop(editingStop)}
-          canDelete={canDeleteStopFn(editingStop)}
-          isDeleting={deleting && pendingDeleteStop?.id === editingStop.id}
-        />
-      )}
-
-      {/* Delete confirmation — opened from sidebar Trash icon OR EditStopModal's Delete */}
+      {/* Delete confirmation — opened from sidebar Trash icon */}
       {pendingDeleteStop && (
         <ConfirmModal
           isOpen={true}

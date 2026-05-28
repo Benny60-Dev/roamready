@@ -8,7 +8,6 @@ import {
   Loader2,
 } from 'lucide-react'
 const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel'))
-import EditStopModal from '../../components/trip/EditStopModal'
 import ConfirmModal from '../../components/ui/ConfirmModal'
 import { tripsApi, aiApi } from '../../services/api'
 import { Trip, Stop, ItineraryDay, ItineraryActivity, StopWeather, POI, TripFuelEstimate } from '../../types'
@@ -486,7 +485,7 @@ export default function TripSummaryPage() {
   const [addingPOI, setAddingPOI] = useState<Record<number, string>>({})
   const [addingPOIDuration, setAddingPOIDuration] = useState<Record<number, number>>({})
   const [weatherData, setWeatherData] = useState<Record<string, StopWeather | null | undefined>>({})
-  const [editingStop, setEditingStop] = useState<Stop | null>(null)
+  // editingStop state retired with the Edit Stop modal.
   const [pendingDeleteStop, setPendingDeleteStop] = useState<Stop | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -887,11 +886,10 @@ export default function TripSummaryPage() {
 
   // ── Stop mutation handlers ──────────────────────────────────────────────────
 
-  // Step 1 of the manual-delete flow: close the edit modal (if open) and queue
-  // the stop for confirmation. Don't fire the request yet — ConfirmModal asks
-  // first and surfaces any cascading-delete warnings (e.g. confirmed booking).
+  // Step 1 of the manual-delete flow: queue the stop for confirmation.
+  // ConfirmModal asks first and surfaces any cascading-delete warnings
+  // (e.g. confirmed booking).
   const requestDeleteStop = (stop: Stop) => {
-    setEditingStop(null)
     setDeleteError(null)
     setPendingDeleteStop(stop)
   }
@@ -938,11 +936,10 @@ export default function TripSummaryPage() {
     return parts.join('\n\n')
   }
 
-  // Whether the Delete button on the Edit modal should be visible. Mirrors the
-  // server-side guards (commit 1ab72ad) so the option only appears when the
-  // server would actually allow it.
-  const canDeleteStop = (stop: Stop): boolean =>
-    stop.type !== 'HOME' && (trip?.stops?.length ?? 0) > 2
+  // canDeleteStop helper retired with the Edit Stop modal. The DayCard
+  // call site below computes canDelete inline (canEdit && length > 2)
+  // for the row's trash icon, which is the only remaining consumer of
+  // the min-stops + HOME guard logic in this file.
 
   const handleInsertStop = async (data: { locationName: string; type: string; nights: number; notes?: string }) => {
     if (!id || !trip || addAfterOrder === null) return
@@ -969,31 +966,15 @@ export default function TripSummaryPage() {
     }
   }
 
-  const handleSaveEditStop = async (stop: Stop, data: Partial<Stop>) => {
-    if (!id || !trip) return
-    setMutating(true)
-    try {
-      // Step 1: persist the field changes (locationName, campgroundName, nights, etc.)
-      await tripsApi.updateStop(id, stop.id, data)
-      console.log(`[handleSaveEditStop] Saved stop "${stop.locationName}" — nights:`, data.nights ?? '(unchanged)')
-
-      // Step 2: if nights changed, recascade every stop's arrivalDate/departureDate
-      if (data.nights !== undefined) {
-        // Build in-memory list with the new nights value applied
-        const updatedStops = (trip.stops || []).map(s =>
-          s.id === stop.id ? { ...s, nights: data.nights! } : s
-        )
-        await cascadeAndSaveDates(updatedStops)
-      }
-
-      setEditingStop(null)
-
-      // Step 3: reload fresh data from DB — timeline rebuilds from the new arrivalDates
-      await reloadTrip()
-    } finally {
-      setMutating(false)
-    }
-  }
+  // handleSaveEditStop retired with the Edit Stop modal. Per the audit:
+  // every field the modal edited had a canonical writer elsewhere
+  // (booking page for campgroundName/notes/conf, inline notes editor for
+  // notes, TripMapPage's nights stepper + server's recomputeStopDates for
+  // nights), and locationName edits silently desynced lat/lng/
+  // driveDistanceMiles from the displayed string. The server's nights-
+  // change → recomputeStopDates cascade still fires on any nights edit
+  // routed through updateStop, so removing this client-side cascade
+  // doesn't break the data path — it just removes the duplicate trigger.
 
   // Highway routes are now extracted by TripMapPage from the Google Maps Routes API
   // and saved directly to each stop record. buildTimeline reads stop.highwayRoute,
@@ -1368,8 +1349,9 @@ export default function TripSummaryPage() {
                 if (group.type === 'STAY_GROUP' || group.type === 'OVERNIGHT_SOLO') return group.entries[0].stop
                 return undefined
               })()
-              const canEdit = !!editableStop
-              const canDelete = canEdit && sortedStops.length > 2
+              // canEdit retired with the Edit Stop modal; only canDelete
+              // survives to gate the row's trash icon.
+              const canDelete = !!editableStop && sortedStops.length > 2
               const poiIdx = driveIdx >= 0 ? driveIdx : group.indices[0]
 
               rendered.push(
@@ -1400,7 +1382,6 @@ export default function TripSummaryPage() {
                   onAddPOI={() => addPOI(poiIdx)}
                   onUpdatePOIDuration={(idx, m) => updatePOIDuration(poiIdx, idx, m)}
                   onAddSuggestion={(poi) => addPOIWithDetails(poiIdx, poi)}
-                  onEdit={canEdit ? () => setEditingStop(editableStop!) : undefined}
                   onDelete={canDelete ? () => requestDeleteStop(editableStop!) : undefined}
                 />
               )
@@ -1893,17 +1874,6 @@ export default function TripSummaryPage() {
       })()}
 
       {/* Modals */}
-      {editingStop && (
-        <EditStopModal
-          stop={editingStop}
-          onSave={data => handleSaveEditStop(editingStop, data)}
-          onClose={() => setEditingStop(null)}
-          saving={mutating}
-          onDelete={() => requestDeleteStop(editingStop)}
-          canDelete={canDeleteStop(editingStop)}
-          isDeleting={deleting}
-        />
-      )}
       {pendingDeleteStop && (
         <ConfirmModal
           isOpen={true}
@@ -3396,9 +3366,9 @@ function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClos
   )
 }
 
-// EditStopModal lives in client/src/components/trip/EditStopModal.tsx now —
-// extracted so the Map page (and any future surface) can reuse the same edit
-// affordance. It also picked up an optional Delete button via the lift.
+// EditStopModal retired — see commit retiring the modal across both this
+// page and TripMapPage. The component file at
+// client/src/components/trip/EditStopModal.tsx is deleted.
 
 // ─── AddStopModal ──────────────────────────────────────────────────────────────
 
