@@ -1392,6 +1392,13 @@ export async function generateRouteHighlights(req: AuthRequest, res: Response, n
 // ─── Trip weather — DB-cached, 6-hour TTL ─────────────────────────────────────
 
 const SIX_HOURS_MS = 6 * 60 * 60 * 1000
+// Open-Meteo's /v1/forecast endpoint accepts start_date / end_date inside
+// roughly [today − 93, today + 15] inclusive — confirmed via direct probe:
+// today+15 returns 200, today+16 returns HTTP 400 "Parameter 'end_date' is
+// out of allowed range from <today-93> to <today+15>". Stops whose date
+// range straddles the upper bound fall back to historical averages so the
+// user sees something instead of a blank card.
+const LIVE_WINDOW_END_DAYS = 15
 
 export async function getTripWeather(req: AuthRequest, res: Response, next: NextFunction) {
   try {
@@ -1406,7 +1413,16 @@ export async function getTripWeather(req: AuthRequest, res: Response, next: Next
     const daysUntil  = tripStart
       ? Math.ceil((tripStart.getTime() - today.getTime()) / 86_400_000)
       : null
-    const useLive    = daysUntil !== null && daysUntil <= 10
+    // Trip-wide hint, NOT the final per-stop decision. A startDate-less trip
+    // can't qualify for live (no anchor to project days against), and trips
+    // starting more than 10 days out short-circuit straight to historical
+    // even if their first stop would technically fit Open-Meteo's window.
+    // Per-stop fitness inside the loop tightens this further — a long trip
+    // can be useLiveHint=true with late stops still falling outside the API
+    // window, in which case those stops fall back to historical here.
+    const useLiveHint = daysUntil !== null && daysUntil <= 10
+    const liveWindowEnd = new Date(today)
+    liveWindowEnd.setDate(liveWindowEnd.getDate() + LIVE_WINDOW_END_DAYS)
 
     const results: Record<string, any> = {}
 
@@ -1414,12 +1430,40 @@ export async function getTripWeather(req: AuthRequest, res: Response, next: Next
       (trip.stops as any[])
         .filter(s => s.latitude && s.longitude)
         .map(async (stop) => {
+          // Compute base / endBase ONCE per stop so the cache mode check,
+          // the live-fit test, and the eventual fetch all agree on the same
+          // window. Prisma returns DateTime columns as Date instances —
+          // `new Date(<Date>)` copies cleanly. .setDate(.getDate() + nights)
+          // is local-time arithmetic; going through `new Date(startDateStr)`
+          // would re-parse YYYY-MM-DD as UTC midnight and lose a day in
+          // UTC-N zones, which used to give endDate === startDate for a
+          // 1-night stop.
+          const base = stop.arrivalDate
+            ? new Date(stop.arrivalDate)
+            : tripStart ?? today
+          const endBase = new Date(base)
+          endBase.setDate(endBase.getDate() + (stop.nights || 1))
+
+          // Per-stop live fitness: BOTH endpoints must sit inside
+          // [today, today + LIVE_WINDOW_END_DAYS]. Stop arriving day 14 with
+          // 3 nights ends day 17 — out of window, falls back to historical
+          // even though useLiveHint is true.
+          const stopFitsLive =
+            useLiveHint &&
+            base.getTime()    <= liveWindowEnd.getTime() &&
+            endBase.getTime() <= liveWindowEnd.getTime()
+
           const cached    = stop.weatherForecast as any
           const cachedAt  = cached?.cachedAt ? new Date(cached.cachedAt).getTime() : 0
           const isFresh   = Date.now() - cachedAt < SIX_HOURS_MS
+          // Per-stop mode match (not trip-wide). The prior trip-wide check
+          // thrashed mixed-mode trips: a correctly-cached historical late-
+          // stop would read as stale under trip-wide useLive=true and
+          // re-fetch every 6 hours. Comparing to the per-stop stopFitsLive
+          // keeps both modes cache-hittable inside one trip.
           const modeMatch = cached?.mode && (
-            (useLive  && cached.mode === 'live') ||
-            (!useLive && cached.mode === 'historical')
+            (stopFitsLive  && cached.mode === 'live') ||
+            (!stopFitsLive && cached.mode === 'historical')
           )
 
           if (isFresh && modeMatch) {
@@ -1432,38 +1476,20 @@ export async function getTripWeather(req: AuthRequest, res: Response, next: Next
           try {
             let data: any = null
 
-            if (useLive) {
-              // Live mode: use stop arrivalDate, or fall back to trip startDate, or today.
-              // Prisma returns DateTime columns as Date instances — wrap directly via
-              // new Date(...) so we copy the Date rather than coercing it to string and
-              // back. The earlier `(stop.arrivalDate as string).split('T')[0]` form
-              // threw TypeError at runtime (.split on a Date), the per-stop catch
-              // swallowed it, and every live-mode trip's weather came back as { id:
-              // null, … } with a 200 — surfacing as a blank Weather tab. Mirrors the
-              // historical branch's tolerant `new Date(stop.arrivalDate)`.
-              const base = stop.arrivalDate
-                ? new Date(stop.arrivalDate)
-                : tripStart ?? today
+            if (stopFitsLive) {
+              // Live mode: use the base / endBase computed above. The
+              // earlier `(stop.arrivalDate as string).split('T')[0]` form
+              // threw TypeError on a Prisma Date and silently nulled every
+              // live-mode trip's weather — keep `new Date(stop.arrivalDate)`
+              // (the historical branch's long-standing tolerant pattern).
               const startDate = isoDate(base)
-              // Add `nights` days to `base` directly with .setDate, then
-              // isoDate the result. The prior form round-tripped through
-              // `new Date(startDate)`, where the "YYYY-MM-DD" string is
-              // parsed as UTC midnight; in UTC-N zones, .getDate() then
-              // reads the previous local calendar day, and setDate(prev+
-              // nights) lands the end one day short — for a 1-night stop
-              // endDate came out EQUAL to startDate. Working off `base`
-              // (which is already a Date with local-time semantics from
-              // Prisma) keeps both endpoints anchored to the same local
-              // calendar day, so endDate = startDate + nights reliably.
-              const endBase = new Date(base)
-              endBase.setDate(endBase.getDate() + (stop.nights || 1))
-              const endDate = isoDate(endBase)
+              const endDate   = isoDate(endBase)
               data = await fetchLiveForecast(stop.latitude, stop.longitude, startDate, endDate)
             } else {
-              // Historical mode: use stop arrivalDate month, trip startDate month, or current month
-              const base = stop.arrivalDate
-                ? new Date(stop.arrivalDate as string)
-                : tripStart ?? today
+              // Historical mode: 3-year averages from Open-Meteo Archive.
+              // Reuses the same `base` so a stop falling out of the live
+              // window without ever changing its arrivalDate gets averages
+              // for the right calendar day.
               data = await fetchHistoricalWeather(
                 stop.latitude, stop.longitude,
                 base.getMonth() + 1, base.getDate(), stop.nights || 1,
