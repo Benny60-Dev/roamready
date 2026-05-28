@@ -1405,20 +1405,20 @@ export default function TripMapPage() {
                     edit details. Denominator uses nonHomeStops.length —
                     the same isHomeBadge-filtered count the booking page
                     reports, so "X of Y" agrees across pages. */}
+                {/* Both CTAs converted from inline-style to Tailwind classes so
+                    the hover state applies. Previous shape had color / border /
+                    background set inline alongside a Tailwind hover:bg-[...]
+                    class; inline styles win on specificity, so the hover rule
+                    was generated but never overrode the inline `background:
+                    transparent`. Matches the styling pattern of the other
+                    action-stack outline buttons (Modify trip with AI, Start
+                    trip, Mark completed), which is exactly why their hovers
+                    worked and these two didn't. */}
                 {nonHomeStops.length > 0 && (
                   bookedStops === nonHomeStops.length ? (
                     <Link
                       to={`/trips/${id}/booking`}
-                      className="flex items-center justify-center gap-1.5 transition-colors hover:bg-[#DCE5D5]"
-                      style={{
-                        color: '#2F4030',
-                        border: '1px solid #3E5540',
-                        background: 'transparent',
-                        fontSize: 14,
-                        fontWeight: 500,
-                        padding: '9px 14px',
-                        borderRadius: 6,
-                      }}
+                      className="flex items-center justify-center gap-1.5 transition-colors text-[#2F4030] border border-[#3E5540] bg-transparent hover:bg-[#DCE5D5] text-sm font-medium px-[14px] py-[9px] rounded-md"
                     >
                       <CheckCircle size={15} />
                       All campgrounds booked ({nonHomeStops.length}/{nonHomeStops.length})
@@ -1426,16 +1426,7 @@ export default function TripMapPage() {
                   ) : (
                     <Link
                       to={`/trips/${id}/booking`}
-                      className="flex items-center justify-center gap-1.5 transition-colors hover:bg-[#FAEEDA]"
-                      style={{
-                        color: '#BA7517',
-                        border: '1px solid #BA7517',
-                        background: 'transparent',
-                        fontSize: 14,
-                        fontWeight: 500,
-                        padding: '9px 14px',
-                        borderRadius: 6,
-                      }}
+                      className="flex items-center justify-center gap-1.5 transition-colors text-[#BA7517] border border-[#BA7517] bg-transparent hover:bg-[#FAEEDA] text-sm font-medium px-[14px] py-[9px] rounded-md"
                     >
                       <Tent size={15} />
                       Book campgrounds ({bookedStops}/{nonHomeStops.length})
