@@ -1505,133 +1505,146 @@ export default function TripMapPage() {
                     ? `${trip.totalNights} night${trip.totalNights !== 1 ? 's' : ''}`
                     : null
 
-                  if (dateEditorOpen) {
-                    // ── Expanded inline editor ────────────────────────────
-                    // react-day-picker calendar auto-saves via debounce on
-                    // day-select. Start now bypasses the debounce. No Enter
-                    // required — picking a day IS the gesture.
-                    //
-                    // Wiring contract (do not touch): onSelect → toYmd(date)
-                    // → setStartDateInput(ymd) → scheduleSave(ymd) →
-                    // commitStartDate → tripsApi.shiftDates. Same path as the
-                    // prior native <input type="date"> onChange.
-                    const selectedDate = parseTripDate(startDateInput) ?? undefined
-                    const defaultMonth = parseTripDate(startDateInput) ?? anchor ?? new Date()
-                    const today = new Date()
-                    const calStart = new Date(today.getFullYear() - 1, 0, 1)
-                    const calEnd   = new Date(today.getFullYear() + 5, 11, 31)
-                    return (
-                      <div className="rounded-md border border-[#E8E4DA] bg-[#F5F4F2] p-2.5">
-                        {!hasStopDates ? (
-                          <p className="text-xs text-gray-500 italic">
-                            Add stops first to set a trip date.
-                          </p>
-                        ) : (
-                          <>
-                            <div className="flex items-center gap-2 mb-2">
-                              <Calendar size={14} className="text-[#1F6F8B] flex-shrink-0" />
-                              <span className="text-xs text-gray-600 flex-1">Pick a start date</span>
-                              <button
-                                onClick={handleStartNow}
-                                disabled={savingDate}
-                                className="text-xs text-[#1F6F8B] hover:underline disabled:opacity-50 disabled:no-underline flex-shrink-0"
-                                title="Shift the trip to start today"
-                              >
-                                Start now
-                              </button>
-                            </div>
-                            <div
-                              className={savingDate ? 'opacity-50 pointer-events-none' : ''}
-                              style={{
-                                ['--rdp-accent-color' as any]: '#1F6F8B',
-                                ['--rdp-accent-background-color' as any]: '#E0F0F4',
-                                ['--rdp-background-color' as any]: '#F5F4F2',
-                                ['--rdp-day-height' as any]: '32px',
-                                ['--rdp-day-width' as any]: '32px',
+                  // Date picker is now a click-to-open popover, not an inline
+                  // expansion. The closed state's footprint is the same whether
+                  // the popover is open or shut — the popover overlays content
+                  // below (position: absolute) instead of pushing layout. Save
+                  // wiring is unchanged: onSelect → setStartDateInput →
+                  // scheduleSave → commitStartDate → tripsApi.shiftDates. The
+                  // only new step is setDateEditorOpen(false) inside onSelect
+                  // so the popover auto-closes after a pick. The outside-click
+                  // handler at L581-599 (composedPath shadow-DOM fix from
+                  // 248753a) still treats every descendant of dateLineWrapperRef
+                  // — including the absolutely-positioned popover — as "inside",
+                  // so opening or picking doesn't get misread as outside-click.
+                  const selectedDate = parseTripDate(startDateInput) ?? undefined
+                  const defaultMonth = parseTripDate(startDateInput) ?? anchor ?? new Date()
+                  const today = new Date()
+                  const calStart = new Date(today.getFullYear() - 1, 0, 1)
+                  const calEnd   = new Date(today.getFullYear() + 5, 11, 31)
+                  return (
+                    <>
+                      {/* Trigger row + anchor for the floating popover */}
+                      <div className="relative">
+                        <div className="flex items-center gap-2">
+                          {hasDates ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setStartDateInput(toYmd(anchor!))
+                                setDateEditorOpen(o => !o)
                               }}
+                              disabled={savingDate}
+                              className="flex-1 min-w-0 flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-[#F2F8FA] hover:bg-[#E0F0F4] text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Edit trip start date"
                             >
-                              <DayPicker
-                                mode="single"
-                                selected={selectedDate}
-                                defaultMonth={defaultMonth}
-                                startMonth={calStart}
-                                endMonth={calEnd}
-                                captionLayout="dropdown"
-                                disabled={savingDate ? () => true : undefined}
-                                onSelect={(date) => {
-                                  if (!date) return
-                                  const ymd = toYmd(date)
-                                  setStartDateInput(ymd)
-                                  scheduleSave(ymd)
-                                }}
-                              />
-                            </div>
-                            {isPastDate && (
-                              <p className="text-[11px] text-[#BA7517] mt-1.5">
-                                This will backdate the trip; status will read COMPLETED right away.
+                              <Calendar size={13} className="text-[#1F6F8B] flex-shrink-0" />
+                              <span className="text-sm text-gray-700 truncate">
+                                {formatTripDate(anchor!, 'MMM d, yyyy')}
+                              </span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setStartDateInput('')
+                                setDateEditorOpen(o => !o)
+                              }}
+                              disabled={savingDate}
+                              className="flex-1 min-w-0 flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-dashed border-gray-300 hover:border-[#1F6F8B] hover:text-[#1F6F8B] text-left text-gray-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Set the trip's start date"
+                            >
+                              <CalendarPlus size={13} className="flex-shrink-0" />
+                              <span className="text-sm">Set start date</span>
+                            </button>
+                          )}
+                          {/* Start now — visible next to the date line in the
+                              closed state. Suppressed when there are no stop
+                              dates because shiftDates would 400 without an
+                              anchor (mirrors trips.ts:587). */}
+                          {hasStopDates && (
+                            <button
+                              onClick={handleStartNow}
+                              disabled={savingDate}
+                              className="text-xs text-[#1F6F8B] hover:underline disabled:opacity-50 disabled:no-underline flex-shrink-0"
+                              title="Shift the trip to start today"
+                            >
+                              Start now
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Floating popover — positioned below the trigger row,
+                            z-30 so it overlays sibling content (status pill,
+                            stops list) instead of pushing layout. Sits inside
+                            dateLineWrapperRef so the composedPath outside-click
+                            handler treats it as "inside" — clicks on day cells
+                            and dropdown navigation don't cancel the pending
+                            save. The desktop sidebar's overflow:hidden (used
+                            for its width animation) clips horizontally at the
+                            sidebar's right edge; the DayPicker's ~250px width
+                            fits comfortably within the 24rem - 2rem padding. */}
+                        {dateEditorOpen && (
+                          <div
+                            className="absolute top-full left-0 mt-1 z-30 rounded-md border border-[#E8E4DA] bg-white shadow-lg p-2"
+                            style={{
+                              ['--rdp-accent-color' as any]: '#1F6F8B',
+                              ['--rdp-accent-background-color' as any]: '#E0F0F4',
+                              ['--rdp-background-color' as any]: '#F5F4F2',
+                              ['--rdp-day-height' as any]: '32px',
+                              ['--rdp-day-width' as any]: '32px',
+                            }}
+                          >
+                            {!hasStopDates ? (
+                              <p className="text-xs text-gray-500 italic px-1 py-2">
+                                Add stops first to set a trip date.
                               </p>
+                            ) : (
+                              <div className={savingDate ? 'opacity-50 pointer-events-none' : ''}>
+                                <DayPicker
+                                  mode="single"
+                                  selected={selectedDate}
+                                  defaultMonth={defaultMonth}
+                                  startMonth={calStart}
+                                  endMonth={calEnd}
+                                  captionLayout="dropdown"
+                                  disabled={savingDate ? () => true : undefined}
+                                  onSelect={(date) => {
+                                    if (!date) return
+                                    const ymd = toYmd(date)
+                                    setStartDateInput(ymd)
+                                    scheduleSave(ymd)
+                                    setDateEditorOpen(false)
+                                  }}
+                                />
+                              </div>
                             )}
-                          </>
-                        )}
-                        {/* Read-only end-date caption — derived, with the
-                            honest "to change, remove a stop / adjust nights"
-                            pointer. Suppressed when the trip has no dates
-                            because there's no end to display yet. */}
-                        {trip.endDate && (
-                          <p className="text-[11px] text-gray-500 mt-2">
-                            Ends {formatTripDate(trip.endDate, 'MMM d')}
-                            {nightsLabel ? ` · ${nightsLabel}` : ''}
-                            {stopCount ? `, ${stopCount} stops` : ''}.
-                            {' '}
-                            <span className="text-gray-400">
-                              To change the end, remove a stop or adjust nights.
-                            </span>
-                          </p>
+                          </div>
                         )}
                       </div>
-                    )
-                  }
 
-                  // ── Collapsed trigger ─────────────────────────────────────
-                  // Two visual states: has-dates (filled tint, calendar
-                  // icon, range text) vs unset (dashed outline, calendar-
-                  // plus icon, "Set start date" prompt). Both open the
-                  // same editor on click.
-                  if (hasDates) {
-                    return (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setStartDateInput(toYmd(anchor!))
-                          setDateEditorOpen(true)
-                        }}
-                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-[#F2F8FA] hover:bg-[#E0F0F4] text-left transition-colors"
-                        title="Edit trip dates"
-                      >
-                        <Calendar size={13} className="text-[#1F6F8B] flex-shrink-0" />
-                        <span className="text-sm text-gray-700 truncate">
-                          {formatTripDate(anchor!, 'MMM d')}
-                          {trip.endDate ? ` – ${formatTripDate(trip.endDate, 'MMM d')}` : ''}
-                        </span>
-                      </button>
-                    )
-                  }
-                  return (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        // No anchor yet — open the editor with an empty
-                        // input; if there are no stop dates the editor
-                        // will show the empty-state hint instead.
-                        setStartDateInput('')
-                        setDateEditorOpen(true)
-                      }}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-dashed border-gray-300 hover:border-[#1F6F8B] hover:text-[#1F6F8B] text-left text-gray-500 transition-colors"
-                      title="Set the trip's start date"
-                    >
-                      <CalendarPlus size={13} className="flex-shrink-0" />
-                      <span className="text-sm">Set start date</span>
-                    </button>
+                      {/* Past-date warning + end-date caption. Live below the
+                          closed date line (not inside the popover) so they
+                          stay visible after the popover auto-closes on pick —
+                          otherwise the user would never see the backdate
+                          warning that the pick just triggered. */}
+                      {isPastDate && (
+                        <p className="text-[11px] text-[#BA7517] mt-1.5">
+                          This will backdate the trip; status will read COMPLETED right away.
+                        </p>
+                      )}
+                      {trip.endDate && (
+                        <p className="text-[11px] text-gray-500 mt-2">
+                          Ends {formatTripDate(trip.endDate, 'MMM d')}
+                          {nightsLabel ? ` · ${nightsLabel}` : ''}
+                          {stopCount ? `, ${stopCount} stops` : ''}.
+                          {' '}
+                          <span className="text-gray-400">
+                            To change the end, remove a stop or adjust nights.
+                          </span>
+                        </p>
+                      )}
+                    </>
                   )
                 })()}
               </div>
