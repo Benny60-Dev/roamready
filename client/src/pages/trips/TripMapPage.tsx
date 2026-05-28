@@ -555,19 +555,36 @@ export default function TripMapPage() {
     }
   }, [mapExpanded, collapseMap])
 
-  // Date-line editor — outside-click + Escape close. Same listener pattern
-  // as the prior popover, just guarding a single wrapper (the date row +
-  // its expanded editor share the same wrapper div, so one contains()
-  // check covers both states). Editor also auto-closes on a successful
-  // save inside commitStartDate; this handler is for the no-save dismiss
-  // paths (clicked elsewhere, hit Escape, picked the same date the trip
-  // already had so commit no-op'd).
+  // Date-line editor — outside-click + Escape close. Editor also auto-closes
+  // on a successful save inside commitStartDate; this handler is for the
+  // no-save dismiss paths (clicked elsewhere, hit Escape, picked the same
+  // date the trip already had so commit no-op'd).
+  //
+  // SHADOW-DOM SUBTLETY — Node.contains() does NOT cross shadow boundaries.
+  // Native <input type="date"> renders its picker UI inside the input's
+  // shadow root (Chrome) or as a browser-level overlay outside the document
+  // tree. A click on a date cell in the picker has e.target inside that
+  // shadow DOM, so wrapper.contains(target) returns false — and an earlier
+  // version of this handler treated picker clicks as outside-clicks, closed
+  // the editor immediately, and (combined with a now-removed cancel-on-
+  // close effect on the save timer) lost the user's most recent pick before
+  // the debounced shiftDates request could fire. The DB-confirmed repro:
+  // a COMPLETED→future edit that left the trip stuck at its original dates.
+  //
+  // Fix: use e.composedPath() instead. composedPath traverses through shadow
+  // boundaries and lists every node the event passed through on its way to
+  // the document. If the wrapper appears anywhere in that path, the click
+  // originated inside the editor (including inside the picker), and the
+  // editor stays open. composedPath is standard in every browser the app
+  // targets; the optional-chain on dateLineWrapperRef handles the ref
+  // being null on mount/unmount transitions.
   useEffect(() => {
     if (!dateEditorOpen) return
     function onPointer(e: PointerEvent) {
-      const t = e.target as Node | null
-      if (!t) return
-      if (dateLineWrapperRef.current?.contains(t)) return
+      const wrapper = dateLineWrapperRef.current
+      if (!wrapper) return
+      const path = e.composedPath()
+      if (path.includes(wrapper)) return
       setDateEditorOpen(false)
     }
     function onKey(e: KeyboardEvent) {
@@ -581,16 +598,14 @@ export default function TripMapPage() {
     }
   }, [dateEditorOpen])
 
-  // Cancel any pending debounced shiftDates on editor close or unmount so a
-  // phantom save can't fire after the editor has been dismissed. The cleanup
-  // also runs when commitStartDate fires successfully (it clears the ref
-  // itself), so this is belt-and-suspenders against stray timers.
-  useEffect(() => {
-    if (!dateEditorOpen && saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current)
-      saveTimerRef.current = null
-    }
-  }, [dateEditorOpen])
+  // Unmount cleanup — clear any pending debounced shiftDates so a phantom
+  // request can't fire after the component unmounts (e.g. user navigates
+  // away mid-debounce). Deliberately does NOT cancel on editor close: a
+  // pending save when the editor closes is the user's most recent picked
+  // date, and the correct semantic is to commit it. Native date inputs
+  // only emit onChange for complete valid dates, and commitStartDate's
+  // no-op guard short-circuits same-value picks, so letting the pending
+  // save fire is safe — it's exactly the user's expressed intent.
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) {
