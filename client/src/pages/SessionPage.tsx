@@ -513,9 +513,17 @@ export default function SessionPage() {
       const tripId = promoted.data.trip.id
       console.timeEnd('[buildItinerary] promoteSession')
 
-      tripsApi.update(tripId, { aiConversation: messages }).catch(err =>
-        console.error('[buildItinerary] failed to attach aiConversation to trip:', err)
-      )
+      // The planning transcript is NOT copied to Trip.aiConversation. It lives
+      // on PlanningSession.messages (autosaved during planning) and the
+      // promoted Trip is linked to its session via Trip.planningSession, so
+      // the conversation is fully recoverable through that relation. The
+      // continuity bridge into Modify-AI uses Trip.planningContextSummary
+      // (a ~250-word distillation generated at promote time), not the full
+      // transcript. A prior version of this code wrote `messages` to
+      // Trip.aiConversation here via tripsApi.update — that write 400'd
+      // silently against the .strict() TripUpdateSchema, which deliberately
+      // omits aiConversation as a server-managed field, and nothing in the
+      // app read Trip.aiConversation back anyway. Removed.
 
       const stops: any[] = itinerary.stops || []
       const lastIdx = stops.length - 1
