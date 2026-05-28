@@ -1409,17 +1409,32 @@ export async function getTripWeather(req: AuthRequest, res: Response, next: Next
     if (!trip) throw new AppError('Trip not found', 404)
 
     const today      = new Date()
-    const tripStart  = trip.startDate ? new Date(trip.startDate) : null
-    const daysUntil  = tripStart
-      ? Math.ceil((tripStart.getTime() - today.getTime()) / 86_400_000)
+    // Canonical trip-anchor probe — mirrors recomputeStopDates (L97-105) and
+    // shiftTripDates (L587), the convention this codebase has settled on:
+    // Trip.startDate is unreliable (the promote flow doesn't write it and
+    // there's no UI to set it directly), so most rows have startDate=null
+    // even when their stops have real dates. The first stop with a non-null
+    // arrivalDate is the canonical source of truth. Reading Trip.startDate
+    // raw — as this controller did before — made every null-startDate trip
+    // fall to historical regardless of how near-term its first stop was.
+    const firstDatedStop = trip.stops.find(s => s.arrivalDate != null)
+    const tripAnchor = trip.startDate
+      ? new Date(trip.startDate)
+      : firstDatedStop?.arrivalDate
+        ? new Date(firstDatedStop.arrivalDate)
+        : null
+    const daysUntil  = tripAnchor
+      ? Math.ceil((tripAnchor.getTime() - today.getTime()) / 86_400_000)
       : null
-    // Trip-wide hint, NOT the final per-stop decision. A startDate-less trip
-    // can't qualify for live (no anchor to project days against), and trips
-    // starting more than 10 days out short-circuit straight to historical
-    // even if their first stop would technically fit Open-Meteo's window.
-    // Per-stop fitness inside the loop tightens this further — a long trip
-    // can be useLiveHint=true with late stops still falling outside the API
-    // window, in which case those stops fall back to historical here.
+    // Trip-wide hint, NOT the final per-stop decision. A trip with no
+    // anchor at all (no startDate AND no dated stop) can't qualify for
+    // live — there's nothing to project days against — so it falls to
+    // historical. Trips starting more than 10 days out short-circuit
+    // straight to historical even if their first stop would technically
+    // fit Open-Meteo's window. Per-stop fitness inside the loop tightens
+    // this further — a long trip can be useLiveHint=true with late stops
+    // still falling outside the API window, in which case those stops
+    // fall back to historical here.
     const useLiveHint = daysUntil !== null && daysUntil <= 10
     const liveWindowEnd = new Date(today)
     liveWindowEnd.setDate(liveWindowEnd.getDate() + LIVE_WINDOW_END_DAYS)
@@ -1440,7 +1455,7 @@ export async function getTripWeather(req: AuthRequest, res: Response, next: Next
           // 1-night stop.
           const base = stop.arrivalDate
             ? new Date(stop.arrivalDate)
-            : tripStart ?? today
+            : tripAnchor ?? today
           const endBase = new Date(base)
           endBase.setDate(endBase.getDate() + (stop.nights || 1))
 
