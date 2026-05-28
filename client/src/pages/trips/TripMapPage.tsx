@@ -7,6 +7,8 @@ import {
   Pencil, Trash2, Check, BookOpen, Package, Share2, Download, CheckCircle, CloudRain, Wand2,
   Maximize2, Minimize2, Tent, Bed, CalendarPlus,
 } from 'lucide-react'
+import { DayPicker } from 'react-day-picker'
+import 'react-day-picker/style.css'
 import { formatTripDate, parseTripDate, toYmd } from '../../utils/dates'
 import { tripsApi } from '../../services/api'
 import { Trip, Stop, StopWeather, LiveForecast, TripFuelEstimate } from '../../types'
@@ -1505,31 +1507,30 @@ export default function TripMapPage() {
 
                   if (dateEditorOpen) {
                     // ── Expanded inline editor ────────────────────────────
-                    // <input type="date"> auto-saves via debounce on the
-                    // onChange. Start now bypasses the debounce. No Enter
-                    // required — picker commit IS the gesture.
+                    // react-day-picker calendar auto-saves via debounce on
+                    // day-select. Start now bypasses the debounce. No Enter
+                    // required — picking a day IS the gesture.
+                    //
+                    // Wiring contract (do not touch): onSelect → toYmd(date)
+                    // → setStartDateInput(ymd) → scheduleSave(ymd) →
+                    // commitStartDate → tripsApi.shiftDates. Same path as the
+                    // prior native <input type="date"> onChange.
+                    const selectedDate = parseTripDate(startDateInput) ?? undefined
+                    const defaultMonth = parseTripDate(startDateInput) ?? anchor ?? new Date()
+                    const today = new Date()
+                    const calStart = new Date(today.getFullYear() - 1, 0, 1)
+                    const calEnd   = new Date(today.getFullYear() + 5, 11, 31)
                     return (
-                      <div className="rounded-md border border-[#1F6F8B] bg-[#F2F8FA] p-2.5">
+                      <div className="rounded-md border border-[#E8E4DA] bg-[#F5F4F2] p-2.5">
                         {!hasStopDates ? (
                           <p className="text-xs text-gray-500 italic">
                             Add stops first to set a trip date.
                           </p>
                         ) : (
                           <>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 mb-2">
                               <Calendar size={14} className="text-[#1F6F8B] flex-shrink-0" />
-                              <input
-                                type="date"
-                                className="flex-1 min-w-0 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-[#1F6F8B] disabled:opacity-50 bg-white"
-                                value={startDateInput}
-                                disabled={savingDate}
-                                onChange={e => {
-                                  const ymd = e.target.value
-                                  setStartDateInput(ymd)
-                                  if (ymd) scheduleSave(ymd)
-                                }}
-                                autoFocus
-                              />
+                              <span className="text-xs text-gray-600 flex-1">Pick a start date</span>
                               <button
                                 onClick={handleStartNow}
                                 disabled={savingDate}
@@ -1538,6 +1539,32 @@ export default function TripMapPage() {
                               >
                                 Start now
                               </button>
+                            </div>
+                            <div
+                              className={savingDate ? 'opacity-50 pointer-events-none' : ''}
+                              style={{
+                                ['--rdp-accent-color' as any]: '#1F6F8B',
+                                ['--rdp-accent-background-color' as any]: '#E0F0F4',
+                                ['--rdp-background-color' as any]: '#F5F4F2',
+                                ['--rdp-day-height' as any]: '32px',
+                                ['--rdp-day-width' as any]: '32px',
+                              }}
+                            >
+                              <DayPicker
+                                mode="single"
+                                selected={selectedDate}
+                                defaultMonth={defaultMonth}
+                                startMonth={calStart}
+                                endMonth={calEnd}
+                                captionLayout="dropdown"
+                                disabled={savingDate ? () => true : undefined}
+                                onSelect={(date) => {
+                                  if (!date) return
+                                  const ymd = toYmd(date)
+                                  setStartDateInput(ymd)
+                                  scheduleSave(ymd)
+                                }}
+                              />
                             </div>
                             {isPastDate && (
                               <p className="text-[11px] text-[#BA7517] mt-1.5">
@@ -2060,7 +2087,7 @@ export default function TripMapPage() {
               mapContainerStyle={MAP_CONTAINER_STYLE}
               zoom={6}
               center={center}
-              options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false, mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID' }}
+              options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy', mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID' }}
               onLoad={onMapLoad}
             >
               {/* Driving route. The library's declarative path-prop wasn't
