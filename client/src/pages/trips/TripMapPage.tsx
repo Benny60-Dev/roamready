@@ -437,7 +437,11 @@ export default function TripMapPage() {
   const [selectedStop, setSelectedStop]     = useState<Stop | null>(null)
   const [sidebarOpen, setSidebarOpen]       = useState(true)
   const [sidebarTab, setSidebarTab]         = useState<'stops' | 'weather'>('stops')
-  const [layers, setLayers]                 = useState({ route: true, stops: true, overnight: true, incompatible: true })
+  // Layers state retired with the Layers panel — all four layers stay on
+  // permanently. None of them had a plausible "turn off" use case, and
+  // the panel itself was adding sidebar noise without earning its space.
+  // If a future need surfaces, the toggles can move behind a gear menu
+  // on the map itself rather than living in the sidebar.
   const [weatherData, setWeatherData]       = useState<Record<string, StopWeather | null | undefined>>({})
   const [weatherLoading, setWeatherLoading] = useState(false)
   const [geocoding, setGeocoding]           = useState(false)
@@ -978,12 +982,9 @@ export default function TripMapPage() {
       const isEndpoint = rawBadge === 'S' || rawBadge === 'H' || rawBadge === 'F'
       const kind: MarkerKind = isEndpoint ? 'home' : classifyStop(stop)
 
-      // Layer visibility — HOME (start) always shows
-      if (kind !== 'home') {
-        if (!layers.stops && stop.type !== 'OVERNIGHT_ONLY') return
-        if (!layers.overnight && stop.type === 'OVERNIGHT_ONLY') return
-        if (!layers.incompatible && !stop.isCompatible) return
-      }
+      // Layer-visibility gates retired with the Layers panel. Stops,
+      // overnight markers, and incompatible markers all render
+      // unconditionally now; HOME (start) was always-on anyway.
 
       console.log(
         `[TripMapPage] marker badge=${badge} "${stop.locationName}" kind=${kind}`,
@@ -1008,7 +1009,7 @@ export default function TripMapPage() {
 
     console.log(`[TripMapPage] ${markersRef.current.length} marker(s) added to map`)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapInstance, stopsWithCoords, stopBadges, layers])
+  }, [mapInstance, stopsWithCoords, stopBadges])
 
   // Cleanup markers on unmount
   useEffect(() => () => { markersRef.current.forEach(m => { m.map = null }) }, [])
@@ -1410,7 +1411,19 @@ export default function TripMapPage() {
                   )
                 )}
 
-                {/* Status-dependent middle button */}
+                {/* Modify trip with AI — promoted above the status-dependent
+                    button. Modify is the far more frequent action during
+                    planning (which is where users spend the most time);
+                    Start trip / Mark completed are rare phase transitions
+                    and belong at the bottom of the stack. */}
+                <button
+                  onClick={() => setModifyPanelOpen(true)}
+                  className="border border-[#1F6F8B] text-[#1F6F8B] bg-white hover:bg-[#E0F0F4] text-sm font-medium px-4 py-2.5 rounded-md transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Wand2 size={13} /> Modify trip with AI
+                </button>
+
+                {/* Status-dependent trip-phase button */}
                 {trip?.status === 'PLANNING' && (
                   <button
                     onClick={handleStartTrip}
@@ -1436,14 +1449,6 @@ export default function TripMapPage() {
                     <CheckCircle size={14} /> Trip completed
                   </div>
                 )}
-
-                {/* Modify trip with AI */}
-                <button
-                  onClick={() => setModifyPanelOpen(true)}
-                  className="border border-[#1F6F8B] text-[#1F6F8B] bg-white hover:bg-[#E0F0F4] text-sm font-medium px-4 py-2.5 rounded-md transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <Wand2 size={13} /> Modify trip with AI
-                </button>
               </div>
 
               {/* C1 — 4-card stats grid removed. Miles + Nights + Est. cost
@@ -1451,25 +1456,9 @@ export default function TripMapPage() {
                   Booked moves into the "Book campgrounds (X/N)" CTA in C2. */}
             </div>
 
-            {/* Layer toggles */}
-            <div className="px-3 py-2.5 border-b border-gray-100 flex-shrink-0" style={{ borderBottomWidth: '0.5px' }}>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5 flex items-center gap-1">
-                <Layers size={11} /> Layers
-              </p>
-              <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-                {Object.entries(layers).map(([key, val]) => (
-                  <label key={key} className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={val}
-                      onChange={() => setLayers(l => ({ ...l, [key]: !val }))}
-                      className="rounded"
-                    />
-                    <span className="text-xs text-gray-600 capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+            {/* Layers panel removed — see the comment on the (now-retired)
+                layers state earlier in this file. Map markers and polylines
+                render unconditionally. */}
 
             {/* Stops / Weather tab bar */}
             <div className="flex border-b border-gray-100 flex-shrink-0" style={{ borderBottomWidth: '0.5px' }}>
@@ -1783,7 +1772,7 @@ export default function TripMapPage() {
               onLoad={onMapLoad}
             >
               {/* Driving route */}
-              {layers.route && routePath && (
+              {routePath && (
                 <Polyline
                   path={routePath}
                   options={{ strokeColor: '#F97316', strokeWeight: 2.5, strokeOpacity: 0.85 }}
