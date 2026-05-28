@@ -18,6 +18,31 @@ import { parseTripDate } from './dates'
  * 5 trips were stale this way before this util landed). Deriving from
  * dates lets the trip's status track reality without ceremony.
  *
+ * STOP-DATE FALLBACK — Trip.startDate / Trip.endDate can be null on real
+ * trips even when the trip is actively under way. The session-promote
+ * flow doesn't write startDate (the AI's plan lives on the stops, not on
+ * the trip row), and shiftTripDates intentionally preserves null on the
+ * Trip row via its `shifted(null) → null` rule. So a promoted-then-
+ * shifted trip looks like { startDate: null, endDate: null } on the trip
+ * row even when its stops carry concrete arrival/departure dates that
+ * put it ACTIVE today. Without a fallback the dashboard kept reading
+ * PLANNING for trips that were genuinely under way — Epic Western Loop's
+ * "Start now → still PLANNING" repro.
+ *
+ * The fallback mirrors what the trip-page date line already does for
+ * display:
+ *   start = parseTripDate(trip.startDate) ?? parseTripDate(firstDatedStop.arrivalDate)
+ *   end   = parseTripDate(trip.endDate)   ?? parseTripDate(lastDatedStop.departureDate)
+ * where firstDatedStop / lastDatedStop are the first/last stops by
+ * `order` ascending with a non-null arrival/departure. This is the same
+ * anchor probe shiftTripDates uses server-side (trips.ts:587), keeping
+ * client and server agreed on what "the trip's effective dates" means.
+ *
+ * If after the fallback either side is still null (no Trip column AND
+ * no stop with the relevant date) the trip is genuinely undated — we
+ * return PLANNING. That preserves the "brand-new plan with no calendar
+ * commitment yet" case correctly.
+ *
  * parseTripDate normalizes both wire shapes (the server emits dates as
  * 'YYYY-MM-DD' or full ISO strings depending on the path) to a local-noon
  * Date whose calendar components match the UTC date — same convention
@@ -30,14 +55,44 @@ import { parseTripDate } from './dates'
  * all the way to end of day — the day-after is the first day it flips
  * to COMPLETED.
  *
- * For trips with no committed dates yet (Trip.startDate or endDate null —
- * e.g. an early-stage plan the user hasn't anchored to a calendar), the
- * result is PLANNING. Adding dates later via the AI shift_trip_dates flow
- * (or, in step 2, a direct date editor) will transition them naturally.
+ * Callers — TripMapPage header pill, TripCard (Dashboard grid + Session
+ * planning-strip), DashboardPage tab filters, SessionPage filter — all
+ * pass a Trip whose `stops` is populated (getTrips at trips.ts:93 and
+ * getTrip at trips.ts:513 both `include: { stops: { orderBy: { order:
+ * 'asc' } } }`). The `stops ?? []` guard below covers the type's
+ * optionality, not a real runtime path.
  */
 export function deriveTripStatus(trip: Trip, today: Date = new Date()): TripStatus {
-  const start = parseTripDate(trip.startDate)
-  const end = parseTripDate(trip.endDate)
+  let start = parseTripDate(trip.startDate)
+  let end = parseTripDate(trip.endDate)
+
+  // Fall back to stop dates when the Trip row's start/end columns are
+  // null. See "STOP-DATE FALLBACK" in the doc above for why this is
+  // necessary (TL;DR: shiftTripDates preserves null on the Trip row).
+  if (!start || !end) {
+    const stops = trip.stops ?? []
+    if (!start) {
+      // First stop (by order asc) with a non-null arrivalDate. Same probe
+      // shiftTripDates uses server-side to compute its shift anchor.
+      const firstDatedStop = stops.find(s => s.arrivalDate != null)
+      start = parseTripDate(firstDatedStop?.arrivalDate)
+    }
+    if (!end) {
+      // Last stop with a non-null departureDate. ES2020 target → no
+      // Array#findLast; walk the array in reverse instead.
+      let lastDatedStop: typeof stops[number] | null = null
+      for (let i = stops.length - 1; i >= 0; i--) {
+        if (stops[i].departureDate != null) {
+          lastDatedStop = stops[i]
+          break
+        }
+      }
+      end = parseTripDate(lastDatedStop?.departureDate)
+    }
+  }
+
+  // Genuinely undated — no Trip columns AND no stops carry the relevant
+  // date. Real "I haven't picked a calendar yet" state, reads PLANNING.
   if (!start || !end) return 'PLANNING'
 
   // Anchor today to local noon on the same calendar day, mirroring
