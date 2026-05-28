@@ -507,14 +507,24 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     let surpriseVibe: string | undefined
     if (isSurprise) {
       try {
+        // Read from PlanningSession.messages via the trip→planningSession
+        // relation. The earlier form filtered on Trip.aiConversation, which
+        // was effectively always null in production (the post-promote client
+        // write that was supposed to populate it 400'd against the .strict()
+        // TripUpdateSchema, and nothing else wrote it for promoted trips).
+        // Net effect was a permanently-empty exclusion list, so the AI could
+        // re-suggest surprise destinations the user had already been given.
+        // PlanningSession.messages is the canonical transcript store and
+        // contains the original "surprise trip" user message verbatim.
         const recent = await prisma.trip.findMany({
           where: {
             userId: req.user!.id,
-            aiConversation: { not: Prisma.JsonNull },
+            planningSession: { isNot: null },
           },
           orderBy: { createdAt: 'desc' },
           take: 30,
           include: {
+            planningSession: { select: { messages: true } },
             stops: {
               where: { type: 'DESTINATION' },
               orderBy: { order: 'asc' },
@@ -523,7 +533,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
           },
         })
         recentSurpriseDestinations = recent
-          .filter(t => JSON.stringify(t.aiConversation).toLowerCase().includes('surprise trip'))
+          .filter(t => JSON.stringify(t.planningSession?.messages ?? null).toLowerCase().includes('surprise trip'))
           .slice(0, 5)
           .map(t => t.stops[0]?.locationName)
           .filter(Boolean) as string[]
