@@ -222,6 +222,15 @@ function StopPopup({
   // actualRate ?? siteRate pattern shipped in bdb4192 — the map popup was
   // the last surface still reading from the estimate-only field.
   const displayRate = stop.actualRate ?? stop.siteRate
+  // All-in total = rate × nights + fees. Fees only count when actualRate is
+  // present (an unbooked stop with just an estimate has no fees to add).
+  // Same formula as the booking-page header's totalCampCost reduce.
+  // Recomputes on every render so the nights stepper's setSelectedStop
+  // patch flows through live — bump nights from 1 to 2 and the total
+  // jumps without a refetch.
+  const displayTotal = displayRate != null
+    ? displayRate * stop.nights + (stop.actualRate != null ? (stop.actualFees ?? 0) : 0)
+    : null
 
   let weatherSummary: React.ReactNode = null
   if (weather?.mode === 'live') {
@@ -304,9 +313,9 @@ function StopPopup({
             className="w-5 h-5 rounded-full border border-gray-200 flex items-center justify-center hover:bg-gray-50"
           ><Plus size={10} /></button>
         </div>
-        {displayRate && (
+        {displayRate != null && displayTotal != null && (
           <span className="ml-auto text-xs text-gray-500 flex items-center gap-0.5">
-            <DollarSign size={11} />${displayRate}/night
+            <DollarSign size={11} />${displayRate}/night · ${displayTotal} total
           </span>
         )}
       </div>
