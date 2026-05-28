@@ -1433,9 +1433,16 @@ export async function getTripWeather(req: AuthRequest, res: Response, next: Next
             let data: any = null
 
             if (useLive) {
-              // Live mode: use stop arrivalDate, or fall back to trip startDate, or today
+              // Live mode: use stop arrivalDate, or fall back to trip startDate, or today.
+              // Prisma returns DateTime columns as Date instances — wrap directly via
+              // new Date(...) so we copy the Date rather than coercing it to string and
+              // back. The earlier `(stop.arrivalDate as string).split('T')[0]` form
+              // threw TypeError at runtime (.split on a Date), the per-stop catch
+              // swallowed it, and every live-mode trip's weather came back as { id:
+              // null, … } with a 200 — surfacing as a blank Weather tab. Mirrors the
+              // historical branch's tolerant `new Date(stop.arrivalDate)`.
               const base = stop.arrivalDate
-                ? new Date((stop.arrivalDate as string).split('T')[0])
+                ? new Date(stop.arrivalDate)
                 : tripStart ?? today
               const startDate = isoDate(base)
               const endDate   = isoDate(new Date(new Date(startDate).setDate(new Date(startDate).getDate() + (stop.nights || 1))))
