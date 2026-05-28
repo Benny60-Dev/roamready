@@ -5,7 +5,7 @@ import {
   Layers, X, Plus, Minus, DollarSign, Calendar, AlertTriangle,
   Wind, Droplets, Snowflake, Thermometer, ExternalLink,
   Pencil, Trash2, Check, BookOpen, Package, Share2, Download, CheckCircle, CloudRain, Wand2,
-  Maximize2, Minimize2, Tent, Bed,
+  Maximize2, Minimize2, Tent, Bed, CalendarPlus,
 } from 'lucide-react'
 import { formatTripDate, parseTripDate, toYmd } from '../../utils/dates'
 import { tripsApi } from '../../services/api'
@@ -469,26 +469,33 @@ export default function TripMapPage() {
   // remount. See the scout notes in the polyline fix commit.
   const polylineRef = useRef<google.maps.Polyline | null>(null)
   const [mapInstance, setMapInstance]       = useState<google.maps.Map | null>(null)
-  // Trip-settings popover — replaces the prior inline rename pencil. Holds
-  // name + start-date editors together so a single pencil affordance covers
-  // all trip-level metadata. End date is shown read-only inside the popover
-  // because it's a derived quantity (utils/tripStatus.ts comment + the
-  // recomputeStopDates contract on the server: endDate = anchor + Σ stop
-  // nights). Editing it directly would lie about how the system works —
-  // length changes happen via remove-stop / change-nights instead, and the
-  // popover caption surfaces that.
-  const [settingsOpen, setSettingsOpen]     = useState(false)
+  // Rename pencil — restored to name-only after the 3f8ed99 popover rework
+  // bundled name+date editing behind one affordance and lost discoverability
+  // on the date side. Dates now live on their own clickable line below the
+  // trip name (see dateEditorOpen below).
+  const [renaming, setRenaming]             = useState(false)
   const [tripNameInput, setTripNameInput]   = useState('')
+  // First-class date line — clickable row directly under the trip name,
+  // shows "May 27 – Jun 10" when set or a "Set start date" prompt when not.
+  // Click toggles dateEditorOpen and the row transforms into an inline
+  // editor (no popover, no position:fixed — the editor flows inline and
+  // pushes the rest of the header down, so the sidebar's overflow:hidden
+  // at L1252 can't clip it).
+  //
+  // Auto-save: <input type="date">'s onChange schedules a debounced save
+  // (saveTimerRef) so picker-navigation streams (notably iOS wheel pickers,
+  // which fire onChange on every wheel tick) collapse into ONE shiftDates
+  // call. Chrome/Edge/Firefox fire one onChange per commit anyway — they
+  // hit the same debounce and fire ~400ms after the pick. End date is
+  // displayed read-only inside the editor because it's a derived quantity
+  // (server-side recomputeStopDates: endDate = anchor + Σ stop nights);
+  // length changes happen via remove-stop / change-nights, surfaced by the
+  // editor's caption.
+  const [dateEditorOpen, setDateEditorOpen] = useState(false)
   const [startDateInput, setStartDateInput] = useState('')
   const [savingDate, setSavingDate]         = useState(false)
-  // Viewport coords of the pencil's bottom-left, recomputed on open and on
-  // scroll/resize. Drives the popover's position:fixed top/left so it
-  // escapes the sidebar wrapper's overflow:hidden (set on the desktop
-  // collapse transition at the sidebar div below). Same anti-clip pattern
-  // as the Home rig dropdown — see commit 9c65444.
-  const [pencilRect, setPencilRect]         = useState<{ top: number; left: number } | null>(null)
-  const pencilBtnRef                        = useRef<HTMLButtonElement>(null)
-  const settingsPopoverRef                  = useRef<HTMLDivElement>(null)
+  const dateLineWrapperRef                  = useRef<HTMLDivElement>(null)
+  const saveTimerRef                        = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [modifyPanelOpen, setModifyPanelOpen] = useState(false)
   const [mapExpanded, setMapExpanded]       = useState(false)
   // Live regional fuel-cost estimate. Same fetch shape as TripSummaryPage —
@@ -548,23 +555,23 @@ export default function TripMapPage() {
     }
   }, [mapExpanded, collapseMap])
 
-  // Trip-settings popover — outside-click + Escape close. Listeners attach
-  // only while the popover is open so they don't tax every page render.
-  // pointerdown (capture-free) catches the click before any inner handler
-  // can stopPropagation; the contains() checks let interactions inside the
-  // popover or on the pencil trigger itself pass through. Escape closes
-  // the popover even if focus is in the inputs.
+  // Date-line editor — outside-click + Escape close. Same listener pattern
+  // as the prior popover, just guarding a single wrapper (the date row +
+  // its expanded editor share the same wrapper div, so one contains()
+  // check covers both states). Editor also auto-closes on a successful
+  // save inside commitStartDate; this handler is for the no-save dismiss
+  // paths (clicked elsewhere, hit Escape, picked the same date the trip
+  // already had so commit no-op'd).
   useEffect(() => {
-    if (!settingsOpen) return
+    if (!dateEditorOpen) return
     function onPointer(e: PointerEvent) {
-      const target = e.target as Node | null
-      if (!target) return
-      if (settingsPopoverRef.current?.contains(target)) return
-      if (pencilBtnRef.current?.contains(target)) return
-      setSettingsOpen(false)
+      const t = e.target as Node | null
+      if (!t) return
+      if (dateLineWrapperRef.current?.contains(t)) return
+      setDateEditorOpen(false)
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setSettingsOpen(false)
+      if (e.key === 'Escape') setDateEditorOpen(false)
     }
     document.addEventListener('pointerdown', onPointer)
     document.addEventListener('keydown', onKey)
@@ -572,36 +579,26 @@ export default function TripMapPage() {
       document.removeEventListener('pointerdown', onPointer)
       document.removeEventListener('keydown', onKey)
     }
-  }, [settingsOpen])
+  }, [dateEditorOpen])
 
-  // Track the pencil's viewport coords so the position:fixed popover stays
-  // anchored as the page scrolls or resizes. Fixed positioning is required
-  // because the sidebar wrapper carries overflow:hidden during its
-  // collapse-width transition (the wrapper's style block sets it on
-  // desktop) — a position:absolute popover would be clipped before its own
-  // size could matter. Same escape pattern as the Home rig dropdown
-  // (commit 9c65444). Capture-phase scroll listener picks up scroll on any
-  // ancestor (the stops list inside the sidebar has its own scroller).
+  // Cancel any pending debounced shiftDates on editor close or unmount so a
+  // phantom save can't fire after the editor has been dismissed. The cleanup
+  // also runs when commitStartDate fires successfully (it clears the ref
+  // itself), so this is belt-and-suspenders against stray timers.
   useEffect(() => {
-    if (!settingsOpen) {
-      setPencilRect(null)
-      return
+    if (!dateEditorOpen && saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
     }
-    function update() {
-      const el = pencilBtnRef.current
-      if (!el) return
-      const r = el.getBoundingClientRect()
-      // Anchor the popover's top-left under the pencil with a 6px gap.
-      setPencilRect({ top: r.bottom + 6, left: r.left })
-    }
-    update()
-    window.addEventListener('scroll', update, true)
-    window.addEventListener('resize', update)
+  }, [dateEditorOpen])
+  useEffect(() => {
     return () => {
-      window.removeEventListener('scroll', update, true)
-      window.removeEventListener('resize', update)
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = null
+      }
     }
-  }, [settingsOpen])
+  }, [])
 
   useEffect(() => {
     const onResize = () => {
@@ -1179,49 +1176,70 @@ export default function TripMapPage() {
   // The row-level showDelete (computed inline in the stops list) carries
   // the same min-stops + HOME-guard logic.
 
-  // ─── Trip-settings popover handlers ────────────────────────────────────────
+  // ─── Header edit handlers ──────────────────────────────────────────────────
   //
-  // Three actions, each scoped narrowly so they can run independently from
-  // the popover without forcing a single "save all" gesture:
+  // handleRename — restored to its pre-3f8ed99 form. The pencil opens an
+  // inline name editor (the renaming/setRenaming ternary on the trip-name
+  // row); Enter or the ✓ button saves via tripsApi.update({ name }). Renames
+  // are rare and the optimistic local update is enough — on-error revert is
+  // intentionally minimal (the server's rejection alert is loud enough).
   //
-  //   handleSaveName       → tripsApi.update({ name }) — same path as the
-  //                          previous inline rename, just lifted into the
-  //                          popover. Optimistic local update; on-error
-  //                          revert is intentionally minimal (renames are
-  //                          rare and the server rejection is loud enough).
+  // commitStartDate / scheduleSave — debounced auto-save for the date-line
+  // editor. tripsApi.shiftDates is the ONLY safe path for moving the trip
+  // in time: the server cascades the delta to every stop's arrival/departure
+  // date in a single transaction (server/src/controllers/trips.ts:576).
+  // Routing via tripsApi.update with startDate would NOT cascade — that's
+  // the live footgun flagged in the scout (TripUpdateSchema permits the
+  // field but updateTrip doesn't call recomputeStopDates). DO NOT use that
+  // path here.
   //
-  //   handleSaveStartDate  → tripsApi.shiftDates({ newStartDate }) — the
-  //                          ONLY safe path for moving the trip in time.
-  //                          The server cascades the delta to every stop's
-  //                          arrival/departure date in a single transaction
-  //                          (see shiftTripDates at server/src/controllers/
-  //                          trips.ts:576). Routing via tripsApi.update with
-  //                          startDate would NOT cascade — that's the live
-  //                          footgun flagged in the scout (TripUpdateSchema
-  //                          permits the field but updateTrip doesn't call
-  //                          recomputeStopDates). DO NOT use that path here.
+  // Debounce rationale: native <input type="date"> behavior varies across
+  // browsers. Chrome/Edge/Firefox fire onChange once when the user commits
+  // a date in the picker — easy case. iOS Safari uses a wheel picker that
+  // fires onChange on every wheel tick; macOS Safari pre-Big-Sur falls back
+  // to text input that fires onChange per keystroke. Both would otherwise
+  // hit shiftDates dozens of times for one "real" selection. A 400ms
+  // setTimeout, cleared on each onChange, collapses the stream into ONE
+  // call that fires after the user pauses. Long enough to absorb the
+  // wheel/keystroke streams, short enough to feel immediate.
   //
-  //   handleStartNow       → shiftDates with today's YYYY-MM-DD. Same path,
-  //                          one click instead of typing a date.
+  // No-op guard: shiftDates fires only when the picked YMD differs from
+  // the current effective anchor (trip.startDate, falling back to the
+  // first stop's arrivalDate, mirroring the server's anchor probe at
+  // trips.ts:587). The server short-circuits a zero-delta shift on its
+  // own (returns the trip unchanged), but skipping the API call entirely
+  // means no network round-trip on a no-op.
   //
   // Response shape: shiftDates returns the full trip with stops + journal
   // (mirrors tripsApi.get), so setTrip(res.data) is a complete hot-swap —
   // no separate refetch needed.
 
-  async function handleSaveName() {
+  async function handleRename() {
     const trimmed = tripNameInput.trim()
-    if (!id || !trimmed || trimmed === trip?.name) return
+    if (!id || !trimmed || trimmed === trip?.name) { setRenaming(false); return }
     await tripsApi.update(id, { name: trimmed }).catch(() => {})
     setTrip(prev => prev ? { ...prev, name: trimmed } : prev)
+    setRenaming(false)
   }
 
-  async function handleSaveStartDate() {
-    if (!id || !startDateInput || savingDate) return
+  async function commitStartDate(ymd: string) {
+    if (!id || !ymd || savingDate) return
+    // No-op guard: skip the API call if the picked date equals the trip's
+    // current effective start. Picks during debounce can echo the same
+    // value back when the user opens then closes the picker without
+    // change; this prevents a wasted round-trip.
+    const firstDatedStop = trip?.stops?.find(s => s.arrivalDate)
+    const currentAnchor =
+      parseTripDate(trip?.startDate) ?? parseTripDate(firstDatedStop?.arrivalDate)
+    if (currentAnchor && toYmd(currentAnchor) === ymd) {
+      setDateEditorOpen(false)
+      return
+    }
     setSavingDate(true)
     try {
-      const res = await tripsApi.shiftDates(id, { newStartDate: startDateInput })
+      const res = await tripsApi.shiftDates(id, { newStartDate: ymd })
       setTrip(res.data)
-      setSettingsOpen(false)
+      setDateEditorOpen(false)
     } catch (err) {
       console.error('Failed to shift trip dates', err)
       alert('Could not change the start date. Make sure your trip has at least one dated stop.')
@@ -1230,21 +1248,22 @@ export default function TripMapPage() {
     }
   }
 
-  async function handleStartNow() {
-    if (!id || savingDate) return
-    setSavingDate(true)
-    const today = toYmd(new Date())
-    try {
-      const res = await tripsApi.shiftDates(id, { newStartDate: today })
-      setTrip(res.data)
-      setStartDateInput(today)
-      setSettingsOpen(false)
-    } catch (err) {
-      console.error('Failed to start trip now', err)
-      alert('Could not start the trip now. Make sure your trip has at least one dated stop.')
-    } finally {
-      setSavingDate(false)
-    }
+  function scheduleSave(ymd: string) {
+    // Clear any pending save before queuing a new one — picker streams
+    // (iOS wheel, Safari-text) collapse into a single trailing-edge call
+    // 400ms after the user stops emitting onChange events.
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null
+      void commitStartDate(ymd)
+    }, 400)
+  }
+
+  function handleStartNow() {
+    // Explicit user gesture — bypass the debounce and commit immediately.
+    // No need to clear saveTimerRef here; commitStartDate's own savingDate
+    // guard prevents a double-fire if a debounced save was already pending.
+    void commitStartDate(toYmd(new Date()))
   }
 
   async function handleExportPdf() {
@@ -1392,49 +1411,187 @@ export default function TripMapPage() {
                 redesigned sidebar header. Rename input matches for visual
                 continuity across the rename state. */}
             <div className="p-4 border-b border-gray-100 flex-shrink-0" style={{ borderBottomWidth: '0.5px' }}>
-              {/* Trip name + settings pencil + (desktop) close-sidebar. The
-                  pencil opens the trip-settings popover below (name editor +
-                  start-date editor + read-only end-date line). Inline rename
-                  is gone — the popover holds both edits together so the
-                  affordance count stays the same and dates are reachable
-                  without a separate icon. */}
+              {/* Trip name + rename pencil + (desktop) close-sidebar. Pencil
+                  is name-only — date editing lives on the clickable date
+                  line directly below this row. Two affordances, two scopes:
+                  pencil = rename, date line = dates. */}
               <div className="flex items-start gap-2">
-                <div className="flex-1 flex items-center gap-1 min-w-0">
-                  <h2
-                    className="font-medium text-gray-900 truncate"
-                    style={{ fontSize: 15, lineHeight: 1.3 }}
-                  >
-                    {trip?.name}
-                  </h2>
-                  <button
-                    ref={pencilBtnRef}
-                    onClick={() => {
-                      // Seed the inputs from current trip state on open. For
-                      // the start date, prefer trip.startDate, then the first
-                      // stop with an arrivalDate (mirrors the server's
-                      // shiftTripDates anchor probe). Empty string when
-                      // neither exists — input renders disabled in that case
-                      // via the hasStopDates guard.
-                      setTripNameInput(trip?.name || '')
-                      const firstDatedStop = trip?.stops?.find(s => s.arrivalDate)
-                      const anchor =
-                        parseTripDate(trip?.startDate) ??
-                        parseTripDate(firstDatedStop?.arrivalDate)
-                      setStartDateInput(anchor ? toYmd(anchor) : '')
-                      setSettingsOpen(true)
-                    }}
-                    className="p-1 hover:bg-gray-100 rounded flex-shrink-0"
-                    title="Edit trip settings"
-                    aria-label="Edit trip settings"
-                  >
-                    <Pencil size={12} className="text-gray-400" />
-                  </button>
-                </div>
+                {renaming ? (
+                  <div className="flex-1 flex items-center gap-1 min-w-0">
+                    <input
+                      className="flex-1 min-w-0 font-medium text-gray-900 border border-[#1F6F8B] rounded px-2 py-1 focus:outline-none"
+                      style={{ fontSize: 15, lineHeight: 1.3 }}
+                      value={tripNameInput}
+                      onChange={e => setTripNameInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleRename()
+                        if (e.key === 'Escape') setRenaming(false)
+                      }}
+                      autoFocus
+                    />
+                    <button onClick={handleRename} className="p-1 text-[#1F6F8B] hover:bg-[#E0F0F4] rounded flex-shrink-0" aria-label="Save name">
+                      <Check size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex items-center gap-1 min-w-0">
+                    <h2
+                      className="font-medium text-gray-900 truncate"
+                      style={{ fontSize: 15, lineHeight: 1.3 }}
+                    >
+                      {trip?.name}
+                    </h2>
+                    <button
+                      onClick={() => { setTripNameInput(trip?.name || ''); setRenaming(true) }}
+                      className="p-1 hover:bg-gray-100 rounded flex-shrink-0"
+                      title="Rename trip"
+                      aria-label="Rename trip"
+                    >
+                      <Pencil size={12} className="text-gray-400" />
+                    </button>
+                  </div>
+                )}
                 {isDesktop && (
                   <button onClick={() => setSidebarOpen(false)} className="p-1 hover:bg-gray-100 rounded flex-shrink-0" title="Close sidebar">
                     <X size={16} />
                   </button>
                 )}
+              </div>
+
+              {/* First-class trip date line ─ clickable row that's either the
+                  trip's "May 27 – Jun 10" range (when set) or a "Set start
+                  date" prompt (when unset). Click toggles dateEditorOpen and
+                  the same wrapper inflates into an inline editor (no popover
+                  → no clipping risk against the sidebar's overflow:hidden).
+
+                  Placement: directly under the trip-name row and above the
+                  status pill. Date is the cause, status is the derived
+                  effect (deriveTripStatus runs against today vs these
+                  dates) — name → when → status reads naturally. */}
+              <div ref={dateLineWrapperRef} className="mt-2">
+                {(() => {
+                  if (!trip) return null
+                  // hasStopDates mirrors the server's anchor probe at
+                  // shiftTripDates (trips.ts:587): without it the shift
+                  // endpoint 400s. We disable input + Start now in the
+                  // editor when this is false rather than letting the user
+                  // submit into a guaranteed error.
+                  const hasStopDates = trip.stops?.some(s => s.arrivalDate != null) ?? false
+                  const firstDatedStop = trip.stops?.find(s => s.arrivalDate)
+                  const anchor =
+                    parseTripDate(trip.startDate) ?? parseTripDate(firstDatedStop?.arrivalDate)
+                  const hasDates = !!anchor
+                  const todayYmd = toYmd(new Date())
+                  const isPastDate = !!startDateInput && startDateInput < todayYmd
+                  const stopCount = trip.stops?.length ?? 0
+                  const nightsLabel = trip.totalNights
+                    ? `${trip.totalNights} night${trip.totalNights !== 1 ? 's' : ''}`
+                    : null
+
+                  if (dateEditorOpen) {
+                    // ── Expanded inline editor ────────────────────────────
+                    // <input type="date"> auto-saves via debounce on the
+                    // onChange. Start now bypasses the debounce. No Enter
+                    // required — picker commit IS the gesture.
+                    return (
+                      <div className="rounded-md border border-[#1F6F8B] bg-[#F2F8FA] p-2.5">
+                        {!hasStopDates ? (
+                          <p className="text-xs text-gray-500 italic">
+                            Add stops first to set a trip date.
+                          </p>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <Calendar size={14} className="text-[#1F6F8B] flex-shrink-0" />
+                              <input
+                                type="date"
+                                className="flex-1 min-w-0 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-[#1F6F8B] disabled:opacity-50 bg-white"
+                                value={startDateInput}
+                                disabled={savingDate}
+                                onChange={e => {
+                                  const ymd = e.target.value
+                                  setStartDateInput(ymd)
+                                  if (ymd) scheduleSave(ymd)
+                                }}
+                                autoFocus
+                              />
+                              <button
+                                onClick={handleStartNow}
+                                disabled={savingDate}
+                                className="text-xs text-[#1F6F8B] hover:underline disabled:opacity-50 disabled:no-underline flex-shrink-0"
+                                title="Shift the trip to start today"
+                              >
+                                Start now
+                              </button>
+                            </div>
+                            {isPastDate && (
+                              <p className="text-[11px] text-[#BA7517] mt-1.5">
+                                This will backdate the trip; status will read COMPLETED right away.
+                              </p>
+                            )}
+                          </>
+                        )}
+                        {/* Read-only end-date caption — derived, with the
+                            honest "to change, remove a stop / adjust nights"
+                            pointer. Suppressed when the trip has no dates
+                            because there's no end to display yet. */}
+                        {trip.endDate && (
+                          <p className="text-[11px] text-gray-500 mt-2">
+                            Ends {formatTripDate(trip.endDate, 'MMM d')}
+                            {nightsLabel ? ` · ${nightsLabel}` : ''}
+                            {stopCount ? `, ${stopCount} stops` : ''}.
+                            {' '}
+                            <span className="text-gray-400">
+                              To change the end, remove a stop or adjust nights.
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                    )
+                  }
+
+                  // ── Collapsed trigger ─────────────────────────────────────
+                  // Two visual states: has-dates (filled tint, calendar
+                  // icon, range text) vs unset (dashed outline, calendar-
+                  // plus icon, "Set start date" prompt). Both open the
+                  // same editor on click.
+                  if (hasDates) {
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStartDateInput(toYmd(anchor!))
+                          setDateEditorOpen(true)
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-[#F2F8FA] hover:bg-[#E0F0F4] text-left transition-colors"
+                        title="Edit trip dates"
+                      >
+                        <Calendar size={13} className="text-[#1F6F8B] flex-shrink-0" />
+                        <span className="text-sm text-gray-700 truncate">
+                          {formatTripDate(anchor!, 'MMM d')}
+                          {trip.endDate ? ` – ${formatTripDate(trip.endDate, 'MMM d')}` : ''}
+                        </span>
+                      </button>
+                    )
+                  }
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // No anchor yet — open the editor with an empty
+                        // input; if there are no stop dates the editor
+                        // will show the empty-state hint instead.
+                        setStartDateInput('')
+                        setDateEditorOpen(true)
+                      }}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-dashed border-gray-300 hover:border-[#1F6F8B] hover:text-[#1F6F8B] text-left text-gray-500 transition-colors"
+                      title="Set the trip's start date"
+                    >
+                      <CalendarPlus size={13} className="flex-shrink-0" />
+                      <span className="text-sm">Set start date</span>
+                    </button>
+                  )
+                })()}
               </div>
 
               {/* Status pill — ACTIVE or COMPLETED only. Sits between the trip
@@ -2006,144 +2163,6 @@ export default function TripMapPage() {
         />
       )}
 
-      {/* Trip-settings popover ──────────────────────────────────────────────
-          Anchored under the header pencil via position:fixed + the tracked
-          pencilRect (see the rect-tracking useEffect). Rendered at the root
-          of the return so it's grouped with the other modal-shaped elements;
-          fixed positioning is viewport-relative, so JSX tree placement
-          doesn't affect layout. Hidden until settingsOpen AND we've measured
-          the pencil — measuring is async via the useEffect, so the && guard
-          on pencilRect prevents a one-frame flash at 0,0. */}
-      {settingsOpen && pencilRect && trip && (() => {
-        // hasStopDates mirrors the server's shiftTripDates anchor probe at
-        // trips.ts:587. If no stop carries an arrivalDate, the server
-        // returns 400; we disable the input + Start-now button instead of
-        // letting the user submit into a guaranteed error.
-        const hasStopDates = trip.stops?.some(s => s.arrivalDate != null) ?? false
-        const todayYmd = toYmd(new Date())
-        const isPastDate = !!startDateInput && startDateInput < todayYmd
-        const stopCount = trip.stops?.length ?? 0
-        const nightsLabel = trip.totalNights
-          ? `${trip.totalNights} night${trip.totalNights !== 1 ? 's' : ''}`
-          : null
-        return (
-          <div
-            ref={settingsPopoverRef}
-            role="dialog"
-            aria-label="Trip settings"
-            style={{
-              position: 'fixed',
-              top: pencilRect.top,
-              left: pencilRect.left,
-              width: 280,
-              zIndex: 50,
-            }}
-            className="bg-white border border-gray-200 rounded-md shadow-lg p-3"
-          >
-            {/* Name editor — Enter saves, popover stays open so the user
-                can also tweak the date in the same gesture. The Check
-                button is the explicit save affordance; either works. */}
-            <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1">
-              Trip name
-            </label>
-            <div className="flex items-center gap-1 mb-3">
-              <input
-                className="flex-1 min-w-0 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-[#1F6F8B]"
-                value={tripNameInput}
-                onChange={e => setTripNameInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') handleSaveName()
-                }}
-                autoFocus
-              />
-              <button
-                onClick={handleSaveName}
-                className="p-1 text-[#1F6F8B] hover:bg-[#E0F0F4] rounded flex-shrink-0"
-                title="Save name"
-                aria-label="Save name"
-              >
-                <Check size={14} />
-              </button>
-            </div>
-
-            {/* Start-date editor — saves go through tripsApi.shiftDates so
-                every stop's arrival/departure date shifts by the same
-                delta atomically on the server. Empty-state guard disables
-                input when no stop has a date (the server would 400). */}
-            <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1">
-              Start date
-            </label>
-            {!hasStopDates ? (
-              <p className="text-xs text-gray-400 italic mb-3">
-                Add stops first to set a trip date.
-              </p>
-            ) : (
-              <>
-                <div className="flex items-center gap-1 mb-1">
-                  <input
-                    type="date"
-                    className="flex-1 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-[#1F6F8B] disabled:opacity-50"
-                    value={startDateInput}
-                    disabled={savingDate}
-                    onChange={e => setStartDateInput(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') handleSaveStartDate()
-                    }}
-                  />
-                  <button
-                    onClick={handleSaveStartDate}
-                    disabled={savingDate || !startDateInput}
-                    className="p-1 text-[#1F6F8B] hover:bg-[#E0F0F4] rounded flex-shrink-0 disabled:opacity-40 disabled:hover:bg-transparent"
-                    title="Save start date"
-                    aria-label="Save start date"
-                  >
-                    <Check size={14} />
-                  </button>
-                </div>
-                {/* Past-date soft warn — the server has no past-date guard
-                    (backdating COMPLETED trips for record-keeping is a
-                    legitimate use case), but the UI should surface what
-                    will happen: deriveTripStatus(today > endDate) flips
-                    the trip to COMPLETED immediately. */}
-                {isPastDate && (
-                  <p className="text-[11px] text-[#BA7517] mb-2">
-                    This will backdate the trip; status will read COMPLETED right away.
-                  </p>
-                )}
-                <button
-                  onClick={handleStartNow}
-                  disabled={savingDate}
-                  className="text-xs text-[#1F6F8B] hover:underline mb-3 disabled:opacity-50 disabled:no-underline"
-                >
-                  Start now
-                </button>
-              </>
-            )}
-
-            {/* End-date display (read-only). endDate is a derived quantity
-                — see utils/tripStatus.ts and server-side recomputeStopDates.
-                Editing it directly would lie about how the system works;
-                length changes happen through remove-stop / change-nights
-                (trash icon on each stop, or AI Modify trip). The caption
-                surfaces that so the user isn't left wondering. */}
-            {trip.endDate && (
-              <div className="pt-2 border-t border-gray-100">
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-0.5">
-                  End
-                </label>
-                <p className="text-sm text-gray-700">
-                  Ends {formatTripDate(trip.endDate, 'MMM d')}
-                  {nightsLabel ? ` · ${nightsLabel}` : ''}
-                  {stopCount ? `, ${stopCount} stops` : ''}
-                </p>
-                <p className="text-[11px] text-gray-400 mt-0.5">
-                  To change, remove a stop or adjust nights with Modify trip.
-                </p>
-              </div>
-            )}
-          </div>
-        )
-      })()}
     </div>
   )
 }
