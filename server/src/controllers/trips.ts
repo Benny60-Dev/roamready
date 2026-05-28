@@ -1445,7 +1445,19 @@ export async function getTripWeather(req: AuthRequest, res: Response, next: Next
                 ? new Date(stop.arrivalDate)
                 : tripStart ?? today
               const startDate = isoDate(base)
-              const endDate   = isoDate(new Date(new Date(startDate).setDate(new Date(startDate).getDate() + (stop.nights || 1))))
+              // Add `nights` days to `base` directly with .setDate, then
+              // isoDate the result. The prior form round-tripped through
+              // `new Date(startDate)`, where the "YYYY-MM-DD" string is
+              // parsed as UTC midnight; in UTC-N zones, .getDate() then
+              // reads the previous local calendar day, and setDate(prev+
+              // nights) lands the end one day short — for a 1-night stop
+              // endDate came out EQUAL to startDate. Working off `base`
+              // (which is already a Date with local-time semantics from
+              // Prisma) keeps both endpoints anchored to the same local
+              // calendar day, so endDate = startDate + nights reliably.
+              const endBase = new Date(base)
+              endBase.setDate(endBase.getDate() + (stop.nights || 1))
+              const endDate = isoDate(endBase)
               data = await fetchLiveForecast(stop.latitude, stop.longitude, startDate, endDate)
             } else {
               // Historical mode: use stop arrivalDate month, trip startDate month, or current month
