@@ -217,6 +217,11 @@ function StopPopup({
   const nwsUrl = stop.latitude && stop.longitude
     ? `https://forecast.weather.gov/MapClick.php?lat=${stop.latitude}&lon=${stop.longitude}`
     : null
+  // Prefer the user-entered actualRate (recorded during a booking commit)
+  // over the AI estimate (siteRate). Matches the booking page's
+  // actualRate ?? siteRate pattern shipped in bdb4192 — the map popup was
+  // the last surface still reading from the estimate-only field.
+  const displayRate = stop.actualRate ?? stop.siteRate
 
   let weatherSummary: React.ReactNode = null
   if (weather?.mode === 'live') {
@@ -299,9 +304,9 @@ function StopPopup({
             className="w-5 h-5 rounded-full border border-gray-200 flex items-center justify-center hover:bg-gray-50"
           ><Plus size={10} /></button>
         </div>
-        {stop.siteRate && (
+        {displayRate && (
           <span className="ml-auto text-xs text-gray-500 flex items-center gap-0.5">
-            <DollarSign size={11} />${stop.siteRate}/night
+            <DollarSign size={11} />${displayRate}/night
           </span>
         )}
       </div>
@@ -1395,7 +1400,7 @@ export default function TripMapPage() {
                   bookedStops === nonHomeStops.length ? (
                     <Link
                       to={`/trips/${id}/booking`}
-                      className="flex items-center justify-center gap-1.5 transition-colors hover:bg-[#3E5540]/5"
+                      className="flex items-center justify-center gap-1.5 transition-colors hover:bg-[#DCE5D5]"
                       style={{
                         color: '#2F4030',
                         border: '1px solid #3E5540',
@@ -1412,7 +1417,7 @@ export default function TripMapPage() {
                   ) : (
                     <Link
                       to={`/trips/${id}/booking`}
-                      className="flex items-center justify-center gap-1.5 transition-colors hover:bg-[#BA7517]/5"
+                      className="flex items-center justify-center gap-1.5 transition-colors hover:bg-[#FAEEDA]"
                       style={{
                         color: '#BA7517',
                         border: '1px solid #BA7517',
