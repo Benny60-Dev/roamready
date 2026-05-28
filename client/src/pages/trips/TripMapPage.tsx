@@ -1609,20 +1609,29 @@ export default function TripMapPage() {
                 })()}
               </div>
 
-              {/* Status pill — ACTIVE or COMPLETED only. Sits between the trip
-                  name and the slim stats line below; PLANNING trips skip it
-                  entirely and the stats line flows directly under the name.
-                  Status is derived from the trip's committed dates vs today
-                  (utils/tripStatus.ts) — no stored override, no manual flip. */}
+              {/* Status pill — Planning / Active / Completed. Sits between the
+                  trip name and the slim stats line below. Status is derived
+                  from the trip's committed dates vs today (utils/tripStatus.ts)
+                  — no stored override, no manual flip. Planning was previously
+                  silent here; restored for symmetry with the dashboard
+                  TripCard, which has always shown a planning badge on every
+                  card. The asymmetry (dashboard shows planning, trip page
+                  didn't) made the trip-page header read as "empty" between
+                  the date line and stats for future-dated trips. */}
               {(() => {
                 if (!trip) return null
                 const derived = deriveTripStatus(trip)
-                if (derived !== 'ACTIVE' && derived !== 'COMPLETED') return null
+                const cls =
+                  derived === 'ACTIVE'    ? 'badge-active' :
+                  derived === 'COMPLETED' ? 'badge-completed' :
+                                            'badge-planning'
+                const label =
+                  derived === 'ACTIVE'    ? 'Active' :
+                  derived === 'COMPLETED' ? 'Completed' :
+                                            'Planning'
                 return (
                   <div className="mt-2">
-                    <span className={derived === 'ACTIVE' ? 'badge-active' : 'badge-completed'}>
-                      {derived === 'ACTIVE' ? 'Active' : 'Completed'}
-                    </span>
+                    <span className={cls}>{label}</span>
                   </div>
                 )
               })()}
