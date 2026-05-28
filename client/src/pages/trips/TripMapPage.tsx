@@ -5,7 +5,7 @@ import {
   Layers, X, Plus, Minus, DollarSign, Calendar, AlertTriangle,
   Wind, Droplets, Snowflake, Thermometer, ExternalLink,
   Pencil, Trash2, Check, BookOpen, Package, Share2, Download, CheckCircle, CloudRain, Wand2,
-  Maximize2, Minimize2, Play, Tent, Bed,
+  Maximize2, Minimize2, Tent, Bed,
 } from 'lucide-react'
 import { formatTripDate } from '../../utils/dates'
 import { tripsApi } from '../../services/api'
@@ -17,6 +17,7 @@ import ConfirmModal from '../../components/ui/ConfirmModal'
 import ShareModal from '../../components/trip/ShareModal'
 import { useAuthStore } from '../../store/authStore'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge } from '../../utils/stopBadge'
+import { deriveTripStatus } from '../../utils/tripStatus'
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' }
 const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 'geometry', 'places']
@@ -480,8 +481,6 @@ export default function TripMapPage() {
   const [isMobile, setIsMobile]             = useState(() => window.innerWidth < 768)
   const [isDesktop, setIsDesktop]           = useState(() => window.innerWidth >= 1024)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
-  const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false)
-  const [changingStatus, setChangingStatus] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
 
   // Per-stop edit/delete affordances on the sidebar — parity with the
@@ -1115,35 +1114,6 @@ export default function TripMapPage() {
     setRenaming(false)
   }
 
-  async function handleStartTrip() {
-    if (!trip || changingStatus) return
-    setChangingStatus(true)
-    try {
-      const res = await tripsApi.update(trip.id, { status: 'ACTIVE' })
-      setTrip(res.data)
-    } catch (err) {
-      console.error('Failed to start trip', err)
-      alert('Could not start trip. Please try again.')
-    } finally {
-      setChangingStatus(false)
-    }
-  }
-
-  async function handleMarkCompleted() {
-    if (!trip || changingStatus) return
-    setChangingStatus(true)
-    try {
-      const res = await tripsApi.update(trip.id, { status: 'COMPLETED' })
-      setTrip(res.data)
-      setConfirmCompleteOpen(false)
-    } catch (err) {
-      console.error('Failed to mark trip completed', err)
-      alert('Could not mark trip as completed. Please try again.')
-    } finally {
-      setChangingStatus(false)
-    }
-  }
-
   async function handleExportPdf() {
     if (downloadingPdf || !trip) return
     setDownloadingPdf(true)
@@ -1333,14 +1303,21 @@ export default function TripMapPage() {
 
               {/* Status pill — ACTIVE or COMPLETED only. Sits between the trip
                   name and the slim stats line below; PLANNING trips skip it
-                  entirely and the stats line flows directly under the name. */}
-              {(trip?.status === 'ACTIVE' || trip?.status === 'COMPLETED') && (
-                <div className="mt-2">
-                  <span className={trip.status === 'ACTIVE' ? 'badge-active' : 'badge-completed'}>
-                    {trip.status === 'ACTIVE' ? 'Active' : 'Completed'}
-                  </span>
-                </div>
-              )}
+                  entirely and the stats line flows directly under the name.
+                  Status is derived from the trip's committed dates vs today
+                  (utils/tripStatus.ts) — no stored override, no manual flip. */}
+              {(() => {
+                if (!trip) return null
+                const derived = deriveTripStatus(trip)
+                if (derived !== 'ACTIVE' && derived !== 'COMPLETED') return null
+                return (
+                  <div className="mt-2">
+                    <span className={derived === 'ACTIVE' ? 'badge-active' : 'badge-completed'}>
+                      {derived === 'ACTIVE' ? 'Active' : 'Completed'}
+                    </span>
+                  </div>
+                )
+              })()}
 
               {/* C1 — Slim stats line. Replaces the 4-card stats grid that
                   used to live at the bottom of this header block. Same data
@@ -1434,44 +1411,19 @@ export default function TripMapPage() {
                   )
                 )}
 
-                {/* Modify trip with AI — promoted above the status-dependent
-                    button. Modify is the far more frequent action during
-                    planning (which is where users spend the most time);
-                    Start trip / Mark completed are rare phase transitions
-                    and belong at the bottom of the stack. */}
+                {/* Modify trip with AI — primary planning affordance and the
+                    most frequent action in the sidebar. The previous
+                    Start trip / Mark completed buttons that lived below it
+                    are gone: status is now derived from the trip's committed
+                    dates vs today (utils/tripStatus.ts), so there's no phase
+                    button for the user to click. The Active / Completed pill
+                    above the stats line is the read-only signal. */}
                 <button
                   onClick={() => setModifyPanelOpen(true)}
                   className="border border-[#1F6F8B] text-[#1F6F8B] bg-white hover:bg-[#E0F0F4] text-sm font-medium px-4 py-2.5 rounded-md transition-colors flex items-center justify-center gap-1.5"
                 >
                   <Wand2 size={13} /> Modify trip with AI
                 </button>
-
-                {/* Status-dependent trip-phase button */}
-                {trip?.status === 'PLANNING' && (
-                  <button
-                    onClick={handleStartTrip}
-                    disabled={changingStatus}
-                    className="border border-[#1F6F8B] text-[#1F6F8B] bg-white hover:bg-[#E0F0F4] text-sm font-medium px-4 py-2.5 rounded-md transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
-                  >
-                    <Play size={14} /> {changingStatus ? 'Starting...' : 'Start trip'}
-                  </button>
-                )}
-
-                {trip?.status === 'ACTIVE' && (
-                  <button
-                    onClick={() => setConfirmCompleteOpen(true)}
-                    disabled={changingStatus}
-                    className="border border-[#3E5540] text-[#2F4030] bg-white hover:bg-[#DCE5D5] text-sm font-medium px-4 py-2.5 rounded-md transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
-                  >
-                    <CheckCircle size={14} /> Mark completed
-                  </button>
-                )}
-
-                {trip?.status === 'COMPLETED' && (
-                  <div className="bg-[#DCE5D5] text-[#2F4030] text-sm font-medium px-4 py-2.5 rounded-md text-center flex items-center justify-center gap-1.5">
-                    <CheckCircle size={14} /> Trip completed
-                  </div>
-                )}
               </div>
 
               {/* C1 — 4-card stats grid removed. Miles + Nights + Est. cost
@@ -1905,18 +1857,6 @@ export default function TripMapPage() {
           isConfirming={deleting}
         />
       )}
-
-      {/* Mark-completed confirmation */}
-      <ConfirmModal
-        isOpen={confirmCompleteOpen}
-        title="Mark trip as completed?"
-        message="This will move your trip to the Completed section. You'll still be able to view the itinerary and journal entries, but the trip won't appear in your active planning list."
-        confirmLabel="Mark completed"
-        cancelLabel="Not yet"
-        onConfirm={handleMarkCompleted}
-        onCancel={() => !changingStatus && setConfirmCompleteOpen(false)}
-        isConfirming={changingStatus}
-      />
 
       {/* Share trip */}
       {trip && (

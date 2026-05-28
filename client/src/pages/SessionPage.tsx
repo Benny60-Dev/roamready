@@ -15,6 +15,7 @@ import { ChatInput } from '../components/ChatInput'
 import { selectGreeting } from '../utils/greeting'
 import { relativeTime } from '../utils/dates'
 import { computeTripTotals } from '../utils/tripTotals'
+import { deriveTripStatus } from '../utils/tripStatus'
 
 // Window augmentation for SpeechRecognition / webkitSpeechRecognition lives
 // in client/src/types/global.d.ts now — see useVoiceInput hook for usage.
@@ -285,7 +286,7 @@ export default function SessionPage() {
       .then(res => {
         if (cancelled) return
         const planning = (res.data as Trip[])
-          .filter(t => t.status === 'PLANNING')
+          .filter(t => deriveTripStatus(t) === 'PLANNING')
           .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
         setPlanningTrips(planning)
       })

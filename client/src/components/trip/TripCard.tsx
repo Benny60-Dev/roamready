@@ -3,6 +3,7 @@ import { Calendar, Map, Tent, DollarSign, Trash2 } from 'lucide-react'
 import { Trip } from '../../types'
 import { formatTripDate, relativeTime } from '../../utils/dates'
 import { computeTripTotals } from '../../utils/tripTotals'
+import { deriveTripStatus } from '../../utils/tripStatus'
 
 /**
  * Shared trip card. Replaces three previously-divergent inline copies:
@@ -67,7 +68,12 @@ export default function TripCard({
   const effectiveShowCost = showCost ?? !isCompact
   const effectiveShowRoute = showRoute ?? !isCompact
 
-  const statusClass = STATUS_BADGE[trip.status]
+  // Status is derived from the trip's committed dates vs today — there's no
+  // longer a stored override flag the user toggles. See utils/tripStatus.ts
+  // for the rules (inclusive endpoints, no-dates → PLANNING). Both the badge
+  // colour class and the lowercased label below read from this single source.
+  const status = deriveTripStatus(trip)
+  const statusClass = STATUS_BADGE[status]
   // Full trip cost using the stored fuel total persisted by the
   // getTripFuelEstimate side-effect: every time the owner opens the
   // itinerary or map page, trip.estimatedFuel is refreshed to the
@@ -103,7 +109,7 @@ export default function TripCard({
           <div className="flex items-center gap-2 mb-1">
             <h3 className="font-medium text-gray-900 text-sm truncate">{trip.name}</h3>
             <span className={`${statusClass} text-xs`}>
-              {trip.status.toLowerCase()}
+              {status.toLowerCase()}
             </span>
           </div>
           {effectiveShowRoute && (
@@ -180,7 +186,7 @@ export default function TripCard({
       >
         <div className="mb-1.5">
           <span className={`badge ${statusClass} text-xs capitalize`}>
-            {trip.status.toLowerCase()}
+            {status.toLowerCase()}
           </span>
         </div>
         <h3 className="font-medium text-gray-900 text-sm truncate mb-1">{trip.name}</h3>
@@ -250,7 +256,7 @@ export default function TripCard({
             provided). Both are flex-shrink-0 so the truncating name/route on
             the left can compress instead. */}
         <div className="flex items-start gap-2 flex-shrink-0">
-          <span className={`badge ${statusClass} capitalize`}>{trip.status.toLowerCase()}</span>
+          <span className={`badge ${statusClass} capitalize`}>{status.toLowerCase()}</span>
           {onDelete && (
             <button
               type="button"

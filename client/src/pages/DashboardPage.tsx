@@ -7,6 +7,7 @@ import { Trip } from '../types'
 import TripCard from '../components/trip/TripCard'
 import ConfirmModal from '../components/ui/ConfirmModal'
 import ReservationsTabContent from '../components/dashboard/ReservationsTabContent'
+import { deriveTripStatus } from '../utils/tripStatus'
 
 // Tabs are data-driven via a discriminated union — three trip-status tabs
 // share a Trip-filter predicate, the Reservations tab renders different
@@ -24,8 +25,8 @@ const TABS: TabEntry[] = [
   // cares about right now". Tab key stays 'active' for state-handler
   // continuity; label became "In Progress" in the Block 3 follow-up so it
   // no longer reads as the ACTIVE status enum value.
-  { key: 'active',    label: 'In Progress', mode: 'trips', filter: t => t.status === 'ACTIVE' || t.status === 'PLANNING' },
-  { key: 'completed', label: 'Completed',   mode: 'trips', filter: t => t.status === 'COMPLETED' },
+  { key: 'active',    label: 'In Progress', mode: 'trips', filter: t => { const s = deriveTripStatus(t); return s === 'ACTIVE' || s === 'PLANNING' } },
+  { key: 'completed', label: 'Completed',   mode: 'trips', filter: t => deriveTripStatus(t) === 'COMPLETED' },
   // "All" intentionally includes DRAFT trips even though no code path currently
   // writes that status — keeps a forward-compatible escape hatch the moment
   // the resume-incomplete-trip UX ships.
