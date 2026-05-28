@@ -66,13 +66,20 @@ export function isoDate(d: Date): string {
 // ─── Live 10-day forecast ──────────────────────────────────────────────────────
 
 export async function fetchLiveForecast(lat: number, lng: number, startDate: string, endDate: string) {
+  // Open-Meteo treats `forecast_days` as mutually exclusive with the
+  // `start_date` / `end_date` pair — passing both returns
+  // HTTP 400 "Parameter 'forecast_days' is mutually exclusive with
+  // 'start_date' and 'end_date'", which the trips controller's per-stop
+  // catch swallowed and turned into a 200 { id: null, … } for every
+  // live-mode trip (visible to the user as a blank Weather tab). The
+  // [startDate, endDate] window already bounds the query, so the
+  // forecast_days param isn't needed here. Don't add it back.
   const response = await axios.get(METEO_FORECAST_URL, {
     params: {
       latitude:      lat,
       longitude:     lng,
       start_date:    startDate,
       end_date:      endDate,
-      forecast_days: 16,
       daily: [
         'weathercode', 'temperature_2m_max', 'temperature_2m_min',
         'precipitation_probability_max', 'precipitation_sum',
