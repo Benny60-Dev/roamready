@@ -822,9 +822,15 @@ export default function TripSummaryPage() {
   }, [id])
 
   // ── Date cascade ────────────────────────────────────────────────────────────
-  // Walks every stop in order, computes correct arrivalDate / departureDate from
-  // the anchor (trip.startDate if set, otherwise today), saves each one to the DB,
-  // then updates trip.totalNights and trip.endDate.
+  // Walks every stop in order, computes correct arrivalDate / departureDate
+  // from the anchor (trip.startDate if set, otherwise today), and saves each
+  // one to the DB. Trip.totalNights and Trip.endDate are NOT written from the
+  // client — every tripsApi.updateStop call triggers the server's
+  // recomputeStopDates side-effect (server/src/controllers/trips.ts:90), which
+  // walks the stops transactionally and persists the recomputed totals to the
+  // Trip row. Each call site of this function follows up with reloadTrip(), so
+  // the UI picks up the server-recomputed endDate / totalNights without any
+  // explicit client write to the Trip row.
   // Always runs — never skipped for missing startDate.
 
   const cascadeAndSaveDates = useCallback(async (stops: Stop[]) => {
@@ -837,8 +843,6 @@ export default function TripSummaryPage() {
     // day the user sees on screen — round-tripping correctly through storage.
     const anchor = parseTripDate(trip?.startDate) ?? new Date()
     let current = new Date(anchor)
-
-    let totalNights = 0
 
     console.log('[cascade] Starting date cascade for', sorted.length, 'stops, anchor =', toYmd(current))
 
@@ -855,13 +859,8 @@ export default function TripSummaryPage() {
       await tripsApi.updateStop(id, s.id, { arrivalDate: arrivalYmd, departureDate: departureYmd })
       console.log(`[cascade] Updated stop "${s.locationName}" arrivalDate to ${arrivalYmd} (${nights} night${nights !== 1 ? 's' : ''})`)
 
-      totalNights += nights
       current = addDays(current, nights)
     }
-
-    const endDate = toYmd(current)
-    await tripsApi.update(id, { totalNights, endDate })
-    console.log(`[cascade] Updated trip totalNights=${totalNights} endDate=${endDate}`)
   }, [id, trip?.startDate])
 
   // First-time auto-cascade for trips just promoted from a session.

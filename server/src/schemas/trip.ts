@@ -32,6 +32,16 @@ import { z } from 'zod'
  *     The write goes through Prisma directly, NOT through this client PUT
  *     path, so the field stays closed at the schema layer while the
  *     server's fuel-estimate endpoint owns the refresh.
+ *   - startDate, endDate, totalNights — date and duration totals are owned
+ *     exclusively by the server cascade. Trip.startDate / endDate /
+ *     totalNights are written transactionally by recomputeStopDates
+ *     (controllers/trips.ts:90) as a side-effect of every createStop /
+ *     updateStop / deleteStop, and also by shiftTripDates when the user
+ *     moves the whole trip in time. Letting a client PUT these directly
+ *     would desync Trip from its Stops (Trip says one thing, Stop.arrival
+ *     / departureDate say another), which is the exact footgun closed
+ *     here. To change dates, use the stop-mutation endpoints or
+ *     POST /trips/:id/shift-dates — never PUT them on the trip itself.
  *   - id, createdAt, updatedAt — never client-writable.
  */
 export const TripUpdateSchema = z
@@ -41,10 +51,7 @@ export const TripUpdateSchema = z
     status: z.enum(['PLANNING', 'ACTIVE', 'COMPLETED', 'DRAFT']).optional(),
     startLocation: z.string().min(1).max(500).optional(),
     endLocation: z.string().min(1).max(500).optional(),
-    startDate: z.coerce.date().nullable().optional(),
-    endDate: z.coerce.date().nullable().optional(),
     totalMiles: z.number().min(0).nullable().optional(),
-    totalNights: z.number().int().min(0).nullable().optional(),
     actualFuel: z.number().min(0).nullable().optional(),
     actualCamp: z.number().min(0).nullable().optional(),
     fuelPrice: z.number().min(0).nullable().optional(),
