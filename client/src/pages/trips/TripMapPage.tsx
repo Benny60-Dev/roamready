@@ -1771,9 +1771,25 @@ export default function TripMapPage() {
               options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false, mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID' }}
               onLoad={onMapLoad}
             >
-              {/* Driving route */}
+              {/* Driving route. The composite key forces React to unmount
+                  and remount the Polyline whenever the route geometry
+                  changes — necessary because @react-google-maps/api v2.19.3's
+                  declarative <Polyline> doesn't reliably propagate path-prop
+                  changes to the underlying google.maps.Polyline's setPath()
+                  after mount. Without this, Modify-with-AI add/remove and
+                  the trash-delete flow both fail to redraw the polyline,
+                  even though Routes API runs and setRoutePath gets called
+                  with the new coords (proven by trip.totalMiles + per-stop
+                  driveDistanceMiles updating correctly via the same handler
+                  that calls setRoutePath).
+                  Key composition — length + first lat + last lat — catches
+                  add/remove (length changes) AND stop-swap edge cases where
+                  the coordinate count would stay the same but the geography
+                  changes (the endpoint or starting position would shift).
+                  Length alone misses that swap case at no extra cost. */}
               {routePath && (
                 <Polyline
+                  key={`${routePath.length}-${routePath[0]?.lat()}-${routePath[routePath.length - 1]?.lat()}`}
                   path={routePath}
                   options={{ strokeColor: '#F97316', strokeWeight: 2.5, strokeOpacity: 0.85 }}
                 />
