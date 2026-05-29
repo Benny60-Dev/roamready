@@ -50,6 +50,7 @@
  *   npm run db:backfill-stay-activities -- --tripId <id>
  *   npm run db:backfill-stay-activities
  */
+import { Prisma } from '@prisma/client'
 import { prisma } from '../utils/prisma'
 
 // ─── Args ─────────────────────────────────────────────────────────────────────
@@ -306,7 +307,13 @@ async function main() {
       if (!args.dryRun) {
         await prisma.stop.update({
           where: { id: stop.id },
-          data: { stayActivities: merged },
+          // merged is ItineraryActivityRecord[] (a typed object array, which
+          // lacks the string index signature Prisma's InputJsonObject wants).
+          // The runtime value is valid JSON; cast to Prisma.InputJsonValue to
+          // bridge the type systems — same target type as the adHocVehicle Json
+          // writes in trips.ts / sessions.ts (double-cast via unknown is needed
+          // here because the source is a typed array, not a Record).
+          data: { stayActivities: merged as unknown as Prisma.InputJsonValue },
         })
       }
       stopsWritten += 1
