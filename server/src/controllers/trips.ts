@@ -10,6 +10,7 @@ import type { StopUpdateInput, TripUpdateInput, TripShiftDatesInput } from '../s
 import { generatePackingListAI, generateTripItineraryAI, generateStopActivitiesAI, generateRouteHighlightsAI } from '../services/ai'
 import { fetchLiveForecast, fetchHistoricalWeather, isoDate } from '../services/weatherFetch'
 import { computeFuelEstimate } from '../services/fuelPrice'
+import { parseTripDate } from '../utils/dates'
 
 // ─── City name normalization ─────────────────────────────────────────────────
 // Strip ZIP, country, full state name, and trailing 2-letter state code so a
@@ -1418,11 +1419,15 @@ export async function getTripWeather(req: AuthRequest, res: Response, next: Next
     // raw — as this controller did before — made every null-startDate trip
     // fall to historical regardless of how near-term its first stop was.
     const firstDatedStop = trip.stops.find(s => s.arrivalDate != null)
-    const tripAnchor = trip.startDate
-      ? new Date(trip.startDate)
-      : firstDatedStop?.arrivalDate
-        ? new Date(firstDatedStop.arrivalDate)
-        : null
+    // parseTripDate anchors each stored Date to local NOON on its UTC
+    // calendar day, so downstream `.getDate()` / `isoDate(...)` calls read
+    // the day the user actually picked instead of the previous local day
+    // (which is what raw `new Date(stop.arrivalDate)` would surface in
+    // negative-offset deploy zones). Same pattern the client uses for
+    // every date display. See server/src/utils/dates.ts for the rationale.
+    const tripAnchor =
+      parseTripDate(trip.startDate) ??
+      parseTripDate(firstDatedStop?.arrivalDate)
     const daysUntil  = tripAnchor
       ? Math.ceil((tripAnchor.getTime() - today.getTime()) / 86_400_000)
       : null
@@ -1453,9 +1458,13 @@ export async function getTripWeather(req: AuthRequest, res: Response, next: Next
           // would re-parse YYYY-MM-DD as UTC midnight and lose a day in
           // UTC-N zones, which used to give endDate === startDate for a
           // 1-night stop.
-          const base = stop.arrivalDate
-            ? new Date(stop.arrivalDate)
-            : tripAnchor ?? today
+          // parseTripDate(stop.arrivalDate) anchors the stored Date to
+          // local noon on its UTC calendar day, so endBase = base + nights
+          // (via local-time .setDate) and isoDate(base/endBase) all read
+          // the correct day. tripAnchor is already locally-anchored via
+          // the trip-level parseTripDate above; today is `new Date()` (the
+          // live present moment, no parsing needed).
+          const base = parseTripDate(stop.arrivalDate) ?? tripAnchor ?? today
           const endBase = new Date(base)
           endBase.setDate(endBase.getDate() + (stop.nights || 1))
 
