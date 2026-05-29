@@ -4,6 +4,7 @@ import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
 import { chatWithAI, generatePackingListAI, analyzeFeedbackAI, generatePlanningContextSummary } from '../services/ai'
+import { parseTripDate } from '../utils/dates'
 
 // Soft cap: inject a "wrap up" system message and let Claude actually respond
 // (so it has a chance to emit the <itinerary> JSON block).
@@ -77,9 +78,18 @@ const SOFT_CAP_NUDGE =
   '<itinerary>...</itinerary> JSON block now. Do not ask further clarifying ' +
   'questions unless absolutely necessary.'
 
+// Stored trip/stop dates are UTC-midnight Prisma DateTime values. Reading them
+// with `new Date(d)` + local accessors (toLocaleDateString) shifts the calendar
+// day back one in negative-offset deploy zones — the same artifact fixed in the
+// weather flow (LAUNCH_STATUS #11). Route through parseTripDate (local-noon
+// anchor on the UTC calendar day) first; local accessors then read the intended
+// day regardless of process TZ. Output format is unchanged ("Jul 10, 2026").
+// NOTE: only for STORED dates — a live `new Date()` (e.g. "Today") must NOT pass
+// through here, since its correct value is the local calendar day, not the UTC one.
 function fmtDate(d: string | Date | null | undefined): string {
-  if (!d) return 'not set'
-  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const parsed = parseTripDate(d)
+  if (!parsed) return 'not set'
+  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 /** Reduces a TravelParty (with people + pets included) to the supplementary
@@ -301,8 +311,12 @@ function buildLiveTripState(trip: any): string {
     `Dates: ${fmtDate(effectiveStart)} – ${fmtDate(effectiveEnd)}`,
     // Today's date is injected so shift_trip_dates can resolve relative
     // user phrases ("two weeks later", "next month") to an absolute
-    // YYYY-MM-DD before emitting the <modify> tag.
-    `Today: ${fmtDate(new Date())}`,
+    // YYYY-MM-DD before emitting the <modify> tag. This is a live instant,
+    // not a stored UTC-midnight date, so it is formatted with local accessors
+    // directly (NOT via fmtDate/parseTripDate) — the user's "today" is their
+    // local calendar day, which would be shifted forward in the evening of a
+    // negative-offset zone if read as the UTC day.
+    `Today: ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
     `Total nights: ${trip.totalNights ?? 'not set'}`,
     '',
     ...(tripShapeBlock ? [tripShapeBlock, ''] : []),
