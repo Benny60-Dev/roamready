@@ -554,12 +554,30 @@ export default function TripMapPage() {
     setSelectedStop(stop)
     if (mapInstance && stop.latitude != null && stop.longitude != null) {
       mapInstance.panTo({ lat: stop.latitude, lng: stop.longitude })
-      const mapH = mapInstance.getDiv()?.clientHeight ?? 0
-      // clamp(80, mapH/3.5, 160) — 80px floor protects very small viewports,
-      // 160px ceiling keeps the desktop pan from feeling jumpy. 120 default
-      // when height is unreadable (race with map mount).
-      const offset = mapH > 0 ? Math.min(Math.max(80, mapH / 3.5), 160) : 120
-      mapInstance.panBy(0, offset)
+      // Popup wrapper height conservatively estimated for the full content variant
+      // (card with weather summary + 2 alerts + Book button: ~296px wrapper, plus
+      // 36px gap from marker to triangle, plus 24px breathing room above the popup).
+      const NEEDED_CLEARANCE_PX = 296 + 36 + 24  // = 356
+      const mapH = mapInstance.getDiv()?.clientHeight ?? 550
+      // Move marker DOWN into lower portion of viewport so NEEDED_CLEARANCE_PX
+      // fits above it. Marker's final screen-y after panBy = mapH/2 + offset,
+      // so offset >= NEEDED_CLEARANCE_PX - mapH/2 places the popup top at the
+      // viewport's top edge (with 24px breathing built in).
+      const idealOffset = Math.max(NEEDED_CLEARANCE_PX - mapH / 2, 80)
+      // Safety cap: never push the marker past 80% down from top — keeps marker
+      // visible on small mobile maps (45vh ~340px) even if popup is taller than
+      // viewport. User can scroll/drag for the rest in that edge case.
+      const capOffset = mapH * 0.3
+      const offset = Math.min(idealOffset, capOffset)
+      // CRITICAL: panBy(0, NEGATIVE) moves map CENTER UP, which makes the
+      // marker appear LOWER on screen — which is what we want. Google's
+      // coordinate system: +y is south (down) in the map frame, so
+      // panBy(0, +y) pulls the camera south and pushes markers north on
+      // screen. The previous +offset was inverted and made the bug WORSE
+      // for stops in the upper map area (the Crested Butte case — popup
+      // ran off the top edge because the marker was being shoved into
+      // the upper-third instead of the lower-third).
+      mapInstance.panBy(0, -offset)
     }
   }, [mapInstance])
 
