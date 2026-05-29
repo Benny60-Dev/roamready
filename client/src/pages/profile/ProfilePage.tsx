@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { Autocomplete, useJsApiLoader } from '@react-google-maps/api'
-import { Truck, Map, CreditCard, Shield, ChevronRight, Save, MapPin, Accessibility, Users } from 'lucide-react'
+import { Truck, Map, CreditCard, Shield, ChevronRight, ChevronDown, Save, MapPin, Accessibility, User, Users } from 'lucide-react'
 import { usersApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 
@@ -12,6 +12,9 @@ export default function ProfilePage() {
   const { user, setUser } = useAuthStore()
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  // Personal Information is an expand-in-place row (toggles the form below it
+  // on /profile — it does NOT navigate, unlike the profileLinks rows).
+  const [personalOpen, setPersonalOpen] = useState(false)
   const { register, handleSubmit, reset, setValue, watch } = useForm({ defaultValues: user || {} })
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null)
 
@@ -67,25 +70,57 @@ export default function ProfilePage() {
     }
   }
 
+  // Per-row brand-colored icons. color = icon (text-*), tint = soft square (bg-*/10).
+  // All reference real tokens from tailwind.config.js (rr group + top-level
+  // accent/premium/purple/red); see report for the substitutions made where a
+  // requested hue had no matching token.
   const profileLinks = [
-    { to: '/profile/rig',           icon: Truck,   label: 'Rig & Vehicle',  sub: 'Manage your rigs' },
-    { to: '/profile/party',         icon: Users,   label: 'Travel Party',   sub: 'People & pets' },
-    { to: '/profile/style',         icon: Map,     label: 'Travel Style',   sub: 'Preferences & budget' },
-    { to: '/profile/accessibility', icon: Accessibility, label: 'Accessibility',  sub: 'Needs & requirements' },
-    { to: '/profile/memberships',   icon: Shield,  label: 'Memberships',    sub: 'ATB, Good Sam, etc.' },
+    { to: '/profile/rig',           icon: Truck,   label: 'Rig & Vehicle',  sub: 'Manage your rigs',       color: 'text-purple',            tint: 'bg-purple/10' },
+    { to: '/profile/party',         icon: Users,   label: 'Travel Party',   sub: 'People & pets',          color: 'text-premium',           tint: 'bg-premium/10' },
+    { to: '/profile/style',         icon: Map,     label: 'Travel Style',   sub: 'Preferences & budget',   color: 'text-red',               tint: 'bg-red/10' },
+    { to: '/profile/accessibility', icon: Accessibility, label: 'Accessibility',  sub: 'Needs & requirements', color: 'text-accent-decorative', tint: 'bg-accent-decorative/10' },
+    { to: '/profile/memberships',   icon: Shield,  label: 'Memberships',    sub: 'ATB, Good Sam, etc.',    color: 'text-rr-gold-700',       tint: 'bg-rr-gold/10' },
     // Notifications link removed May 19 — the settings page persists toggles
     // but no downstream code reads them, push/SMS have no providers, and 5
     // of 6 types have no sender. Route stays registered in App.tsx so any
     // bookmarked /profile/notifications URLs still work and re-linking here
     // post-launch is a one-line restoration once delivery is wired up.
-    { to: '/profile/billing',       icon: CreditCard, label: 'Billing',     sub: user?.subscriptionTier === 'FREE' ? 'Free plan' : `${user?.subscriptionTier} plan` },
+    { to: '/profile/billing',       icon: CreditCard, label: 'Billing',     sub: user?.subscriptionTier === 'FREE' ? 'Free plan' : `${user?.subscriptionTier} plan`, color: 'text-rr-pine', tint: 'bg-rr-pine/10' },
   ]
+
+  // Subtitle for the collapsed Personal Information row: full name · home city,
+  // each part dropped gracefully when empty (falls back to a generic label).
+  const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim()
+  const personalSub = [fullName, user?.homeCity].filter(Boolean).join(' · ') || 'Name, address & contact'
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <h1 className="text-xl font-medium text-gray-900">Profile</h1>
+      <h1 className="text-xl font-medium text-gray-900">{user?.firstName ? `${user.firstName}'s profile` : 'Profile'}</h1>
 
-      <div className="card-lg">
+      <div className="space-y-1">
+        {/* Personal Information — expand-in-place drill-down row. Matches the
+            profileLinks rows visually (card / w-8 icon square / title+subtitle /
+            chevron) but is a <button> that toggles the form below IN PLACE
+            rather than a <Link> that navigates. First row, above Rig & Vehicle. */}
+        <div className="card">
+          <button
+            type="button"
+            onClick={() => setPersonalOpen(o => !o)}
+            aria-expanded={personalOpen}
+            className="w-full flex items-center gap-3 text-left"
+          >
+            <div className="w-8 h-8 bg-rr-blue/10 rounded-lg flex items-center justify-center">
+              <User size={16} className="text-rr-blue" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-gray-900">Personal Information</p>
+              <p className="text-xs text-gray-500">{personalSub}</p>
+            </div>
+            <ChevronDown size={16} className={`text-gray-400 transition-transform ${personalOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {personalOpen && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-12 h-12 bg-[#1F6F8B] rounded-full flex items-center justify-center text-white font-medium">
             {user?.firstName?.[0]}{user?.lastName?.[0]}
@@ -162,13 +197,14 @@ export default function ProfilePage() {
             <Save size={15} /> {saving ? 'Saving...' : saved ? 'Saved!' : 'Save changes'}
           </button>
         </form>
-      </div>
+            </div>
+          )}
+        </div>
 
-      <div className="space-y-1">
-        {profileLinks.map(({ to, icon: Icon, label, sub }) => (
+        {profileLinks.map(({ to, icon: Icon, label, sub, color, tint }) => (
           <Link key={to} to={to} className="card flex items-center gap-3 hover:border-[#1F6F8B]/30 transition-all">
-            <div className="w-8 h-8 bg-gray-50 rounded-lg flex items-center justify-center">
-              <Icon size={16} className="text-gray-600" />
+            <div className={`w-8 h-8 ${tint} rounded-lg flex items-center justify-center`}>
+              <Icon size={16} className={color} />
             </div>
             <div className="flex-1">
               <p className="text-sm font-medium text-gray-900">{label}</p>
