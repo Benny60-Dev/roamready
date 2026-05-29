@@ -534,6 +534,35 @@ export default function TripMapPage() {
     setMapInstance(map)
   }, [])
 
+  // Open a stop's popup AND move the camera so the popup is actually visible.
+  // The popup is an <OverlayViewF> geographically anchored to the stop's
+  // lat/lng (see ~L2151), so when the clicked stop sits outside the current
+  // viewport the popup renders off-screen and the click looks like a no-op —
+  // especially on sidebar-list clicks for stops far from the current center.
+  // Pan to the stop, then nudge the camera down so the marker lands in the
+  // lower third of the viewport, leaving room above for the ~260px popup
+  // card. Offset scales with map height so the mobile 45vh layout doesn't
+  // get an oversized pan that shoots past the viewport bottom.
+  //
+  // Guarded with mapInstance && lat/lng so first-load races safely no-op
+  // (selectedStop still updates — never worse than today's behavior).
+  // panTo short-circuits when the target is already in view, so clicks on
+  // an already-centered stop don't trigger a redundant camera animation;
+  // panBy still applies a small downward nudge in that case, which keeps
+  // the popup unclipped at the top and is acceptable UX.
+  const focusStop = useCallback((stop: Stop) => {
+    setSelectedStop(stop)
+    if (mapInstance && stop.latitude != null && stop.longitude != null) {
+      mapInstance.panTo({ lat: stop.latitude, lng: stop.longitude })
+      const mapH = mapInstance.getDiv()?.clientHeight ?? 0
+      // clamp(80, mapH/3.5, 160) — 80px floor protects very small viewports,
+      // 160px ceiling keeps the desktop pan from feeling jumpy. 120 default
+      // when height is unreadable (race with map mount).
+      const offset = mapH > 0 ? Math.min(Math.max(80, mapH / 3.5), 160) : 120
+      mapInstance.panBy(0, offset)
+    }
+  }, [mapInstance])
+
   // ── Map expand / collapse ─────────────────────────────────────────────────────
   const expandMap = useCallback(() => {
     setMapExpanded(true)
@@ -1129,7 +1158,7 @@ export default function TripMapPage() {
         title:    stop.locationName,
         zIndex:   KIND_Z[kind] + (isOffset ? 1 : 0),
       })
-      marker.addListener('click', () => setSelectedStop(stop))
+      marker.addListener('click', () => focusStop(stop))
       markersRef.current.push(marker)
     })
 
@@ -1961,8 +1990,8 @@ export default function TripMapPage() {
                         key={stop.id}
                         role="button"
                         tabIndex={0}
-                        onClick={() => setSelectedStop(stop)}
-                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedStop(stop) } }}
+                        onClick={() => focusStop(stop)}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); focusStop(stop) } }}
                         className="w-full text-left flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1F6F8B]/30"
                       >
                         {/* 8px booking-state dot */}
