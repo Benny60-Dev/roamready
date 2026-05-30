@@ -97,7 +97,10 @@ function parseItinerary(text: string) {
 // present, return the itinerary unchanged (genuine round trip is kept).
 //
 // IDENTIFICATION LOGIC:
-//   • Turnaround = last stop with nights > 0 whose city ≠ stops[0].city.
+//   • Turnaround = last DESTINATION-type stop with nights > 0, city ≠ stops[0].
+//     Requiring type=DESTINATION is essential: OVERNIGHT_ONLY transit stops exist
+//     on BOTH legs; matching any stop with nights > 0 would wrongly select the
+//     return-transit stop instead of the real destination.
 //   • Return leg = everything after turnaroundIdx (transit + final home stop).
 //   • Slice stops[0..turnaroundIdx] removes the whole return leg in one cut.
 //
@@ -136,19 +139,24 @@ function stripUnrequestedReturnLeg(
 
   if (hasRoundTripPhrase) return itinerary  // genuine round trip — no-op
 
-  // Find turnaround: last stop with nights > 0 that isn't the home city
+  // Find turnaround: last DESTINATION-typed stop with nights > 0 that isn't
+  // the home city. Requiring type='DESTINATION' is critical: transit stops
+  // (OVERNIGHT_ONLY) can appear on BOTH the outbound AND the return leg, so
+  // the previous "any stop with nights > 0" check wrongly found the return-
+  // transit Albuquerque instead of Denver on a Mesa→Albuq→Denver→Albuq→Mesa
+  // itinerary, leaving the dangling return transit in the preview.
   const homeCityNorm = stops[0]?.locationName?.toLowerCase().trim() ?? ''
   let turnaroundIdx = -1
   for (let i = stops.length - 1; i >= 0; i--) {
     const city = (stops[i].locationName ?? '').toLowerCase().trim()
-    if ((stops[i].nights ?? 0) > 0 && city !== homeCityNorm) {
+    if (stops[i].type === 'DESTINATION' && (stops[i].nights ?? 0) > 0 && city !== homeCityNorm) {
       turnaroundIdx = i
       break
     }
   }
 
-  // Fallback: no stay-night stop found (all nights:0) — use last DESTINATION
-  // that isn't the home city
+  // Fallback: no DESTINATION stop with nights > 0 found (e.g. all nights:0) —
+  // use any DESTINATION-type stop that isn't the home city
   if (turnaroundIdx === -1) {
     for (let i = stops.length - 1; i >= 0; i--) {
       const city = (stops[i].locationName ?? '').toLowerCase().trim()
