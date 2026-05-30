@@ -138,8 +138,32 @@ const s = StyleSheet.create({
   hwyBadge: { backgroundColor: GRAY_9, borderRadius: 3, paddingHorizontal: 5, paddingVertical: 2, marginRight: 4 },
   hwyText: { fontSize: 7, color: WHITE, fontFamily: 'Helvetica-Bold' },
 
-  // Map image
+  // Map image — legacy (kept for reference; cover page now uses mapCover)
   mapImage: { width: '100%', height: 180, borderRadius: 6, marginBottom: 16, objectFit: 'cover' },
+
+  // Cover-page map — 2:1 aspect ratio (content width 532pt → height 266pt).
+  // objectFit:'contain' so the full route is never cropped top/bottom.
+  mapCover: { width: '100%', height: 266, borderRadius: 6, objectFit: 'contain' },
+
+  // Slim stats strip (cover page) — hairline rules above/below, 5 cells in a
+  // horizontal row, thin vertical dividers between them. Numbers (~12pt bold)
+  // sit above lighter uppercase labels (~7pt). Font sizes are starting values
+  // to be tuned after a first visual check of the generated PDF.
+  statsStrip: {
+    marginTop: 4,
+    marginBottom: 20,
+    borderTopWidth: 0.5,
+    borderTopColor: '#D1D5DB',
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#D1D5DB',
+  },
+  statsStripInner: { flexDirection: 'row', alignItems: 'center' },
+  statsStripCell:  { flex: 1, alignItems: 'center', paddingVertical: 10 },
+  statsStripVal:   { fontSize: 12, fontFamily: 'Helvetica-Bold', color: GRAY_9 },
+  statsStripLabel: { fontSize: 7, color: GRAY_5, marginTop: 2, letterSpacing: 0.5 },
+  // Divider is fixed-height so it always spans the text block regardless of
+  // how react-pdf resolves cross-axis stretch on a content-sized flex row.
+  statsStripVDiv:  { width: 0.5, height: 28, backgroundColor: '#D1D5DB' },
 })
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -282,7 +306,10 @@ function InfoCell({ label, value }: { label: string; value?: string | null }) {
 
 function DriveEntry({ entry }: { entry: TimelineEntry }) {
   return (
-    <View style={[s.entry, s.driveCard]}>
+    // wrap={false}: the entire drive card — header, route name, meta, notes —
+    // is kept as an unbreakable unit. If it genuinely exceeds a full page
+    // (pathological case) react-pdf degrades by breaking rather than erroring.
+    <View wrap={false} style={[s.entry, s.driveCard]}>
       <View style={s.entryHeader}>
         <View style={[s.dayBadge, { backgroundColor: '#3B82F6' }]}>
           <Text style={s.dayBadgeText}>{entry.dayNum}</Text>
@@ -365,7 +392,10 @@ function StopEntry({ entry }: { entry: TimelineEntry }) {
     : '#D97706'
 
   return (
-    <View style={[s.entry, cardStyle]}>
+    // wrap={false}: the whole stop block (check-in info, notes, activities,
+    // transit note) stays on one page. Over-tall single stops degrade
+    // gracefully — react-pdf renders rather than errors.
+    <View wrap={false} style={[s.entry, cardStyle]}>
       <View style={s.entryHeader}>
         <View style={[s.dayBadge, { backgroundColor: dayBadgeBg }]}>
           <Text style={s.dayBadgeText}>{entry.dayNum}</Text>
@@ -527,10 +557,16 @@ export function TripPDF({ trip, mapImageBase64, fuelEstimate }: Props) {
     fuelPerLeg: fuelEstimate?.noEstimate ? null : (fuelEstimate?.perLeg ?? null),
   })
   const totalCampEst = totals.campEst
-  const fuelEst = totals.fuelEst
+  // fuelEst was in the old 6-stat card; the cover strip uses 5 stats
+  // (Miles / Nights / Stops / Est. Camp / Total Est. Cost). Uncomment to
+  // add it back as a 6th cell or to an "actual so far" itinerary row.
+  // const fuelEst = totals.fuelEst
   const plannedTotal = totals.plannedTotal
-  const actualTotalSoFar = totals.actualTotal
-  const hasAnyActuals = totals.hasAnyActuals
+  // actualTotalSoFar / hasAnyActuals were shown in the old chunky stats card
+  // (removed in the cover-page redesign). Kept as a comment so they're easy
+  // to restore if an "actual so far" row is added back to the itinerary page.
+  // const actualTotalSoFar = totals.actualTotal
+  // const hasAnyActuals    = totals.hasAnyActuals
 
   // Live total miles: prefer Routes API driveDistanceMiles per stop, fall back to Haversine.
   const liveTotalMiles = sortedStops.slice(1).reduce((sum, stop, i) => {
@@ -552,6 +588,11 @@ export function TripPDF({ trip, mapImageBase64, fuelEstimate }: Props) {
 
   return (
     <Document title={`RoamReady – ${trip.name}`} author="RoamReady">
+
+      {/* ══════════════════════════════════════════════════════════════
+          PAGE 1 — COVER: header · stats strip · full-route map
+          Day-by-day itinerary ALWAYS starts on page 2.
+          ══════════════════════════════════════════════════════════════ */}
       <Page size="LETTER" style={s.page}>
 
         {/* ── Header ── */}
@@ -565,77 +606,60 @@ export function TripPDF({ trip, mapImageBase64, fuelEstimate }: Props) {
           </View>
           <View style={s.headerRight}>
             <Text style={s.tripName}>{trip.name}</Text>
-            <Text style={s.tripSub}>{trip.startLocation} → {trip.endLocation}</Text>
-            <Text style={[s.tripSub, { marginTop: 2 }]}>{dateRange}</Text>
+            {/* Combined route + date on one subtitle line */}
+            <Text style={s.tripSub}>
+              {trip.startLocation} → {trip.endLocation}{'  ·  '}{dateRange}
+            </Text>
           </View>
         </View>
 
         <View style={s.divider} />
 
-        {/* ── Stats ── */}
-        <View style={s.statsCard}>
-          <Text style={s.statsTitle}>Trip at a Glance</Text>
-          <View style={s.statsGrid}>
-            <View style={s.statCell}>
-              <Text style={s.statVal}>{liveTotalMiles > 0 ? liveTotalMiles.toLocaleString() : (trip.totalMiles?.toLocaleString() || '—')}</Text>
-              <Text style={s.statLabel}>Total Miles</Text>
+        {/* ── Slim stats strip ── */}
+        {/* 5 stats in a horizontal band: hairline top & bottom, thin vertical
+            dividers between cells. Font sizes are starting values — tune after
+            reviewing a generated PDF. */}
+        <View style={s.statsStrip}>
+          <View style={s.statsStripInner}>
+            <View style={s.statsStripCell}>
+              <Text style={s.statsStripVal}>
+                {liveTotalMiles > 0 ? liveTotalMiles.toLocaleString() : (trip.totalMiles?.toLocaleString() || '—')}
+              </Text>
+              <Text style={s.statsStripLabel}>MILES</Text>
             </View>
-            <View style={s.statDivider} />
-            <View style={s.statCell}>
-              <Text style={s.statVal}>{totalNights}</Text>
-              <Text style={s.statLabel}>Nights</Text>
+            <View style={s.statsStripVDiv} />
+            <View style={s.statsStripCell}>
+              <Text style={s.statsStripVal}>{totalNights}</Text>
+              <Text style={s.statsStripLabel}>NIGHTS</Text>
             </View>
-            <View style={s.statDivider} />
-            <View style={s.statCell}>
-              <Text style={s.statVal}>{sortedStops.length}</Text>
-              <Text style={s.statLabel}>Stops</Text>
+            <View style={s.statsStripVDiv} />
+            <View style={s.statsStripCell}>
+              <Text style={s.statsStripVal}>{sortedStops.length}</Text>
+              <Text style={s.statsStripLabel}>STOPS</Text>
             </View>
-            <View style={s.statDivider} />
-            <View style={s.statCell}>
-              <Text style={s.statVal}>{fmtCurrency(fuelEst || null)}</Text>
-              <Text style={s.statLabel}>Est. Fuel</Text>
+            <View style={s.statsStripVDiv} />
+            <View style={s.statsStripCell}>
+              <Text style={s.statsStripVal}>{fmtCurrency(totalCampEst || null)}</Text>
+              <Text style={s.statsStripLabel}>EST. CAMP</Text>
             </View>
-            <View style={s.statDivider} />
-            <View style={s.statCell}>
-              <Text style={s.statVal}>{fmtCurrency(totalCampEst || null)}</Text>
-              <Text style={s.statLabel}>Est. Camping</Text>
-            </View>
-            <View style={s.statDivider} />
-            <View style={s.statCell}>
-              <Text style={[s.statVal, { fontSize: 16 }]}>{fmtCurrency(plannedTotal || null)}</Text>
-              <Text style={s.statLabel}>{hasAnyActuals ? 'Planned Total' : 'Total Est. Cost'}</Text>
+            <View style={s.statsStripVDiv} />
+            <View style={s.statsStripCell}>
+              <Text style={s.statsStripVal}>{fmtCurrency(plannedTotal || null)}</Text>
+              <Text style={s.statsStripLabel}>TOTAL EST. COST</Text>
             </View>
           </View>
-          {/* Actual-so-far line — only when at least one actual has been
-              recorded (booked stop with actualRate, or trip.actualFuel set).
-              Renders below the stats grid so the existing 6-cell layout
-              stays intact and the "what you've actually paid" number sits
-              prominent right under the planned total. */}
-          {hasAnyActuals && (
-            <View style={{ marginTop: 6, paddingTop: 6, borderTopWidth: 0.5, borderTopColor: '#E5E7EB', flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={{ fontSize: 9, color: '#6B7280' }}>Actual so far</Text>
-              <Text style={{ fontSize: 11, fontWeight: 600, color: '#1F6F8B' }}>
-                {fmtCurrency(actualTotalSoFar || null)}
-              </Text>
-            </View>
-          )}
         </View>
 
-        {/* ── Route Map ── */}
+        {/* ── Route map — centerpiece ── */}
+        {/* mapCover is sized to the image's true 2:1 aspect (532pt wide × 266pt tall)
+            with objectFit:'contain', so the full route and all markers are visible
+            with no top/bottom cropping. The server auto-fits all stops + polyline
+            into the image, so no bounds work is needed here. */}
         {mapImageBase64 ? (
-          <Image src={mapImageBase64} style={s.mapImage} />
+          <Image src={mapImageBase64} style={s.mapCover} />
         ) : null}
 
-        {/* ── Itinerary ── */}
-        <Text style={s.sectionTitle}>Day-by-Day Itinerary</Text>
-
-        {entries.map((entry, idx) =>
-          entry.type === 'DRIVE'
-            ? <DriveEntry key={idx} entry={entry} />
-            : <StopEntry key={idx} entry={entry} />
-        )}
-
-        {/* ── Footer ── */}
+        {/* ── Footer (fixed: repeats on any cover overflow pages) ── */}
         <View style={s.footer} fixed>
           <Text style={s.footerLeft}>Generated by RoamReady · {generatedOn}</Text>
           <Text
@@ -645,6 +669,33 @@ export function TripPDF({ trip, mapImageBase64, fuelEstimate }: Props) {
         </View>
 
       </Page>
+
+      {/* ══════════════════════════════════════════════════════════════
+          PAGE 2+ — DAY-BY-DAY ITINERARY
+          Each stop/drive entry is wrapped in wrap={false} so the whole
+          block moves to the next page rather than splitting mid-card.
+          ══════════════════════════════════════════════════════════════ */}
+      <Page size="LETTER" style={s.page}>
+
+        <Text style={s.sectionTitle}>Day-by-Day Itinerary</Text>
+
+        {entries.map((entry, idx) =>
+          entry.type === 'DRIVE'
+            ? <DriveEntry key={idx} entry={entry} />
+            : <StopEntry key={idx} entry={entry} />
+        )}
+
+        {/* ── Footer (fixed: repeats on every itinerary page) ── */}
+        <View style={s.footer} fixed>
+          <Text style={s.footerLeft}>Generated by RoamReady · {generatedOn}</Text>
+          <Text
+            style={s.footerRight}
+            render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+          />
+        </View>
+
+      </Page>
+
     </Document>
   )
 }
