@@ -886,6 +886,46 @@ export default function TripMapPage() {
     }
   }, [routePath])
 
+  // ── Initial framing: fit ALL stops + the driving route in view ────────────────
+  // Replaces the old fixed zoom={6} / center-on-first-stop framing (those props now
+  // only serve as the pre-load placeholder + the no-coords US-center fallback). We
+  // build a LatLngBounds over every stop AND every point of the road-snapped route
+  // polyline (so curved legs near the edges aren't clipped) and fitBounds with
+  // padding. Re-runs whenever the stop set or the route geometry changes.
+  // NOTE: this is separate from the stop-click panTo/panBy popup camera move — that
+  // stays as-is and is still wanted.
+  useEffect(() => {
+    if (!mapInstance) return
+
+    // No coords at all → leave the center/zoom props' US-center fallback untouched.
+    if (stopsWithCoords.length === 0) return
+
+    // Degenerate: a single stop (or all stops at coincident coords — e.g. a
+    // start === return-home loop) yields a zero-size bounds that fitBounds would
+    // blow up to max zoom. Center on the point at a sane fixed zoom instead.
+    if (stopsWithCoords.length < 2) {
+      const s = stopsWithCoords[0]
+      mapInstance.setCenter({ lat: s.latitude!, lng: s.longitude! })
+      mapInstance.setZoom(10)
+      return
+    }
+
+    const bounds = new window.google.maps.LatLngBounds()
+    for (const s of stopsWithCoords) bounds.extend({ lat: s.latitude!, lng: s.longitude! })
+    if (routePath) for (const pt of routePath) bounds.extend(pt)
+
+    // All coords identical (multiple stops, same spot) → same degenerate case.
+    if (bounds.getNorthEast().equals(bounds.getSouthWest())) {
+      mapInstance.setCenter(bounds.getCenter())
+      mapInstance.setZoom(10)
+      return
+    }
+
+    // Pixel padding so edge pins aren't clipped at the container edge; a little
+    // extra on top since the marker pins extend upward from their anchor.
+    mapInstance.fitBounds(bounds, { top: 72, right: 60, bottom: 60, left: 60 })
+  }, [mapInstance, stopsWithCoords, routePath])
+
   // ── Routes API (replaces deprecated DirectionsService) ────────────────────────
   useEffect(() => {
     if (!isLoaded || geocoding || !trip?.stops?.length) return
@@ -2144,13 +2184,16 @@ export default function TripMapPage() {
           )}
 
           {isLoaded ? (
-            // `center` is memoized at line ~1134 so its reference stays stable across
-            // re-renders when the underlying lat/lng don't change. Without that,
-            // @react-google-maps/api treats every new {lat,lng} object literal as a
-            // changed `center` prop and calls map.setCenter internally — which would
-            // snap the user back to the first stop's coords on every state update
-            // (popup close, layer toggle, etc.). The library has no defaultCenter
-            // prop, so reference stability via useMemo is the fix.
+            // `center` and `zoom` here are PLACEHOLDER values only — the real
+            // framing is applied imperatively by the fitBounds useEffect above,
+            // which fires after mapInstance is set and again whenever stops or
+            // routePath change. `center` is still memoized so that its reference
+            // stays stable: @react-google-maps/api calls map.setCenter whenever the
+            // `center` prop reference changes, which would fight the fitBounds-set
+            // viewport on every re-render. The memoized reference only changes when
+            // the first stop's actual coords change, so it never snaps back on
+            // unrelated state updates (popup open/close, layer toggles, etc.).
+            // The library has no `defaultCenter` prop, so this is the only option.
             <GoogleMap
               mapContainerStyle={MAP_CONTAINER_STYLE}
               zoom={6}
