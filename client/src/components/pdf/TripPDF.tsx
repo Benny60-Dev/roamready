@@ -148,15 +148,30 @@ const s = StyleSheet.create({
   // Map image — legacy (kept for reference; cover page now uses mapCoverWrap/mapCoverImg)
   mapImage: { width: '100%', height: 180, borderRadius: 6, marginBottom: 16, objectFit: 'cover' },
 
-  // Cover-page map — fills ALL remaining vertical space on the cover page.
-  // The wrapper gets flex:1 so the Page's flex-column layout expands it to fill
-  // whatever height is left after coverHeader + divider + statsStrip. The image
-  // uses width/height 100% + objectFit:'contain' so the portrait source image
-  // (540×640, ratio ≈ 0.844) scales to fit the container without distortion —
-  // thin neutral side-strips appear if the container is wider than 0.844:1, but
-  // no crop and no stretch ever occur. The footer is position:absolute inside
-  // paddingBottom:48, so flex:1 never overlaps it.
-  mapCoverWrap: { flex: 1, borderRadius: 6, overflow: 'hidden' },
+  // Cover-page map — FIXED height so react-pdf never pushes it to page 2.
+  //
+  // flex:1 was the previous approach but react-pdf does not reliably shrink a
+  // flex child containing an <Image> to the remaining page height — it can
+  // instead push the whole block to a new page.
+  //
+  // Height derived from stylesheet values (worst case = 2-line title):
+  //   Usable page height   = 792 − paddingTop(36) − paddingBottom(48) = 708pt
+  //   logoRow              = logoImg.height(36) + marginBottom(10)     =  46pt
+  //   tripNameRow 2-line   = 17×1.25×2 + tripSub(9+3)                 =  54.5pt
+  //   coverHeader.mb       =                                             14pt
+  //   divider              = height(1) + marginBottom(16)              =  17pt
+  //   statsStrip           = marginTop(4)+borders(1)+cells(42)+mb(20)  =  67pt
+  //   Total above map                                                  = 198.5pt
+  //   Available (worst)    = 708 − 198.5                               = 509.5pt
+  //   Fixed height (−70pt safety margin for rounding + unmeasured gaps)= 440pt
+  //
+  // Short 1-line title leaves ~91pt gap below the map — acceptable white space.
+  // 2-line title leaves ~70pt gap — still comfortable. Increase toward 500 once
+  // confirmed safe in both real PDFs; decrease if still overflowing.
+  //
+  // objectFit:'contain' on the image → no distortion. Portrait source (0.844:1)
+  // in a wider-than-tall container produces neutral side-strips; no crop ever.
+  mapCoverWrap: { height: 440, borderRadius: 6, overflow: 'hidden' },
   mapCoverImg:  { width: '100%', height: '100%', objectFit: 'contain' },
 
   // Slim stats strip (cover page) — hairline rules above/below, 6 cells
