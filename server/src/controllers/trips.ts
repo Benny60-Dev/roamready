@@ -292,11 +292,24 @@ async function fetchAllSegmentRoutes(
  * resolves names itself), so it does not require pre-geocoded stop coords.
  * Returns null on any failure — caller treats a null leg as "leave it alone".
  */
+interface LegStep {
+  durationSec: number
+  startLat: number
+  startLng: number
+  endLat: number
+  endLng: number
+}
+interface LegDetail {
+  durationSec: number
+  distanceMeters: number
+  steps: LegStep[]
+}
+
 async function fetchLegDetail(
   from: any,
   to: any,
   apiKey: string,
-): Promise<{ durationSec: number; distanceMeters: number; steps: { durationSec: number; lat: number; lng: number }[] } | null> {
+): Promise<LegDetail | null> {
   const origin = from.latitude && from.longitude
     ? `${from.latitude},${from.longitude}`
     : `${from.locationName}${from.locationState ? ', ' + from.locationState : ''}`
@@ -317,14 +330,21 @@ async function fetchLegDetail(
     const legs = data.routes[0].legs as any[]
     const durationSec = legs.reduce((s: number, l: any) => s + (l.duration?.value ?? 0), 0)
     const distanceMeters = legs.reduce((s: number, l: any) => s + (l.distance?.value ?? 0), 0)
-    const steps = legs
+    // Capture each step's START and END coordinate + duration. We interpolate a
+    // split point WITHIN the step that crosses the target (start→end linear), so a
+    // single multi-hour interstate step no longer forces the split to its far end.
+    const steps: LegStep[] = legs
       .flatMap((l: any) => l.steps ?? [])
       .map((st: any) => ({
         durationSec: st.duration?.value ?? 0,
-        lat: st.end_location?.lat,
-        lng: st.end_location?.lng,
+        startLat: st.start_location?.lat,
+        startLng: st.start_location?.lng,
+        endLat: st.end_location?.lat,
+        endLng: st.end_location?.lng,
       }))
-      .filter((s: any) => typeof s.lat === 'number' && typeof s.lng === 'number')
+      .filter((s: any) =>
+        typeof s.startLat === 'number' && typeof s.startLng === 'number' &&
+        typeof s.endLat === 'number' && typeof s.endLng === 'number')
     return { durationSec, distanceMeters, steps }
   } catch (err: any) {
     console.error('[fetchLegDetail] error for %s → %s:', origin, destination, err?.message)
@@ -372,6 +392,134 @@ async function reverseGeocode(
     console.error('[reverseGeocode] error for %s,%s:', lat, lng, err?.message)
     return null
   }
+}
+
+// ─── Long-leg split helpers ───────────────────────────────────────────────────
+
+interface TransitTown { locationName: string; locationState: string; latitude: number; longitude: number }
+
+/**
+ * Find a coordinate `targetSec` of driving into a measured leg by interpolating
+ * WITHIN the step that crosses the target — NOT at the step's far end. Google
+ * steps can be multi-hour interstate runs; taking the step end overshoots the
+ * target badly (the original bug: a single I-70 step ended ~9.4h out, so the
+ * "6h" split landed at Grand Junction). Linear start→end interpolation inside
+ * the crossing step keeps the point near the true target along the road.
+ */
+function interpolateSplitPoint(detail: LegDetail, targetSec: number): { lat: number; lng: number } | null {
+  let acc = 0
+  for (const step of detail.steps) {
+    if (acc + step.durationSec >= targetSec) {
+      const remaining = targetSec - acc
+      const frac = step.durationSec > 0 ? Math.max(0, Math.min(1, remaining / step.durationSec)) : 0
+      return {
+        lat: step.startLat + (step.endLat - step.startLat) * frac,
+        lng: step.startLng + (step.endLng - step.startLng) * frac,
+      }
+    }
+    acc += step.durationSec
+  }
+  const last = detail.steps[detail.steps.length - 1]
+  return last ? { lat: last.endLat, lng: last.endLng } : null
+}
+
+interface LegPlan {
+  towns: TransitTown[]
+  /** Ordered resulting sub-leg durations (hours) for logging — last entry is the tail. */
+  subLegs: { from: string; to: string; hours: number; over: boolean }[]
+  warnings: string[]
+}
+
+/**
+ * Plan the transit-stop splits for ONE original leg (from → to) using REAL,
+ * re-measured drive times. Frontier loop: measure frontier→to; if within cap,
+ * done; else interpolate a point ~targetSec into the REAL remaining route,
+ * reverse-geocode it to a town, then RE-MEASURE frontier→town and only accept
+ * it when that actual sub-leg is under cap (retrying closer if a town snapped
+ * too far). This guarantees every emitted sub-leg is measured ≤ cap — the
+ * placement no longer trusts the original-route projection. Bounded by
+ * maxInserts; fails soft (leaves remainder + logs) rather than looping.
+ */
+async function planLegSplits(
+  from: TransitTown,
+  to: TransitTown,
+  apiKey: string,
+  capSec: number,
+  targetSec: number,
+  tolSec: number,
+  maxInserts: number,
+): Promise<LegPlan> {
+  const plan: LegPlan = { towns: [], subLegs: [], warnings: [] }
+  let frontier = from
+  let iterations = 0
+
+  while (true) {
+    if (++iterations > maxInserts + 5) {  // hard backstop against any pathological loop
+      plan.warnings.push(`iteration backstop tripped on ${from.locationName}→${to.locationName}`)
+      break
+    }
+
+    const detail = await fetchLegDetail(frontier, to, apiKey)
+    if (!detail) {
+      plan.warnings.push(`routing failed ${frontier.locationName}→${to.locationName}; leaving leg as-is`)
+      // Record nothing for this tail (unknown) — fail soft.
+      break
+    }
+
+    // Remaining route fits → this is the final sub-leg, under cap. Done.
+    if (detail.durationSec <= capSec + tolSec) {
+      plan.subLegs.push({ from: frontier.locationName, to: to.locationName, hours: detail.durationSec / 3600, over: false })
+      break
+    }
+
+    // Out of insert budget → leave the over-cap tail and warn.
+    if (plan.towns.length >= maxInserts) {
+      plan.subLegs.push({ from: frontier.locationName, to: to.locationName, hours: detail.durationSec / 3600, over: true })
+      plan.warnings.push(
+        `hit MAX_INSERTS_PER_LEG=${maxInserts} on ${from.locationName}→${to.locationName}; ` +
+        `tail ${frontier.locationName}→${to.locationName} left at ${(detail.durationSec / 3600).toFixed(1)}h`,
+      )
+      break
+    }
+
+    // Place a town ~targetSec into the REAL remaining route. Retry closer if the
+    // reverse-geocoded town snapped too far (measured frontier→town over cap).
+    let placed = false
+    let tryTarget = targetSec
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const pt = interpolateSplitPoint(detail, tryTarget)
+      if (!pt) break
+      const rg = await reverseGeocode(pt.lat, pt.lng, apiKey)
+      if (!rg) { tryTarget *= 0.7; continue }
+      const town: TransitTown = { locationName: rg.city, locationState: rg.state, latitude: rg.lat, longitude: rg.lng }
+      // Don't accept a town that is effectively the frontier or the destination.
+      if (
+        town.locationName.toLowerCase() === frontier.locationName.toLowerCase() ||
+        town.locationName.toLowerCase() === to.locationName.toLowerCase()
+      ) { tryTarget *= 0.7; continue }
+
+      const sub = await fetchLegDetail(frontier, town, apiKey)
+      if (!sub) { tryTarget *= 0.7; continue }
+      if (sub.durationSec <= capSec + tolSec) {
+        plan.towns.push(town)
+        plan.subLegs.push({ from: frontier.locationName, to: town.locationName, hours: sub.durationSec / 3600, over: false })
+        frontier = town
+        placed = true
+        break
+      }
+      tryTarget *= 0.7  // overshoot — pull the split closer and retry
+    }
+
+    if (!placed) {
+      plan.subLegs.push({ from: frontier.locationName, to: to.locationName, hours: detail.durationSec / 3600, over: true })
+      plan.warnings.push(
+        `could not place an under-cap split for ${frontier.locationName}→${to.locationName} after retries; leaving remainder as-is`,
+      )
+      break
+    }
+  }
+
+  return plan
 }
 
 // ─── POI geocoding helpers ────────────────────────────────────────────────────
@@ -1349,52 +1497,32 @@ export async function expandLongLegs(req: AuthRequest, res: Response, next: Next
 
     // Phase 1 — plan insertions per gap (no DB writes yet). Each plan records the
     // ORIGINAL order of the stop the transit stops go AFTER, plus the towns.
-    const plans: { afterOrder: number; towns: { locationName: string; locationState: string; latitude: number; longitude: number }[] }[] = []
+    // planLegSplits measures the REAL resulting sub-legs and re-splits until each
+    // is under cap (or the per-leg insert cap is hit), so we never trust the
+    // original-route projection.
+    const plans: { afterOrder: number; towns: TransitTown[] }[] = []
 
     for (let i = 1; i < stops.length; i++) {
       const from = stops[i - 1]
       const to   = stops[i]
-      const detail = await fetchLegDetail(from, to, apiKey)
-      if (!detail) continue                                   // routing failed → leave leg as-is
-      if (detail.durationSec <= capSec + TOLERANCE_SEC) continue  // within cap → no split
+      const fromTown: TransitTown = { locationName: from.locationName, locationState: from.locationState, latitude: from.latitude, longitude: from.longitude }
+      const toTown:   TransitTown = { locationName: to.locationName,   locationState: to.locationState,   latitude: to.latitude,   longitude: to.longitude }
 
-      // Walk steps, marking a split point each time accumulated duration reaches
-      // the target. Each reset guarantees every sub-leg (and the final tail) is
-      // <= TARGET_SEC <= cap, except when the per-leg insert cap is hit.
-      const splitPoints: { lat: number; lng: number }[] = []
-      let acc = 0
-      let cappedOut = false
-      for (const step of detail.steps) {
-        acc += step.durationSec
-        if (acc >= TARGET_SEC) {
-          splitPoints.push({ lat: step.lat, lng: step.lng })
-          acc = 0
-          if (splitPoints.length >= MAX_INSERTS_PER_LEG) { cappedOut = true; break }
-        }
-      }
-      if (cappedOut) {
-        console.warn(
-          '[expandLongLegs] leg %s→%s needs more than %d transit stops (%.1fh leg, %.1fh cap) — inserting %d and leaving the tail long',
-          from.locationName, to.locationName, MAX_INSERTS_PER_LEG,
-          detail.durationSec / 3600, maxHours, MAX_INSERTS_PER_LEG,
-        )
-      }
-      if (splitPoints.length === 0) continue
+      const legPlan = await planLegSplits(fromTown, toTown, apiKey, capSec, TARGET_SEC, TOLERANCE_SEC, MAX_INSERTS_PER_LEG)
 
-      const towns: { locationName: string; locationState: string; latitude: number; longitude: number }[] = []
-      for (const sp of splitPoints) {
-        const rg = await reverseGeocode(sp.lat, sp.lng, apiKey)
-        if (!rg) {
-          console.warn('[expandLongLegs] split point %s,%s did not reverse-geocode to a town — skipping', sp.lat, sp.lng)
-          continue
-        }
-        towns.push({ locationName: rg.city, locationState: rg.state, latitude: rg.lat, longitude: rg.lng })
+      // Per-leg log: original leg + the resulting sub-leg durations (with any
+      // still-over markers and warnings) so over-cap tails are never hidden.
+      if (legPlan.towns.length > 0 || legPlan.warnings.length > 0) {
+        const subLegStr = legPlan.subLegs
+          .map(sl => `${sl.from}→${sl.to} ${sl.hours.toFixed(1)}h${sl.over ? ' [OVER CAP]' : ''}`)
+          .join(' | ')
+        console.log('[expandLongLegs] leg %s→%s (cap %.1fh): %d transit stop(s) → %s',
+          from.locationName, to.locationName, maxHours, legPlan.towns.length, subLegStr || '(no split)')
+        for (const w of legPlan.warnings) console.warn('[expandLongLegs] %s', w)
       }
-      if (towns.length > 0) {
-        plans.push({ afterOrder: from.order, towns })
-        console.log('[expandLongLegs] leg %s→%s (%.1fh) → inserting %d transit stop(s): %s',
-          from.locationName, to.locationName, detail.durationSec / 3600, towns.length,
-          towns.map(t => `${t.locationName}, ${t.locationState}`).join(' | '))
+
+      if (legPlan.towns.length > 0) {
+        plans.push({ afterOrder: from.order, towns: legPlan.towns })
       }
     }
 
