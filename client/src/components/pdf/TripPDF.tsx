@@ -54,15 +54,22 @@ const s = StyleSheet.create({
     paddingHorizontal: 40,
   },
 
-  // Header
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
-  logoBox: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  logoImg: { width: 40, height: 40, objectFit: 'contain' },
-  brandName: { fontSize: 14, fontFamily: 'Helvetica-Bold', color: GRAY_9 },
-  brandTag: { fontSize: 8, color: GRAY_5, marginTop: 1 },
-  headerRight: { textAlign: 'right' },
-  tripName: { fontSize: 16, fontFamily: 'Helvetica-Bold', color: GRAY_9 },
-  tripSub: { fontSize: 9, color: GRAY_5, marginTop: 2 },
+  // Header — two-row stacked layout so a long title can't collide with the
+  // logo or overflow the right margin.
+  // Row 1: logo block (icon + wordmark) — left-aligned, no right partner.
+  // Row 2: trip title (full-width, wrappable) + subtitle line beneath it.
+  coverHeader:  { marginBottom: 14 },
+  logoRow:      { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
+  logoBox:      { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  logoImg:      { width: 36, height: 36, objectFit: 'contain' },
+  brandName:    { fontSize: 13, fontFamily: 'Helvetica-Bold', color: GRAY_9 },
+  brandTag:     { fontSize: 7.5, color: GRAY_5, marginTop: 1 },
+  tripNameRow:  { flexDirection: 'column' },
+  tripName:     { fontSize: 17, fontFamily: 'Helvetica-Bold', color: GRAY_9, lineHeight: 1.25 },
+  tripSub:      { fontSize: 9, color: GRAY_5, marginTop: 3 },
+  // Legacy — kept so the itinerary page's existing style refs compile
+  headerRow:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
+  headerRight:  { textAlign: 'right' },
   divider: { height: 1, backgroundColor: GREEN, marginBottom: 16, opacity: 0.3 },
 
   // Stats
@@ -145,10 +152,10 @@ const s = StyleSheet.create({
   // objectFit:'contain' so the full route is never cropped top/bottom.
   mapCover: { width: '100%', height: 266, borderRadius: 6, objectFit: 'contain' },
 
-  // Slim stats strip (cover page) — hairline rules above/below, 5 cells in a
-  // horizontal row, thin vertical dividers between them. Numbers (~12pt bold)
-  // sit above lighter uppercase labels (~7pt). Font sizes are starting values
-  // to be tuned after a first visual check of the generated PDF.
+  // Slim stats strip (cover page) — hairline rules above/below, 6 cells
+  // (Miles | Nights | Stops | Est. Fuel | Est. Camp | Total) in a horizontal
+  // row with thin vertical dividers. Numbers ~14pt bold, labels ~8pt muted.
+  // Font sizes are starting values — tune after visual review of a generated PDF.
   statsStrip: {
     marginTop: 4,
     marginBottom: 20,
@@ -158,12 +165,12 @@ const s = StyleSheet.create({
     borderBottomColor: '#D1D5DB',
   },
   statsStripInner: { flexDirection: 'row', alignItems: 'center' },
-  statsStripCell:  { flex: 1, alignItems: 'center', paddingVertical: 10 },
-  statsStripVal:   { fontSize: 12, fontFamily: 'Helvetica-Bold', color: GRAY_9 },
-  statsStripLabel: { fontSize: 7, color: GRAY_5, marginTop: 2, letterSpacing: 0.5 },
-  // Divider is fixed-height so it always spans the text block regardless of
-  // how react-pdf resolves cross-axis stretch on a content-sized flex row.
-  statsStripVDiv:  { width: 0.5, height: 28, backgroundColor: '#D1D5DB' },
+  statsStripCell:  { flex: 1, alignItems: 'center', paddingVertical: 9 },
+  statsStripVal:   { fontSize: 14, fontFamily: 'Helvetica-Bold', color: GRAY_9 },
+  statsStripLabel: { fontSize: 8, color: GRAY_5, marginTop: 2, letterSpacing: 0.4 },
+  // Fixed-height divider (spans the inner text block). Height tuned for 14pt
+  // value + 8pt label + 2pt gap ≈ 24pt content; 30pt gives a little breathing room.
+  statsStripVDiv:  { width: 0.5, height: 30, backgroundColor: '#D1D5DB' },
 })
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -557,10 +564,7 @@ export function TripPDF({ trip, mapImageBase64, fuelEstimate }: Props) {
     fuelPerLeg: fuelEstimate?.noEstimate ? null : (fuelEstimate?.perLeg ?? null),
   })
   const totalCampEst = totals.campEst
-  // fuelEst was in the old 6-stat card; the cover strip uses 5 stats
-  // (Miles / Nights / Stops / Est. Camp / Total Est. Cost). Uncomment to
-  // add it back as a 6th cell or to an "actual so far" itinerary row.
-  // const fuelEst = totals.fuelEst
+  const fuelEst      = totals.fuelEst   // restored: 6th cell in the cover strip
   const plannedTotal = totals.plannedTotal
   // actualTotalSoFar / hasAnyActuals were shown in the old chunky stats card
   // (removed in the cover-page redesign). Kept as a comment so they're easy
@@ -595,18 +599,23 @@ export function TripPDF({ trip, mapImageBase64, fuelEstimate }: Props) {
           ══════════════════════════════════════════════════════════════ */}
       <Page size="LETTER" style={s.page}>
 
-        {/* ── Header ── */}
-        <View style={s.headerRow}>
-          <View style={s.logoBox}>
+        {/* ── Header — stacked layout ── */}
+        {/* Row 1: logo + wordmark left-aligned on its own line.
+            Row 2: trip title (full content width, wraps on long titles) +
+                   "start → end · date range" subtitle directly beneath.
+            This prevents the logo / title collision on long trip names. */}
+        <View style={s.coverHeader}>
+          {/* Row 1 — logo */}
+          <View style={s.logoRow}>
             <Image src="/roamready-icon.png" style={s.logoImg} />
             <View>
               <Text style={s.brandName}>RoamReady</Text>
               <Text style={s.brandTag}>Trip Itinerary</Text>
             </View>
           </View>
-          <View style={s.headerRight}>
+          {/* Row 2 — title + subtitle, full content width */}
+          <View style={s.tripNameRow}>
             <Text style={s.tripName}>{trip.name}</Text>
-            {/* Combined route + date on one subtitle line */}
             <Text style={s.tripSub}>
               {trip.startLocation} → {trip.endLocation}{'  ·  '}{dateRange}
             </Text>
@@ -615,10 +624,11 @@ export function TripPDF({ trip, mapImageBase64, fuelEstimate }: Props) {
 
         <View style={s.divider} />
 
-        {/* ── Slim stats strip ── */}
-        {/* 5 stats in a horizontal band: hairline top & bottom, thin vertical
-            dividers between cells. Font sizes are starting values — tune after
-            reviewing a generated PDF. */}
+        {/* ── Slim stats strip — 6 cells ── */}
+        {/* Miles | Nights | Stops | Est. Fuel | Est. Camp | Total
+            Hairline top & bottom, thin vertical dividers between cells.
+            Labels are shortened to 1–2 words so 6 cells fit at any trip name length.
+            Font sizes (val: 14pt, label: 8pt) are starting values — tune visually. */}
         <View style={s.statsStrip}>
           <View style={s.statsStripInner}>
             <View style={s.statsStripCell}>
@@ -639,13 +649,18 @@ export function TripPDF({ trip, mapImageBase64, fuelEstimate }: Props) {
             </View>
             <View style={s.statsStripVDiv} />
             <View style={s.statsStripCell}>
+              <Text style={s.statsStripVal}>{fmtCurrency(fuelEst || null)}</Text>
+              <Text style={s.statsStripLabel}>EST. FUEL</Text>
+            </View>
+            <View style={s.statsStripVDiv} />
+            <View style={s.statsStripCell}>
               <Text style={s.statsStripVal}>{fmtCurrency(totalCampEst || null)}</Text>
               <Text style={s.statsStripLabel}>EST. CAMP</Text>
             </View>
             <View style={s.statsStripVDiv} />
             <View style={s.statsStripCell}>
               <Text style={s.statsStripVal}>{fmtCurrency(plannedTotal || null)}</Text>
-              <Text style={s.statsStripLabel}>TOTAL EST. COST</Text>
+              <Text style={s.statsStripLabel}>TOTAL</Text>
             </View>
           </View>
         </View>
