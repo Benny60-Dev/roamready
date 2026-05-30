@@ -510,12 +510,27 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       defaultParty: serializeParty(user?.parties?.[0] ?? null),
     }
 
-    // Surprise-trip variety: detect "surprise trip" in the latest user message,
-    // then pull the user's last 5 surprise destinations to exclude and pick a
-    // random landscape vibe to nudge variety. Falls through silently on any error.
+    // Surprise-trip variety: detect a destination-deferral phrase in the latest
+    // user message, then pull the user's last 5 surprise destinations to exclude
+    // and pick a random landscape vibe to nudge variety. Falls through silently
+    // on any error.
+    //
+    // These phrases MUST stay in sync with the "Surprise trip rule" in
+    // services/ai.ts — the rule fires on "surprise me" / "you pick" / etc., so
+    // the detector has to match the same set or the variety machinery (exclusion
+    // + vibe) never runs for the cases that actually defer the destination. The
+    // earlier detector only matched the literal "surprise trip", which none of
+    // the natural phrasings contain → variety system was effectively unreachable.
+    const SURPRISE_PHRASES = [
+      'surprise trip', 'surprise me', 'you pick', 'you choose',
+      'choose somewhere', 'pick a destination', 'pick somewhere', 'pick a place',
+    ]
+    const matchesSurprise = (text: unknown): boolean =>
+      typeof text === 'string' &&
+      SURPRISE_PHRASES.some(p => text.toLowerCase().includes(p))
+
     const lastUserMsg = [...messages].reverse().find((m: any) => m.role === 'user')
-    const isSurprise = typeof lastUserMsg?.content === 'string'
-      && lastUserMsg.content.toLowerCase().includes('surprise trip')
+    const isSurprise = matchesSurprise(lastUserMsg?.content)
 
     let recentSurpriseDestinations: string[] | undefined
     let surpriseVibe: string | undefined
@@ -547,7 +562,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
           },
         })
         recentSurpriseDestinations = recent
-          .filter(t => JSON.stringify(t.planningSession?.messages ?? null).toLowerCase().includes('surprise trip'))
+          .filter(t => matchesSurprise(JSON.stringify(t.planningSession?.messages ?? null)))
           .slice(0, 5)
           .map(t => t.stops[0]?.locationName)
           .filter(Boolean) as string[]
