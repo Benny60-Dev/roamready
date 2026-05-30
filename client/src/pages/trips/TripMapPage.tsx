@@ -771,14 +771,16 @@ export default function TripMapPage() {
     allMissing.forEach(s => console.log('[TripMapPage:geocodeEffect]   missing stop id=%s type=%s locationName=%s', s.id, s.type, s.locationName))
 
     // Stops that get the user's exact home coordinates instead of geocoding:
-    //   • Any HOME-typed stop
-    //   • The last stop when its city matches the user's homeCity (returning home)
+    //   • A HOME-typed stop whose city matches user.homeCity (true home departure)
+    //   • The last stop when its city matches user.homeCity (returning home)
+    // A HOME-typed stop whose city does NOT match (e.g. a trip starting from San Jose)
+    // is excluded from this set so it falls through to the geocoder below, which
+    // resolves the real start-city coordinates instead of applying Mesa's address.
     const exactHomeStops = hasExactHome
       ? allMissing.filter(s => {
-          if (s.type === 'HOME') return true
-          if (s.id === lastStop?.id && user?.homeCity)
-            return s.locationName.toLowerCase().trim() === user.homeCity.toLowerCase().trim()
-          return false
+          const cityIsHome = !!user?.homeCity &&
+            s.locationName.toLowerCase().trim() === user.homeCity.toLowerCase().trim()
+          return (s.type === 'HOME' || s.id === lastStop?.id) && cityIsHome
         })
       : []
 
@@ -838,11 +840,14 @@ export default function TripMapPage() {
       } : prev)
       setGeocoding(false)
     })
-  }, [isLoaded, trip?.stops, user?.homeLat, user?.homeLng])
+  }, [isLoaded, trip?.stops, user?.homeLat, user?.homeLng, user?.homeCity])
 
   // ── Pin HOME stops to exact home coordinates ───────────────────────────────────
   // Runs independently of the geocode effect so it also corrects stops that were
   // previously geocoded to city center (non-null coords that are still wrong).
+  // City match required for both HOME-typed and return-home stops: a HOME-typed stop
+  // whose city does NOT match homeCity (e.g. a non-home trip origin like San Jose)
+  // must NOT be pinned to Mesa — only stops actually at the user's home city are.
   useEffect(() => {
     if (!id || !trip?.stops?.length || !user?.homeLat || !user?.homeLng) return
 
@@ -850,9 +855,10 @@ export default function TripMapPage() {
     const lastStop  = sortedAll[sortedAll.length - 1]
 
     const stopsToPin = trip.stops.filter(s => {
-      const isHomeType = s.type === 'HOME'
-      const isReturnHome = s.id === lastStop?.id && !!user?.homeCity &&
+      const cityIsHome = !!user?.homeCity &&
         s.locationName.toLowerCase().trim() === user.homeCity.toLowerCase().trim()
+      const isHomeType   = s.type === 'HOME' && cityIsHome
+      const isReturnHome = s.id === lastStop?.id && cityIsHome
       if (!isHomeType && !isReturnHome) return false
       return s.latitude !== user.homeLat || s.longitude !== user.homeLng
     })
@@ -873,7 +879,7 @@ export default function TripMapPage() {
           : s
       ),
     } : prev)
-  }, [trip?.stops, user?.homeLat, user?.homeLng])
+  }, [trip?.stops, user?.homeLat, user?.homeLng, user?.homeCity])
 
   // Push routePath changes imperatively to the underlying polyline. Bypasses
   // the @react-google-maps/api v2.19.3 declarative path-prop handling, which
