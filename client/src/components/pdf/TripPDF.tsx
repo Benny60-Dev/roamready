@@ -145,12 +145,19 @@ const s = StyleSheet.create({
   hwyBadge: { backgroundColor: GRAY_9, borderRadius: 3, paddingHorizontal: 5, paddingVertical: 2, marginRight: 4 },
   hwyText: { fontSize: 7, color: WHITE, fontFamily: 'Helvetica-Bold' },
 
-  // Map image — legacy (kept for reference; cover page now uses mapCover)
+  // Map image — legacy (kept for reference; cover page now uses mapCoverWrap/mapCoverImg)
   mapImage: { width: '100%', height: 180, borderRadius: 6, marginBottom: 16, objectFit: 'cover' },
 
-  // Cover-page map — 2:1 aspect ratio (content width 532pt → height 266pt).
-  // objectFit:'contain' so the full route is never cropped top/bottom.
-  mapCover: { width: '100%', height: 266, borderRadius: 6, objectFit: 'contain' },
+  // Cover-page map — fills ALL remaining vertical space on the cover page.
+  // The wrapper gets flex:1 so the Page's flex-column layout expands it to fill
+  // whatever height is left after coverHeader + divider + statsStrip. The image
+  // uses width/height 100% + objectFit:'contain' so the portrait source image
+  // (540×640, ratio ≈ 0.844) scales to fit the container without distortion —
+  // thin neutral side-strips appear if the container is wider than 0.844:1, but
+  // no crop and no stretch ever occur. The footer is position:absolute inside
+  // paddingBottom:48, so flex:1 never overlaps it.
+  mapCoverWrap: { flex: 1, borderRadius: 6, overflow: 'hidden' },
+  mapCoverImg:  { width: '100%', height: '100%', objectFit: 'contain' },
 
   // Slim stats strip (cover page) — hairline rules above/below, 6 cells
   // (Miles | Nights | Stops | Est. Fuel | Est. Camp | Total) in a horizontal
@@ -665,13 +672,16 @@ export function TripPDF({ trip, mapImageBase64, fuelEstimate }: Props) {
           </View>
         </View>
 
-        {/* ── Route map — centerpiece ── */}
-        {/* mapCover is sized to the image's true 2:1 aspect (532pt wide × 266pt tall)
-            with objectFit:'contain', so the full route and all markers are visible
-            with no top/bottom cropping. The server auto-fits all stops + polyline
-            into the image, so no bounds work is needed here. */}
+        {/* ── Route map — tall centerpiece, fills remaining cover height ── */}
+        {/* mapCoverWrap has flex:1 → the Page's flex-column distributes the
+            remaining height (after header + divider + stats strip) to this
+            container. The Image inside uses objectFit:'contain' so the portrait
+            source (540×640, ratio ≈ 0.844) fits without any crop or distortion.
+            Server auto-fits all stops + polyline; no center/zoom in the URL. */}
         {mapImageBase64 ? (
-          <Image src={mapImageBase64} style={s.mapCover} />
+          <View style={s.mapCoverWrap}>
+            <Image src={mapImageBase64} style={s.mapCoverImg} />
+          </View>
         ) : null}
 
         {/* ── Footer (fixed: repeats on any cover overflow pages) ── */}
