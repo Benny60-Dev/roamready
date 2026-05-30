@@ -85,6 +85,95 @@ function parseItinerary(text: string) {
   }
 }
 
+// ─── Return-leg guard ─────────────────────────────────────────────────────────
+// Deterministic post-processing applied to every itinerary the AI emits.
+// Three prompt-edit passes failed to make the model reliably default to
+// one-way; this guard enforces the behavior in code regardless of what
+// the model emits.
+//
+// RULE: if the conversation contains no explicit round-trip request phrase,
+// strip the entire return leg (final home stop + any return-side transit
+// stops) so the trip ends at the real destination. If a round-trip phrase IS
+// present, return the itinerary unchanged (genuine round trip is kept).
+//
+// IDENTIFICATION LOGIC:
+//   • Turnaround = last stop with nights > 0 whose city ≠ stops[0].city.
+//   • Return leg = everything after turnaroundIdx (transit + final home stop).
+//   • Slice stops[0..turnaroundIdx] removes the whole return leg in one cut.
+//
+// TOTAL FIXUP after slice:
+//   • totalNights: recomputed from sliced stops (exact).
+//   • totalMiles, estimatedFuel: nulled out — AI's value was the round-trip
+//     total; blank is better than a doubled figure (geocoding corrects this).
+//   • estimatedCamp: left alone (downstream code walks per-stop siteRates).
+//   • stop.order values: NOT renumbered — remain sequential from the slice,
+//     and the server's createStop resequences on insert anyway.
+
+const ROUND_TRIP_PHRASES = [
+  'round trip', 'round-trip', 'coming back home', 'returning home',
+  'back home', 'end at home', 'heading home after',
+] as const
+
+function stripUnrequestedReturnLeg(
+  itinerary: any,
+  messages: ChatMessage[],
+  homeCity?: string | null,
+): any {
+  // Guard: malformed or trivially short stop list — nothing to strip
+  const stops: any[] = itinerary?.stops
+  if (!Array.isArray(stops) || stops.length < 2) return itinerary
+
+  // Scan all user messages for any explicit round-trip phrase
+  const userText = messages
+    .filter(m => m.role === 'user')
+    .map(m => m.content.toLowerCase())
+    .join(' ')
+
+  const hasRoundTripPhrase =
+    ROUND_TRIP_PHRASES.some(p => userText.includes(p)) ||
+    // "back to Mesa" (or whatever homeCity is) also counts
+    (homeCity ? userText.includes('back to ' + homeCity.toLowerCase()) : false)
+
+  if (hasRoundTripPhrase) return itinerary  // genuine round trip — no-op
+
+  // Find turnaround: last stop with nights > 0 that isn't the home city
+  const homeCityNorm = stops[0]?.locationName?.toLowerCase().trim() ?? ''
+  let turnaroundIdx = -1
+  for (let i = stops.length - 1; i >= 0; i--) {
+    const city = (stops[i].locationName ?? '').toLowerCase().trim()
+    if ((stops[i].nights ?? 0) > 0 && city !== homeCityNorm) {
+      turnaroundIdx = i
+      break
+    }
+  }
+
+  // Fallback: no stay-night stop found (all nights:0) — use last DESTINATION
+  // that isn't the home city
+  if (turnaroundIdx === -1) {
+    for (let i = stops.length - 1; i >= 0; i--) {
+      const city = (stops[i].locationName ?? '').toLowerCase().trim()
+      if (stops[i].type === 'DESTINATION' && city !== homeCityNorm) {
+        turnaroundIdx = i
+        break
+      }
+    }
+  }
+
+  // No-op: no turnaround found, or it's already the final stop (one-way)
+  if (turnaroundIdx === -1 || turnaroundIdx === stops.length - 1) return itinerary
+
+  const slicedStops = stops.slice(0, turnaroundIdx + 1)
+  const totalNights = slicedStops.reduce((n: number, s: any) => n + ((s.nights as number) ?? 0), 0)
+
+  console.log(
+    '[stripUnrequestedReturnLeg] stripped return leg:',
+    `${stops.length} → ${slicedStops.length} stops,`,
+    `destination="${(stops[turnaroundIdx] as any)?.locationName}"`,
+  )
+
+  return { ...itinerary, stops: slicedStops, totalNights, totalMiles: null, estimatedFuel: null }
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function SessionPage() {
@@ -224,7 +313,7 @@ export default function SessionPage() {
             if (m.role !== 'assistant') continue
             const parsed = parseItinerary(m.content)
             if (parsed) {
-              setItinerary(parsed)
+              setItinerary(stripUnrequestedReturnLeg(parsed, persistedMessages, user?.homeCity))
               break
             }
           }
@@ -424,7 +513,10 @@ export default function SessionPage() {
       const aiText = res.data.message
       setMessages([...next, { role: 'assistant', content: aiText }])
       const parsed = parseItinerary(aiText)
-      if (parsed) setItinerary(parsed)
+      // `next` holds all messages up to and including the current user message —
+      // the correct slice to scan for round-trip phrases (the AI reply isn't a
+      // user message, so it doesn't affect the phrase check).
+      if (parsed) setItinerary(stripUnrequestedReturnLeg(parsed, next, user?.homeCity))
     } catch (err: any) {
       // FEATURE_GATED 403 — paywall modal already opened by the central
       // axios interceptor. Skip the generic assistant-bubble error so the
