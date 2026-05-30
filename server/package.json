@@ -18,6 +18,7 @@
     "db:backfill-candidates": "tsx --env-file=../.env src/scripts/backfillCampgroundCandidates.ts",
     "db:sync-endpoints": "tsx --env-file=../.env src/scripts/syncTripEndpoints.ts",
     "db:reparent-trip": "tsx --env-file=../.env src/scripts/reparentTrip.ts",
+    "db:repair-home-coords": "tsx --env-file=../.env src/scripts/repairHomeCoords.ts",
     "diagnose:area-search": "tsx --env-file=../.env src/scripts/diagnoseAreaSearch.ts"
   },
   "dependencies": {
