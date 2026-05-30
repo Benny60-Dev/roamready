@@ -1134,13 +1134,13 @@ export async function getTripMapImage(req: AuthRequest, res: Response, next: Nex
     if (!stops.length) return res.json({ base64: null })
 
     const params = new URLSearchParams()
-    // Portrait image (540×640) to fill the cover page's vertical space.
-    // Google Static Maps free tier caps each dimension at 640px — 540 and
-    // 640 are both within that limit. scale=2 doubles the output to 1080×1280
-    // for sharp rendering on screen/print without counting against the cap.
-    // center and zoom are intentionally omitted so the API auto-fits all
-    // markers + path (confirmed behavior — do NOT add them here).
-    params.set('size', '540x640')
+    // Landscape image (640×583) matched to the cover box ratio (532×485pt ≈ 1.0969:1).
+    // 640÷583 = 1.0978:1 → only 0.08% wider than the box, so objectFit:'contain'
+    // fills the full width with a <0.5pt invisible top/bottom strip — no side-strips,
+    // no distortion, no crop. Both dimensions are ≤640 (free-tier cap). scale=2
+    // doubles output to 1280×1166px for sharp print/screen rendering.
+    // center and zoom intentionally omitted — API auto-fits all markers + path.
+    params.set('size', '640x583')
     params.set('scale', '2')
     params.set('maptype', 'roadmap')
     params.set('key', apiKey)
