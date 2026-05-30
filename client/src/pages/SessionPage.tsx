@@ -237,6 +237,27 @@ export default function SessionPage() {
     onStart: () => input,
   })
 
+  // Keep the cursor in the chat box: focus on load AND after each send completes
+  // (so the user can keep typing without clicking back into the field).
+  //
+  // We refocus when `typing` clears rather than from inside sendMessage, because
+  // the ChatInput textarea is disabled={typing} while the AI responds — focusing
+  // a disabled element is a no-op. Waiting for `typing` to flip back to false
+  // means we focus exactly when the field re-enables. The same effect also fires
+  // when `hydrating` clears (the input mounts after the loading state), giving
+  // us autofocus-on-load for free. Deps are only [hydrating, typing], so this
+  // never steals focus on unrelated re-renders (typing in the box, AI render).
+  //
+  // Gated to fine-pointer (desktop/mouse) devices so we don't pop the on-screen
+  // keyboard on touch devices when the page loads. inputRef?.focus() is null-safe
+  // when the input isn't mounted yet. NOTE: this also gates refocus-after-send on
+  // touch — flip the matchMedia guard if mobile autofocus is wanted.
+  useEffect(() => {
+    if (hydrating || typing) return
+    if (typeof window !== 'undefined' && !window.matchMedia('(pointer: fine)').matches) return
+    inputRef.current?.focus()
+  }, [hydrating, typing])
+
   // Mark this session as the last one the user actively visited. SessionNewPage's
   // resume-detection uses this to skip the "Resume your last session?" prompt for
   // in-app navigation (e.g. user taps Profile then Plan). Tab close clears
