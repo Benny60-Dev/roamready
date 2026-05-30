@@ -886,46 +886,6 @@ export default function TripMapPage() {
     }
   }, [routePath])
 
-  // ── Initial framing: fit ALL stops + the driving route in view ────────────────
-  // Replaces the old fixed zoom={6} / center-on-first-stop framing (those props now
-  // only serve as the pre-load placeholder + the no-coords US-center fallback). We
-  // build a LatLngBounds over every stop AND every point of the road-snapped route
-  // polyline (so curved legs near the edges aren't clipped) and fitBounds with
-  // padding. Re-runs whenever the stop set or the route geometry changes.
-  // NOTE: this is separate from the stop-click panTo/panBy popup camera move — that
-  // stays as-is and is still wanted.
-  useEffect(() => {
-    if (!mapInstance) return
-
-    // No coords at all → leave the center/zoom props' US-center fallback untouched.
-    if (stopsWithCoords.length === 0) return
-
-    // Degenerate: a single stop (or all stops at coincident coords — e.g. a
-    // start === return-home loop) yields a zero-size bounds that fitBounds would
-    // blow up to max zoom. Center on the point at a sane fixed zoom instead.
-    if (stopsWithCoords.length < 2) {
-      const s = stopsWithCoords[0]
-      mapInstance.setCenter({ lat: s.latitude!, lng: s.longitude! })
-      mapInstance.setZoom(10)
-      return
-    }
-
-    const bounds = new window.google.maps.LatLngBounds()
-    for (const s of stopsWithCoords) bounds.extend({ lat: s.latitude!, lng: s.longitude! })
-    if (routePath) for (const pt of routePath) bounds.extend(pt)
-
-    // All coords identical (multiple stops, same spot) → same degenerate case.
-    if (bounds.getNorthEast().equals(bounds.getSouthWest())) {
-      mapInstance.setCenter(bounds.getCenter())
-      mapInstance.setZoom(10)
-      return
-    }
-
-    // Pixel padding so edge pins aren't clipped at the container edge; a little
-    // extra on top since the marker pins extend upward from their anchor.
-    mapInstance.fitBounds(bounds, { top: 72, right: 60, bottom: 60, left: 60 })
-  }, [mapInstance, stopsWithCoords, routePath])
-
   // ── Routes API (replaces deprecated DirectionsService) ────────────────────────
   useEffect(() => {
     if (!isLoaded || geocoding || !trip?.stops?.length) return
@@ -1046,6 +1006,49 @@ export default function TripMapPage() {
     () => trip?.stops?.filter(s => s.latitude && s.longitude).sort((a, b) => a.order - b.order) ?? [],
     [trip?.stops]
   )
+
+  // ── Initial framing: fit ALL stops + the driving route in view ────────────────
+  // Placed here (after stopsWithCoords useMemo) so all referenced variables are
+  // declared before this effect. The effect was originally written above
+  // stopsWithCoords, which caused a TDZ crash on every mount — move-only fix.
+  // Replaces the old fixed zoom={6} / center-on-first-stop framing (those props now
+  // only serve as the pre-load placeholder + the no-coords US-center fallback). We
+  // build a LatLngBounds over every stop AND every point of the road-snapped route
+  // polyline (so curved legs near the edges aren't clipped) and fitBounds with
+  // padding. Re-runs whenever the stop set or the route geometry changes.
+  // NOTE: this is separate from the stop-click panTo/panBy popup camera move — that
+  // stays as-is and is still wanted.
+  useEffect(() => {
+    if (!mapInstance) return
+
+    // No coords at all → leave the center/zoom props' US-center fallback untouched.
+    if (stopsWithCoords.length === 0) return
+
+    // Degenerate: a single stop (or all stops at coincident coords — e.g. a
+    // start === return-home loop) yields a zero-size bounds that fitBounds would
+    // blow up to max zoom. Center on the point at a sane fixed zoom instead.
+    if (stopsWithCoords.length < 2) {
+      const s = stopsWithCoords[0]
+      mapInstance.setCenter({ lat: s.latitude!, lng: s.longitude! })
+      mapInstance.setZoom(10)
+      return
+    }
+
+    const bounds = new window.google.maps.LatLngBounds()
+    for (const s of stopsWithCoords) bounds.extend({ lat: s.latitude!, lng: s.longitude! })
+    if (routePath) for (const pt of routePath) bounds.extend(pt)
+
+    // All coords identical (multiple stops, same spot) → same degenerate case.
+    if (bounds.getNorthEast().equals(bounds.getSouthWest())) {
+      mapInstance.setCenter(bounds.getCenter())
+      mapInstance.setZoom(10)
+      return
+    }
+
+    // Pixel padding so edge pins aren't clipped at the container edge; a little
+    // extra on top since the marker pins extend upward from their anchor.
+    mapInstance.fitBounds(bounds, { top: 72, right: 60, bottom: 60, left: 60 })
+  }, [mapInstance, stopsWithCoords, routePath])
 
   // Badge values: 'S' for first stop, 'H'/'F' for last, sequential numbers for middle stops.
   const stopBadges = useMemo(() => {
