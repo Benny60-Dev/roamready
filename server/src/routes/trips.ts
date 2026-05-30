@@ -10,7 +10,7 @@ import {
   generateItinerary, saveItinerary, generateRoutes, generateActivities,
   generateRouteHighlights, getTripMapImage, getTripWeather, reassignPOIs,
   createShareToken, regenerateShareToken, revokeShareToken,
-  getTripFuelEstimate,
+  getTripFuelEstimate, expandLongLegs,
 } from '../controllers/trips'
 
 export const tripsRouter = Router()
@@ -47,6 +47,10 @@ tripsRouter.get('/:id/weather', requireFeature('weatherAlerts'), getTripWeather 
 tripsRouter.get('/:id/fuel-estimate', getTripFuelEstimate as any)
 tripsRouter.post('/:id/packing-list', requireFeature('packingListGenerator'), generatePackingList as any)
 tripsRouter.post('/:id/stops/reassign-pois', reassignPOIs as any)
+// Deterministic per-leg max-drive-time guard — breaks over-long legs into
+// OVERNIGHT_ONLY transit stops. Ungated (Google Directions + Geocode, no LLM),
+// same posture as reassign-pois. Called from buildItinerary before generateItinerary.
+tripsRouter.post('/:id/expand-long-legs', expandLongLegs as any)
 // Block 9 — three AI-calling endpoints on the trips router get
 // requireFeature('aiPlannerUnlimited') so non-Pro users hit a 403 → paywall.
 //   /:id/itinerary/generate   → generateTripItineraryAI  (build from chat)

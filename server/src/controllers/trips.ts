@@ -282,6 +282,98 @@ async function fetchAllSegmentRoutes(
   return results
 }
 
+/**
+ * Sibling to fetchAllSegmentRoutes — returns the RICH per-leg detail the
+ * long-leg guard needs (total drive duration/distance + the ordered list of
+ * steps with each step's duration and end coordinate). fetchAllSegmentRoutes
+ * deliberately throws all of this away (it only wants highway names), so rather
+ * than change its return shape and every caller, this fetches one segment's
+ * detail on demand. Works on lat/lng OR "City, State" strings (Directions
+ * resolves names itself), so it does not require pre-geocoded stop coords.
+ * Returns null on any failure — caller treats a null leg as "leave it alone".
+ */
+async function fetchLegDetail(
+  from: any,
+  to: any,
+  apiKey: string,
+): Promise<{ durationSec: number; distanceMeters: number; steps: { durationSec: number; lat: number; lng: number }[] } | null> {
+  const origin = from.latitude && from.longitude
+    ? `${from.latitude},${from.longitude}`
+    : `${from.locationName}${from.locationState ? ', ' + from.locationState : ''}`
+  const destination = to.latitude && to.longitude
+    ? `${to.latitude},${to.longitude}`
+    : `${to.locationName}${to.locationState ? ', ' + to.locationState : ''}`
+
+  try {
+    const res = await axios.get('https://maps.googleapis.com/maps/api/directions/json', {
+      params: { origin, destination, key: apiKey },
+      timeout: 10000,
+    })
+    const data = res.data
+    if (data.status !== 'OK' || !data.routes?.[0]) {
+      console.warn('[fetchLegDetail] Directions status=%s for %s → %s', data.status, origin, destination)
+      return null
+    }
+    const legs = data.routes[0].legs as any[]
+    const durationSec = legs.reduce((s: number, l: any) => s + (l.duration?.value ?? 0), 0)
+    const distanceMeters = legs.reduce((s: number, l: any) => s + (l.distance?.value ?? 0), 0)
+    const steps = legs
+      .flatMap((l: any) => l.steps ?? [])
+      .map((st: any) => ({
+        durationSec: st.duration?.value ?? 0,
+        lat: st.end_location?.lat,
+        lng: st.end_location?.lng,
+      }))
+      .filter((s: any) => typeof s.lat === 'number' && typeof s.lng === 'number')
+    return { durationSec, distanceMeters, steps }
+  } catch (err: any) {
+    console.error('[fetchLegDetail] error for %s → %s:', origin, destination, err?.message)
+    return null
+  }
+}
+
+/**
+ * Reverse-geocode a coordinate to a real town. Biases toward locality-level
+ * results so a split point in open country resolves to the nearest named town
+ * (rather than a street address). Returns null if no usable city+state found —
+ * caller skips that split point gracefully.
+ */
+async function reverseGeocode(
+  lat: number,
+  lng: number,
+  apiKey: string,
+): Promise<{ city: string; state: string; lat: number; lng: number } | null> {
+  try {
+    const res = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
+      params: {
+        latlng: `${lat},${lng}`,
+        key: apiKey,
+        result_type: 'locality|postal_town|administrative_area_level_3',
+      },
+      timeout: 5000,
+    })
+    if (res.data.status !== 'OK' || !res.data.results?.length) {
+      console.warn('[reverseGeocode] status=%s for %s,%s', res.data.status, lat, lng)
+      return null
+    }
+    for (const r of res.data.results) {
+      const comps: any[] = r.address_components || []
+      const has = (t: string) => comps.find(c => c.types.includes(t))
+      const city =
+        has('locality')?.long_name ||
+        has('postal_town')?.long_name ||
+        has('administrative_area_level_3')?.long_name ||
+        has('administrative_area_level_2')?.long_name
+      const state = has('administrative_area_level_1')?.short_name
+      if (city && state) return { city, state, lat, lng }
+    }
+    return null
+  } catch (err: any) {
+    console.error('[reverseGeocode] error for %s,%s:', lat, lng, err?.message)
+    return null
+  }
+}
+
 // ─── POI geocoding helpers ────────────────────────────────────────────────────
 
 function pointToSegmentDistance(
@@ -1203,6 +1295,153 @@ export async function getTripMapImage(req: AuthRequest, res: Response, next: Nex
     const imgResponse = await axios.get(url, { responseType: 'arraybuffer' })
     const base64 = `data:image/png;base64,${Buffer.from(imgResponse.data).toString('base64')}`
     res.json({ base64 })
+  } catch (err) { next(err) }
+}
+
+/**
+ * Deterministic enforcement of the per-leg max-drive-time rule. The AI is told
+ * (HARD RULE in the planner prompt) to insert transit stops so no leg exceeds
+ * the user's maxDriveHours, but it routinely ignores it (e.g. an 872mi/13.5h
+ * Mesa→Rawlins leg against a 6h cap). This guard walks each consecutive stop
+ * pair using REAL Google Directions drive times, and breaks any over-long leg
+ * into OVERNIGHT_ONLY transit stops at real towns sampled ~maxDriveHours apart.
+ *
+ * Runs server-side (the client only has straight-line Haversine, which
+ * underestimates road time 20-40% — unsafe for a hard cap) and must run BEFORE
+ * generateItinerary so the day-by-day narration sees the corrected stop set.
+ * Only INSERTS transit stops between existing stops — never touches the HOME
+ * stop, the final DESTINATION, or any existing stop's nights. Fails soft: any
+ * per-leg routing/geocoding error leaves that leg as-is and is logged, never
+ * aborting the build.
+ */
+export async function expandLongLegs(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY
+    if (!apiKey) {
+      console.warn('[expandLongLegs] GOOGLE_MAPS_API_KEY not set — skipping')
+      return res.json({ inserted: 0, skipped: 'no-api-key' })
+    }
+
+    const trip = await prisma.trip.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+      include: { stops: { orderBy: { order: 'asc' } } },
+    })
+    if (!trip) throw new AppError('Trip not found', 404)
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      include: { travelProfile: true },
+    })
+    const tp = user?.travelProfile
+    // Fallback chain mirrors the planner prompt's DRIVE-TIME CONSTRAINT:
+    // maxDriveHours → derive from maxMilesPerDay (~55 mph) → default 6h.
+    let maxHours = tp?.maxDriveHours ?? null
+    if (maxHours == null && tp?.maxMilesPerDay != null) maxHours = tp.maxMilesPerDay / 55
+    if (maxHours == null || maxHours <= 0) maxHours = 6
+
+    const capSec       = maxHours * 3600
+    const TOLERANCE_SEC = 15 * 60          // don't split a leg only slightly over
+    const TARGET_SEC    = 0.9 * capSec     // aim a touch under the cap per sub-leg
+    const MAX_INSERTS_PER_LEG = 4          // safety rail vs. pathological cross-country legs
+
+    const stops = trip.stops as any[]
+    if (stops.length < 2) return res.json({ inserted: 0 })
+
+    // Phase 1 — plan insertions per gap (no DB writes yet). Each plan records the
+    // ORIGINAL order of the stop the transit stops go AFTER, plus the towns.
+    const plans: { afterOrder: number; towns: { locationName: string; locationState: string; latitude: number; longitude: number }[] }[] = []
+
+    for (let i = 1; i < stops.length; i++) {
+      const from = stops[i - 1]
+      const to   = stops[i]
+      const detail = await fetchLegDetail(from, to, apiKey)
+      if (!detail) continue                                   // routing failed → leave leg as-is
+      if (detail.durationSec <= capSec + TOLERANCE_SEC) continue  // within cap → no split
+
+      // Walk steps, marking a split point each time accumulated duration reaches
+      // the target. Each reset guarantees every sub-leg (and the final tail) is
+      // <= TARGET_SEC <= cap, except when the per-leg insert cap is hit.
+      const splitPoints: { lat: number; lng: number }[] = []
+      let acc = 0
+      let cappedOut = false
+      for (const step of detail.steps) {
+        acc += step.durationSec
+        if (acc >= TARGET_SEC) {
+          splitPoints.push({ lat: step.lat, lng: step.lng })
+          acc = 0
+          if (splitPoints.length >= MAX_INSERTS_PER_LEG) { cappedOut = true; break }
+        }
+      }
+      if (cappedOut) {
+        console.warn(
+          '[expandLongLegs] leg %s→%s needs more than %d transit stops (%.1fh leg, %.1fh cap) — inserting %d and leaving the tail long',
+          from.locationName, to.locationName, MAX_INSERTS_PER_LEG,
+          detail.durationSec / 3600, maxHours, MAX_INSERTS_PER_LEG,
+        )
+      }
+      if (splitPoints.length === 0) continue
+
+      const towns: { locationName: string; locationState: string; latitude: number; longitude: number }[] = []
+      for (const sp of splitPoints) {
+        const rg = await reverseGeocode(sp.lat, sp.lng, apiKey)
+        if (!rg) {
+          console.warn('[expandLongLegs] split point %s,%s did not reverse-geocode to a town — skipping', sp.lat, sp.lng)
+          continue
+        }
+        towns.push({ locationName: rg.city, locationState: rg.state, latitude: rg.lat, longitude: rg.lng })
+      }
+      if (towns.length > 0) {
+        plans.push({ afterOrder: from.order, towns })
+        console.log('[expandLongLegs] leg %s→%s (%.1fh) → inserting %d transit stop(s): %s',
+          from.locationName, to.locationName, detail.durationSec / 3600, towns.length,
+          towns.map(t => `${t.locationName}, ${t.locationState}`).join(' | '))
+      }
+    }
+
+    if (plans.length === 0) return res.json({ inserted: 0 })
+
+    // Phase 2 — apply insertions. Process gaps from HIGHEST afterOrder to LOWEST so
+    // each order-shift only touches stops above an already-processed gap, leaving
+    // the lower gaps' captured afterOrder values valid.
+    let inserted = 0
+    plans.sort((a, b) => b.afterOrder - a.afterOrder)
+    for (const plan of plans) {
+      const k = plan.towns.length
+      // Shift everything after the gap up by k to make room.
+      await prisma.stop.updateMany({
+        where: { tripId: trip.id, order: { gt: plan.afterOrder } },
+        data: { order: { increment: k } },
+      })
+      for (let j = 0; j < k; j++) {
+        const t = plan.towns[j]
+        await prisma.stop.create({
+          data: {
+            tripId: trip.id,
+            order: plan.afterOrder + 1 + j,
+            type: 'OVERNIGHT_ONLY',
+            locationName: t.locationName,
+            locationState: t.locationState,
+            latitude: t.latitude,
+            longitude: t.longitude,
+            nights: 1,
+            bookingStatus: 'NOT_BOOKED',
+            isCompatible: true,
+          },
+        })
+        inserted++
+      }
+    }
+
+    // Normalize orders to contiguous 1..N and refresh trip endpoints.
+    await resequenceStops(trip.id)
+    try {
+      await syncTripEndpoints(trip.id)
+    } catch (e: any) {
+      console.warn('[expandLongLegs] syncTripEndpoints failed (non-fatal):', e?.message)
+    }
+
+    console.log('[expandLongLegs] tripId=%s inserted %d transit stop(s) across %d leg(s)', trip.id, inserted, plans.length)
+    res.json({ inserted })
   } catch (err) { next(err) }
 }
 

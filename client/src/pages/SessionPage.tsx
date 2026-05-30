@@ -665,6 +665,19 @@ export default function SessionPage() {
       await tripsApi.reassignPOIs(tripId)
       console.timeEnd('[buildItinerary] reassignPOIs')
 
+      // Deterministic per-leg max-drive-time guard: break any leg that exceeds
+      // the user's maxDriveHours into OVERNIGHT_ONLY transit stops at real towns.
+      // AWAITED and BEFORE generateItinerary so the day-by-day narration sees the
+      // corrected stop set. Wrapped so a guard failure never blocks trip creation
+      // (the server controller also fails soft per-leg).
+      console.time('[buildItinerary] expandLongLegs')
+      try {
+        await tripsApi.expandLongLegs(tripId)
+      } catch (e) {
+        console.error('[buildItinerary] expandLongLegs failed (non-fatal):', e)
+      }
+      console.timeEnd('[buildItinerary] expandLongLegs')
+
       tripsApi.generateItinerary(tripId).catch(err =>
         console.error('[buildItinerary] generateItinerary failed in background:', err)
       )
