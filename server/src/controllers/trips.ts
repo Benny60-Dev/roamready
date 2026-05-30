@@ -741,14 +741,25 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
       const commaIdx = raw.indexOf(',')
       const homeName  = commaIdx >= 0 ? raw.slice(0, commaIdx).trim() : raw.trim()
       const homeState = commaIdx >= 0 ? raw.slice(commaIdx + 1).trim() : null
-      console.log('[createStop] First stop is not HOME — auto-creating HOME stop for startLocation=%s', raw)
+      // Only pin to exact home coords when the parsed city IS the user's home city.
+      // If the trip departs from elsewhere (e.g. "San Jose to Shenandoah"), store
+      // null coords so the client geocoder resolves the real start location.
+      // Same city-match logic as looksLikeHome below — reuse normalizeCity.
+      const prepNameMatchesHome =
+        !!homeOwner?.homeCity &&
+        !!homeName &&
+        normalizeCity(homeName) === homeOwner.homeCity.toLowerCase().trim()
+      const prepLat = prepNameMatchesHome ? exactHomeLat : null
+      const prepLng = prepNameMatchesHome ? exactHomeLng : null
+      console.log('[createStop] First stop is not HOME — auto-creating HOME stop for startLocation=%s cityMatch=%s prepLat=%s prepLng=%s',
+        raw, prepNameMatchesHome, prepLat, prepLng)
       await prisma.stop.create({
         data: {
           type: 'HOME',
           locationName: homeName,
           locationState: homeState,
-          latitude: exactHomeLat,
-          longitude: exactHomeLng,
+          latitude: prepLat,
+          longitude: prepLng,
           nights: 0,
           bookingStatus: 'NOT_BOOKED',
           isCompatible: true,
@@ -767,20 +778,28 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
     const bookingStatus = rawBookingStatus ?? 'NOT_BOOKED'
     const isCompatible = rawIsCompatible ?? true
 
-    // For HOME stops, always use the user's exact home coordinates (if available) so the
-    // marker lands on the street address rather than the city center returned by geocoding.
-    // Also catch the AI-emitted return-home stop on round trips: the prompt requires the
-    // last stop to be DESTINATION, so a Mesa→Flagstaff→Mesa loop ends with type=DESTINATION
-    // for the home Mesa stop. Match by homeCity so that stop still gets the precise home pin.
+    // Use exact home coordinates only when the stop's city matches the owner's homeCity.
+    // This covers two cases:
+    //   • HOME-typed start stop on a trip departing FROM home (Mesa→Flagstaff):
+    //     type=HOME, city=Mesa → looksLikeHome true → home coords used ✓
+    //   • DESTINATION-typed return-home stop on round trips (the AI must emit the
+    //     final stop as DESTINATION, but its city matches homeCity) → home coords used ✓
+    // When the city does NOT match — e.g. a trip starting from San Jose, which the AI
+    // correctly labels type=HOME but whose city ≠ homeCity — home coords are NOT used.
+    // resolvedLat/Lng fall through to the incoming AI value (null), which the client
+    // geocoder then resolves to the actual start city's coordinates.
     const looksLikeHome =
       !!homeOwner?.homeCity &&
       !!locationName &&
       normalizeCity(locationName) === homeOwner.homeCity.toLowerCase().trim()
-    const useHomeCoords = (type === 'HOME' || looksLikeHome) && exactHomeLat != null && exactHomeLng != null
+    const useHomeCoords = looksLikeHome && exactHomeLat != null && exactHomeLng != null
     const resolvedLat = useHomeCoords ? exactHomeLat : (latitude ?? null)
     const resolvedLng = useHomeCoords ? exactHomeLng : (longitude ?? null)
     if (looksLikeHome && type !== 'HOME' && useHomeCoords) {
-      console.log(`[createStop:homeCoords] backfill via city match — locationName="${locationName}" matches homeCity="${homeOwner!.homeCity}" → using home coords (${exactHomeLat}, ${exactHomeLng})`)
+      console.log(`[createStop:homeCoords] backfill via city match — locationName="${locationName}" (type=${type}) matches homeCity="${homeOwner!.homeCity}" → using home coords (${exactHomeLat}, ${exactHomeLng})`)
+    }
+    if (type === 'HOME' && !looksLikeHome) {
+      console.log(`[createStop:homeCoords] HOME stop city mismatch — locationName="${locationName}" ≠ homeCity="${homeOwner?.homeCity ?? 'none'}" → null coords (will be geocoded by client)`)
     }
 
     console.log('[createStop] tripId=%s locationName=%s type=%s order=%d incomingLat=%s incomingLng=%s resolvedLat=%s resolvedLng=%s',
