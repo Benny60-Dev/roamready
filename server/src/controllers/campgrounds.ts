@@ -24,6 +24,7 @@ interface CampgroundResult {
   hookupTypes?: string[]
   amenities?: string[]
   reservable?: boolean
+  activities?: string[]
   source?: string
   isCompatible?: boolean
   incompatibilityReasons?: string[]
@@ -156,6 +157,18 @@ async function fetchRecGovCampgrounds(query: string, lat?: number, lng?: number,
       const lat_ = parseFloat(String(f.FacilityLatitude))
       const lng_ = parseFloat(String(f.FacilityLongitude))
 
+      // Real activity names from the RIDB record (already present; previously
+      // used only for the camping filter above). Title-cased + de-duped so the
+      // OHV page can show genuine activities ("Off Highway Vehicle", "Camping")
+      // instead of hardcoded terrain tags. e.g. "OFF HIGHWAY VEHICLE" → "Off
+      // Highway Vehicle".
+      const activityNames: string[] = Array.from(new Set(
+        ((f.ACTIVITY as { ActivityName?: string }[]) || [])
+          .map(a => a.ActivityName)
+          .filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
+          .map(n => n.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())),
+      ))
+
       return {
         id: `recgov-${f.FacilityID}`,
         name: f.FacilityName,
@@ -170,6 +183,7 @@ async function fetchRecGovCampgrounds(query: string, lat?: number, lng?: number,
         source: 'recreation.gov',
         reservable: isReservable,
         hookupTypes: hookupTypes.length > 0 ? hookupTypes : undefined,
+        activities: activityNames.length > 0 ? activityNames : undefined,
         maxRigLength,
         maxRigHeight,
         rvProhibited: false,
@@ -480,17 +494,12 @@ export async function getMilitary(req: AuthRequest, res: Response, next: NextFun
 
 export async function getOhv(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const rig = await prisma.rig.findFirst({ where: { userId: req.user!.id, isDefault: true } })
+    // OHV is open to all rig types now — no rig-derived matchScore. Each result
+    // already carries the real Recreation.gov facility data (lat/lng, address,
+    // description, website/reservationUrl, hookups, rig-fit limits, activities);
+    // the client renders those directly. No hardcoded season/terrain fakes.
     const campgrounds = await fetchRecGovCampgrounds('OHV ATV off-highway vehicle')
-
-    const destinations = campgrounds.map(cg => ({
-      ...cg,
-      season: 'Year-round (check local conditions)',
-      terrainTypes: ['Desert trails', 'Mountain trails'],
-      matchScore: rig?.isToyHauler ? 95 : 60,
-    }))
-
-    res.json(destinations)
+    res.json(campgrounds)
   } catch (err) { next(err) }
 }
 
