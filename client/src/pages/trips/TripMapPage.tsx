@@ -1412,7 +1412,7 @@ export default function TripMapPage() {
         import('@react-pdf/renderer'),
         import('../../components/pdf/TripPDF'),
       ])
-      const blob = await pdf(<TripPDF trip={trip} mapImageBase64={mapBlobUrl} />).toBlob()
+      const blob = await pdf(<TripPDF trip={trip} mapImageBase64={mapBlobUrl} fuelEstimate={fuelEstimate} />).toBlob()
       if (mapBlobUrl) URL.revokeObjectURL(mapBlobUrl)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
