@@ -4,6 +4,38 @@ import { useAuthStore } from '../store/authStore'
 import { useUIStore } from '../store/uiStore'
 import { MapPin, Navigation, Globe, Ticket } from 'lucide-react'
 
+// Rec.gov FacilityDescription arrives as raw HTML (<p>, <h2>Overview</h2>, …).
+// We deliberately do NOT render it as HTML (third-party content → XSS risk),
+// so strip tags + decode common entities to clean plain text, then truncate at
+// a word boundary so the card never trails off mid-word. The leading "Overview"
+// heading is boilerplate on most facilities — drop it so the real sentence leads.
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: '&', nbsp: ' ', lt: '<', gt: '>', quot: '"', apos: "'",
+  rsquo: '’', lsquo: '‘', ldquo: '“', rdquo: '”',
+  mdash: '—', ndash: '–', hellip: '…', deg: '°',
+}
+
+function cleanDescription(raw?: string | null, maxLen = 180): string {
+  if (!raw) return ''
+  const text = raw
+    .replace(/<[^>]*>/g, ' ')                                            // strip HTML tags
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => safeCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => safeCodePoint(parseInt(d, 10)))
+    .replace(/&([a-zA-Z]+);/g, (m, name) => NAMED_ENTITIES[name.toLowerCase()] ?? m)
+    .replace(/\s+/g, ' ')                                                // collapse whitespace
+    .replace(/^\s*overview[\s:.-]*/i, '')                               // drop boilerplate heading
+    .trim()
+  if (text.length <= maxLen) return text
+  // Truncate at the last word boundary before maxLen so we don't cut mid-word.
+  const cut = text.slice(0, maxLen)
+  const lastSpace = cut.lastIndexOf(' ')
+  return `${(lastSpace > 0 ? cut.slice(0, lastSpace) : cut).replace(/[.,;:]$/, '')}…`
+}
+
+function safeCodePoint(n: number): string {
+  return Number.isFinite(n) && n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : ' '
+}
+
 export default function OhvDestinationsPage() {
   const [destinations, setDestinations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -54,6 +86,7 @@ export default function OhvDestinationsPage() {
             )
             const hasActivities = Boolean(d.activities && d.activities.length)
             const hasActions = Boolean(mapsUrl || canReserve || d.website)
+            const description = cleanDescription(d.description)
 
             return (
               <div key={d.id} className="card flex flex-col">
@@ -66,8 +99,13 @@ export default function OhvDestinationsPage() {
                   </p>
                 )}
 
-                {d.description && (
-                  <p className="text-xs text-gray-600 mt-1.5 line-clamp-3">{d.description}</p>
+                {/* Cleaned, word-boundary-truncated plain text (no line-clamp):
+                    a CSS "…" on a non-clickable card reads as "click for more",
+                    so we truncate deterministically instead. The card stays a
+                    static div — Directions / Reserve / Website are the only
+                    actions, and .card has no hover/cursor affordance. */}
+                {description && (
+                  <p className="text-xs text-gray-600 mt-1.5">{description}</p>
                 )}
 
                 {/* Real rig-fit attributes — each only when present. */}
