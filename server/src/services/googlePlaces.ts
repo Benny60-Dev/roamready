@@ -69,6 +69,11 @@ async function placesTextSearch(
   textQuery: string,
   fieldMask: string,
   ctx: { userId: string },
+  // Optional extra request-body fields merged into the searchText payload —
+  // e.g. { locationBias: { circle: {...} }, maxResultCount: 10 } for the
+  // resources-near-me finder. Defaults to {} so existing callers
+  // (verifyCampground / searchCampgroundsByArea) are unaffected.
+  extraBody: Record<string, any> = {},
 ): Promise<any[] | null> {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY
   if (!apiKey) {
@@ -81,7 +86,7 @@ async function placesTextSearch(
   try {
     const response = await axios.post(
       'https://places.googleapis.com/v1/places:searchText',
-      { textQuery },
+      { textQuery, ...extraBody },
       {
         headers: {
           'Content-Type': 'application/json',
@@ -319,5 +324,65 @@ export async function searchCampgroundsByArea(
     latitude: place.location?.latitude ?? null,
     longitude: place.location?.longitude ?? null,
     source: 'google_places',
+  }))
+}
+
+// ─── Resources "near me" finder ────────────────────────────────────────────
+// Powers GET /api/v1/resources (the /resources page's RV-repair/propane/etc.
+// chips). Uses the SAME Places API (New) searchText primitive as the
+// campground helpers — so phone, website, and a ready-made googleMapsUri come
+// back in ONE billed call (the legacy Nearby Search this replaced returned
+// none of those). Location is biased to the caller's GPS point within `radius`
+// miles. NOT cached here — the controller owns the Redis layer.
+
+export interface ResourceResult {
+  id: string
+  name: string
+  address: string | null
+  latitude: number | null
+  longitude: number | null
+  rating: number | null
+  isOpen?: boolean        // undefined when Google omits opening hours for a place
+  phone: string | null
+  website: string | null
+  googleMapsUrl: string | null
+}
+
+export async function searchResourcesNearby(
+  query: string,
+  lat: number,
+  lng: number,
+  radiusMiles: number,
+  ctx: { userId: string },
+): Promise<ResourceResult[]> {
+  const fieldMask =
+    'places.id,places.displayName,places.formattedAddress,places.internationalPhoneNumber,places.websiteUri,places.googleMapsUri,places.rating,places.location,places.currentOpeningHours.openNow,places.types'
+
+  // Places API circle locationBias caps at 50,000 m; clamp so a large radius
+  // param can't 400 the request. Floor at 1 mi to avoid a zero-radius circle.
+  const radiusMeters = Math.min(Math.max(radiusMiles, 1) * 1609, 50000)
+
+  const places = await placesTextSearch(query, fieldMask, ctx, {
+    locationBias: { circle: { center: { latitude: lat, longitude: lng }, radius: radiusMeters } },
+    maxResultCount: 10,
+  })
+  // null (transport failure / missing key) and [] (no hits) both collapse to an
+  // empty list — the controller decides not to cache an empty result.
+  if (places === null || places.length === 0) return []
+
+  return places.slice(0, 10).map((place: any) => ({
+    id: place.id,
+    name: place.displayName?.text ?? '',
+    address: place.formattedAddress ?? null,
+    latitude: place.location?.latitude ?? null,
+    longitude: place.location?.longitude ?? null,
+    rating: typeof place.rating === 'number' ? place.rating : null,
+    // currentOpeningHours is omitted by Google for places with no hours data;
+    // leave isOpen undefined so the client hides the Open/Closed pill rather
+    // than asserting "Closed".
+    isOpen: place.currentOpeningHours?.openNow,
+    phone: place.internationalPhoneNumber ?? null,
+    website: place.websiteUri ?? null,
+    googleMapsUrl: place.googleMapsUri ?? null,
   }))
 }

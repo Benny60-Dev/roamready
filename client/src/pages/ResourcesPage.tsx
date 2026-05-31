@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { MapPin, Phone, Star, Wrench, Package, Mountain, Caravan, Tent } from 'lucide-react'
+import { MapPin, Phone, Star, Wrench, Package, Mountain, Caravan, Tent, Navigation, Globe } from 'lucide-react'
 import { resourcesApi } from '../services/api'
 
 /**
@@ -59,7 +59,7 @@ export default function ResourcesPage() {
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       pos => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => setLocationError('Location access denied. Using default location.')
+      () => setLocationError('Location access is required to find resources near you. Enable location for this site in your browser settings, then reload.')
     )
   }, [])
 
@@ -109,7 +109,7 @@ export default function ResourcesPage() {
           distinct surface from the hub above. */}
       <div className="space-y-3">
         <div>
-          <h2 className="text-sm font-medium text-gray-700">Resources along your route</h2>
+          <h2 className="text-sm font-medium text-gray-700">Resources near you</h2>
           {locationError && <p className="text-xs text-amber-600 mt-1">{locationError}</p>}
         </div>
 
@@ -144,7 +144,7 @@ export default function ResourcesPage() {
                 <div className="w-8 h-8 bg-gray-50 rounded-lg flex items-center justify-center flex-shrink-0">
                   <MapPin size={15} className="text-[#1F6F8B]" />
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900">{r.name}</p>
                   {r.address && <p className="text-xs text-gray-500 mt-0.5">{r.address}</p>}
                   <div className="flex items-center gap-3 mt-1">
@@ -159,12 +159,45 @@ export default function ResourcesPage() {
                       </span>
                     )}
                   </div>
+
+                  {/* Inline actions — touch-friendly tap targets (py-2, primary
+                      use is mobile/roadside). Each renders only when its data
+                      is present (no dead-code gating now that the Places API
+                      returns phone / googleMapsUrl / website). Directions is
+                      the primary roadside action, so it's the filled button. */}
+                  {(r.googleMapsUrl || r.phone || r.website) && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {r.googleMapsUrl && (
+                        <a
+                          href={r.googleMapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#1F6F8B] text-white text-xs font-medium hover:bg-[#134756] transition-colors"
+                        >
+                          <Navigation size={13} /> Directions
+                        </a>
+                      )}
+                      {r.phone && (
+                        <a
+                          href={`tel:${r.phone}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-xs font-medium text-[#1F6F8B] hover:bg-[#E0F0F4] transition-colors"
+                        >
+                          <Phone size={13} /> Call
+                        </a>
+                      )}
+                      {r.website && (
+                        <a
+                          href={r.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-xs font-medium text-[#1F6F8B] hover:bg-[#E0F0F4] transition-colors"
+                        >
+                          <Globe size={13} /> Website
+                        </a>
+                      )}
+                    </div>
+                  )}
                 </div>
-                {r.phone && (
-                  <a href={`tel:${r.phone}`} className="flex items-center gap-1 text-xs text-[#1F6F8B]">
-                    <Phone size={12} /> Call
-                  </a>
-                )}
               </div>
             ))}
           </div>
