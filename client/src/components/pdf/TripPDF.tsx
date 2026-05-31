@@ -34,6 +34,14 @@ export interface TimelineEntry {
   consolidatedStay?: boolean
   endDate?: Date
   endDayNum?: number
+  // Post-arrival night count for a consolidated card (= number of ACTIVITY
+  // entries absorbed). Drives the "N-NIGHT STAY" tag so it matches the web's
+  // STAY_GROUP, which excludes the arrival night folded into the travel day.
+  consolidatedNights?: number
+  // Marks the arrival (n=0) STAY of a shared multi-night stop. Its card shows
+  // the booking info grid but NOT the shared activity list — the list renders
+  // on the separate consolidated card (mirrors the web's travel-day split).
+  arrivalCheckIn?: boolean
 }
 
 // ─── Colors / constants ───────────────────────────────────────────────────────
@@ -48,6 +56,16 @@ const GRAY_7  = '#374151'
 const GRAY_5  = '#6B7280'
 const GRAY_1  = '#F9FAFB'
 const WHITE   = '#FFFFFF'
+
+// Amber/gold tokens — mirror the web's multi-night STAY_GROUP card
+// (TripSummaryPage.tsx): gold header band, gray-400 border, amber-700 labels,
+// #854F0B night tag. Tailwind's numbered amber/gray scale is stock here (the
+// project's tailwind.config only overrides the DEFAULT shade), so these are the
+// literal Tailwind values the web classes resolve to.
+const AMBER_HEADER = '#FAEEDA'  // header band background  (web: bg-[#FAEEDA])
+const AMBER_700    = '#B45309'  // day label + activity title (web: text-amber-700)
+const AMBER_TAG    = '#854F0B'  // "N-NIGHT STAY" tag text  (web: text-[#854F0B])
+const GRAY_400     = '#9CA3AF'  // card + header-band border (web: border-gray-400)
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
@@ -116,6 +134,11 @@ const s = StyleSheet.create({
   stayCard: { backgroundColor: GREEN_L, borderWidth: 1, borderColor: '#BFDBFE', borderRadius: 6 },
   actCard: { backgroundColor: AMBER_L, borderWidth: 1, borderColor: '#FDE68A', borderRadius: 6 },
   ovCard: { backgroundColor: PURP_L, borderWidth: 1, borderColor: '#DDD6FE', borderRadius: 6 },
+  // Consolidated multi-night stay — white body + gold header band + gray-400
+  // border, matching the web's STAY_GROUP card. The gold band comes from
+  // entryHeaderAmber applied to the header View; the body inherits this white.
+  stayCardAmber: { backgroundColor: WHITE, borderWidth: 1, borderColor: GRAY_400, borderRadius: 6 },
+  entryHeaderAmber: { backgroundColor: AMBER_HEADER, borderBottomWidth: 1, borderBottomColor: GRAY_400 },
 
   locationName: { fontSize: 11, fontFamily: 'Helvetica-Bold', color: GRAY_9, marginBottom: 2 },
   campName: { fontSize: 9, color: GRAY_7, marginBottom: 6 },
@@ -140,6 +163,21 @@ const s = StyleSheet.create({
   actItem: { flexDirection: 'row', gap: 4, alignItems: 'center', marginBottom: 2 },
   actDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: GREEN, marginTop: 1 },
   actText: { fontSize: 8, color: GRAY_7 },
+
+  // Cost breakdown — per-stop camping rows + per-leg fuel rows + subtotals +
+  // grand total. Mirrors the web Cost breakdown (TripSummaryPage.tsx); values
+  // come from the SAME computeTripTotals helper + per-stop/per-leg math.
+  costGroupLabel:   { fontSize: 9, fontFamily: 'Helvetica-Bold', color: GRAY_9, marginTop: 8, marginBottom: 2 },
+  costRow:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 3, paddingLeft: 10, borderBottomWidth: 0.5, borderBottomColor: '#F3F4F6' },
+  costRowLabel:     { fontSize: 8.5, color: GRAY_7 },
+  costRowSub:       { fontSize: 7.5, color: GRAY_5 },
+  costRowVal:       { fontSize: 8.5, color: GRAY_7 },
+  costSubtotalRow:  { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 3, paddingLeft: 10, borderTopWidth: 0.5, borderTopColor: '#E5E7EB' },
+  costSubtotalLabel:{ fontSize: 8.5, color: GRAY_5 },
+  costSubtotalVal:  { fontSize: 8.5, color: GRAY_7 },
+  costTotalRow:     { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 6, marginTop: 6, borderTopWidth: 1, borderTopColor: '#D1D5DB' },
+  costTotalLabel:   { fontSize: 10, fontFamily: 'Helvetica-Bold', color: GRAY_9 },
+  costTotalVal:     { fontSize: 10, fontFamily: 'Helvetica-Bold', color: GREEN },
 
   // Footer
   footer: { position: 'absolute', bottom: 20, left: 40, right: 40, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -331,21 +369,29 @@ function mergeAI(entries: TimelineEntry[], aiDays: ItineraryDay[]): TimelineEntr
   })
 }
 
-// Option A — collapse a shared-list multi-night stay into ONE entry.
+// Option A (+ partial Fix C) — collapse a shared-list multi-night stay into a
+// CHECK-IN card + one consolidated activity-days card.
 //
 // Runs AFTER mergeAI so the per-day index alignment between buildTimeline's
 // entries and trip.itinerary (one ItineraryDay per day) is never disturbed by
 // this consolidation. For each STAY entry whose stop carries a non-null
-// stayActivities list (the new shape), we absorb the immediately-following
-// ACTIVITY entries for the SAME stop and emit a single consolidatedStay entry
-// spanning the whole stay. The shared activity list already renders once on the
-// STAY entry, so dropping the ACTIVITY entries removes the hollow "EXPLORE DAY"
-// cards without losing anything.
+// stayActivities list (the new shape):
+//   • the arrival night (n=0 STAY) is KEPT as its own CHECK-IN card, flagged
+//     arrivalCheckIn — exactly like the web folds the arrival into its
+//     travel-day card and excludes it from the STAY_GROUP count;
+//   • the following ACTIVITY entries (n≥1) collapse into ONE consolidatedStay
+//     card carrying the shared list, labelled with the POST-ARRIVAL night
+//     count and date range. So an 8-night Whitefish stop arriving Jun 2 reads
+//     "7-NIGHT STAY · Jun 3 – Jun 9", matching the web (NOT "8-NIGHT / Jun 2").
+// The arrival night is not dropped from the trip — it's just shown on the
+// check-in card rather than counted in the consolidated stay card.
 //
 // Old-shape stops (stayActivities == null) carry genuinely distinct per-day
 // activities, so they are left completely untouched and keep their per-day
 // cards exactly as before. Drive / overnight / single-night entries pass
-// through unchanged (a 1-night shared stay simply becomes a 1-day range).
+// through unchanged (a 1-night shared stay stays a lone CHECK-IN card with
+// its list). Day-badge numbers are intentionally left on the PDF's existing
+// per-entry scheme (the web-parity day-numbering port is a separate item).
 function collapseSharedStays(entries: TimelineEntry[]): TimelineEntry[] {
   const out: TimelineEntry[] = []
   for (let i = 0; i < entries.length; i++) {
@@ -359,8 +405,30 @@ function collapseSharedStays(entries: TimelineEntry[]): TimelineEntry[] {
       ) {
         j++
       }
-      const last = entries[j - 1]
-      out.push({ ...e, consolidatedStay: true, endDate: last.date, endDayNum: last.dayNum })
+      const activityEntries = entries.slice(i + 1, j)  // n = 1 … nights-1 (post-arrival)
+      // Single-night shared stay → no post-arrival nights. Leave the lone STAY
+      // card untouched (it keeps the shared list, as before).
+      if (activityEntries.length === 0) {
+        out.push(e)
+        continue
+      }
+      // Multi-night: the arrival night (n=0) stays its own CHECK-IN card — the
+      // web folds it into the travel-day card and counts only the remaining
+      // nights on the STAY_GROUP. We mark it arrivalCheckIn so the shared list
+      // renders on the consolidated card below, not twice. The consolidated
+      // card spans the post-arrival nights only → "7-NIGHT STAY", Jun 3 – Jun 9
+      // for an 8-night Whitefish stop arriving Jun 2 (matches the web).
+      const first = activityEntries[0]
+      const last = activityEntries[activityEntries.length - 1]
+      out.push({ ...e, arrivalCheckIn: true })
+      out.push({
+        ...first,
+        type: 'STAY',
+        consolidatedStay: true,
+        consolidatedNights: activityEntries.length,
+        endDate: last.date,
+        endDayNum: last.dayNum,
+      })
       i = j - 1
       continue
     }
@@ -459,37 +527,47 @@ function StopEntry({ entry }: { entry: TimelineEntry }) {
     ? (sharedRaw as any[]).map(a => typeof a === 'string' ? { name: a, checked: false } : a)
     : []
 
-  const cardStyle = entry.type === 'STAY' ? s.stayCard
+  // Fix A — the consolidated stay card uses the web's amber/gold palette
+  // (white body, gold header band via entryHeaderAmber, gray-400 border).
+  // Every other card keeps its existing color.
+  const cardStyle = entry.consolidatedStay ? s.stayCardAmber
+    : entry.type === 'STAY' ? s.stayCard
     : entry.type === 'OVERNIGHT' ? s.ovCard
     : s.actCard
 
-  const badgeBg = entry.type === 'STAY' ? '#BFDBFE'
+  // Consolidated tag mirrors the web's text-only #854F0B night tag (no fill).
+  const badgeBg = entry.consolidatedStay ? 'transparent'
+    : entry.type === 'STAY' ? '#BFDBFE'
     : entry.type === 'OVERNIGHT' ? '#DDD6FE'
     : '#FDE68A'
 
-  const badgeTxt = entry.type === 'STAY' ? '#065F46'
+  const badgeTxt = entry.consolidatedStay ? AMBER_TAG
+    : entry.type === 'STAY' ? '#065F46'
     : entry.type === 'OVERNIGHT' ? '#5B21B6'
     : '#92400E'
 
-  // Consolidated multi-night stay → "N-NIGHT STAY" tag (mirrors the web's
-  // stay-group header) instead of "CHECK-IN". Falls back to the day span if
-  // stop.nights is somehow unset.
-  const stayNights = stop.nights ?? ((entry.endDayNum ?? entry.dayNum) - entry.dayNum + 1)
+  // Consolidated card → "N-NIGHT STAY" where N is the POST-ARRIVAL night count
+  // (consolidatedNights), matching the web STAY_GROUP which excludes the
+  // arrival night. Non-consolidated stays keep "CHECK-IN" etc.
+  const stayNights = entry.consolidatedNights ?? stop.nights ?? ((entry.endDayNum ?? entry.dayNum) - entry.dayNum + 1)
   const typeLabel = entry.consolidatedStay
     ? `${stayNights}-NIGHT STAY`
     : entry.type === 'STAY' ? 'CHECK-IN'
     : entry.type === 'OVERNIGHT' ? 'OVERNIGHT'
     : 'EXPLORE DAY'
 
-  // Day badge spans a range ("5–11") for a multi-day consolidated stay; single
-  // number otherwise. Header date likewise collapses to a range for the stay.
+  // Day badge spans a range for a multi-day consolidated stay; single number
+  // otherwise. (Absolute numbers stay on the PDF's per-entry scheme — the
+  // web-parity day-numbering port is a separate, parked item.) Header date
+  // collapses to a range for the consolidated stay.
   const isDayRange = !!entry.consolidatedStay && entry.endDayNum != null && entry.endDayNum !== entry.dayNum
   const dayBadgeLabel = isDayRange ? `${entry.dayNum}–${entry.endDayNum}` : String(entry.dayNum)
   const headerDate = entry.consolidatedStay
     ? fmtDateRange(entry.date, entry.endDate)
     : entry.date ? fmtDate(entry.date) : null
 
-  const dayBadgeBg = entry.type === 'STAY' ? GREEN
+  const dayBadgeBg = entry.consolidatedStay ? AMBER_700
+    : entry.type === 'STAY' ? GREEN
     : entry.type === 'OVERNIGHT' ? '#7C3AED'
     : '#D97706'
 
@@ -498,7 +576,7 @@ function StopEntry({ entry }: { entry: TimelineEntry }) {
     // transit note) stays on one page. Over-tall single stops degrade
     // gracefully — react-pdf renders rather than errors.
     <View wrap={false} style={[s.entry, cardStyle]}>
-      <View style={s.entryHeader}>
+      <View style={entry.consolidatedStay ? [s.entryHeader, s.entryHeaderAmber] : s.entryHeader}>
         <View style={[isDayRange ? s.dayBadgeWide : s.dayBadge, { backgroundColor: dayBadgeBg }]}>
           <Text style={s.dayBadgeText}>{dayBadgeLabel}</Text>
         </View>
@@ -555,58 +633,80 @@ function StopEntry({ entry }: { entry: TimelineEntry }) {
             ) : null}
           </>
         ) : (
-          /* ── Normal stay (CHECK-IN) ── */
+          /* ── Stay: CHECK-IN card (arrival / single-night / old-shape) OR the
+                consolidated activity-days card (amber). The consolidated card
+                shows only the campground + shared list (its booking detail
+                lives on the preceding CHECK-IN card, mirroring the web's
+                travel-day / STAY_GROUP split). ── */
           <>
-            {stop.confirmationNum && stop.bookingStatus === 'CONFIRMED' ? (
-              <View style={s.confirmBox}>
-                <Text style={s.confirmLabel}>CONFIRMED</Text>
-                <Text style={s.confirmVal}>#{stop.confirmationNum}</Text>
-                {stop.siteNumber ? <Text style={s.confirmVal}>· Site {stop.siteNumber}</Text> : null}
-              </View>
-            ) : null}
+            {!entry.consolidatedStay && (
+              <>
+                {stop.confirmationNum && stop.bookingStatus === 'CONFIRMED' ? (
+                  <View style={s.confirmBox}>
+                    <Text style={s.confirmLabel}>CONFIRMED</Text>
+                    <Text style={s.confirmVal}>#{stop.confirmationNum}</Text>
+                    {stop.siteNumber ? <Text style={s.confirmVal}>· Site {stop.siteNumber}</Text> : null}
+                  </View>
+                ) : null}
 
-            <View style={s.infoGrid}>
-              <InfoCell label="Nights" value={stop.nights ? String(stop.nights) : null} />
-              <InfoCell label="Check-in" value={fmtTime(stop.checkInTime || entry.checkInTime)} />
-              <InfoCell label="Check-out" value={fmtTime(stop.checkOutTime || entry.checkOutTime)} />
-              <InfoCell label="Site rate" value={stop.siteRate ? `$${stop.siteRate}/night` : null} />
-              <InfoCell label="Hookups" value={stop.hookupType || null} />
-              <InfoCell label="Pet friendly" value={stop.isPetFriendly === true ? 'Yes' : stop.isPetFriendly === false ? 'No' : null} />
-            </View>
+                <View style={s.infoGrid}>
+                  <InfoCell label="Nights" value={stop.nights ? String(stop.nights) : null} />
+                  <InfoCell label="Check-in" value={fmtTime(stop.checkInTime || entry.checkInTime)} />
+                  <InfoCell label="Check-out" value={fmtTime(stop.checkOutTime || entry.checkOutTime)} />
+                  <InfoCell label="Site rate" value={stop.siteRate ? `$${stop.siteRate}/night` : null} />
+                  <InfoCell label="Hookups" value={stop.hookupType || null} />
+                  <InfoCell label="Pet friendly" value={stop.isPetFriendly === true ? 'Yes' : stop.isPetFriendly === false ? 'No' : null} />
+                </View>
 
-            {stop.notes ? (
-              <View style={s.notesBox}>
-                <Text style={s.notesText}>{stop.notes}</Text>
-              </View>
-            ) : null}
+                {stop.notes ? (
+                  <View style={s.notesBox}>
+                    <Text style={s.notesText}>{stop.notes}</Text>
+                  </View>
+                ) : null}
+              </>
+            )}
 
-            {/* Block 15 — new-shape: render the shared list once here under
-                the web's "Things to do during your stay" wording.
-                Old-shape (stayActivities == null): fall through to the
-                per-day entry.activities path exactly as before. */}
-            {usesSharedStayActivities ? (
+            {/* Shared activity list. Renders on the consolidated card (amber
+                title/dots) and on a single-night shared stay's check-in card;
+                SUPPRESSED on the arrival check-in card of a multi-night stay
+                (arrivalCheckIn) since the list is on the consolidated card.
+                Old-shape stops fall through to per-day entry.activities. */}
+            {entry.consolidatedStay ? (
               sharedStayActivities.length ? (
                 <>
-                  <Text style={s.actTitle}>Things to do during your stay</Text>
+                  <Text style={[s.actTitle, { color: AMBER_700 }]}>Things to do during your stay</Text>
                   {sharedStayActivities.map((act, i) => (
+                    <View key={i} style={s.actItem}>
+                      <View style={[s.actDot, { backgroundColor: AMBER_700 }]} />
+                      <Text style={s.actText}>{act.name}</Text>
+                    </View>
+                  ))}
+                </>
+              ) : null
+            ) : entry.arrivalCheckIn ? null
+              : usesSharedStayActivities ? (
+                sharedStayActivities.length ? (
+                  <>
+                    <Text style={s.actTitle}>Things to do during your stay</Text>
+                    {sharedStayActivities.map((act, i) => (
+                      <View key={i} style={s.actItem}>
+                        <View style={s.actDot} />
+                        <Text style={s.actText}>{act.name}</Text>
+                      </View>
+                    ))}
+                  </>
+                ) : null
+              ) : entry.activities?.length ? (
+                <>
+                  <Text style={s.actTitle}>Activities</Text>
+                  {entry.activities.map((act, i) => (
                     <View key={i} style={s.actItem}>
                       <View style={s.actDot} />
                       <Text style={s.actText}>{act.name}</Text>
                     </View>
                   ))}
                 </>
-              ) : null
-            ) : entry.activities?.length ? (
-              <>
-                <Text style={s.actTitle}>Activities</Text>
-                {entry.activities.map((act, i) => (
-                  <View key={i} style={s.actItem}>
-                    <View style={s.actDot} />
-                    <Text style={s.actText}>{act.name}</Text>
-                  </View>
-                ))}
-              </>
-            ) : null}
+              ) : null}
 
             {entry.transitNote ? (
               <View style={[s.notesBox, { marginTop: 4 }]}>
@@ -668,6 +768,26 @@ export function TripPDF({ trip, mapImageBase64, fuelEstimate }: Props) {
   // to restore if an "actual so far" row is added back to the itinerary page.
   // const actualTotalSoFar = totals.actualTotal
   // const hasAnyActuals    = totals.hasAnyActuals
+
+  // ── Cost breakdown rows — SAME math as the web Cost breakdown
+  // (TripSummaryPage.tsx). Camping rows = per-stop siteRate × nights ($0 rows
+  // skipped, exactly like the web); the Camping subtotal, Fuel subtotal, and
+  // grand total all read straight from computeTripTotals above (campEst /
+  // fuelEst / plannedTotal) — no reimplemented arithmetic that could drift.
+  // Fuel rows come from the same threaded fuelEstimate.perLeg the page shows.
+  const campRows = sortedStops
+    .map(st => ({
+      name: st.locationName,
+      nights: st.nights ?? 0,
+      rate: st.siteRate ?? 0,
+      cost: (st.siteRate ?? 0) * (st.nights ?? 0),
+    }))
+    .filter(r => r.cost > 0)
+  const stopNameByOrder = new Map<number, string>()
+  for (const st of sortedStops) stopNameByOrder.set(st.order, st.locationName)
+  const legName = (order: number, fallback: string | null) =>
+    stopNameByOrder.get(order) ?? fallback ?? `Stop ${order}`
+  const fuelLegs = fuelEstimate && !fuelEstimate.noEstimate ? fuelEstimate.perLeg : []
 
   // Live total miles: prefer Routes API driveDistanceMiles per stop, fall back to Haversine.
   const liveTotalMiles = sortedStops.slice(1).reduce((sum, stop, i) => {
@@ -799,6 +919,57 @@ export function TripPDF({ trip, mapImageBase64, fuelEstimate }: Props) {
             ? <DriveEntry key={idx} entry={entry} />
             : <StopEntry key={idx} entry={entry} />
         )}
+
+        {/* ══════════════════════════════════════════════════════════════
+            COST BREAKDOWN — per-stop camping + per-leg fuel + grand total.
+            One-to-one with the web Cost breakdown; subtotals/total come from
+            computeTripTotals so the PDF can't drift from the on-screen number.
+            ══════════════════════════════════════════════════════════════ */}
+        <View style={{ marginTop: 14 }} wrap={false}>
+          <Text style={s.sectionTitle}>Cost breakdown</Text>
+
+          <Text style={s.costGroupLabel}>Camping</Text>
+          {campRows.map((r, i) => (
+            <View key={`camp-${i}`} style={s.costRow}>
+              <Text style={s.costRowLabel}>
+                {r.name}
+                <Text style={s.costRowSub}>  ·  {r.nights} night{r.nights === 1 ? '' : 's'}{r.rate ? ` × $${r.rate}` : ''}</Text>
+              </Text>
+              <Text style={s.costRowVal}>{fmtCurrency(Math.round(r.cost))}</Text>
+            </View>
+          ))}
+          <View style={s.costSubtotalRow}>
+            <Text style={s.costSubtotalLabel}>Camping subtotal</Text>
+            <Text style={s.costSubtotalVal}>{fmtCurrency(Math.round(totalCampEst))}</Text>
+          </View>
+        </View>
+
+        <View wrap={false}>
+          <Text style={s.costGroupLabel}>Fuel</Text>
+          {fuelLegs.length ? fuelLegs.map((leg, i) => (
+            <View key={`fuel-${i}`} style={s.costRow}>
+              <Text style={s.costRowLabel}>
+                {legName(leg.fromOrder, null)} → {legName(leg.toOrder, leg.toState)}
+                <Text style={s.costRowSub}>  ·  {Math.round(leg.miles).toLocaleString()} mi</Text>
+              </Text>
+              <Text style={s.costRowVal}>{fmtCurrency(Math.round(leg.cost))}</Text>
+            </View>
+          )) : (
+            <View style={s.costRow}>
+              <Text style={s.costRowLabel}>Fuel estimate unavailable</Text>
+              <Text style={s.costRowVal}>—</Text>
+            </View>
+          )}
+          <View style={s.costSubtotalRow}>
+            <Text style={s.costSubtotalLabel}>Fuel subtotal</Text>
+            <Text style={s.costSubtotalVal}>{fuelEst != null ? fmtCurrency(Math.round(fuelEst)) : '—'}</Text>
+          </View>
+
+          <View style={s.costTotalRow}>
+            <Text style={s.costTotalLabel}>Estimated total</Text>
+            <Text style={s.costTotalVal}>{fmtCurrency(Math.round(plannedTotal))}</Text>
+          </View>
+        </View>
 
         {/* ── Footer (fixed: repeats on every itinerary page) ── */}
         <View style={s.footer} fixed>
