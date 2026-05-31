@@ -394,6 +394,77 @@ async function reverseGeocode(
   }
 }
 
+/** State (admin_area_level_1 short_name) for a coordinate via an UNRESTRICTED
+ *  reverse geocode — reliable even in remote areas where no locality exists
+ *  (a state-level result almost always covers the point). */
+async function stateForCoords(lat: number, lng: number, apiKey: string): Promise<string | null> {
+  try {
+    const res = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
+      params: { latlng: `${lat},${lng}`, key: apiKey },
+      timeout: 5000,
+    })
+    if (res.data.status !== 'OK') return null
+    for (const r of res.data.results || []) {
+      const st = (r.address_components || []).find((c: any) => c.types.includes('administrative_area_level_1'))?.short_name
+      if (st) return st
+    }
+    return null
+  } catch (err: any) {
+    console.warn('[stateForCoords] error for %s,%s: %s', lat, lng, err?.message)
+    return null
+  }
+}
+
+/**
+ * Nearest-real-place fallback for split points that land in empty wilderness
+ * (Four Corners / open desert), where strict reverseGeocode returns ZERO_RESULTS
+ * because there is no locality at the exact point. Uses Places Nearby Search with
+ * rankby=distance (nearest result wins, no radius) across an ordered set of place
+ * types — a real town first, then overnight-appropriate POIs, then a generic
+ * keyword sweep — widening the net by trying successive queries. For each hit it
+ * resolves a clean city+state by reverse-geocoding the FOUND place's own coords
+ * (which, being an actual place, normally succeeds); failing that, it uses the
+ * place's own name + a state lookup. A campground / RV-park name is an acceptable
+ * result — these are OVERNIGHT_ONLY transit stops. Returns null only when nothing
+ * nameable turns up at all (then the caller fails soft).
+ */
+async function findNearestTown(lat: number, lng: number, apiKey: string): Promise<TransitTown | null> {
+  const queries: Record<string, string>[] = [
+    { type: 'locality' },    // a real town, ideal
+    { keyword: 'town' },     // generic town sweep
+    { type: 'rv_park' },     // overnight-appropriate POI
+    { type: 'campground' },  // overnight-appropriate POI
+  ]
+  for (const q of queries) {
+    try {
+      const res = await axios.get('https://maps.googleapis.com/maps/api/place/nearbysearch/json', {
+        params: { location: `${lat},${lng}`, rankby: 'distance', key: apiKey, ...q },
+        timeout: 6000,
+      })
+      const top = res.data?.results?.[0]
+      if (res.data?.status !== 'OK' || !top?.geometry?.location) continue
+      const plat = top.geometry.location.lat
+      const plng = top.geometry.location.lng
+      // Prefer a clean city+state from the found place's own coordinates.
+      const rg = await reverseGeocode(plat, plng, apiKey)
+      if (rg) {
+        console.log('[findNearestTown] %s,%s → %s, %s (via %j → reverse-geocode)', lat, lng, rg.city, rg.state, q)
+        return { locationName: rg.city, locationState: rg.state, latitude: rg.lat, longitude: rg.lng }
+      }
+      // Else use the place's own name + a state lookup on its coords.
+      const state = await stateForCoords(plat, plng, apiKey)
+      if (top.name && state) {
+        console.log('[findNearestTown] %s,%s → %s, %s (via %j place name)', lat, lng, top.name, state, q)
+        return { locationName: top.name, locationState: state, latitude: plat, longitude: plng }
+      }
+    } catch (err: any) {
+      console.warn('[findNearestTown] nearbysearch %j failed for %s,%s: %s', q, lat, lng, err?.message)
+    }
+  }
+  console.warn('[findNearestTown] no nameable place near %s,%s', lat, lng)
+  return null
+}
+
 // ─── Long-leg split helpers ───────────────────────────────────────────────────
 
 interface TransitTown { locationName: string; locationState: string; latitude: number; longitude: number }
@@ -489,9 +560,17 @@ async function planLegSplits(
     for (let attempt = 0; attempt < 3; attempt++) {
       const pt = interpolateSplitPoint(detail, tryTarget)
       if (!pt) break
+      // Reverse-geocode the exact point; if it lands in empty wilderness
+      // (ZERO_RESULTS / no locality), fall back to the nearest real town/place
+      // so the split can always be NAMED and therefore inserted.
+      let town: TransitTown | null = null
       const rg = await reverseGeocode(pt.lat, pt.lng, apiKey)
-      if (!rg) { tryTarget *= 0.7; continue }
-      const town: TransitTown = { locationName: rg.city, locationState: rg.state, latitude: rg.lat, longitude: rg.lng }
+      if (rg) {
+        town = { locationName: rg.city, locationState: rg.state, latitude: rg.lat, longitude: rg.lng }
+      } else {
+        town = await findNearestTown(pt.lat, pt.lng, apiKey)
+      }
+      if (!town) { tryTarget *= 0.7; continue }
       // Don't accept a town that is effectively the frontier or the destination.
       if (
         town.locationName.toLowerCase() === frontier.locationName.toLowerCase() ||
@@ -1516,8 +1595,14 @@ export async function expandLongLegs(req: AuthRequest, res: Response, next: Next
         const subLegStr = legPlan.subLegs
           .map(sl => `${sl.from}→${sl.to} ${sl.hours.toFixed(1)}h${sl.over ? ' [OVER CAP]' : ''}`)
           .join(' | ')
-        console.log('[expandLongLegs] leg %s→%s (cap %.1fh): %d transit stop(s) → %s',
-          from.locationName, to.locationName, maxHours, legPlan.towns.length, subLegStr || '(no split)')
+        // Build the message with template literals — Node's console.log/util.format
+        // does NOT support precision specifiers like %.1f (it printed the literal
+        // "%.1f"); only bare %s/%d/%f are recognized.
+        console.log(
+          `[expandLongLegs] leg ${from.locationName}→${to.locationName} ` +
+          `(cap ${maxHours.toFixed(1)}h): ${legPlan.towns.length} transit stop(s) → ` +
+          `${subLegStr || '(no split)'}`,
+        )
         for (const w of legPlan.warnings) console.warn('[expandLongLegs] %s', w)
       }
 
