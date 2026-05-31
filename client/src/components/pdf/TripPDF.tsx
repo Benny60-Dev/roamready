@@ -26,6 +26,14 @@ export interface TimelineEntry {
   pointsOfInterest?: POI[] | null
   activities: ItineraryActivity[]
   transitNote?: string | null
+  // Option A — consolidated multi-night stay. When a DESTINATION stop carries a
+  // shared stayActivities list, its per-night STAY + ACTIVITY entries are
+  // collapsed into ONE entry (see collapseSharedStays) that spans the whole
+  // stay, mirroring the web's STAY_GROUP card. endDate/endDayNum carry the last
+  // night so the header can render a "Day 5–11 · Jun 3 – Jun 9" range.
+  consolidatedStay?: boolean
+  endDate?: Date
+  endDayNum?: number
 }
 
 // ─── Colors / constants ───────────────────────────────────────────────────────
@@ -88,6 +96,9 @@ const s = StyleSheet.create({
   entry: { borderRadius: 6, marginBottom: 8, overflow: 'hidden' },
   entryHeader: { flexDirection: 'row', alignItems: 'center', padding: 8, gap: 6 },
   dayBadge: { width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
+  // Pill variant for a consolidated stay's day range ("5–11") — circle is too
+  // narrow for two numbers, so widen with horizontal padding and a min width.
+  dayBadgeWide: { minWidth: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center', flexShrink: 0, paddingHorizontal: 5 },
   dayBadgeText: { fontSize: 8, fontFamily: 'Helvetica-Bold', color: WHITE },
   typeBadge: { borderRadius: 3, paddingHorizontal: 5, paddingVertical: 2 },
   typeBadgeText: { fontSize: 7, fontFamily: 'Helvetica-Bold' },
@@ -203,6 +214,14 @@ function fmtDate(d?: Date): string {
   return d ? format(d, 'EEE, MMM d yyyy') : '—'
 }
 
+// Compact range for a consolidated stay header, e.g. "Jun 3 – Jun 9 2026".
+// Collapses to a single date when start === end (1-night stay).
+function fmtDateRange(start?: Date, end?: Date): string {
+  if (!start) return '—'
+  if (!end || start.getTime() === end.getTime()) return format(start, 'MMM d yyyy')
+  return `${format(start, 'MMM d')} – ${format(end, 'MMM d yyyy')}`
+}
+
 function fmtTime(hhmm?: string | null): string {
   if (!hhmm) return '—'
   const [h, m] = hhmm.split(':').map(Number)
@@ -312,6 +331,44 @@ function mergeAI(entries: TimelineEntry[], aiDays: ItineraryDay[]): TimelineEntr
   })
 }
 
+// Option A — collapse a shared-list multi-night stay into ONE entry.
+//
+// Runs AFTER mergeAI so the per-day index alignment between buildTimeline's
+// entries and trip.itinerary (one ItineraryDay per day) is never disturbed by
+// this consolidation. For each STAY entry whose stop carries a non-null
+// stayActivities list (the new shape), we absorb the immediately-following
+// ACTIVITY entries for the SAME stop and emit a single consolidatedStay entry
+// spanning the whole stay. The shared activity list already renders once on the
+// STAY entry, so dropping the ACTIVITY entries removes the hollow "EXPLORE DAY"
+// cards without losing anything.
+//
+// Old-shape stops (stayActivities == null) carry genuinely distinct per-day
+// activities, so they are left completely untouched and keep their per-day
+// cards exactly as before. Drive / overnight / single-night entries pass
+// through unchanged (a 1-night shared stay simply becomes a 1-day range).
+function collapseSharedStays(entries: TimelineEntry[]): TimelineEntry[] {
+  const out: TimelineEntry[] = []
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i]
+    if (e.type === 'STAY' && e.stop?.stayActivities != null) {
+      let j = i + 1
+      while (
+        j < entries.length &&
+        entries[j].type === 'ACTIVITY' &&
+        entries[j].stop?.id === e.stop?.id
+      ) {
+        j++
+      }
+      const last = entries[j - 1]
+      out.push({ ...e, consolidatedStay: true, endDate: last.date, endDayNum: last.dayNum })
+      i = j - 1
+      continue
+    }
+    out.push(e)
+  }
+  return out
+}
+
 function calcMiles(lat1?: number, lng1?: number, lat2?: number, lng2?: number): number {
   if (!lat1 || !lng1 || !lat2 || !lng2) return 0
   const R = 3958.8
@@ -414,9 +471,23 @@ function StopEntry({ entry }: { entry: TimelineEntry }) {
     : entry.type === 'OVERNIGHT' ? '#5B21B6'
     : '#92400E'
 
-  const typeLabel = entry.type === 'STAY' ? 'CHECK-IN'
+  // Consolidated multi-night stay → "N-NIGHT STAY" tag (mirrors the web's
+  // stay-group header) instead of "CHECK-IN". Falls back to the day span if
+  // stop.nights is somehow unset.
+  const stayNights = stop.nights ?? ((entry.endDayNum ?? entry.dayNum) - entry.dayNum + 1)
+  const typeLabel = entry.consolidatedStay
+    ? `${stayNights}-NIGHT STAY`
+    : entry.type === 'STAY' ? 'CHECK-IN'
     : entry.type === 'OVERNIGHT' ? 'OVERNIGHT'
     : 'EXPLORE DAY'
+
+  // Day badge spans a range ("5–11") for a multi-day consolidated stay; single
+  // number otherwise. Header date likewise collapses to a range for the stay.
+  const isDayRange = !!entry.consolidatedStay && entry.endDayNum != null && entry.endDayNum !== entry.dayNum
+  const dayBadgeLabel = isDayRange ? `${entry.dayNum}–${entry.endDayNum}` : String(entry.dayNum)
+  const headerDate = entry.consolidatedStay
+    ? fmtDateRange(entry.date, entry.endDate)
+    : entry.date ? fmtDate(entry.date) : null
 
   const dayBadgeBg = entry.type === 'STAY' ? GREEN
     : entry.type === 'OVERNIGHT' ? '#7C3AED'
@@ -428,13 +499,13 @@ function StopEntry({ entry }: { entry: TimelineEntry }) {
     // gracefully — react-pdf renders rather than errors.
     <View wrap={false} style={[s.entry, cardStyle]}>
       <View style={s.entryHeader}>
-        <View style={[s.dayBadge, { backgroundColor: dayBadgeBg }]}>
-          <Text style={s.dayBadgeText}>{entry.dayNum}</Text>
+        <View style={[isDayRange ? s.dayBadgeWide : s.dayBadge, { backgroundColor: dayBadgeBg }]}>
+          <Text style={s.dayBadgeText}>{dayBadgeLabel}</Text>
         </View>
         <View style={[s.typeBadge, { backgroundColor: badgeBg }]}>
           <Text style={[s.typeBadgeText, { color: badgeTxt }]}>{typeLabel}</Text>
         </View>
-        {entry.date && <Text style={s.entryDateText}>{fmtDate(entry.date)}</Text>}
+        {headerDate && <Text style={s.entryDateText}>{headerDate}</Text>}
       </View>
 
       <View style={s.entryBody}>
@@ -569,7 +640,9 @@ export function TripPDF({ trip, mapImageBase64, fuelEstimate }: Props) {
   const sortedStops = [...(trip.stops || [])].sort((a, b) => a.order - b.order)
 
   const rawEntries = buildTimeline(sortedStops, trip.startDate ?? undefined)
-  const entries = trip.itinerary ? mergeAI(rawEntries, trip.itinerary) : rawEntries
+  const mergedEntries = trip.itinerary ? mergeAI(rawEntries, trip.itinerary) : rawEntries
+  // Option A — fold each shared-list multi-night stay into one consolidated card.
+  const entries = collapseSharedStays(mergedEntries)
 
   const totalNights = trip.totalNights ?? sortedStops.reduce((s, st) => s + st.nights, 0)
 
