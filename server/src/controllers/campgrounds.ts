@@ -25,6 +25,13 @@ interface CampgroundResult {
   amenities?: string[]
   reservable?: boolean
   activities?: string[]
+  // True when the facility offers overnight stays (Campground type, has
+  // campsites, or lists a CAMPING activity). Drives the OHV page's
+  // "Camping available" vs "Day-use" badge. Computed during mapping.
+  campingAvailable?: boolean
+  // Distance from the caller's GPS origin in miles — attached by getOhv after
+  // the haversine pass; null when origin or facility coords are unavailable.
+  distanceMiles?: number | null
   source?: string
   isCompatible?: boolean
   incompatibilityReasons?: string[]
@@ -70,8 +77,20 @@ function checkCompatibility(campground: CampgroundResult, rig: any) {
   }
 }
 
-async function fetchRecGovCampgrounds(query: string, lat?: number, lng?: number, radius = 25): Promise<CampgroundResult[]> {
-  const cacheKey = `recgov:${query}:${lat}:${lng}`
+// `options.filter` overrides the default camping-relevance filter for callers
+// with a different inclusion rule (the OHV page filters on the OFF HIGHWAY
+// VEHICLE activity instead). `options.limit` raises the RIDB result cap for
+// that caller WITHOUT changing it for everyone else. Both default to the prior
+// behavior, so van/car/military/search are unaffected.
+async function fetchRecGovCampgrounds(
+  query: string,
+  lat?: number,
+  lng?: number,
+  radius = 25,
+  options?: { limit?: number; filter?: (f: any) => boolean },
+): Promise<CampgroundResult[]> {
+  const limit = options?.limit ?? 20
+  const cacheKey = `recgov:${query}:${lat}:${lng}:${radius}:${limit}`
   const cached = await getCache<any[]>(cacheKey)
   if (cached) return cached
 
@@ -81,7 +100,12 @@ async function fetchRecGovCampgrounds(query: string, lat?: number, lng?: number,
   }
 
   try {
-    const params: any = { query, limit: 20, full: 'true' }
+    // Only send the text `query` when non-empty. RIDB ANDs the full-text query
+    // with the geo filter, which cripples recall for a location-aware search
+    // (live probe: "OHV…" + 50-mi radius returned ~1 result near Moab vs ~50
+    // geo-only). Callers doing a geo + post-filter search (OHV) pass query=''.
+    const params: any = { limit, full: 'true' }
+    if (query) params.query = query
     if (lat && lng) { params.latitude = lat; params.longitude = lng; params.radius = radius }
 
     const res = await axios.get('https://ridb.recreation.gov/api/v1/facilities', {
@@ -96,19 +120,23 @@ async function fetchRecGovCampgrounds(query: string, lat?: number, lng?: number,
       console.log('[RIDB] First 2 results raw shape:', JSON.stringify(recdata.slice(0, 2), null, 2))
     }
 
-    // RIDB returns lookout towers, picnic areas, day-use sites, ranger stations, fire towers,
-    // boat ramps — none of which serve RV camping. Keep only facilities that are actually
-    // a campground, list CAMPING in their activities, or have at least one campsite.
-    const campingRelevant = recdata.filter((f: any) => {
+    // Default inclusion: RIDB returns lookout towers, picnic areas, day-use
+    // sites, ranger stations, etc. — keep only facilities that are a campground,
+    // list CAMPING, or have a campsite. Callers can override (the OHV page
+    // filters on the OFF HIGHWAY VEHICLE activity to include day-use riding
+    // spots that this default would drop).
+    const defaultFilter = (f: any): boolean => {
       if (f.FacilityTypeDescription === 'Campground') return true
       const activities: { ActivityName?: string }[] = f.ACTIVITY || []
       if (activities.some(a => a.ActivityName === 'CAMPING')) return true
       const campsites: any[] = f.CAMPSITE || []
       if (campsites.length > 0) return true
       return false
-    })
+    }
+    const keep = options?.filter ?? defaultFilter
+    const campingRelevant = recdata.filter(keep)
     const dropped = recdata.length - campingRelevant.length
-    console.log(`[RIDB] Filtered ${dropped} non-camping facilities, kept ${campingRelevant.length} camping-relevant ones for query="${query}"`)
+    console.log(`[RIDB] Filtered ${dropped} non-matching facilities, kept ${campingRelevant.length} for query="${query}"`)
 
     const campgrounds = campingRelevant.map((f: any) => {
       const addr = f.FACILITYADDRESS?.[0]
@@ -162,12 +190,19 @@ async function fetchRecGovCampgrounds(query: string, lat?: number, lng?: number,
       // OHV page can show genuine activities ("Off Highway Vehicle", "Camping")
       // instead of hardcoded terrain tags. e.g. "OFF HIGHWAY VEHICLE" → "Off
       // Highway Vehicle".
+      const rawActivityNames: string[] = ((f.ACTIVITY as { ActivityName?: string }[]) || [])
+        .map(a => a.ActivityName)
+        .filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
       const activityNames: string[] = Array.from(new Set(
-        ((f.ACTIVITY as { ActivityName?: string }[]) || [])
-          .map(a => a.ActivityName)
-          .filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
-          .map(n => n.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())),
+        rawActivityNames.map(n => n.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())),
       ))
+
+      // Overnight-stay signal for the OHV "Camping available" vs "Day-use"
+      // badge: a campground, any campsites, or a CAMPING activity tag.
+      const campingAvailable =
+        f.FacilityTypeDescription === 'Campground' ||
+        ((f.CAMPSITE as any[]) || []).length > 0 ||
+        rawActivityNames.includes('CAMPING')
 
       return {
         id: `recgov-${f.FacilityID}`,
@@ -184,6 +219,7 @@ async function fetchRecGovCampgrounds(query: string, lat?: number, lng?: number,
         reservable: isReservable,
         hookupTypes: hookupTypes.length > 0 ? hookupTypes : undefined,
         activities: activityNames.length > 0 ? activityNames : undefined,
+        campingAvailable,
         maxRigLength,
         maxRigHeight,
         rvProhibited: false,
@@ -494,12 +530,47 @@ export async function getMilitary(req: AuthRequest, res: Response, next: NextFun
 
 export async function getOhv(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    // OHV is open to all rig types now — no rig-derived matchScore. Each result
-    // already carries the real Recreation.gov facility data (lat/lng, address,
-    // description, website/reservationUrl, hookups, rig-fit limits, activities);
-    // the client renders those directly. No hardcoded season/terrain fakes.
-    const campgrounds = await fetchRecGovCampgrounds('OHV ATV off-highway vehicle')
-    res.json(campgrounds)
+    // Location-aware (browser GPS, 50-mi radius). GEO-ONLY query (no keyword):
+    // a live RIDB probe showed the full-text keyword AND'd with the radius
+    // crippled recall (~1 result near Moab vs ~50 geo-only), so we fetch the
+    // nearest facilities and apply the OFF HIGHWAY VEHICLE activity filter
+    // ourselves. That INCLUDES day-use riding spots (trailheads/staging areas,
+    // type "Facility") the default campground filter drops, and EXCLUDES
+    // campgrounds that aren't OHV-tagged. Open to all rig types; camping-vs-
+    // day-use is a per-card label, not a gate. (Coverage caveat: RIDB returns
+    // at most the ~50 nearest facilities and doesn't index BLM dispersed /
+    // forest-road / most state OHV land, so sparse regions yield few or none.)
+    const lat = req.query.lat ? parseFloat(req.query.lat as string) : undefined
+    const lng = req.query.lng ? parseFloat(req.query.lng as string) : undefined
+    const radius = req.query.radius ? parseInt(req.query.radius as string, 10) : 50
+
+    const facilities = await fetchRecGovCampgrounds(
+      '', // geo-only — see note above; OHV precision comes from the filter below
+      lat, lng, radius,
+      {
+        limit: 50, // grab the nearest 50, then filter to OHV-tagged + slice to 10
+        filter: (f: any) =>
+          Array.isArray(f.ACTIVITY) &&
+          f.ACTIVITY.some((a: any) => a?.ActivityName === 'OFF HIGHWAY VEHICLE'),
+      },
+    )
+
+    // Distance from the GPS origin (haversine → miles), nearest first. Results
+    // without coords (or when no origin was sent) sort last with null distance.
+    const withDistance = facilities
+      .map(c => {
+        const meters = lat != null && lng != null
+          ? haversineMeters(lat, lng, c.latitude, c.longitude)
+          : Infinity
+        const distanceMiles = Number.isFinite(meters)
+          ? Math.round((meters / 1609.34) * 10) / 10
+          : null
+        return { ...c, distanceMiles }
+      })
+      .sort((a, b) => (a.distanceMiles ?? Infinity) - (b.distanceMiles ?? Infinity))
+      .slice(0, 10)
+
+    res.json(withDistance)
   } catch (err) { next(err) }
 }
 

@@ -217,7 +217,8 @@ export const campgroundsApi = {
   get: (id: string) => api.get(`/campgrounds/${id}`),
   getCompatible: (params: any) => api.get('/campgrounds/compatible', { params }),
   getMilitary: () => api.get('/campgrounds/military'),
-  getOhv: () => api.get('/campgrounds/ohv'),
+  getOhv: (lat?: number, lng?: number, radius?: number) =>
+    api.get('/campgrounds/ohv', { params: { lat, lng, radius } }),
   getVan: () => api.get('/campgrounds/van'),
   getCarCamping: () => api.get('/campgrounds/car-camping'),
 }
