@@ -501,22 +501,41 @@ interface LegPlan {
   warnings: string[]
 }
 
+// ─── Split policy (module-level constants — easy to tune) ─────────────────────
+// HARD CAP is per-user (maxDriveHours), computed at call time. These are fixed:
+const LEG_GRACE_HOURS         = 1.0   // a leg ≤ cap+grace stays ONE day (no split)
+const LEG_MIN_USEFUL_HOURS    = 3.0   // avoid creating sub-legs shorter than this
+const LEG_DRIFT_TOLERANCE_MIN = 15    // slack on a placed sub-leg vs cap (town drift)
+const MAX_TRANSIT_INSERTS_PER_LEG = 4 // safety rail vs. pathological cross-country legs
+
 /**
  * Plan the transit-stop splits for ONE original leg (from → to) using REAL,
- * re-measured drive times. Frontier loop: measure frontier→to; if within cap,
- * done; else interpolate a point ~targetSec into the REAL remaining route,
- * reverse-geocode it to a town, then RE-MEASURE frontier→town and only accept
- * it when that actual sub-leg is under cap (retrying closer if a town snapped
- * too far). This guarantees every emitted sub-leg is measured ≤ cap — the
- * placement no longer trusts the original-route projection. Bounded by
- * maxInserts; fails soft (leaves remainder + logs) rather than looping.
+ * re-measured drive times, dividing the leg into roughly EQUAL days rather than
+ * greedily maxing each sub-leg to the cap (the old approach stranded tiny 1h
+ * stubs, e.g. 5.7h + 1.6h, or split a barely-over 6.4h leg into 5.4h + 1.0h).
+ *
+ * Per iteration over the REMAINING route (frontier → to):
+ *   • If remaining ≤ cap + GRACE → it fits in one comfortable day; done. GRACE
+ *     means a barely-over leg (e.g. 6.4h vs a 6h cap) is NOT split into a stub.
+ *   • Else split into balanced days: days = ceil(remaining / cap) (uses cap, not
+ *     cap+grace, so each day keeps margin under the hard cap), target each
+ *     sub-leg at remaining / days. MIN_USEFUL floor: reduce `days` (fewer,
+ *     slightly-longer but still-legal days) before producing a sub-leg below the
+ *     floor. Place a split at ~target, name it (reverseGeocode → findNearestTown
+ *     fallback), RE-MEASURE frontier→town, accept only when ≤ cap + drift
+ *     tolerance (retry closer otherwise).
+ *
+ * Re-measuring the real remaining route each pass self-corrects placement drift
+ * and keeps the resulting days balanced. Bounded by maxInserts; fails soft
+ * (leaves remainder + logs) rather than looping.
  */
 async function planLegSplits(
   from: TransitTown,
   to: TransitTown,
   apiKey: string,
   capSec: number,
-  targetSec: number,
+  graceSec: number,
+  minUsefulSec: number,
   tolSec: number,
   maxInserts: number,
 ): Promise<LegPlan> {
@@ -537,8 +556,9 @@ async function planLegSplits(
       break
     }
 
-    // Remaining route fits → this is the final sub-leg, under cap. Done.
-    if (detail.durationSec <= capSec + tolSec) {
+    // Fits in one comfortable day (within grace) → final sub-leg, done. This
+    // covers both "already short" legs and "barely over" legs (no stub split).
+    if (detail.durationSec <= capSec + graceSec) {
       plan.subLegs.push({ from: frontier.locationName, to: to.locationName, hours: detail.durationSec / 3600, over: false })
       break
     }
@@ -553,8 +573,15 @@ async function planLegSplits(
       break
     }
 
+    // Even division of the REMAINING route into balanced days, each ≤ cap.
+    let days = Math.ceil(detail.durationSec / capSec)
+    // MIN_USEFUL floor: prefer fewer, slightly-longer (still-legal) days over a
+    // sub-leg that's too short to be worth stopping for.
+    while (days > 1 && detail.durationSec / days < minUsefulSec) days--
+    const targetSec = detail.durationSec / days   // ≤ capSec by construction
+
     // Place a town ~targetSec into the REAL remaining route. Retry closer if the
-    // reverse-geocoded town snapped too far (measured frontier→town over cap).
+    // named town snapped too far (measured frontier→town over cap+tolerance).
     let placed = false
     let tryTarget = targetSec
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -570,15 +597,15 @@ async function planLegSplits(
       } else {
         town = await findNearestTown(pt.lat, pt.lng, apiKey)
       }
-      if (!town) { tryTarget *= 0.7; continue }
+      if (!town) { tryTarget *= 0.8; continue }
       // Don't accept a town that is effectively the frontier or the destination.
       if (
         town.locationName.toLowerCase() === frontier.locationName.toLowerCase() ||
         town.locationName.toLowerCase() === to.locationName.toLowerCase()
-      ) { tryTarget *= 0.7; continue }
+      ) { tryTarget *= 0.8; continue }
 
       const sub = await fetchLegDetail(frontier, town, apiKey)
-      if (!sub) { tryTarget *= 0.7; continue }
+      if (!sub) { tryTarget *= 0.8; continue }
       if (sub.durationSec <= capSec + tolSec) {
         plan.towns.push(town)
         plan.subLegs.push({ from: frontier.locationName, to: town.locationName, hours: sub.durationSec / 3600, over: false })
@@ -586,7 +613,7 @@ async function planLegSplits(
         placed = true
         break
       }
-      tryTarget *= 0.7  // overshoot — pull the split closer and retry
+      tryTarget *= 0.8  // overshoot — pull the split closer and retry
     }
 
     if (!placed) {
@@ -1567,9 +1594,10 @@ export async function expandLongLegs(req: AuthRequest, res: Response, next: Next
     if (maxHours == null || maxHours <= 0) maxHours = 6
 
     const capSec       = maxHours * 3600
-    const TOLERANCE_SEC = 15 * 60          // don't split a leg only slightly over
-    const TARGET_SEC    = 0.9 * capSec     // aim a touch under the cap per sub-leg
-    const MAX_INSERTS_PER_LEG = 4          // safety rail vs. pathological cross-country legs
+    const graceSec     = LEG_GRACE_HOURS * 3600
+    const minUsefulSec = LEG_MIN_USEFUL_HOURS * 3600
+    const tolSec       = LEG_DRIFT_TOLERANCE_MIN * 60
+    const maxInserts   = MAX_TRANSIT_INSERTS_PER_LEG
 
     const stops = trip.stops as any[]
     if (stops.length < 2) return res.json({ inserted: 0 })
@@ -1587,7 +1615,7 @@ export async function expandLongLegs(req: AuthRequest, res: Response, next: Next
       const fromTown: TransitTown = { locationName: from.locationName, locationState: from.locationState, latitude: from.latitude, longitude: from.longitude }
       const toTown:   TransitTown = { locationName: to.locationName,   locationState: to.locationState,   latitude: to.latitude,   longitude: to.longitude }
 
-      const legPlan = await planLegSplits(fromTown, toTown, apiKey, capSec, TARGET_SEC, TOLERANCE_SEC, MAX_INSERTS_PER_LEG)
+      const legPlan = await planLegSplits(fromTown, toTown, apiKey, capSec, graceSec, minUsefulSec, tolSec, maxInserts)
 
       // Per-leg log: original leg + the resulting sub-leg durations (with any
       // still-over markers and warnings) so over-cap tails are never hidden.
