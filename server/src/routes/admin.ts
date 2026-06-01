@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { requireAuth, requireOwner } from '../middleware/auth'
 import { requireVerifiedEmail } from '../middleware/requireVerifiedEmail'
-import { getMetrics, getSubscribers, getRevenue, getAdminFeedback, analyzeFeedback } from '../controllers/admin'
+import { getMetrics, getSubscribers, getRevenue, getAdminFeedback, analyzeFeedback, getLinkHealth } from '../controllers/admin'
 
 export const adminRouter = Router()
 // requireVerifiedEmail before requireOwner — owners always bypass the
@@ -15,3 +15,4 @@ adminRouter.get('/subscribers', getSubscribers as any)
 adminRouter.get('/revenue', getRevenue as any)
 adminRouter.get('/feedback', getAdminFeedback as any)
 adminRouter.post('/feedback/analyze', analyzeFeedback as any)
+adminRouter.get('/link-health', getLinkHealth as any)

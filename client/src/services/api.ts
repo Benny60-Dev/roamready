@@ -285,4 +285,5 @@ export const adminApi = {
   getRevenue: () => api.get('/admin/revenue'),
   getFeedback: () => api.get('/admin/feedback'),
   analyzeFeedback: () => api.post('/admin/feedback/analyze'),
+  getLinkHealth: () => api.get('/admin/link-health'),
 }

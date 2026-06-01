@@ -6,6 +6,7 @@ import { Request, Response, NextFunction } from 'express'
 import { Resend } from 'resend'
 import { prisma } from '../utils/prisma'
 import { AppError } from '../middleware/errorHandler'
+import { runOhvLinkCheck } from '../services/ohvLinkCheck'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const replyToEmail = process.env.REPLY_TO_EMAIL ?? 'support@roamready.ai'
@@ -134,6 +135,82 @@ export async function trialEndingReminder(req: Request, res: Response, next: Nex
       errors,
       windowStart: windowStart.toISOString(),
       windowEnd: windowEnd.toISOString(),
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/** Monthly OHV link-checker. Pings every URL in server/src/data/ohvLinks.json
+ *  (54: 4 national + 50 state), persists the result for the owner-only admin
+ *  view, and emails ADMIN_EMAIL ONLY when one or more links are dead (silent on
+ *  a fully-healthy run). Scheduling: external caller hits this monthly. Returns
+ *  a summary like the other cron handlers.
+ *
+ *  The `(prisma as any)` cast on the new OhvLinkCheck model mirrors the
+ *  trial-ending casts above — the generated Prisma client won't include the
+ *  model until the migration runs + the client regenerates (the running dev
+ *  server holds an EPERM lock on the engine DLL). Removable after regen. */
+export async function ohvLinkCheck(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!checkCronSecret(req, res)) return
+
+    const result = await runOhvLinkCheck()
+
+    // Persist the latest run so the admin view can read it. Wrapped so a DB
+    // hiccup (or a not-yet-migrated model) never fails the whole cron run —
+    // the email alert below is the more important side effect.
+    try {
+      await (prisma as any).ohvLinkCheck.create({
+        data: {
+          checkedAt: new Date(result.checkedAt),
+          total: result.total,
+          okCount: result.okCount,
+          deadCount: result.deadCount,
+          dead: result.dead,
+          driftWarning: result.driftWarning ?? null,
+        },
+      })
+    } catch (persistErr: any) {
+      console.error('[cron:ohv-link-check] persist failed:', persistErr?.message ?? persistErr)
+    }
+
+    // Email ONLY when something is dead — silent on a healthy run.
+    if (result.deadCount > 0) {
+      const to = process.env.ADMIN_EMAIL
+      if (!to) {
+        console.warn('[cron:ohv-link-check] ADMIN_EMAIL not set — skipping alert email')
+      } else if (!process.env.FROM_EMAIL) {
+        console.warn('[cron:ohv-link-check] FROM_EMAIL not set — skipping alert email')
+      } else {
+        const driftHtml = result.driftWarning ? `<p><strong>Drift:</strong> ${result.driftWarning}</p>` : ''
+        const driftText = result.driftWarning ? `Drift: ${result.driftWarning}\n` : ''
+        const rowsHtml = result.dead
+          .map(d => `<li>${d.label} — <a href="${d.url}">${d.url}</a> (status: ${d.status})</li>`)
+          .join('')
+        const rowsText = result.dead.map(d => `- ${d.label} — ${d.url} (status: ${d.status})`).join('\n')
+        try {
+          await resend.emails.send({
+            from: process.env.FROM_EMAIL!, // runtime-guarded above; matches trial-ending
+            reply_to: replyToEmail,
+            to,
+            subject: `[RoamReady] OHV link check: ${result.deadCount} dead link${result.deadCount === 1 ? '' : 's'}`,
+            html: `<p>${result.deadCount} of ${result.total} OHV resource link(s) failed the monthly check (${result.checkedAt}).</p>${driftHtml}<ul>${rowsHtml}</ul><p>Fix in <code>client/src/constants/ohvStateResources.ts</code>, then regenerate <code>server/src/data/ohvLinks.json</code>.</p>`,
+            text: `${result.deadCount} of ${result.total} OHV resource link(s) failed the monthly check (${result.checkedAt}).\n${driftText}\n${rowsText}\n\nFix in client/src/constants/ohvStateResources.ts, then regenerate server/src/data/ohvLinks.json.`,
+          })
+          console.log(`[cron:ohv-link-check] alerted ${to} about ${result.deadCount} dead link(s)`)
+        } catch (mailErr: any) {
+          console.error('[cron:ohv-link-check] alert email failed:', mailErr?.message ?? mailErr)
+        }
+      }
+    }
+
+    res.json({
+      total: result.total,
+      okCount: result.okCount,
+      deadCount: result.deadCount,
+      dead: result.dead,
+      driftWarning: result.driftWarning,
     })
   } catch (err) {
     next(err)

@@ -624,3 +624,20 @@ model CampgroundCache {
   @@index([cacheKey])
   @@index([expiresAt])
 }
+
+// Result of the monthly OHV link-checker (server/src/services/ohvLinkCheck.ts,
+// triggered via the /api/v1/internal/cron/ohv-link-check endpoint). One row is
+// written per run; the owner-only admin view reads the most recent by
+// createdAt. `dead` is the JSON array of { label, url, status }.
+model OhvLinkCheck {
+  id           String   @id @default(cuid())
+  checkedAt    DateTime
+  total        Int
+  okCount      Int
+  deadCount    Int
+  dead         Json
+  driftWarning String?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+}
