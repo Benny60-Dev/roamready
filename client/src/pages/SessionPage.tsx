@@ -1,6 +1,6 @@
 import { useCallback, useState, useRef, useEffect, type CSSProperties } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { MapPin, Tent, Users, Loader, Plus, X, Sparkles, ChevronDown, ChevronUp, ChevronRight, Check } from 'lucide-react'
+import { MapPin, Tent, Users, Loader, Plus, X, Sparkles, ChevronDown, ChevronUp, ChevronRight, Check, Info } from 'lucide-react'
 import { aiApi, sessionsApi, tripsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import { ChatMessage, Trip, Rig } from '../types'
@@ -927,8 +927,12 @@ export default function SessionPage() {
                           className="transition-colors"
                           style={{
                             ...CONTEXT_CHIP_STYLE,
-                            background: rigDropdownOpen ? '#E0F0F4' : 'white',
-                            border: rigDropdownOpen ? '0.5px solid #1F6F8B' : '0.5px solid #E8E4DA',
+                            // Multi-rig discoverability: a calm info tint + soft
+                            // blue border at rest marks this as the interactive,
+                            // switchable chip (vs. the quiet white travelers /
+                            // hookup chips). Open state is unchanged.
+                            background: rigDropdownOpen ? '#E0F0F4' : '#F2F8FA',
+                            border: rigDropdownOpen ? '0.5px solid #1F6F8B' : '0.5px solid #B8DCE5',
                             cursor: 'pointer',
                           }}
                         >
@@ -1265,6 +1269,22 @@ export default function SessionPage() {
                     </span>
                   )}
                 </div>
+              )}
+
+              {/* Multi-rig discoverability nudge — a calm one-line hint directly
+                  below the chip row pointing at the (emphasized) rig chip. Light
+                  nudge only: muted text, no action required. Single-rig users
+                  never see this (hasMultipleRigs gate). Negative marginTop pulls
+                  it up under the strip's marginBottom so it reads as attached to
+                  the row, not floating. */}
+              {hasMultipleRigs && rigChipText && (
+                <p
+                  className="flex items-center justify-center gap-1 text-center"
+                  style={{ marginTop: -20, marginBottom: 24, fontSize: 13, color: '#888780' }}
+                >
+                  <Info size={13} aria-hidden="true" color="#1F6F8B" />
+                  Planning for your {rigName} — tap the rig to switch.
+                </p>
               )}
 
               <div className="w-full max-w-[600px]">
