@@ -2,39 +2,30 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Loader } from 'lucide-react'
 import { sessionsApi } from '../services/api'
-import type { PlanningSession } from '../types'
-import { relativeTime } from '../utils/dates'
 
 export default function SessionNewPage() {
   const navigate = useNavigate()
-  const [resumeCandidate, setResumeCandidate] = useState<PlanningSession | null>(null)
-  const [checking, setChecking] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    setChecking(true)
     sessionsApi
       .getLatestActive()
       .then(latest => {
         if (cancelled) return
         if (latest) {
-          // Skip the resume prompt for in-session navigation. Two checks:
+          // Silent-resume fast-paths for IN-APP navigation (kept intact):
           //
           // A — sessionStorage flag (explicit signal). SessionPage writes
           //   `lastVisitedSessionId` on mount. If the user just came back from
           //   /profile or another internal route, this id matches and we
-          //   silently route them back to the session.
+          //   silently route them back into that session.
           //
           // B — recent updatedAt window (fallback). Within 5 minutes of the
           //   last autosave we treat the visit as in-session navigation even
-          //   if the sessionStorage flag is missing (e.g. private window
-          //   that nuked storage, or new tab that lost the flag).
-          //
-          // Only fall through to the prompt when both fail — that's the
-          // "stale return next day" case where the user genuinely needs to
-          // choose between resume and start fresh.
+          //   if the sessionStorage flag is missing (private window that nuked
+          //   storage, or a new tab that lost the flag).
           const lastVisited = sessionStorage.getItem('lastVisitedSessionId')
           if (lastVisited === latest.id) {
             navigate(`/sessions/${latest.id}`, { replace: true })
@@ -46,16 +37,21 @@ export default function SessionNewPage() {
             navigate(`/sessions/${latest.id}`, { replace: true })
             return
           }
-          setResumeCandidate(latest)
-          setChecking(false)
+          // STALE case (both fast-paths failed — a "returning later" Home
+          // click): Home IS the planning canvas, so we do NOT show a
+          // Resume/Start-fresh modal. Start a fresh canvas, same as a brand-new
+          // start. The prior session is NOT lost or deleted — createFresh only
+          // inserts a new row; the stale session remains in the header "Your
+          // planning sessions" panel (SessionsPanel, AppLayout) one click away.
+          createFresh()
         } else {
-          // No latest — go straight to creating a fresh session
+          // No latest active session — go straight to a fresh canvas.
           createFresh()
         }
       })
       .catch(() => {
         if (cancelled) return
-        // On lookup failure, fall back to creating a fresh session
+        // On lookup failure, fall back to creating a fresh session.
         createFresh()
       })
     return () => { cancelled = true }
@@ -72,21 +68,7 @@ export default function SessionNewPage() {
     } catch (e: any) {
       setError(e?.response?.data?.message || 'Could not start a new session.')
       setBusy(false)
-      setChecking(false)
     }
-  }
-
-  function resume() {
-    if (!resumeCandidate) return
-    navigate(`/sessions/${resumeCandidate.id}`, { replace: true })
-  }
-
-  if (checking || (!resumeCandidate && !error)) {
-    return (
-      <div className="flex items-center justify-center py-20 text-gray-400">
-        <Loader size={20} className="animate-spin" />
-      </div>
-    )
   }
 
   if (error) {
@@ -100,43 +82,14 @@ export default function SessionNewPage() {
     )
   }
 
+  // Home is the planning canvas: every resolved path above navigates away
+  // (silent resume or fresh create), so this component only renders a loader
+  // until that navigation happens — or the error block above on create failure.
+  // The Resume/Start-fresh modal was removed (it surfaced on every stale-session
+  // Home click after the nav repoint made /sessions/new the Home target).
   return (
-    <div className="max-w-md mx-auto mt-12">
-      <div
-        className="bg-white rounded-xl px-5 py-5"
-        style={{ border: '0.5px solid #E8E4DA' }}
-      >
-        <h2 className="text-base font-medium text-gray-900 mb-1">
-          Resume your last planning session?
-        </h2>
-        <p className="text-sm text-gray-600 mb-4">
-          "{resumeCandidate!.title || 'Untitled session'}" from {relativeTime(resumeCandidate!.updatedAt)}.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <button
-            onClick={resume}
-            disabled={busy}
-            className="flex-1 px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-60"
-            style={{ backgroundColor: '#1F6F8B' }}
-            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#134756' }}
-            onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#1F6F8B' }}
-          >
-            Resume
-          </button>
-          <button
-            onClick={createFresh}
-            disabled={busy}
-            className="flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-60"
-            style={{
-              backgroundColor: 'transparent',
-              border: '0.5px solid #1F6F8B',
-              color: '#1F6F8B',
-            }}
-          >
-            {busy ? 'Starting…' : 'Start fresh'}
-          </button>
-        </div>
-      </div>
+    <div className="flex items-center justify-center py-20 text-gray-400">
+      <Loader size={20} className="animate-spin" />
     </div>
   )
 }
