@@ -556,7 +556,16 @@ export default function SessionPage() {
     }
 
     try {
-      const res = await aiApi.chat(next, undefined, undefined, sessionId)
+      // Phase B — plan for the canvas-selected rig (the same one the chip/nudge
+      // shows), not just the user's default. Saved rig → rigId; ad-hoc one-off →
+      // adHocVehicle. Read fresh each send, so switching rigs mid-conversation
+      // affects subsequent messages. null → omitted → server uses the default.
+      const rigArg = selectedRig
+        ? isAdHocRig(selectedRig)
+          ? { adHocVehicle: { year: selectedRig.year, make: selectedRig.make, model: selectedRig.model, length: selectedRig.length } }
+          : { rigId: selectedRig.id }
+        : undefined
+      const res = await aiApi.chat(next, undefined, undefined, sessionId, rigArg)
       const aiText = res.data.message
       setMessages([...next, { role: 'assistant', content: aiText }])
       const parsed = parseItinerary(aiText)

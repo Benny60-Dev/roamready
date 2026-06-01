@@ -349,7 +349,7 @@ function buildLiveTripState(trip: any): string {
 
 export async function chat(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { messages, tripId, sessionId, context } = req.body
+    const { messages, tripId, sessionId, context, rigId, adHocVehicle } = req.body
     if (!messages || !Array.isArray(messages)) throw new AppError('Messages required', 400)
 
     // Daily cap for non-paying, non-trial accounts. Quiet cost protection.
@@ -508,6 +508,27 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       // (adults / children / hasPets / petDetails) remain primary until the
       // Phase C cutover; the AI sees both in its JSON context.
       defaultParty: serializeParty(user?.parties?.[0] ?? null),
+    }
+
+    // Phase B — plan for the rig the user picked on the planning canvas (passed
+    // as rigId), not just their default. The lookup is SCOPED TO THE REQUESTING
+    // USER, so a forged/foreign rigId can never load another user's rig — a miss
+    // silently keeps the default rig already in userProfile.rigs. An unsaved
+    // one-off vehicle rides in via adHocVehicle for prompt context. The rig
+    // reaches the model purely through JSON.stringify(userProfile) in the system
+    // prompt (services/ai.ts), so swapping userProfile.rigs is the whole fix —
+    // every rig-keyed rule (towing, length restrictions, mpg, toy-hauler/OHV,
+    // campground fit) then reasons about the selected rig from this message on.
+    if (typeof rigId === 'string' && rigId.length > 0) {
+      const selectedRig = await prisma.rig.findFirst({
+        where: { id: rigId, userId: req.user!.id },
+      })
+      if (selectedRig) {
+        userProfile.rigs = [selectedRig]
+        console.log('[AI chat] planning for canvas-selected rig=%s user=%s', selectedRig.id, userId)
+      }
+    } else if (adHocVehicle && typeof adHocVehicle === 'object') {
+      userProfile.rigs = [adHocVehicle]
     }
 
     // Surprise-trip variety: detect a destination-deferral phrase in the latest
