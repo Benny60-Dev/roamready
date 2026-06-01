@@ -92,7 +92,8 @@ export default function OhvDestinationsPage() {
         <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="card h-24 animate-pulse bg-gray-50" />)}</div>
       ) : destinations.length === 0 ? (
         <div className="card text-center py-12">
-          <p className="text-gray-500 text-sm">No OHV destinations found within 50 miles. Recreation.gov doesn&apos;t index every riding area — there may be more nearby that aren&apos;t listed.</p>
+          <p className="text-gray-700 text-sm font-medium mb-1">No Recreation.gov-listed OHV spots within range right now.</p>
+          <p className="text-gray-500 text-sm">We&apos;re expanding coverage to include more Forest Service &amp; BLM riding areas — check back soon.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

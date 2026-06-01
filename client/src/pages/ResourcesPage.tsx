@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { MapPin, Phone, Star, Wrench, Package, Mountain, Caravan, Tent, Navigation, Globe } from 'lucide-react'
+import { MapPin, Phone, Star, Wrench, Package, Mountain, Navigation, Globe } from 'lucide-react'
 import { resourcesApi } from '../services/api'
 
 /**
@@ -34,8 +34,10 @@ const HUB_TILES = [
   { to: '/maintenance',      icon: Wrench,   label: 'Maintenance',      desc: 'Rig service tracker' },
   { to: '/roadmap',          icon: Package,  label: 'Product Roadmap',  desc: "What we're shipping next" },
   { to: '/ohv-destinations', icon: Mountain, label: 'OHV Destinations', desc: 'Off-highway parks & trails' },
-  { to: '/van-destinations', icon: Caravan,  label: 'Van Destinations', desc: 'Van-life favorites' },
-  { to: '/car-camping',      icon: Tent,     label: 'Car Camping',      desc: 'Tent sites & backcountry' },
+  // Van Destinations + Car Camping tiles hidden (post-launch revisit): they were
+  // national keyword lists with hardcoded decorations, redundant with the trip
+  // planner's campground discovery. Routes/pages/controllers stay dormant. Van
+  // life & car camping are covered by the planner — see the note under the grid.
 ]
 
 const RESOURCE_TABS = [
@@ -86,10 +88,9 @@ export default function ResourcesPage() {
           users who recognized them there map the same metaphor here. */}
       <div>
         <h2 className="text-sm font-medium text-gray-700 mb-2">Tools &amp; guides</h2>
-        {/* 5-tile responsive grid. Tablet 3-col splits 3+2 (no orphan); desktop
-            5-col fits the row exactly. Mobile 2-col leaves a single tile on the
-            third row — unavoidable with 5 and visually fine. */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+        {/* Compact tile grid — 3 tiles after hiding Van/Car. Mobile 2-col,
+            tablet/desktop 3-across (one clean row). */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {HUB_TILES.map(({ to, icon: Icon, label, desc }) => (
             <Link
               key={to}
@@ -102,6 +103,12 @@ export default function ResourcesPage() {
             </Link>
           ))}
         </div>
+        {/* Van life & car camping fold into the planner — their standalone tiles
+            were redundant (national keyword lists). Honest "we serve you" note. */}
+        <p className="text-xs text-gray-500 mt-2 leading-snug">
+          Van life or car camping? The AI trip planner finds BLM, dispersed, and tent-friendly
+          campgrounds along your route — the same off-grid destination tools, built right into planning.
+        </p>
       </div>
 
       {/* Along-Route finder — original ResourcesPage content, structurally
