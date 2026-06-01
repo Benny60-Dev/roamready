@@ -104,7 +104,7 @@ export const OHV_STATE_RESOURCES: OhvStateResource[] = [
   { state: 'Utah', abbr: 'UT', agency: 'Utah Division of Outdoor Recreation', url: 'https://recreation.utah.gov', type: 'state-program', confidence: 'high' },
   { state: 'Vermont', abbr: 'VT', agency: "Vermont ATV Sportsman's Association (VASA)", url: 'https://www.vtvasa.org/', type: 'authority', confidence: 'high' },
   { state: 'Virginia', abbr: 'VA', agency: 'Spearhead Trails (SW Regional Recreation Authority)', url: 'https://www.spearheadtrails.com/', type: 'authority', confidence: 'high' },
-  { state: 'Washington', abbr: 'WA', agency: 'Washington State Parks — Recreation (ORV)', url: 'https://www.parks.wa.gov/find-parks/activities/atving', type: 'state-program', confidence: 'medium' },
+  { state: 'Washington', abbr: 'WA', agency: 'Washington DNR — Motorized Recreation', url: 'https://dnr.wa.gov/recreation/where-go-what-do', type: 'state-program', confidence: 'high' },
   { state: 'West Virginia', abbr: 'WV', agency: 'Hatfield-McCoy Trails (Regional Recreation Authority)', url: 'https://trailsheaven.com/', type: 'authority', confidence: 'high' },
   { state: 'Wisconsin', abbr: 'WI', agency: 'Wisconsin DNR — ATV/UTV', url: 'https://dnr.wisconsin.gov/topic/ATV', type: 'state-program', confidence: 'high' },
   { state: 'Wyoming', abbr: 'WY', agency: 'Wyoming State Parks — ORV/Trails', url: 'https://wyoparks.wyo.gov/index.php/orv-trails', type: 'state-program', confidence: 'high' },
