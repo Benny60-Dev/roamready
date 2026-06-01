@@ -81,3 +81,15 @@ export async function analyzeFeedback(req: AuthRequest, res: Response, next: Nex
     res.json({ analysis })
   } catch (err) { next(err) }
 }
+
+/** Latest OHV link-check result for the owner-only admin view. Returns null
+ *  when no run has happened yet. `(prisma as any)` until the OhvLinkCheck model
+ *  is migrated + the client regenerated (same pattern as cron.ts). */
+export async function getLinkHealth(_req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const latest = await (prisma as any).ohvLinkCheck.findFirst({
+      orderBy: { createdAt: 'desc' },
+    })
+    res.json(latest ?? null)
+  } catch (err) { next(err) }
+}
