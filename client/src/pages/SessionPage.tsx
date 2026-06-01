@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef, useEffect } from 'react'
+import { useCallback, useState, useRef, useEffect, type CSSProperties } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { MapPin, Tent, Users, Loader, Plus, X, Sparkles, ChevronDown, ChevronUp, ChevronRight, Check } from 'lucide-react'
 import { aiApi, sessionsApi, tripsApi } from '../services/api'
@@ -14,6 +14,24 @@ import { useVoiceInput } from '../hooks/useVoiceInput'
 import { ChatInput } from '../components/ChatInput'
 import { selectGreeting } from '../utils/greeting'
 import { relativeTime } from '../utils/dates'
+
+// Shared style for the "Trip context" strip chips (rig | travelers | hookup).
+// minHeight 44 gives a comfortable touch target (the rig chip is tappable on
+// multi-rig), and giving all three the same base makes the row read as one set
+// of equal-height chips instead of a tall interactive pill beside two short
+// text labels. The rig chip layers its open/hover state + cursor on top.
+const CONTEXT_CHIP_STYLE: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  minHeight: 44,
+  padding: '6px 12px',
+  borderRadius: 6,
+  border: '0.5px solid #E8E4DA',
+  background: 'white',
+  color: '#134756',
+  fontSize: 12,
+}
 import { computeTripTotals } from '../utils/tripTotals'
 import { deriveTripStatus } from '../utils/tripStatus'
 
@@ -906,15 +924,11 @@ export default function SessionPage() {
                           onClick={() => setRigDropdownOpen(o => !o)}
                           aria-haspopup="listbox"
                           aria-expanded={rigDropdownOpen}
-                          className="inline-flex items-center transition-colors"
+                          className="transition-colors"
                           style={{
-                            gap: 6,
-                            padding: '6px 12px',
-                            borderRadius: 6,
+                            ...CONTEXT_CHIP_STYLE,
                             background: rigDropdownOpen ? '#E0F0F4' : 'white',
                             border: rigDropdownOpen ? '0.5px solid #1F6F8B' : '0.5px solid #E8E4DA',
-                            color: '#134756',
-                            fontSize: 12,
                             cursor: 'pointer',
                           }}
                         >
@@ -923,7 +937,7 @@ export default function SessionPage() {
                           {rigDropdownOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                         </button>
                       ) : (
-                        <span className="inline-flex items-center" style={{ gap: 6 }}>
+                        <span style={CONTEXT_CHIP_STYLE}>
                           <MapPin size={14} aria-hidden="true" color="#1F6F8B" />
                           {rigChipText}
                         </span>
@@ -1239,13 +1253,13 @@ export default function SessionPage() {
                     </span>
                   )}
                   {partyChipText && (
-                    <span className="inline-flex items-center" style={{ gap: 6 }}>
+                    <span style={CONTEXT_CHIP_STYLE}>
                       <Users size={14} aria-hidden="true" color="#1F6F8B" />
                       {partyChipText}
                     </span>
                   )}
                   {styleChipText && (
-                    <span className="inline-flex items-center" style={{ gap: 6 }}>
+                    <span style={CONTEXT_CHIP_STYLE}>
                       <Tent size={14} aria-hidden="true" color="#1F6F8B" />
                       {styleChipText}
                     </span>
