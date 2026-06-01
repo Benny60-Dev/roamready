@@ -29,7 +29,7 @@ export const PRO_FEATURES: readonly string[] = [
   'AI trip planner (unlimited)',
   'Rig compatibility filtering',
   'Save campground booking info',
-  'OHV & van destinations',
+  'OHV destinations',
   'Weather forecasts along route',
   'Trip journal',
   'Maintenance tracker',
