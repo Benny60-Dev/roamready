@@ -22,16 +22,6 @@ const NATIONAL_ICON: Record<string, LucideIcon> = {
   'Tread Lightly!': Leaf,
 }
 
-// The data file has no per-state `description`; surface the `type` as a short,
-// honest label so each card says what KIND of authority it points to.
-const TYPE_LABEL: Record<OhvStateResource['type'], string> = {
-  'state-program': 'State OHV program',
-  'state-portal': 'State tourism / trails portal',
-  usfs: 'US Forest Service (OHV authority)',
-  authority: 'Regional recreation authority',
-  registration: 'State registration / regulations',
-}
-
 export default function OhvResourceBlock({ userState }: { userState?: string | null }) {
   const [query, setQuery] = useState('')
 
@@ -90,9 +80,7 @@ export default function OhvResourceBlock({ userState }: { userState?: string | n
                 {matchedState.agency}
                 <ExternalLink size={12} className="text-gray-400 flex-shrink-0" aria-hidden="true" />
               </div>
-              <p className="text-xs text-gray-500 mt-0.5">
-                {matchedState.state} · {TYPE_LABEL[matchedState.type]}
-              </p>
+              <p className="text-xs text-gray-500 mt-0.5">{matchedState.state}</p>
             </div>
           </a>
         </div>
