@@ -3,6 +3,7 @@ import { campgroundsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import { useUIStore } from '../store/uiStore'
 import { MapPin, Navigation, Globe, Ticket } from 'lucide-react'
+import OhvResourceBlock from '../components/OhvResourceBlock'
 
 // Rec.gov FacilityDescription arrives as raw HTML (<p>, <h2>Overview</h2>, …).
 // We deliberately do NOT render it as HTML (third-party content → XSS risk),
@@ -41,6 +42,10 @@ export default function OhvDestinationsPage() {
   const [loading, setLoading] = useState(true)
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [locationError, setLocationError] = useState('')
+  // GPS-derived US state (full name, e.g. "Arizona") for the curated resource
+  // block's "Your state" card. Null until reverse-geocoded; stays null on any
+  // failure (Maps not loaded, no result, non-US) — the card just won't render.
+  const [userState, setUserState] = useState<string | null>(null)
   const { hasAccess } = useAuthStore()
   const { openPaywall } = useUIStore()
 
@@ -75,6 +80,27 @@ export default function OhvDestinationsPage() {
       .catch(() => { setDestinations([]); setLoading(false) })
   }, [location])
 
+  // Reverse-geocode the GPS point to a US state (administrative_area_level_1)
+  // via the already-loaded Google Maps Geocoder — best-effort, no new deps.
+  // Guards window.google like TripMapPage; any failure leaves userState null so
+  // the curated block simply omits the "Your state" card.
+  useEffect(() => {
+    if (!location) return
+    if (!window.google?.maps?.Geocoder) return
+    try {
+      const geocoder = new window.google.maps.Geocoder()
+      geocoder.geocode({ location: { lat: location.lat, lng: location.lng } }, (results, status) => {
+        try {
+          if (status !== 'OK' || !results || !results[0]) return
+          const comp = results[0].address_components?.find(c =>
+            c.types.includes('administrative_area_level_1'),
+          )
+          if (comp?.long_name) setUserState(comp.long_name)
+        } catch { /* leave userState null */ }
+      })
+    } catch { /* leave userState null */ }
+  }, [location])
+
   return (
     <div className="space-y-4 max-w-3xl">
       <div>
@@ -85,15 +111,22 @@ export default function OhvDestinationsPage() {
         <p className="text-sm text-gray-500">OHV-tagged spots near you · from Recreation.gov</p>
       </div>
       {locationError ? (
-        <div className="card text-center py-12">
-          <p className="text-gray-500 text-sm">{locationError}</p>
+        <div className="space-y-4">
+          <div className="card text-center py-12">
+            <p className="text-gray-500 text-sm">{locationError}</p>
+          </div>
+          {/* No location → no "Your state" card; national links + browse grid still help. */}
+          <OhvResourceBlock userState={null} />
         </div>
       ) : loading ? (
         <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="card h-24 animate-pulse bg-gray-50" />)}</div>
       ) : destinations.length === 0 ? (
-        <div className="card text-center py-12">
-          <p className="text-gray-700 text-sm font-medium mb-1">No Recreation.gov-listed OHV spots within range right now.</p>
-          <p className="text-gray-500 text-sm">We&apos;re expanding coverage to include more Forest Service &amp; BLM riding areas — check back soon.</p>
+        <div className="space-y-4">
+          <div className="card text-center py-12">
+            <p className="text-gray-700 text-sm font-medium mb-1">No Recreation.gov-listed OHV spots within range right now.</p>
+            <p className="text-gray-500 text-sm">We&apos;re expanding coverage to include more Forest Service &amp; BLM riding areas — check back soon.</p>
+          </div>
+          <OhvResourceBlock userState={userState} />
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
