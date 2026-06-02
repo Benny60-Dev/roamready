@@ -65,10 +65,16 @@ export default function OhvDestinationsPage() {
     navigator.geolocation.getCurrentPosition(
       pos => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
       () => {
-        // Honest copy: there is no fallback location — denial yields no results.
+        // Honest copy: there is no fallback location — denial/timeout yields no
+        // results. This fires on PERMISSION_DENIED and on the 10s timeout below,
+        // and clears loading so the skeleton can't hang forever — the page still
+        // renders national links + the state search via the locationError branch.
         setLocationError('Location access is required to find OHV destinations near you. Enable location for this site in your browser settings, then reload.')
         setLoading(false)
       },
+      // Reuse a fix up to 5 min old instead of acquiring fresh on every mount;
+      // bail after 10s so a slow/hanging fix triggers the error path above.
+      { maximumAge: 300000, timeout: 10000, enableHighAccuracy: false },
     )
   }, [])
 

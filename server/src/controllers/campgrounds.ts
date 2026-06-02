@@ -87,10 +87,17 @@ async function fetchRecGovCampgrounds(
   lat?: number,
   lng?: number,
   radius = 25,
-  options?: { limit?: number; filter?: (f: any) => boolean },
+  options?: { limit?: number; filter?: (f: any) => boolean; coarseGeoCacheKey?: boolean },
 ): Promise<CampgroundResult[]> {
   const limit = options?.limit ?? 20
-  const cacheKey = `recgov:${query}:${lat}:${lng}:${radius}:${limit}`
+  // OHV opts into a coarser geo cache key (lat/lng rounded to 2 decimals, ~1km)
+  // so the jittered full-precision GPS coords from repeat page loads still hit
+  // the same Redis entry. Other callers keep the original full-precision key, so
+  // their caching is byte-for-byte unchanged. Rounding affects ONLY the cache
+  // key — the upstream RIDB request below still uses the real lat/lng.
+  const keyLat = options?.coarseGeoCacheKey && lat != null ? lat.toFixed(2) : lat
+  const keyLng = options?.coarseGeoCacheKey && lng != null ? lng.toFixed(2) : lng
+  const cacheKey = `recgov:${query}:${keyLat}:${keyLng}:${radius}:${limit}`
   const cached = await getCache<any[]>(cacheKey)
   if (cached) return cached
 
@@ -549,6 +556,7 @@ export async function getOhv(req: AuthRequest, res: Response, next: NextFunction
       lat, lng, radius,
       {
         limit: 50, // grab the nearest 50, then filter to OHV-tagged + slice to 10
+        coarseGeoCacheKey: true, // ~1km cache key so jittered GPS reloads hit cache
         filter: (f: any) =>
           Array.isArray(f.ACTIVITY) &&
           f.ACTIVITY.some((a: any) => a?.ActivityName === 'OFF HIGHWAY VEHICLE'),
