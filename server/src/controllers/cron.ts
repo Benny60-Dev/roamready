@@ -144,9 +144,9 @@ export async function trialEndingReminder(req: Request, res: Response, next: Nex
 /** Monthly OHV link-checker. Pings every URL in server/src/data/ohvLinks.json
  *  (97: 4 national + 50 state authorities + 43 unique supplemental links),
  *  persists the result for the owner-only admin
- *  view, and emails ADMIN_EMAIL ONLY when one or more links are dead (silent on
- *  a fully-healthy run). Scheduling: external caller hits this monthly. Returns
- *  a summary like the other cron handlers.
+ *  view, and emails ADMIN_EMAIL when one or more links are DEAD or need REVIEW
+ *  (silent only on a fully-healthy run: zero dead AND zero review). Scheduling:
+ *  external caller hits this monthly. Returns a summary like the other handlers.
  *
  *  The `(prisma as any)` cast on the new OhvLinkCheck model mirrors the
  *  trial-ending casts above — the generated Prisma client won't include the
@@ -168,7 +168,10 @@ export async function ohvLinkCheck(req: Request, res: Response, next: NextFuncti
           total: result.total,
           okCount: result.okCount,
           deadCount: result.deadCount,
-          dead: result.dead,
+          // No schema change: the `dead` Json column stores ALL non-OK results
+          // (DEAD + REVIEW), each tagged with `state`. deadCount stays strict
+          // DEAD; the admin view derives REVIEW by filtering state === 'REVIEW'.
+          dead: [...result.dead, ...result.review],
           driftWarning: result.driftWarning ?? null,
         },
       })
@@ -176,8 +179,10 @@ export async function ohvLinkCheck(req: Request, res: Response, next: NextFuncti
       console.error('[cron:ohv-link-check] persist failed:', persistErr?.message ?? persistErr)
     }
 
-    // Email ONLY when something is dead — silent on a healthy run.
-    if (result.deadCount > 0) {
+    // Email when ANYTHING needs attention — DEAD (real problem) or REVIEW
+    // (couldn't confirm, needs a human glance). A fully-healthy run (zero DEAD
+    // AND zero REVIEW, after the WAF-403 downgrade) stays silent.
+    if (result.deadCount > 0 || result.reviewCount > 0) {
       const to = process.env.ADMIN_EMAIL
       if (!to) {
         console.warn('[cron:ohv-link-check] ADMIN_EMAIL not set — skipping alert email')
@@ -186,20 +191,44 @@ export async function ohvLinkCheck(req: Request, res: Response, next: NextFuncti
       } else {
         const driftHtml = result.driftWarning ? `<p><strong>Drift:</strong> ${result.driftWarning}</p>` : ''
         const driftText = result.driftWarning ? `Drift: ${result.driftWarning}\n` : ''
-        const rowsHtml = result.dead
-          .map(d => `<li>${d.label} — <a href="${d.url}">${d.url}</a> (status: ${d.status})</li>`)
-          .join('')
-        const rowsText = result.dead.map(d => `- ${d.label} — ${d.url} (status: ${d.status})`).join('\n')
+
+        const liHtml = (d: typeof result.dead[number]) =>
+          `<li>${d.label} — <a href="${d.url}">${d.url}</a> (status: ${d.status}${d.finalUrl ? `, redirected to ${d.finalUrl}` : ''})</li>`
+        const liText = (d: typeof result.dead[number]) =>
+          `- ${d.label} — ${d.url} (status: ${d.status}${d.finalUrl ? `, redirected to ${d.finalUrl}` : ''})`
+
+        // DEAD section (only when there are dead links).
+        const deadHtml = result.deadCount > 0
+          ? `<h3>Dead — fix these (${result.deadCount})</h3><ul>${result.dead.map(liHtml).join('')}</ul>`
+          : ''
+        const deadText = result.deadCount > 0
+          ? `Dead — fix these (${result.deadCount}):\n${result.dead.map(liText).join('\n')}\n`
+          : ''
+
+        // REVIEW section — clearly separated so ambiguous links reach a human
+        // instead of being silently passed.
+        const reviewHtml = result.reviewCount > 0
+          ? `<h3>Needs manual review — could not confirm, not necessarily dead (${result.reviewCount})</h3><ul>${result.review.map(liHtml).join('')}</ul>`
+          : ''
+        const reviewText = result.reviewCount > 0
+          ? `Needs manual review — could not confirm, not necessarily dead (${result.reviewCount}):\n${result.review.map(liText).join('\n')}\n`
+          : ''
+
+        // Subject leads with the more urgent number.
+        const subject = result.deadCount > 0
+          ? `[RoamReady] OHV link check: ${result.deadCount} dead${result.reviewCount > 0 ? `, ${result.reviewCount} to review` : ''}`
+          : `[RoamReady] OHV link check: ${result.reviewCount} link${result.reviewCount === 1 ? '' : 's'} need review`
+
         try {
           await resend.emails.send({
             from: process.env.FROM_EMAIL!, // runtime-guarded above; matches trial-ending
             reply_to: replyToEmail,
             to,
-            subject: `[RoamReady] OHV link check: ${result.deadCount} dead link${result.deadCount === 1 ? '' : 's'}`,
-            html: `<p>${result.deadCount} of ${result.total} OHV resource link(s) failed the monthly check (${result.checkedAt}).</p>${driftHtml}<ul>${rowsHtml}</ul><p>Fix in <code>client/src/constants/ohvStateResources.ts</code>, then regenerate <code>server/src/data/ohvLinks.json</code>.</p>`,
-            text: `${result.deadCount} of ${result.total} OHV resource link(s) failed the monthly check (${result.checkedAt}).\n${driftText}\n${rowsText}\n\nFix in client/src/constants/ohvStateResources.ts, then regenerate server/src/data/ohvLinks.json.`,
+            subject,
+            html: `<p>OHV link check (${result.checkedAt}): ${result.okCount} of ${result.total} healthy, ${result.deadCount} dead, ${result.reviewCount} to review.</p>${driftHtml}${deadHtml}${reviewHtml}<p>Fix dead links in <code>client/src/constants/ohvStateResources.ts</code> / <code>ohvStateExtraLinks.ts</code>, then regenerate <code>server/src/data/ohvLinks.json</code>. Review links are best checked in a browser — if a host is confirmed live-behind-WAF, add it to KNOWN_WAF_HOSTS in <code>ohvLinkCheck.ts</code>.</p>`,
+            text: `OHV link check (${result.checkedAt}): ${result.okCount} of ${result.total} healthy, ${result.deadCount} dead, ${result.reviewCount} to review.\n${driftText}\n${deadText}${deadText && reviewText ? '\n' : ''}${reviewText}\nFix dead links in client/src/constants/ohvStateResources.ts / ohvStateExtraLinks.ts, then regenerate server/src/data/ohvLinks.json. Review links are best checked in a browser — if a host is confirmed live-behind-WAF, add it to KNOWN_WAF_HOSTS in ohvLinkCheck.ts.`,
           })
-          console.log(`[cron:ohv-link-check] alerted ${to} about ${result.deadCount} dead link(s)`)
+          console.log(`[cron:ohv-link-check] alerted ${to}: ${result.deadCount} dead, ${result.reviewCount} review`)
         } catch (mailErr: any) {
           console.error('[cron:ohv-link-check] alert email failed:', mailErr?.message ?? mailErr)
         }
@@ -210,7 +239,9 @@ export async function ohvLinkCheck(req: Request, res: Response, next: NextFuncti
       total: result.total,
       okCount: result.okCount,
       deadCount: result.deadCount,
+      reviewCount: result.reviewCount,
       dead: result.dead,
+      review: result.review,
       driftWarning: result.driftWarning,
     })
   } catch (err) {
