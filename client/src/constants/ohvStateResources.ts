@@ -73,7 +73,7 @@ export const OHV_STATE_RESOURCES: OhvStateResource[] = [
   { state: 'Illinois', abbr: 'IL', agency: 'Illinois DNR — Offroad Trails', url: 'https://dnr.illinois.gov/parks/offroad.html', type: 'state-program', confidence: 'high' },
   { state: 'Indiana', abbr: 'IN', agency: 'Indiana DNR — Motorized Recreation', url: 'https://www.in.gov/dnr/state-parks/recreation/motorized-recreation/', type: 'state-program', confidence: 'high' },
   { state: 'Iowa', abbr: 'IA', agency: 'Iowa DNR — Off-Highway Vehicles', url: 'https://www.iowadnr.gov/things-do/highway-vehicles', type: 'state-program', confidence: 'high' },
-  { state: 'Kansas', abbr: 'KS', agency: 'Kansas Dept of Wildlife & Parks — ATV/Off-Road', url: 'https://ksoutdoors.gov/Services/Outdoor-Activities/ATV-Riding', type: 'state-program', confidence: 'medium' },
+  { state: 'Kansas', abbr: 'KS', agency: 'Kansas Tourism — Off-Roading & ORV Trails', url: 'https://www.travelks.com/blog/stories/post/kansas-off-roading-jeep-and-orv-trails/', type: 'state-program', confidence: 'medium' },
   { state: 'Kentucky', abbr: 'KY', agency: 'Kentucky Tourism — Off-Roading', url: 'https://www.kentuckytourism.com/things-to-do/outdoors/outdoor-recreation/off-roading', type: 'state-portal', confidence: 'medium' },
   { state: 'Louisiana', abbr: 'LA', agency: 'USFS Kisatchie National Forest — OHV', url: 'https://www.fs.usda.gov/r08/kisatchie/recreation/opportunities/highway-vehicles-ohv', type: 'usfs', confidence: 'medium' },
   { state: 'Maine', abbr: 'ME', agency: 'Maine Dept of Inland Fisheries & Wildlife — ATV', url: 'https://www.maine.gov/ifw/atv-snowmobile/atv/index.html', type: 'state-program', confidence: 'high' },
