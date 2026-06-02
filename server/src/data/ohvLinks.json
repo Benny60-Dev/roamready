@@ -1,5 +1,5 @@
 {
-  "_note": "Monitored copy of the URLs in client/src/constants/ohvStateResources.ts (OHV_NATIONAL_LINKS + OHV_STATE_RESOURCES). The server cannot import the client package, so this is a manual copy. The monthly link-checker (server/src/services/ohvLinkCheck.ts) warns on count drift vs EXPECTED_LINK_COUNT. Do not hand-edit URLs here — update the client file and regenerate. 4 national + 50 state = 54 entries.",
+  "_note": "Monitored copy of the URLs surfaced to riders: client/src/constants/ohvStateResources.ts (OHV_NATIONAL_LINKS + OHV_STATE_RESOURCES) plus client/src/constants/ohvStateExtraLinks.ts (OHV_STATE_EXTRA_LINKS). The server cannot import the client package, so this is a generated copy, de-duplicated by URL. The monthly link-checker (server/src/services/ohvLinkCheck.ts) warns on count drift vs EXPECTED_LINK_COUNT. Do not hand-edit URLs here — update the client files and regenerate. 4 national + 50 state authorities + 45 unique extra links = 99 entries.",
   "links": [
     {
       "label": "Recreation.gov",
@@ -216,6 +216,186 @@
     {
       "label": "Wyoming — Wyoming State Parks — ORV/Trails",
       "url": "https://wyoparks.wyo.gov/index.php/orv-trails"
+    },
+    {
+      "label": "Arizona — Arizona State Parks — Join an OHV Club",
+      "url": "https://azstateparks.com/join-an-ohv-club"
+    },
+    {
+      "label": "California — California Off-Road Vehicle Association (CORVA)",
+      "url": "https://corva.org/"
+    },
+    {
+      "label": "California — California Outdoor Recreation Foundation",
+      "url": "https://outdoorrecreationfoundation.org/"
+    },
+    {
+      "label": "Colorado — Colorado Off-Highway Vehicle Coalition (COHVCO)",
+      "url": "https://www.cohvco.org/"
+    },
+    {
+      "label": "Idaho — Idaho State ATV/UTV Association (ISATVA)",
+      "url": "https://idahostateatv.org/"
+    },
+    {
+      "label": "Iowa — Iowa Off-Highway Vehicle Association",
+      "url": "https://iowaohv.org/"
+    },
+    {
+      "label": "Michigan — Michigan ATV Association (MATVA)",
+      "url": "https://www.matva.org/"
+    },
+    {
+      "label": "Michigan — Michigan ORV/ATV Riding (Pure Michigan)",
+      "url": "https://www.michigan.org/orv-atv-riding"
+    },
+    {
+      "label": "Minnesota — All-Terrain Vehicle Association of Minnesota (ATV MN)",
+      "url": "https://atvmn.org/"
+    },
+    {
+      "label": "Montana — Montana Trail Vehicle Riders Association (MTVRA)",
+      "url": "https://mtvra.com/"
+    },
+    {
+      "label": "North Dakota — ND Parks & Rec — OHV Trails",
+      "url": "https://www.parkrec.nd.gov/business/recreation-programs/highway-vehicles-ohv/ohv-trails"
+    },
+    {
+      "label": "New Mexico — New Mexico Off-Highway Vehicle Alliance (NMOHVA)",
+      "url": "https://www.nmohva.org/"
+    },
+    {
+      "label": "New Mexico — Ride New Mexico — Where to Ride",
+      "url": "https://ridenm.dgf.nm.gov/ride/"
+    },
+    {
+      "label": "Nevada — Nevada Offroad Association (NVORA)",
+      "url": "https://www.nevadaoffroad.us/"
+    },
+    {
+      "label": "Nevada — Nevada Trail Finder (official)",
+      "url": "https://www.nevadatrailfinder.com/"
+    },
+    {
+      "label": "Oregon — Oregon State Parks — ATV Clubs & Volunteering",
+      "url": "https://www.oregon.gov/oprd/atv/pages/atv-volunteer-land-use.aspx"
+    },
+    {
+      "label": "Oregon — Oregon Motorcycle Riders Association (OMRA)",
+      "url": "https://www.omraoffroad.com/"
+    },
+    {
+      "label": "Utah — Utah ATV Association",
+      "url": "https://utahatv.com/"
+    },
+    {
+      "label": "Utah — Utah OHV Program — Clubs & Organizations",
+      "url": "https://recreation.utah.gov/off-highway-vehicles/additional-ohv-resources/ohv-clubs-organizations/"
+    },
+    {
+      "label": "Washington — Washington Off Highway Vehicle Alliance (WOHVA)",
+      "url": "https://www.wohva.org/"
+    },
+    {
+      "label": "Wyoming — Wyoming State Parks — ORV Clubs",
+      "url": "https://wyoparks.wyo.gov/index.php/orv-trails/orv-clubs-trails"
+    },
+    {
+      "label": "Wisconsin — Wisconsin ATV/UTV Association (WATVA)",
+      "url": "https://www.watva.org/"
+    },
+    {
+      "label": "Kansas — Kansas ATV Association (KATVA)",
+      "url": "https://katva.org/"
+    },
+    {
+      "label": "Nebraska — Nebraska Game & Parks — Explore Trails",
+      "url": "https://outdoornebraska.gov/parks/explore-trails/"
+    },
+    {
+      "label": "South Dakota — SD Game, Fish & Parks — ATVs & Off-Highway Vehicles",
+      "url": "https://gfp.sd.gov/atv/"
+    },
+    {
+      "label": "Indiana — Indiana DNR — Clubs & Organizations",
+      "url": "https://in.gov/dnr/state-parks/recreation/trails/off-roading"
+    },
+    {
+      "label": "Ohio — Ohio DNR — APV Riding",
+      "url": "https://ohiodnr.gov/go-and-do/find-a-trail/apv-riding"
+    },
+    {
+      "label": "Missouri — Missouri State Parks — ORV Riding",
+      "url": "https://mostateparks.com/activity/all_terrain_vehicle_riding"
+    },
+    {
+      "label": "Texas — Texas Motorized Trails Coalition (TMTC)",
+      "url": "https://tpwd.texas.gov/state-parks/texas-off-highway-program/ohv-other-resources"
+    },
+    {
+      "label": "Mississippi — MS Dept. of Wildlife, Fisheries & Parks — Recreational Trails",
+      "url": "https://www.mdwfp.com/parks-destinations/recreational-trails"
+    },
+    {
+      "label": "Alabama — Alabama State Parks — OHV Trail (Bucks Pocket)",
+      "url": "https://www.alapark.com/parks/bucks-pocket-state-park/ohv-trail"
+    },
+    {
+      "label": "Florida — Florida Trail Riders",
+      "url": "https://www.floridatrailriders.org/"
+    },
+    {
+      "label": "Tennessee — TWRA — North Cumberland WMA (OHV)",
+      "url": "https://www.tn.gov/twra/wildlife-management-areas/east-tennessee-r4/north-cumberland-wma.html"
+    },
+    {
+      "label": "South Carolina — Francis Marion & Sumter National Forests — OHV",
+      "url": "https://www.fs.usda.gov/r08/francismarionsumter/recreation/opportunities/highway-vehicles-ohv"
+    },
+    {
+      "label": "Virginia — Virginia.org — ATV & Spearhead Trails",
+      "url": "https://www.virginia.org/things-to-do/sports-and-recreation/atv-and-spearhead-trails/"
+    },
+    {
+      "label": "Pennsylvania — PA DCNR — ATV Trails in State Forests",
+      "url": "https://www.pa.gov/agencies/dcnr/recreation/what-to-do/atv-riding/atv-trails-in-state-forests"
+    },
+    {
+      "label": "New York — St. Lawrence County ATV Trail System",
+      "url": "https://www.visitstlc.com/atv-ride/"
+    },
+    {
+      "label": "Massachusetts — Mass.gov — Find a State Park OHV Riding Trail",
+      "url": "https://www.mass.gov/info-details/find-a-state-park-ohv-riding-trail"
+    },
+    {
+      "label": "Vermont — VT Forests, Parks & Recreation — All-Terrain Vehicles",
+      "url": "https://fpr.vermont.gov/recreation/activities/all-terrain-vehicles"
+    },
+    {
+      "label": "New Hampshire — NH Off-Highway Vehicle Association (NHOHVA)",
+      "url": "https://nhohva.org/"
+    },
+    {
+      "label": "New Hampshire — NH Fish & Game — Where to Ride OHRVs",
+      "url": "https://www.wildlife.nh.gov/highway-recreational-vehicles-ohrv-and-snowmobiles/where-ride-ohrvs-and-snowmobiles-new-hampshire"
+    },
+    {
+      "label": "Maine — ATV Maine",
+      "url": "https://www.atvmaine.org/"
+    },
+    {
+      "label": "Maine — Maine Bureau of Parks & Lands — ATV Trails",
+      "url": "https://www.maine.gov/dacf/parks/trail_activities/atv/atv-trails.shtml"
+    },
+    {
+      "label": "Delaware — Delaware DMV — Off-Highway Vehicles",
+      "url": "https://dmv.de.gov/VehicleServices/specialvehicles/index.shtml?dc=ve_reg_ohv"
+    },
+    {
+      "label": "New Jersey — NJ DEP — Division of Parks & Forestry",
+      "url": "https://dep.nj.gov/parksandforests/"
     }
   ]
 }

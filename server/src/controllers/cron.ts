@@ -142,7 +142,8 @@ export async function trialEndingReminder(req: Request, res: Response, next: Nex
 }
 
 /** Monthly OHV link-checker. Pings every URL in server/src/data/ohvLinks.json
- *  (54: 4 national + 50 state), persists the result for the owner-only admin
+ *  (99: 4 national + 50 state authorities + 45 unique supplemental links),
+ *  persists the result for the owner-only admin
  *  view, and emails ADMIN_EMAIL ONLY when one or more links are dead (silent on
  *  a fully-healthy run). Scheduling: external caller hits this monthly. Returns
  *  a summary like the other cron handlers.
