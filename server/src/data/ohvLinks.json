@@ -1,5 +1,5 @@
 {
-  "_note": "Monitored copy of the URLs surfaced to riders: client/src/constants/ohvStateResources.ts (OHV_NATIONAL_LINKS + OHV_STATE_RESOURCES) plus client/src/constants/ohvStateExtraLinks.ts (OHV_STATE_EXTRA_LINKS). The server cannot import the client package, so this is a generated copy, de-duplicated by URL. The monthly link-checker (server/src/services/ohvLinkCheck.ts) warns on count drift vs EXPECTED_LINK_COUNT. Do not hand-edit URLs here — update the client files and regenerate. 4 national + 50 state authorities + 44 unique extra links = 98 entries.",
+  "_note": "Monitored copy of the URLs surfaced to riders: client/src/constants/ohvStateResources.ts (OHV_NATIONAL_LINKS + OHV_STATE_RESOURCES) plus client/src/constants/ohvStateExtraLinks.ts (OHV_STATE_EXTRA_LINKS). The server cannot import the client package, so this is a generated copy, de-duplicated by URL. The monthly link-checker (server/src/services/ohvLinkCheck.ts) warns on count drift vs EXPECTED_LINK_COUNT. Do not hand-edit URLs here — update the client files and regenerate. 4 national + 50 state authorities + 43 unique extra links = 97 entries.",
   "links": [
     {
       "label": "Recreation.gov",
@@ -231,7 +231,7 @@
     },
     {
       "label": "Colorado — Colorado Off-Highway Vehicle Coalition (COHVCO)",
-      "url": "https://www.cohvco.org/"
+      "url": "https://cohvco.clubexpress.com/"
     },
     {
       "label": "Idaho — Idaho State ATV/UTV Association (ISATVA)",
@@ -287,7 +287,7 @@
     },
     {
       "label": "Utah — Utah OHV Program — Clubs & Organizations",
-      "url": "https://recreation.utah.gov/off-highway-vehicles/additional-ohv-resources/ohv-clubs-organizations/"
+      "url": "https://recreation.utah.gov/local-ohv-clubs-organizations/"
     },
     {
       "label": "Washington — Washington Off Highway Vehicle Alliance (WOHVA)",
@@ -300,10 +300,6 @@
     {
       "label": "Wisconsin — Wisconsin ATV/UTV Association (WATVA)",
       "url": "https://www.watva.org/"
-    },
-    {
-      "label": "Kansas — Kansas ATV Association (KATVA)",
-      "url": "https://katva.org/"
     },
     {
       "label": "Nebraska — Nebraska Game & Parks — Explore Trails",

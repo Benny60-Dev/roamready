@@ -34,7 +34,7 @@ export const OHV_STATE_EXTRA_LINKS: Record<string, OhvStateExtra> = {
     { name: 'California Outdoor Recreation Foundation', url: 'https://outdoorrecreationfoundation.org/', kind: 'association' },
   ]},
   CO: { links: [
-    { name: 'Colorado Off-Highway Vehicle Coalition (COHVCO)', url: 'https://www.cohvco.org/', kind: 'association' },
+    { name: 'Colorado Off-Highway Vehicle Coalition (COHVCO)', url: 'https://cohvco.clubexpress.com/', kind: 'association' },
   ]},
   ID: { links: [
     { name: 'Idaho State ATV/UTV Association (ISATVA)', url: 'https://idahostateatv.org/', kind: 'association' },
@@ -68,7 +68,7 @@ export const OHV_STATE_EXTRA_LINKS: Record<string, OhvStateExtra> = {
   ]},
   UT: { links: [
     { name: 'Utah ATV Association', url: 'https://utahatv.com/', kind: 'association' },
-    { name: 'Utah OHV Program — Clubs & Organizations', url: 'https://recreation.utah.gov/off-highway-vehicles/additional-ohv-resources/ohv-clubs-organizations/', kind: 'official-directory' },
+    { name: 'Utah OHV Program — Clubs & Organizations', url: 'https://recreation.utah.gov/local-ohv-clubs-organizations/', kind: 'official-directory' },
   ]},
   WA: { links: [
     { name: 'Washington Off Highway Vehicle Alliance (WOHVA)', url: 'https://www.wohva.org/', kind: 'association' },
@@ -78,9 +78,6 @@ export const OHV_STATE_EXTRA_LINKS: Record<string, OhvStateExtra> = {
   ]},
   WI: { links: [
     { name: 'Wisconsin ATV/UTV Association (WATVA)', url: 'https://www.watva.org/', kind: 'association' },
-  ]},
-  KS: { links: [
-    { name: 'Kansas ATV Association (KATVA)', url: 'https://katva.org/', kind: 'association' },
   ]},
   NE: { links: [
     { name: 'Nebraska Game & Parks — Explore Trails', url: 'https://outdoornebraska.gov/parks/explore-trails/', kind: 'where-to-ride' },
