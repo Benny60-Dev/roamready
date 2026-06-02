@@ -1,5 +1,5 @@
 {
-  "_note": "Monitored copy of the URLs surfaced to riders: client/src/constants/ohvStateResources.ts (OHV_NATIONAL_LINKS + OHV_STATE_RESOURCES) plus client/src/constants/ohvStateExtraLinks.ts (OHV_STATE_EXTRA_LINKS). The server cannot import the client package, so this is a generated copy, de-duplicated by URL. The monthly link-checker (server/src/services/ohvLinkCheck.ts) warns on count drift vs EXPECTED_LINK_COUNT. Do not hand-edit URLs here — update the client files and regenerate. 4 national + 50 state authorities + 45 unique extra links = 99 entries.",
+  "_note": "Monitored copy of the URLs surfaced to riders: client/src/constants/ohvStateResources.ts (OHV_NATIONAL_LINKS + OHV_STATE_RESOURCES) plus client/src/constants/ohvStateExtraLinks.ts (OHV_STATE_EXTRA_LINKS). The server cannot import the client package, so this is a generated copy, de-duplicated by URL. The monthly link-checker (server/src/services/ohvLinkCheck.ts) warns on count drift vs EXPECTED_LINK_COUNT. Do not hand-edit URLs here — update the client files and regenerate. 4 national + 50 state authorities + 44 unique extra links = 98 entries.",
   "links": [
     {
       "label": "Recreation.gov",
@@ -242,10 +242,6 @@
       "url": "https://iowaohv.org/"
     },
     {
-      "label": "Michigan — Michigan ATV Association (MATVA)",
-      "url": "https://www.matva.org/"
-    },
-    {
       "label": "Michigan — Michigan ORV/ATV Riding (Pure Michigan)",
       "url": "https://www.michigan.org/orv-atv-riding"
     },
@@ -275,7 +271,7 @@
     },
     {
       "label": "Nevada — Nevada Trail Finder (official)",
-      "url": "https://www.nevadatrailfinder.com/"
+      "url": "https://www.nvtrailfinder.com/trails"
     },
     {
       "label": "Oregon — Oregon State Parks — ATV Clubs & Volunteering",
@@ -343,7 +339,7 @@
     },
     {
       "label": "Florida — Florida Trail Riders",
-      "url": "https://www.floridatrailriders.org/"
+      "url": "https://floridatrailriders.com/"
     },
     {
       "label": "Tennessee — TWRA — North Cumberland WMA (OHV)",

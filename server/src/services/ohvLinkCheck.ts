@@ -14,9 +14,9 @@ import path from 'path'
 // package or a build step, not worth it for a monthly maintenance job. If you
 // add/remove a state in the client list, regenerate the JSON and bump this.
 //
-// 99 = 4 national + 50 state authorities (ohvStateResources.ts) + 45 unique
+// 98 = 4 national + 50 state authorities (ohvStateResources.ts) + 44 unique
 // supplemental links (ohvStateExtraLinks.ts, de-duplicated by URL).
-const EXPECTED_LINK_COUNT = 99
+const EXPECTED_LINK_COUNT = 98
 
 const REQUEST_TIMEOUT_MS = 10_000
 const BATCH_SIZE = 6 // be polite to .gov servers — check in small batches
