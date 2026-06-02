@@ -8,6 +8,10 @@ import {
   type OhvResourceLink,
   type OhvStateResource,
 } from '../constants/ohvStateResources'
+import {
+  OHV_STATE_EXTRA_LINKS,
+  type OhvStateExtra,
+} from '../constants/ohvStateExtraLinks'
 
 // Curated OHV resources, shown when the live Rec.gov search is empty/blocked.
 // Presentational only — no data fetching. The page passes the user's state
@@ -20,6 +24,36 @@ const NATIONAL_ICON: Record<string, LucideIcon> = {
   'USFS Motor Vehicle Use Maps': Map,
   'BLM Off-Highway Vehicle': Mountain,
   'Tread Lightly!': Leaf,
+}
+
+// Supplemental per-state links (rider associations, "where to ride", etc.),
+// rendered beneath the single official authority. Presentational only — same
+// inline-anchor idiom as the rest of the block. Renders nothing when a state
+// has no extra record. The cards above are themselves <a> elements, so these
+// must render as siblings, never nested anchors.
+function OhvExtraLinks({ extra, compact }: { extra?: OhvStateExtra; compact?: boolean }) {
+  if (!extra) return null
+  return (
+    <div className="space-y-1.5 mt-2">
+      {extra.note && <p className="text-gray-500 text-xs">{extra.note}</p>}
+      {extra.links.map(link => (
+        <a
+          key={link.url}
+          href={link.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-start gap-2 p-2.5 rounded-lg border border-gray-200 hover:bg-[#E0F0F4] transition-colors"
+        >
+          <div className="flex-1 min-w-0">
+            <div className={`flex items-center gap-1 font-medium text-gray-900 ${compact ? 'text-xs' : 'text-sm'}`}>
+              {link.name}
+              <ExternalLink size={compact ? 11 : 12} className="text-gray-400 flex-shrink-0" aria-hidden="true" />
+            </div>
+          </div>
+        </a>
+      ))}
+    </div>
+  )
 }
 
 export default function OhvResourceBlock({ userState }: { userState?: string | null }) {
@@ -83,6 +117,7 @@ export default function OhvResourceBlock({ userState }: { userState?: string | n
               <p className="text-xs text-gray-500 mt-0.5">{matchedState.state}</p>
             </div>
           </a>
+          <OhvExtraLinks extra={OHV_STATE_EXTRA_LINKS[matchedState.abbr]} />
         </div>
       )}
 
@@ -110,21 +145,23 @@ export default function OhvResourceBlock({ userState }: { userState?: string | n
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {filtered.map(r => (
-              <a
-                key={r.abbr}
-                href={r.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-start gap-2 p-2.5 rounded-lg border border-gray-200 hover:bg-[#E0F0F4] transition-colors"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1 text-xs font-medium text-gray-900">
-                    {r.state}
-                    <ExternalLink size={11} className="text-gray-400 flex-shrink-0" aria-hidden="true" />
+              <div key={r.abbr} className="self-start">
+                <a
+                  href={r.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-start gap-2 p-2.5 rounded-lg border border-gray-200 hover:bg-[#E0F0F4] transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1 text-xs font-medium text-gray-900">
+                      {r.state}
+                      <ExternalLink size={11} className="text-gray-400 flex-shrink-0" aria-hidden="true" />
+                    </div>
+                    <p className="text-[11px] text-gray-500 truncate">{r.agency}</p>
                   </div>
-                  <p className="text-[11px] text-gray-500 truncate">{r.agency}</p>
-                </div>
-              </a>
+                </a>
+                <OhvExtraLinks extra={OHV_STATE_EXTRA_LINKS[r.abbr]} compact />
+              </div>
             ))}
           </div>
         )}

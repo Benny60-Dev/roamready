@@ -13,7 +13,10 @@ import path from 'path'
 // is intentionally coarse (count only) — a richer diff would need a shared
 // package or a build step, not worth it for a monthly maintenance job. If you
 // add/remove a state in the client list, regenerate the JSON and bump this.
-const EXPECTED_LINK_COUNT = 54
+//
+// 99 = 4 national + 50 state authorities (ohvStateResources.ts) + 45 unique
+// supplemental links (ohvStateExtraLinks.ts, de-duplicated by URL).
+const EXPECTED_LINK_COUNT = 99
 
 const REQUEST_TIMEOUT_MS = 10_000
 const BATCH_SIZE = 6 // be polite to .gov servers — check in small batches
