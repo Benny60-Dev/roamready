@@ -125,7 +125,7 @@ export const OHV_STATE_EXTRA_LINKS: Record<string, OhvStateExtra> = {
     { name: 'Chattahoochee-Oconee National Forest — OHV', url: 'https://www.fs.usda.gov/r08/chattahoochee-oconee/recreation/opportunities/highway-vehicles-ohv', kind: 'where-to-ride' },
   ]},
   FL: { links: [
-    { name: 'Florida Trail Riders', url: 'https://floridatrailriders.com/', kind: 'association' },
+    { name: 'USFS National Forests in Florida — OHV (Ocala NF)', url: 'https://www.fs.usda.gov/r08/florida/recreation/opportunities/highway-vehicles-ohv', kind: 'where-to-ride' },
   ]},
   TN: { links: [
     { name: 'TWRA — North Cumberland WMA (OHV)', url: 'https://www.tn.gov/twra/wildlife-management-areas/east-tennessee-r4/north-cumberland-wma.html', kind: 'where-to-ride' },
