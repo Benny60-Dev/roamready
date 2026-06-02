@@ -79,6 +79,7 @@ export const OHV_STATE_EXTRA_LINKS: Record<string, OhvStateExtra> = {
   WI: { links: [
     { name: 'Wisconsin ATV/UTV Association (WATVA)', url: 'https://www.watva.org/', kind: 'association' },
   ]},
+  KS: { links: [], note: 'Kansas has no ATV/off-road trails on state parks, wildlife areas, or fishing lakes. Riding is on private parks, Army Corps lakes, and Syracuse Sand Dunes. See the state authority for rules.' },
   NE: { links: [
     { name: 'Nebraska Game & Parks — Explore Trails', url: 'https://outdoornebraska.gov/parks/explore-trails/', kind: 'where-to-ride' },
     { name: 'Nebraska National Forest — Off-Highway Vehicles', url: 'https://www.fs.usda.gov/r02/nebraska/recreation/opportunities/highway-vehicles-ohv', kind: 'where-to-ride' },
