@@ -59,7 +59,7 @@ export const OHV_RESOURCE_DISCLAIMER =
 // ---- Verified per-state OHV authorities (all 50) ----
 export const OHV_STATE_RESOURCES: OhvStateResource[] = [
   { state: 'Alabama', abbr: 'AL', agency: 'Alabama Recreation Trails (OHV)', url: 'https://alabamarecreationtrails.org/activity/ohv-jeeps/', type: 'state-portal', confidence: 'medium' },
-  { state: 'Alaska', abbr: 'AK', agency: 'Alaska Public Lands Info Centers — ATV Riding', url: 'https://www.alaskacenters.gov/explore/things-to-do/all-terrain-vehicle-riding', type: 'state-portal', confidence: 'medium' },
+  { state: 'Alaska', abbr: 'AK', agency: 'BLM Alaska — Off-Highway Vehicles', url: 'https://www.blm.gov/programs/recreation/recreation-activities/alaska', type: 'state-portal', confidence: 'high' },
   { state: 'Arizona', abbr: 'AZ', agency: 'Arizona State Parks OHV Program', url: 'https://azstateparks.com/ohv', type: 'state-program', confidence: 'high' },
   { state: 'Arkansas', abbr: 'AR', agency: 'Arkansas Tourism — Off-Roading & ATV', url: 'https://www.arkansas.com/experiences/discover/all-experiences/off-roading-atv', type: 'state-portal', confidence: 'medium' },
   { state: 'California', abbr: 'CA', agency: 'California State Parks OHMVR Division', url: 'https://ohv.parks.ca.gov', type: 'state-program', confidence: 'high' },
