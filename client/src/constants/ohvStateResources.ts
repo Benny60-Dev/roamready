@@ -99,7 +99,7 @@ export const OHV_STATE_RESOURCES: OhvStateResource[] = [
   { state: 'Rhode Island', abbr: 'RI', agency: 'RI Dept of Environmental Management', url: 'https://dem.ri.gov/', type: 'registration', confidence: 'medium' },
   { state: 'South Carolina', abbr: 'SC', agency: 'SC Trails (State Trails / OHV)', url: 'https://www.sctrails.net/', type: 'state-portal', confidence: 'medium' },
   { state: 'South Dakota', abbr: 'SD', agency: 'USFS Black Hills National Forest — OHV', url: 'https://www.fs.usda.gov/r02/blackhills/recreation/opportunities/highway-vehicles-ohv', type: 'usfs', confidence: 'high' },
-  { state: 'Tennessee', abbr: 'TN', agency: 'TWRA — Go Outdoors Tennessee (permits)', url: 'https://www.gooutdoorstennessee.com/', type: 'state-program', confidence: 'medium' },
+  { state: 'Tennessee', abbr: 'TN', agency: 'TWRA — North Cumberland WMA (OHV)', url: 'https://www.tn.gov/twra/wildlife-management-areas/east-tennessee-r4/north-cumberland-wma.html', type: 'state-program', confidence: 'high' },
   { state: 'Texas', abbr: 'TX', agency: 'Texas Parks & Wildlife — Off-Highway Program', url: 'https://tpwd.texas.gov/state-parks/texas-off-highway-program', type: 'state-program', confidence: 'high' },
   { state: 'Utah', abbr: 'UT', agency: 'Utah Division of Outdoor Recreation', url: 'https://recreation.utah.gov', type: 'state-program', confidence: 'high' },
   { state: 'Vermont', abbr: 'VT', agency: "Vermont ATV Sportsman's Association (VASA)", url: 'https://www.vtvasa.org/', type: 'authority', confidence: 'high' },
