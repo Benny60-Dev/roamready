@@ -43,7 +43,6 @@ export const OHV_STATE_EXTRA_LINKS: Record<string, OhvStateExtra> = {
     { name: 'Iowa Off-Highway Vehicle Association', url: 'https://iowaohv.org/', kind: 'association' },
   ]},
   MI: { links: [
-    { name: 'Michigan ATV Association (MATVA)', url: 'https://www.matva.org/', kind: 'association' },
     { name: 'Michigan ORV/ATV Riding (Pure Michigan)', url: 'https://www.michigan.org/orv-atv-riding', kind: 'where-to-ride' },
   ]},
   MN: { links: [
@@ -61,7 +60,7 @@ export const OHV_STATE_EXTRA_LINKS: Record<string, OhvStateExtra> = {
   ]},
   NV: { links: [
     { name: 'Nevada Offroad Association (NVORA)', url: 'https://www.nevadaoffroad.us/', kind: 'association' },
-    { name: 'Nevada Trail Finder (official)', url: 'https://www.nevadatrailfinder.com/', kind: 'where-to-ride' },
+    { name: 'Nevada Trail Finder (official)', url: 'https://www.nvtrailfinder.com/trails', kind: 'where-to-ride' },
   ]},
   OR: { links: [
     { name: 'Oregon State Parks — ATV Clubs & Volunteering', url: 'https://www.oregon.gov/oprd/atv/pages/atv-volunteer-land-use.aspx', kind: 'official-directory' },
@@ -126,7 +125,7 @@ export const OHV_STATE_EXTRA_LINKS: Record<string, OhvStateExtra> = {
     { name: 'Chattahoochee-Oconee National Forest — OHV', url: 'https://www.fs.usda.gov/r08/chattahoochee-oconee/recreation/opportunities/highway-vehicles-ohv', kind: 'where-to-ride' },
   ]},
   FL: { links: [
-    { name: 'Florida Trail Riders', url: 'https://www.floridatrailriders.org/', kind: 'association' },
+    { name: 'Florida Trail Riders', url: 'https://floridatrailriders.com/', kind: 'association' },
   ]},
   TN: { links: [
     { name: 'TWRA — North Cumberland WMA (OHV)', url: 'https://www.tn.gov/twra/wildlife-management-areas/east-tennessee-r4/north-cumberland-wma.html', kind: 'where-to-ride' },
