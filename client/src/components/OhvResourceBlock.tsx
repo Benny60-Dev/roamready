@@ -149,7 +149,14 @@ export default function OhvResourceBlock({ userState }: { userState?: string | n
             id="ohv-state-search"
             type="text"
             value={query}
-            onChange={e => { setQuery(e.target.value); setTouched(true) }}
+            onChange={e => {
+              const v = e.target.value
+              setQuery(v)
+              setTouched(true)
+              // Emptying the box clears the manual selection's result panel; if a
+              // GPS state exists, fall back to it (the on-load panel), else none.
+              if (v.trim().length === 0) setSelected(gpsMatch ?? null)
+            }}
             onKeyDown={e => {
               if (e.key === 'Enter' && matches.length === 1) {
                 e.preventDefault()
