@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ExternalLink, Tent, Map, Mountain, Leaf, Search, MapPin } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -56,17 +56,55 @@ function OhvExtraLinks({ extra, compact }: { extra?: OhvStateExtra; compact?: bo
   )
 }
 
+const MAX_MATCHES = 8
+
 export default function OhvResourceBlock({ userState }: { userState?: string | null }) {
   const [query, setQuery] = useState('')
+  const [selected, setSelected] = useState<OhvStateResource | null>(null)
+  // Once the user types or picks a state, stop letting a late-arriving GPS
+  // result override their choice (the geocode resolves async after mount).
+  const [touched, setTouched] = useState(false)
 
-  const matchedState: OhvStateResource | undefined = userState
-    ? OHV_STATE_RESOURCES.find(r => r.state.toLowerCase() === userState.trim().toLowerCase())
-    : undefined
+  // GPS-derived state, matched by full name (case-insensitive), same as before.
+  const gpsMatch = useMemo<OhvStateResource | undefined>(
+    () =>
+      userState
+        ? OHV_STATE_RESOURCES.find(r => r.state.toLowerCase() === userState.trim().toLowerCase())
+        : undefined,
+    [userState],
+  )
+
+  // Pre-fill from GPS on mount / when it resolves, unless the user already acted.
+  useEffect(() => {
+    if (!touched && gpsMatch) {
+      setSelected(gpsMatch)
+      setQuery(gpsMatch.state)
+    }
+  }, [gpsMatch, touched])
 
   const q = query.trim().toLowerCase()
-  const filtered = q
-    ? OHV_STATE_RESOURCES.filter(r => r.state.toLowerCase().includes(q))
-    : OHV_STATE_RESOURCES
+  // Show matches while the user is actively typing a query that differs from
+  // the currently-selected state's name (so a selection collapses the list).
+  const showMatches = q.length >= 1 && q !== (selected?.state.toLowerCase() ?? '')
+
+  const matches = useMemo<OhvStateResource[]>(() => {
+    if (!showMatches) return []
+    return OHV_STATE_RESOURCES
+      .filter(r => r.state.toLowerCase().includes(q))
+      .sort((a, b) => {
+        // Names that START WITH the query rank above those that merely contain it.
+        const aStarts = a.state.toLowerCase().startsWith(q) ? 0 : 1
+        const bStarts = b.state.toLowerCase().startsWith(q) ? 0 : 1
+        return aStarts - bStarts || a.state.localeCompare(b.state)
+      })
+      .slice(0, MAX_MATCHES)
+  }, [showMatches, q])
+
+  const selectState = (r: OhvStateResource) => {
+    setSelected(r)
+    setQuery(r.state)
+    setTouched(true)
+  }
 
   return (
     <div className="space-y-5">
@@ -98,71 +136,75 @@ export default function OhvResourceBlock({ userState }: { userState?: string | n
         </div>
       </div>
 
-      {/* 2 — "Your state" highlight (only when GPS-derived state matches a record) */}
-      {matchedState && (
-        <div>
-          <h2 className="text-sm font-medium text-gray-700 mb-2">Your state</h2>
-          <a
-            href={matchedState.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="card border-2 border-[#1F6F8B] flex items-start gap-3 hover:bg-[#E0F0F4] transition-colors"
-          >
-            <MapPin size={18} className="text-[#1F6F8B] mt-0.5 flex-shrink-0" aria-hidden="true" />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1 text-sm font-medium text-gray-900">
-                {matchedState.agency}
-                <ExternalLink size={12} className="text-gray-400 flex-shrink-0" aria-hidden="true" />
-              </div>
-              <p className="text-xs text-gray-500 mt-0.5">{matchedState.state}</p>
-            </div>
-          </a>
-          <OhvExtraLinks extra={OHV_STATE_EXTRA_LINKS[matchedState.abbr]} />
-        </div>
-      )}
-
-      {/* 3 — Browse all states */}
+      {/* 2 — Find your state (type-ahead). Pre-filled from GPS on load; the
+            result panel folds in the former "Your state" highlight so a state
+            is never shown twice. */}
       <div>
-        <div className="flex items-center justify-between mb-2 gap-2">
-          <h2 className="text-sm font-medium text-gray-700">Browse all states</h2>
-          <span className="text-xs text-gray-400 flex-shrink-0">
-            {filtered.length} OHV program{filtered.length === 1 ? '' : 's'}
-          </span>
-        </div>
-        <div className="relative mb-3">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+        <label htmlFor="ohv-state-search" className="block text-sm font-medium text-gray-700 mb-2">
+          Find your state
+        </label>
+        <div className="relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden="true" />
           <input
+            id="ohv-state-search"
             type="text"
             value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Find your state…"
-            aria-label="Find your state"
+            onChange={e => { setQuery(e.target.value); setTouched(true) }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && matches.length === 1) {
+                e.preventDefault()
+                selectState(matches[0])
+              }
+            }}
+            placeholder="Type a state name…"
+            autoComplete="off"
             className="input pl-9"
           />
         </div>
-        {filtered.length === 0 ? (
-          <p className="text-sm text-gray-400 py-4 text-center">No state matches “{query}”.</p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {filtered.map(r => (
-              <div key={r.abbr} className="self-start">
-                <a
-                  href={r.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-start gap-2 p-2.5 rounded-lg border border-gray-200 hover:bg-[#E0F0F4] transition-colors"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1 text-xs font-medium text-gray-900">
-                      {r.state}
-                      <ExternalLink size={11} className="text-gray-400 flex-shrink-0" aria-hidden="true" />
+
+        {/* Match list — sits directly under the input (not hidden by the keyboard) */}
+        {showMatches && (
+          matches.length === 0 ? (
+            <p className="text-sm text-gray-400 mt-2">No match — check spelling.</p>
+          ) : (
+            <ul className="mt-2 space-y-1">
+              {matches.map(r => (
+                <li key={r.abbr}>
+                  <button
+                    type="button"
+                    onClick={() => selectState(r)}
+                    className="w-full text-left flex items-center gap-2 p-2.5 min-h-[44px] rounded-lg border border-gray-200 hover:bg-[#E0F0F4] transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-900">{r.state}</div>
+                      <p className="text-xs text-gray-500 truncate">{r.agency}</p>
                     </div>
-                    <p className="text-[11px] text-gray-500 truncate">{r.agency}</p>
-                  </div>
-                </a>
-                <OhvExtraLinks extra={OHV_STATE_EXTRA_LINKS[r.abbr]} compact />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )
+        )}
+
+        {/* Result panel — selected state's authority + extras (+ note). */}
+        {selected && !showMatches && (
+          <div className="mt-3">
+            <a
+              href={selected.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="card border-2 border-[#1F6F8B] flex items-start gap-3 hover:bg-[#E0F0F4] transition-colors"
+            >
+              <MapPin size={18} className="text-[#1F6F8B] mt-0.5 flex-shrink-0" aria-hidden="true" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1 text-sm font-medium text-gray-900">
+                  {selected.agency}
+                  <ExternalLink size={12} className="text-gray-400 flex-shrink-0" aria-hidden="true" />
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">{selected.state}</p>
               </div>
-            ))}
+            </a>
+            <OhvExtraLinks extra={OHV_STATE_EXTRA_LINKS[selected.abbr]} />
           </div>
         )}
       </div>
