@@ -1,13 +1,14 @@
 import { useCallback, useState, useRef, useEffect, type CSSProperties } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { MapPin, Tent, Users, Loader, Plus, X, Sparkles, ChevronDown, ChevronUp, ChevronRight, Check, Info } from 'lucide-react'
-import { aiApi, sessionsApi, tripsApi } from '../services/api'
+import { aiApi, sessionsApi, tripsApi, usersApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import { ChatMessage, Trip, Rig } from '../types'
 import { VEHICLE_LABELS } from './profile/RigPage'
 import BottomSheet from '../components/ui/BottomSheet'
 import ConfirmModal from '../components/ui/ConfirmModal'
 import ConfirmVehiclesModal, { type ConfirmVehiclesResult } from '../components/trip/ConfirmVehiclesModal'
+import SaveHomeAddressModal from '../components/trip/SaveHomeAddressModal'
 import TripCard from '../components/trip/TripCard'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
 import { useVoiceInput } from '../hooks/useVoiceInput'
@@ -241,9 +242,18 @@ export default function SessionPage() {
   // through with the pre-Block-8 behavior in that case.
   const [confirmVehiclesOpen, setConfirmVehiclesOpen] = useState(false)
 
+  // First-trip home-address capture. When a user promotes their first trip and
+  // has no saved home address yet, we stash the resolved starting location here
+  // to drive the SaveHomeAddressModal opt-in. The trip is already built; this
+  // only gates the hop to its map. null = no prompt pending.
+  const [saveHomePrompt, setSaveHomePrompt] = useState<
+    { tripId: string; address: string; city?: string; state?: string } | null
+  >(null)
+  const [savingHome, setSavingHome] = useState(false)
+
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
-  const { user } = useAuthStore()
+  const { user, setUser } = useAuthStore()
   const navigate = useNavigate()
 
   // Apple-style press-to-start / press-to-stop dictation. The hook captures
@@ -714,6 +724,26 @@ export default function SessionPage() {
       // Clear the visit flag so SessionNewPage doesn't try to silent-route them
       // back to a session that's now COMPLETED.
       sessionStorage.removeItem('lastVisitedSessionId')
+
+      // First-trip home-address capture. If the user has no saved home address
+      // yet and we resolved a real starting location, offer to remember it (the
+      // SaveHomeAddressModal is opt-in only). The trip is fully built at this
+      // point — the modal just gates navigation to the map so the user decides
+      // before leaving the canvas. Override-safe: this is the ONLY writer of
+      // User.home* outside /profile, and it fires only when homeLocation is
+      // empty, so a one-off per-trip start never overwrites a saved home.
+      const startStop = itinerary.stops?.[0]
+      const startState: string | undefined = startStop?.locationState || undefined
+      if (!user?.homeLocation && homeStopName && homeStopName !== 'Start') {
+        setCreating(false)
+        setSaveHomePrompt({
+          tripId,
+          address: [homeStopName, startState].filter(Boolean).join(', '),
+          city: homeStopName,
+          state: startState,
+        })
+        return
+      }
       navigate(`/trips/${tripId}/map`)
     } catch (e: any) {
       console.error('[buildItinerary] failed:', e)
@@ -728,6 +758,37 @@ export default function SessionPage() {
       setBuildError(e?.response?.data?.message || e?.message || 'Something went wrong. Please try again.')
       setCreating(false)
     }
+  }
+
+  // Resolve the first-trip home-address opt-in, then proceed to the trip map.
+  // saveAsHome=true persists the starting location to the user's profile;
+  // false (Continue with the box unchecked, Escape, or backdrop) saves nothing.
+  async function handleSaveHomeDone(saveAsHome: boolean) {
+    const prompt = saveHomePrompt
+    if (!prompt) return
+    if (saveAsHome) {
+      setSavingHome(true)
+      try {
+        // Send the city-level fields we have; the /users/me getMe geocode
+        // backfill fills lat/lng/street/zip on the next profile load.
+        const res = await usersApi.updateMe({
+          homeLocation: prompt.address,
+          homeCity: prompt.city,
+          homeState: prompt.state,
+        })
+        setUser({ ...user!, ...res.data })
+      } catch (e) {
+        // Non-fatal: the opt-in is a convenience. If the save fails, don't
+        // strand the user away from their freshly built trip — they can set
+        // a home address later from their profile.
+        console.error('[SaveHomeAddress] updateMe failed (non-fatal):', e)
+      } finally {
+        setSavingHome(false)
+      }
+    }
+    const tripId = prompt.tripId
+    setSaveHomePrompt(null)
+    navigate(`/trips/${tripId}/map`)
   }
 
   const cleanText = (text: string) => text
@@ -1622,6 +1683,16 @@ export default function SessionPage() {
           }}
         />
       )}
+
+      {/* First-trip home-address opt-in. Opens after a successful promote when
+          the user has no saved home address yet; gates the hop to the trip map.
+          See buildItinerary + handleSaveHomeDone. */}
+      <SaveHomeAddressModal
+        isOpen={!!saveHomePrompt}
+        address={saveHomePrompt?.address || ''}
+        isSaving={savingHome}
+        onDone={handleSaveHomeDone}
+      />
     </div>
 
     {/* Continue planning strip — sibling of the viewport-locked canvas above so it
