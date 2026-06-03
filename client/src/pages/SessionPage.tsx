@@ -1511,7 +1511,7 @@ export default function SessionPage() {
           ) : (
             // ── Active conversation: history + bottom-pinned input ────────────
             <>
-              <div className="flex-1 overflow-y-auto space-y-3 pb-2">
+              <div className="flex-1 min-w-0 overflow-y-auto space-y-3 pb-2">
                 {messages.map((msg, i) => (
                   <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div
@@ -1522,7 +1522,7 @@ export default function SessionPage() {
                       }`}
                       style={{ borderWidth: '0.5px' }}
                     >
-                      <p className="whitespace-pre-wrap">{cleanText(msg.content)}</p>
+                      <p className="whitespace-pre-wrap break-words">{cleanText(msg.content)}</p>
                     </div>
                   </div>
                 ))}
