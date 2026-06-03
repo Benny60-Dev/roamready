@@ -5,6 +5,7 @@ import { useUIStore } from './store/uiStore'
 
 // Layout
 import AppLayout from './components/layout/AppLayout'
+import ScrollToTop from './components/ScrollToTop'
 
 // Public pages
 import LandingPage from './pages/LandingPage'
@@ -107,6 +108,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <Suspense fallback={null}>
       <Routes>
         {/* Public */}
