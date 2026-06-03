@@ -1507,6 +1507,20 @@ export default function SessionPage() {
                   )}
                 </div>
               </div>
+
+              {/* Below-the-fold cue: the Continue-planning strip sits beneath
+                  this canvas, so once Home anchors at the top its trips are out
+                  of view. A muted, non-CTA hint (gated on the same
+                  showContinueStrip condition + live count) nudges the user to
+                  scroll. Hidden entirely when there are no in-progress trips. */}
+              {showContinueStrip && (
+                <p
+                  style={{ marginTop: 24, fontSize: 12, color: '#888780', display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <span aria-hidden="true">↓</span>
+                  {planningTrips.length} {planningTrips.length === 1 ? 'trip' : 'trips'} in progress — scroll to see them
+                </p>
+              )}
             </div>
           ) : (
             // ── Active conversation: history + bottom-pinned input ────────────
