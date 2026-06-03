@@ -12,7 +12,7 @@ interface FormData {
 export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { setUser, setToken } = useAuthStore()
+  const { setUser, setToken, rehydrateUser } = useAuthStore()
   const navigate = useNavigate()
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>()
 
@@ -23,6 +23,12 @@ export default function LoginPage() {
       const res = await authApi.login(data.email, data.password)
       setToken(res.data.accessToken)
       setUser(res.data.user)
+      // The login payload is a SLIM user (no rigs / travelProfile), so the
+      // Home rig-context row would render blank until a manual refresh. Pull
+      // the full /users/me user now that the token is set (rehydrateUser gates
+      // on it). It swallows its own errors, so a getMe hiccup never blocks
+      // login — we just land logged-in with the slim user, same as before.
+      await rehydrateUser()
       navigate('/sessions/new')
     } catch (e: any) {
       setError(e.response?.data?.error || 'Invalid email or password')
