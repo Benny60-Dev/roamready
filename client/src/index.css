@@ -52,12 +52,6 @@
     @apply w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1F6F8B]/20 focus:border-[#1F6F8B] transition-colors;
     border-width: 0.5px;
   }
-  /* Prevent iOS Safari auto-zoom on input focus (triggers when font-size < 16px) */
-  input,
-  textarea,
-  select {
-    font-size: 16px;
-  }
   .label {
     @apply block text-sm font-medium text-gray-700 mb-1;
   }
@@ -84,6 +78,27 @@
   .badge-completed { @apply badge; background-color: #DCE5D5; color: #2F4030; }
   /* Reserved for future "resume incomplete trip" UX — no code path currently sets status: DRAFT */
   .badge-draft     { @apply badge; background-color: #EDEAE3; color: #6B6458; }
+}
+
+/*
+ * IOS-1: prevent iOS Safari auto-zoom on input focus (it zooms whenever a
+ * focused field's font-size is < 16px, and never zooms back out).
+ *
+ * Intentionally UNLAYERED (not inside @layer components/utilities): unlayered
+ * declarations always win over any cascade layer, so this beats Tailwind's
+ * `text-sm` (14px) utility — which lives in @layer utilities and previously
+ * defeated the old in-layer guard regardless of selector specificity.
+ *
+ * Scoped to coarse pointers so the bump applies only to touch devices; desktop
+ * keeps its 14px input density. Covers every focusable field app-wide (the hero
+ * + compact ChatInput textareas, the .input class on auth/profile, etc.).
+ */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
 }
 
 .typing-dot {
