@@ -9,6 +9,7 @@ import BottomSheet from '../components/ui/BottomSheet'
 import ConfirmModal from '../components/ui/ConfirmModal'
 import ConfirmVehiclesModal, { type ConfirmVehiclesResult } from '../components/trip/ConfirmVehiclesModal'
 import SaveHomeAddressModal from '../components/trip/SaveHomeAddressModal'
+import type { HomeAddress } from '../components/ui/AddressAutocomplete'
 import TripCard from '../components/trip/TripCard'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
 import { useVoiceInput } from '../hooks/useVoiceInput'
@@ -761,21 +762,19 @@ export default function SessionPage() {
   }
 
   // Resolve the first-trip home-address opt-in, then proceed to the trip map.
-  // saveAsHome=true persists the starting location to the user's profile;
-  // false (Continue with the box unchecked, Escape, or backdrop) saves nothing.
-  async function handleSaveHomeDone(saveAsHome: boolean) {
+  // (true, address) persists the user's REAL structured address (all 8 fields,
+  // captured by the modal's Places autocomplete) to their profile; (false)
+  // ("Not now", Escape, or backdrop) saves nothing — the trip's start city
+  // still drives planning. No city-centroid middle path anymore (PROF-2).
+  async function handleSaveHomeDone(saveAsHome: boolean, address?: HomeAddress) {
     const prompt = saveHomePrompt
     if (!prompt) return
-    if (saveAsHome) {
+    if (saveAsHome && address) {
       setSavingHome(true)
       try {
-        // Send the city-level fields we have; the /users/me getMe geocode
-        // backfill fills lat/lng/street/zip on the next profile load.
-        const res = await usersApi.updateMe({
-          homeLocation: prompt.address,
-          homeCity: prompt.city,
-          homeState: prompt.state,
-        })
+        // Persist the full 8-field address straight from the modal — no reliance
+        // on the getMe geocode backfill, because we already have street/zip/lat/lng.
+        const res = await usersApi.updateMe(address)
         setUser({ ...user!, ...res.data })
       } catch (e) {
         // Non-fatal: the opt-in is a convenience. If the save fails, don't
