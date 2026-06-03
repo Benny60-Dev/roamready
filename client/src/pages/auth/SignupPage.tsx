@@ -14,7 +14,7 @@ interface FormData {
 export default function SignupPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { setUser, setToken } = useAuthStore()
+  const { setUser, setToken, rehydrateUser } = useAuthStore()
   const navigate = useNavigate()
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>()
 
@@ -25,6 +25,12 @@ export default function SignupPage() {
       const res = await authApi.register(data)
       setToken(res.data.accessToken)
       setUser(res.data.user)
+      // Same slim-payload fix as login: enrich the store to the full
+      // /users/me user (rigs / travelProfile) before navigating, so any
+      // rig-aware view is correct on first paint. rehydrateUser gates on the
+      // just-set token and swallows its own errors, so signup never breaks on
+      // a getMe hiccup (a brand-new user simply has no rig yet — no error).
+      await rehydrateUser()
       navigate('/onboarding')
     } catch (e: any) {
       // Surface the server's `message` first when present — INVALID_PASSWORD
