@@ -155,10 +155,19 @@ export default function ProfilePage() {
                 onPlaceChanged={onPlaceChanged}
                 options={{ types: ['address'], componentRestrictions: { country: 'us' } }}
               >
+                {/* Controlled off RHF state (NOT register()'d, so the Google
+                    Autocomplete keeps the input ref it needs). Reading the value
+                    via watch() means reset(user) on hydrate — the same path that
+                    fills the hidden registered fields below — now also drives
+                    what's shown here, fixing the blank-on-load bug where the old
+                    uncontrolled defaultValue never re-applied after user arrived.
+                    onChange keeps free-text typing in sync for the autocomplete
+                    search; onPlaceChanged still commits all 8 fields on select. */}
                 <input
                   className="input"
                   placeholder="Start typing your address…"
-                  defaultValue={user?.homeAddress || user?.homeLocation || ''}
+                  value={(watch('homeAddress') as string | undefined) || (watch('homeLocation') as string | undefined) || ''}
+                  onChange={e => setValue('homeAddress', e.target.value, { shouldDirty: true })}
                 />
               </Autocomplete>
             ) : (
