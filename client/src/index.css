@@ -84,10 +84,14 @@
  * IOS-1: prevent iOS Safari auto-zoom on input focus (it zooms whenever a
  * focused field's font-size is < 16px, and never zooms back out).
  *
- * Intentionally UNLAYERED (not inside @layer components/utilities): unlayered
- * declarations always win over any cascade layer, so this beats Tailwind's
- * `text-sm` (14px) utility — which lives in @layer utilities and previously
- * defeated the old in-layer guard regardless of selector specificity.
+ * Uses !important deliberately. Tailwind v3 emits NO native CSS @layer blocks —
+ * its @layer directives are flattened at build time, so the compiled output is
+ * plain unlayered CSS. That means the textarea's `text-sm` / `.input` utility
+ * classes (specificity 0,1,0) out-rank a bare `input,textarea,select` type
+ * selector (0,0,1) on pure specificity, and an earlier "move it out of @layer"
+ * attempt did nothing (there were never any real layers to beat). !important
+ * is the surgical override that wins regardless of specificity, without
+ * recoupling this rule to Tailwind class names.
  *
  * Scoped to coarse pointers so the bump applies only to touch devices; desktop
  * keeps its 14px input density. Covers every focusable field app-wide (the hero
@@ -97,7 +101,7 @@
   input,
   textarea,
   select {
-    font-size: 16px;
+    font-size: 16px !important;
   }
 }
 
