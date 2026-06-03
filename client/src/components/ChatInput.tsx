@@ -84,7 +84,14 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
           // The runtime CSS property is `field-sizing: content`; React/JSX accepts
           // it as the camelCased key via inline style. Falls back silently on
           // older browsers — text still wraps, just no auto-grow.
-          style={{ fieldSizing: 'content', maxHeight: '8rem', paddingTop: 8, paddingBottom: 8 } as React.CSSProperties}
+          // minHeight floors the box at TWO lines so the multi-line placeholder
+          // ("Tell me about your trip — …") shows fully on mobile. fieldSizing:
+          // content sizes to the (empty) VALUE, not the placeholder, so an empty
+          // box would otherwise collapse to one line and clip the wrapped
+          // placeholder — worse now that the iOS guard forces 16px. 3.5rem =
+          // 2×20px line-height (text-sm) + 8+8px padding, border-box. fieldSizing
+          // + maxHeight still let it grow for real multi-line input.
+          style={{ fieldSizing: 'content', minHeight: '3.5rem', maxHeight: '8rem', paddingTop: 8, paddingBottom: 8 } as React.CSSProperties}
           placeholder={placeholder}
           value={value}
           onChange={e => onChange(e.target.value)}
