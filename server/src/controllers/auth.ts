@@ -16,6 +16,15 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 // the proxy sets x-forwarded-host to the original hostname:port.
 // This lets server-side redirects go back to the correct host instead of localhost.
 function getClientOrigin(req: Request): string {
+  // Prefer the explicitly-configured client origin. In production the OAuth
+  // callback arrives through a Render rewrite, so x-forwarded-host is the API's
+  // host — deriving the origin from it would redirect to the API (which has no
+  // /auth/callback route) instead of the client. CLIENT_URL is the source of
+  // truth when set; the x-forwarded-host derivation is only a fallback for
+  // environments where CLIENT_URL isn't configured.
+  if (process.env.CLIENT_URL) {
+    return process.env.CLIENT_URL
+  }
   const fwdHost = req.headers['x-forwarded-host']
   if (fwdHost) {
     const host = Array.isArray(fwdHost) ? fwdHost[0] : fwdHost
@@ -24,7 +33,7 @@ function getClientOrigin(req: Request): string {
       : (req.headers['x-forwarded-proto'] as string | undefined) || 'http'
     return `${proto}://${host}`
   }
-  return process.env.CLIENT_URL || 'http://localhost:3000'
+  return 'http://localhost:3000'
 }
 
 function generateTokens(userId: string) {
