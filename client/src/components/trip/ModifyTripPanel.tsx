@@ -208,8 +208,12 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
       .finally(() => setHistoryLoaded(true))
   }, [trip.id, isOpen])
 
+  // block:'nearest' so it no-ops when the latest message is already visible and
+  // only scrolls the minimum when the list overflows (consistent with
+  // SessionPage). This panel is fixed-position so the window was never an
+  // ancestor here, but matching the option keeps both chat surfaces identical.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    bottomRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [messages, typing])
 
   // Focus input when panel opens
