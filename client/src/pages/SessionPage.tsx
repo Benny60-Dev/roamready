@@ -419,8 +419,14 @@ export default function SessionPage() {
     }
   )
 
+  // block:'nearest' so this no-ops when the bottom sentinel is already visible
+  // (short exchange that fits → no scroll, the New trip/Cancel header stays put)
+  // but still scrolls the minimum to reveal the latest message when the
+  // conversation overflows. The default block:'start' scrolled ALL scrollable
+  // ancestors — including the WINDOW on mobile (dvh > visual viewport) — even
+  // when nothing needed scrolling, carrying the non-sticky header off the top.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    bottomRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [messages, typing])
 
   // Reset window scroll to the top the moment this page transitions from its
