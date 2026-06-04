@@ -663,6 +663,11 @@ export default function SessionPage() {
       console.time('[buildItinerary] promoteSession')
       const promoted = await sessionsApi.promote(sessionId, {
         name: itinerary.name,
+        // DATE-ANCHOR-1: carry the AI-captured departure date through to
+        // Trip.startDate so recomputeStopDates anchors stops on it instead of
+        // falling back to today. null when the AI emitted no date (no-date
+        // trips keep the today fallback). The promote schema accepts startDate.
+        startDate: itinerary.startDate ?? null,
         startLocation: homeStopName,
         endLocation: itinerary.stops?.[itinerary.stops.length - 1]?.locationName || 'End',
         totalMiles: itinerary.totalMiles,
