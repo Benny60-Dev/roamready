@@ -5,6 +5,7 @@ import { feedbackApi } from '../services/api'
 import { Feedback } from '../types'
 import { useUIStore } from '../store/uiStore'
 import { useAuthStore } from '../store/authStore'
+import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
 
 function FeedbackCard({ item, onVote }: { item: Feedback; onVote: (id: string) => void }) {
   const { isAuthenticated } = useAuthStore()
@@ -47,6 +48,10 @@ export default function RoadmapPage() {
   useEffect(() => {
     feedbackApi.getPublic().then(res => { setData(res.data); setLoading(false) })
   }, [])
+
+  // Reset window scroll to the top on the loading→ready edge when the tall
+  // roadmap columns first mount. See hooks/useScrollResetOnReady for rationale.
+  useScrollResetOnReady(!loading)
 
   async function vote(id: string) {
     await feedbackApi.vote(id)

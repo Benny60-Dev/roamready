@@ -4,6 +4,7 @@ import { CheckCircle, AlertTriangle, Clock, Wrench } from 'lucide-react'
 import { usersApi, maintenanceApi } from '../services/api'
 import { Rig, MaintenanceItem } from '../types'
 import { format } from 'date-fns'
+import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
 
 function StatusBadge({ status }: { status: string }) {
   if (status === 'OVERDUE') return <span className="badge-red flex items-center gap-1"><AlertTriangle size={11} /> Overdue</span>
@@ -32,6 +33,10 @@ export default function MaintenancePage() {
     setLoading(true)
     maintenanceApi.getItems(activeRig).then(res => { setItems(res.data); setLoading(false) })
   }, [activeRig])
+
+  // Reset window scroll to the top on the loading→ready edge when the tall
+  // maintenance sections first mount. See hooks/useScrollResetOnReady.
+  useScrollResetOnReady(!loading)
 
   async function logService() {
     if (!activeRig || !logModal) return

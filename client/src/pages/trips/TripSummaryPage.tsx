@@ -17,6 +17,7 @@ import { format, addDays } from 'date-fns'
 import { parseTripDate, toYmd } from '../../utils/dates'
 import { computeTripTotals } from '../../utils/tripTotals'
 import { StopWeatherCard } from '../../components/weather/StopWeatherCard'
+import { useScrollResetOnReady } from '../../hooks/useScrollResetOnReady'
 
 // ─── Format helpers ───────────────────────────────────────────────────────────
 
@@ -574,6 +575,10 @@ export default function TripSummaryPage() {
     if (!id) return
     reloadTrip().finally(() => setLoading(false))
   }, [id])
+
+  // Reset window scroll to the top on the loading→ready edge when the tall
+  // itinerary timeline first mounts. See hooks/useScrollResetOnReady.
+  useScrollResetOnReady(!loading)
 
   useEffect(() => () => stopPolling(), [stopPolling])
 

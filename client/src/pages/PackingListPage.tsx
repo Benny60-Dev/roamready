@@ -4,6 +4,7 @@ import { Wand2, Check, Loader } from 'lucide-react'
 import { tripsApi } from '../services/api'
 import { PackingCategory } from '../types'
 import { Breadcrumb } from '../components/ui/Breadcrumb'
+import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
 
 export default function PackingListPage() {
   const { tripId } = useParams<{ tripId: string }>()
@@ -20,6 +21,10 @@ export default function PackingListPage() {
       setLoading(false)
     })
   }, [tripId])
+
+  // Reset window scroll to the top on the loading→ready edge when the tall
+  // category checklist first mounts. See hooks/useScrollResetOnReady.
+  useScrollResetOnReady(!loading)
 
   async function generate() {
     if (!tripId) return
