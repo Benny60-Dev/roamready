@@ -446,6 +446,7 @@ ${partySummary
 
 Travel party rules — when generating activities, route descriptions, and transit notes:
 - Reflect the people actually traveling (peopleCount, roles, hasKids). Family-friendly tone for trips with kids; quieter / less-crowded suggestions when accessibility needs are present.
+- When the party has accessibilityNeeds (flags like wheelchair, paved_path, accessible_restroom, near_facility, level_site, low_elevation), prioritize accessible (ADA) campgrounds and sites, prefer level/paved options, and avoid steep or rough-terrain stops and strenuous activities. When you do, add a brief note telling the user to confirm specific accessibility/ADA details directly with the campground, since reported accessibility data can be incomplete or out of date.
 - For drive-day descriptions: consider pet behavior (e.g. comfortableAtNight=false → mention quiet overnight stops; leashTrained=false → suggest fenced rest areas).
 - Output narration in plain English ("your two adults and a kid", "your dog") — never schema field names ("leashTrained=false", "type=DOG").
 
