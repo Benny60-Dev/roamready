@@ -72,6 +72,16 @@ export const PersonCreateSchema = z
     age: z.number().int().min(0).max(120).nullable().optional(),
     isTraveling: z.boolean().optional(),
     isEmergencyContact: z.boolean().optional(),
+    // isSelf marks the user's OWN person within their default party — the row
+    // the AI planner reads for the account-holder's accessibility needs. It is
+    // accepted on CREATE (not update) so the find-or-create-self path in
+    // AccessibilityPage can stamp a freshly created self person; it is set
+    // exactly once, when no isSelf person exists yet. Deliberately absent from
+    // PersonUpdateSchema: there's no DB uniqueness guard on isSelf, so exposing
+    // it on the generic person editor would let a save silently create a second
+    // "self" and split the planner's source of truth. The original backfill
+    // (backfillIsSelf.ts) is the only other writer.
+    isSelf: z.boolean().optional(),
     emergencyPhone: z.string().max(50).nullable().optional(),
     // accessibilityNeeds is a JSON object of boolean flags +
     // optional `notes` (see AccessibilityPage.tsx). z.unknown() matches

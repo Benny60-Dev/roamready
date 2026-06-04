@@ -244,7 +244,7 @@ function buildLiveTripState(trip: any): string {
     '  PEOPLE',
     '  - For each Person with isTraveling=true: count them in the party size. Use this for campground capacity, site recommendations, and activity suggestions.',
     '  - Persons with isTraveling=false (typically with isEmergencyContact=true) are NOT on the trip — never count them in party size or include them in trip-context narration.',
-    '  - If any Person has accessibilityNeeds set (JSON with flags like wheelchair, paved_path, accessible_restroom, near_facility, level_site, low_elevation), filter campground suggestions to ADA/accessible sites and avoid steep or rough-terrain stops.',
+    '  - If any Person has accessibilityNeeds set (JSON with flags like wheelchair, paved_path, accessible_restroom, near_facility, level_site, low_elevation), filter campground suggestions to ADA/accessible sites and avoid steep or rough-terrain stops. When you recommend or filter sites based on accessibility needs, add a brief note telling the user to confirm specific accessibility/ADA details directly with the campground, since reported accessibility data can be incomplete or out of date.',
     '  - If any Person has dietaryNotes (e.g. "gluten-free", "kosher"), prefer stops near grocery stores or restaurants that can accommodate.',
     '  - If any Person has role=CHILD or INFANT, prefer family-friendly campgrounds, suggest age-appropriate activities, and avoid adult-only RV resorts.',
     '  - militaryStatus and firstResponder on a Person are informational; do NOT use them to gate suggestions (the campground access endpoint handles that separately at the account-holder level).',
