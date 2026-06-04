@@ -61,6 +61,7 @@ export interface Person {
   age?: number | null
   isTraveling: boolean
   isEmergencyContact: boolean
+  isSelf: boolean
   emergencyPhone?: string | null
   accessibilityNeeds?: any
   dietaryNotes?: string | null

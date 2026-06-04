@@ -242,6 +242,7 @@ model Person {
   age                 Int?
   isTraveling         Boolean     @default(true)
   isEmergencyContact  Boolean     @default(false)
+  isSelf              Boolean     @default(false)
   emergencyPhone      String?
   accessibilityNeeds  Json?
   dietaryNotes        String?
