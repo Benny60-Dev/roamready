@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef, useEffect, useLayoutEffect, type CSSProperties } from 'react'
+import { useCallback, useState, useRef, useEffect, type CSSProperties } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { MapPin, Tent, Users, Loader, Plus, X, Sparkles, ChevronDown, ChevronUp, ChevronRight, Check, Info } from 'lucide-react'
 import { aiApi, sessionsApi, tripsApi, usersApi } from '../services/api'
@@ -13,6 +13,7 @@ import type { HomeAddress } from '../components/ui/AddressAutocomplete'
 import TripCard from '../components/trip/TripCard'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
 import { useVoiceInput } from '../hooks/useVoiceInput'
+import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
 import { ChatInput } from '../components/ChatInput'
 import { selectGreeting } from '../utils/greeting'
 import { relativeTime } from '../utils/dates'
@@ -429,21 +430,13 @@ export default function SessionPage() {
     bottomRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [messages, typing])
 
-  // Reset window scroll to the top the moment this page transitions from its
-  // hydrating spinner to real content. The global <ScrollToTop> fires once on
-  // pathname change — but post-login that lands while we're still showing the
-  // short `if (hydrating)` spinner (scroll trivially 0). A tick later the tall
-  // empty-state (greeting + rig row + input) mounts and the browser's
-  // scroll-anchoring bumps scrollTop up, clipping the greeting; ScrollToTop
-  // never re-fires (same pathname). Re-applying the reset on the hydrating→
-  // ready edge lands it on the real content. useLayoutEffect (not useEffect)
-  // runs BEFORE paint, so the greeting is already at the top on the first
-  // visible frame — no jump/snap. This resets the WINDOW only; the active-
-  // conversation chat scrolls its own internal overflow-y-auto list (bottomRef,
-  // a different container), so this never fights the scroll-to-bottom.
-  useLayoutEffect(() => {
-    if (!hydrating) window.scrollTo(0, 0)
-  }, [hydrating])
+  // Reset window scroll to the top on the hydrating→ready edge, when this page's
+  // tall content first mounts. The global <ScrollToTop> fires once on pathname
+  // change, which post-login lands while we still show the short `if (hydrating)`
+  // spinner; re-applying the reset when content is ready lands it correctly.
+  // (Pre-paint useLayoutEffect inside the hook → no jump.) See the hook for the
+  // full rationale; window-only, so it never fights the chat's internal scroll.
+  useScrollResetOnReady(!hydrating)
 
   // ── Continue-planning strip data ───────────────────────────────────────────
   // Fetched once on mount. Trips don't change while the user is inside this
