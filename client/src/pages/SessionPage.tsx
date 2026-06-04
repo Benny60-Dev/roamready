@@ -759,7 +759,12 @@ export default function SessionPage() {
         setCreating(false)
         setSaveHomePrompt({
           tripId,
-          address: [homeStopName, startState].filter(Boolean).join(', '),
+          // Prefer the AI-captured verbatim full street address (HOME stop's
+          // optional startAddress) so the modal title + AddressAutocomplete
+          // seed show what the user actually typed; fall back to "City, ST"
+          // when only a city was given. city/state stay city/state for the
+          // save path — unchanged.
+          address: startStop?.startAddress || [homeStopName, startState].filter(Boolean).join(', '),
           city: homeStopName,
           state: startState,
         })

@@ -229,6 +229,12 @@ export interface Stop {
   type: StopType
   locationName: string
   locationState?: string
+  // AI-itinerary-only, HOME stop only: the user's verbatim full starting
+  // address (street/zip) when they typed one in chat. locationName/locationState
+  // stay city/state for planning; this is read solely to pre-fill the
+  // SaveHomeAddressModal with the full address (SessionPage buildItinerary).
+  // Never persisted — the createStop controller whitelists fields and drops it.
+  startAddress?: string
   latitude?: number
   longitude?: number
   arrivalDate?: string
