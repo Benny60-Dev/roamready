@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel'))
 import ConfirmModal from '../../components/ui/ConfirmModal'
-import { tripsApi, aiApi } from '../../services/api'
+import { tripsApi, aiApi, usersApi } from '../../services/api'
 import { Trip, Stop, ItineraryDay, ItineraryActivity, StopWeather, POI, TripFuelEstimate } from '../../types'
 import { useAuthStore } from '../../store/authStore'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge, StopBadge } from '../../utils/stopBadge'
@@ -462,6 +462,20 @@ function cascadeChange(entries: TimelineEntry[], idx: number, field: CascadeFiel
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+// Accessibility banner predicate. A person "has accessibility needs" when at
+// least one of the six AccessibilityPage flags is true, OR the free-form notes
+// string is non-empty. Mirrors the exact shape AccessibilityPage writes onto
+// the self person's accessibilityNeeds JSON.
+const ACCESSIBILITY_FLAGS = [
+  'wheelchair', 'paved_path', 'accessible_restroom',
+  'near_facility', 'level_site', 'low_elevation',
+] as const
+function hasAccessibilityNeeds(an: any): boolean {
+  if (!an || typeof an !== 'object') return false
+  if (ACCESSIBILITY_FLAGS.some(k => an[k] === true)) return true
+  return typeof an.notes === 'string' && an.notes.trim().length > 0
+}
+
 export default function TripSummaryPage() {
   const { user } = useAuthStore()
   const { id } = useParams<{ id: string }>()
@@ -579,6 +593,28 @@ export default function TripSummaryPage() {
   // Reset window scroll to the top on the loading→ready edge when the tall
   // itinerary timeline first mounts. See hooks/useScrollResetOnReady.
   useScrollResetOnReady(!loading)
+
+  // Accessibility disclaimer banner — shown deterministically whenever the
+  // user's effective party has a traveling person with accessibility needs.
+  // This does NOT depend on the AI: the trip-gen prompt is JSON-only with no
+  // slot for a user-facing note, so the disclaimer must come from the UI.
+  // getTrip doesn't return the trip's party, so we read the default party —
+  // the live source AccessibilityPage writes to, and the source the trip-scoped
+  // clone (trip.party) is copied from. Non-fatal: on error the banner hides.
+  const [showAccessibilityBanner, setShowAccessibilityBanner] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    usersApi.getDefaultParty()
+      .then(res => {
+        const people = (res.data?.people ?? []) as any[]
+        const applies = people.some(
+          p => p.isTraveling !== false && hasAccessibilityNeeds(p.accessibilityNeeds),
+        )
+        if (!cancelled) setShowAccessibilityBanner(applies)
+      })
+      .catch(() => { /* non-fatal — banner stays hidden */ })
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => () => stopPolling(), [stopPolling])
 
@@ -1285,6 +1321,15 @@ export default function TripSummaryPage() {
           </div>
         </div>
       </div>
+
+      {/* Accessibility disclaimer — deterministic UI banner (not AI-authored).
+          Renders only when the user's effective party has accessibility needs
+          set; reassures that ADA/accessibility filtering is best-effort. */}
+      {showAccessibilityBanner && (
+        <div className="rounded-lg border border-[#1F6F8B]/20 bg-[#1F6F8B]/5 px-4 py-3 text-sm text-gray-600">
+          Accessibility filtering is best-effort. RoamReady prioritizes sites that report matching accessibility features, but availability and accuracy aren't guaranteed — confirm specific accessibility/ADA details directly with each campground before booking.
+        </div>
+      )}
 
       {/* Timeline */}
       <div className="card-lg">
