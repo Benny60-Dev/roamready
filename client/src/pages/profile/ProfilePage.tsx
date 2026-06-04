@@ -142,10 +142,6 @@ export default function ProfilePage() {
               <input className="input" {...register('lastName')} />
             </div>
           </div>
-          <div>
-            <label className="label">Phone</label>
-            <input className="input" type="tel" {...register('phone')} />
-          </div>
 
           <div>
             <label className="label">Home address</label>
