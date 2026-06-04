@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { campgroundsApi } from '../services/api'
+import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
 
 export default function CarCampingPage() {
   const [destinations, setDestinations] = useState<any[]>([])
@@ -8,6 +9,10 @@ export default function CarCampingPage() {
   useEffect(() => {
     campgroundsApi.getCarCamping().then(res => { setDestinations(res.data); setLoading(false) })
   }, [])
+
+  // Reset window scroll to the top on the loading→ready edge when the
+  // destination list first mounts. See hooks/useScrollResetOnReady.
+  useScrollResetOnReady(!loading)
 
   return (
     <div className="space-y-4 max-w-3xl">

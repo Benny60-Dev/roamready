@@ -6,6 +6,7 @@ import { Trip } from '../types'
 import { formatTripDate } from '../utils/dates'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge } from '../utils/stopBadge'
 import { computeTripTotals } from '../utils/tripTotals'
+import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
 
 export default function SharedTripPage() {
   const { token } = useParams<{ token: string }>()
@@ -17,6 +18,10 @@ export default function SharedTripPage() {
     if (!token) return
     tripsApi.getShared(token).then(res => { setTrip(res.data); setLoading(false) }).catch(() => { setNotFound(true); setLoading(false) })
   }, [token])
+
+  // Reset window scroll to the top on the loading→ready edge when the tall stop
+  // list first mounts. See hooks/useScrollResetOnReady for the full rationale.
+  useScrollResetOnReady(!loading)
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="w-6 h-6 border-2 border-[#1F6F8B] border-t-transparent rounded-full animate-spin" /></div>
   if (notFound) return (

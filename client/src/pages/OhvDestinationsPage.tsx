@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/authStore'
 import { useUIStore } from '../store/uiStore'
 import { MapPin, Navigation, Globe, Ticket } from 'lucide-react'
 import OhvResourceBlock from '../components/OhvResourceBlock'
+import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
 
 // Rec.gov FacilityDescription arrives as raw HTML (<p>, <h2>Overview</h2>, …).
 // We deliberately do NOT render it as HTML (third-party content → XSS risk),
@@ -85,6 +86,10 @@ export default function OhvDestinationsPage() {
       .then(res => { setDestinations(Array.isArray(res.data) ? res.data : []); setLoading(false) })
       .catch(() => { setDestinations([]); setLoading(false) })
   }, [location])
+
+  // Reset window scroll to the top on the loading→ready edge when the tall
+  // destination grid + resource block first mount. See hooks/useScrollResetOnReady.
+  useScrollResetOnReady(!loading)
 
   // Reverse-geocode the GPS point to a US state (administrative_area_level_1)
   // via the already-loaded Google Maps Geocoder — best-effort, no new deps.

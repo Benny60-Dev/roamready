@@ -6,6 +6,7 @@ import { usersApi } from '../../services/api'
 import { Rig, TowedType, VehicleType } from '../../types'
 import { VEHICLE_LABELS } from './RigPage'
 import { deriveSecondVehicle } from '../../utils/rigs'
+import { useScrollResetOnReady } from '../../hooks/useScrollResetOnReady'
 
 type TowingChoice = 'NONE' | 'VEHICLE' | 'TRAILER'
 
@@ -87,6 +88,11 @@ export default function EditRigPage() {
       setTowingChoice(found.isTowing && found.towedType ? found.towedType : 'NONE')
     })
   }, [id, reset])
+
+  // Reset window scroll to the top once the rig loads and the tall edit form
+  // mounts (ready = rig is non-null; the page shows "Loading…" until then).
+  // See hooks/useScrollResetOnReady for the full rationale.
+  useScrollResetOnReady(!!rig)
 
   async function onSubmit(data: any) {
     if (!rig) return

@@ -8,6 +8,7 @@ import TripCard from '../components/trip/TripCard'
 import ConfirmModal from '../components/ui/ConfirmModal'
 import ReservationsTabContent from '../components/dashboard/ReservationsTabContent'
 import { deriveTripStatus } from '../utils/tripStatus'
+import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
 
 // Tabs are data-driven via a discriminated union — three trip-status tabs
 // share a Trip-filter predicate, the Reservations tab renders different
@@ -93,6 +94,10 @@ export default function DashboardPage() {
       .then(res => { setTrips(res.data); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
+
+  // Reset window scroll to the top on the loading→ready edge when the tall trip
+  // grid first mounts. See hooks/useScrollResetOnReady for the full rationale.
+  useScrollResetOnReady(!loading)
 
   // ── Filtering ────────────────────────────────────────────────────────────────
   //   Only the three trip-status tabs filter trips; the Reservations tab
