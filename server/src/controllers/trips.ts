@@ -1691,13 +1691,22 @@ export async function generateItinerary(req: AuthRequest, res: Response, next: N
     console.log('[generateItinerary] endpoint hit — tripId=%s userId=%s', req.params.id, req.user?.id)
     const trip = await prisma.trip.findFirst({
       where: { id: req.params.id, userId: req.user!.id },
-      include: { stops: true },
+      // Party plumbed in so the day-by-day prompt reflects who's traveling —
+      // accessibilityNeeds, kids, pet behavior. trip.party is the trip-scoped
+      // clone (authoritative; created at createTrip with accessibilityNeeds);
+      // generateTripItineraryAI falls back to user.parties[0] for legacy trips
+      // created before the clone existed.
+      include: { stops: true, party: { include: { people: true, pets: true } } },
     })
     if (!trip) throw new AppError('Trip not found', 404)
 
     const user = await prisma.user.findUnique({
       where: { id: req.user!.id },
-      include: { rigs: { where: { isDefault: true } }, travelProfile: true },
+      include: {
+        rigs: { where: { isDefault: true } },
+        travelProfile: true,
+        parties: { where: { isDefault: true }, include: { people: true, pets: true }, take: 1 },
+      },
     })
 
     // Block 15 (Step 2) — build the per-stop "things to do during your stay"
@@ -1843,13 +1852,20 @@ export async function generatePackingList(req: AuthRequest, res: Response, next:
   try {
     const trip = await prisma.trip.findFirst({
       where: { id: req.params.id, userId: req.user!.id },
-      include: { stops: true },
+      // Party plumbed in so the packing list reflects traveling people —
+      // accessibility gear, dietary items, pet supplies. Same trip.party >
+      // user.parties[0] resolution as generatePackingListAI.
+      include: { stops: true, party: { include: { people: true, pets: true } } },
     })
     if (!trip) throw new AppError('Trip not found', 404)
 
     const user = await prisma.user.findUnique({
       where: { id: req.user!.id },
-      include: { rigs: { where: { isDefault: true } }, travelProfile: true },
+      include: {
+        rigs: { where: { isDefault: true } },
+        travelProfile: true,
+        parties: { where: { isDefault: true }, include: { people: true, pets: true }, take: 1 },
+      },
     })
 
     const packingList = await generatePackingListAI(trip, user, { userId: req.user!.id, tripId: trip.id })
