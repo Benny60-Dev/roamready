@@ -85,9 +85,10 @@ const SOFT_CAP_NUDGE =
 // client's parseItinerary returns null and shows no Build button — the trip cannot
 // build until the user provides a real starting city.
 const NO_ORIGIN_RESPONSE =
-  "I don't have a home address on file for you yet, so I need one more thing before " +
-  "I can map this out: where will you be starting from? Once you give me your starting " +
-  "city, I'll put the whole trip together."
+  "Quick thing first — I don't have a home address saved to your profile yet. Are you " +
+  "starting from home, or somewhere else this trip? If it's home, share your address and " +
+  "I'll help you save it for future trips; otherwise just give me your starting location " +
+  "and I'll get going."
 
 // Server-side mirror of the client's parseItinerary (SessionPage.tsx). Extracts the
 // <itinerary>…</itinerary> JSON from an assistant reply and parses it. Returns the
