@@ -218,8 +218,11 @@ function buildLiveTripState(trip: any): string {
   //   nights 0, locationName matches HOME) is the "Return home" — NOT "Stop N"
   // - Destinations between are renumbered "Stop 1..N" for the user, where Stop 1
   //   is the first destination AFTER home.
-  // The internal `order` field is preserved on every line so the AI still has the
-  // 1-indexed data reference it needs for <modify> action's afterStopOrder field.
+  // MODIFY-ANCHOR-1: the model is shown ONE number (the user-facing "Stop N") and
+  // the NAME per line — the raw `order` is deliberately NOT printed, because showing
+  // two competing numbers made the model conflate them (it miscounted "stop 7" by
+  // one). The model anchors <modify> actions on the bracket stop's NAME (after_stop),
+  // which the client resolver matches; the numeric order stays internal to the data.
   const homeStop = stops.find((s: any) => s.type === 'HOME')
   const lastStop = stops.length > 0 ? stops[stops.length - 1] : null
   const isReturnHome = (s: any) =>
@@ -276,7 +279,7 @@ function buildLiveTripState(trip: any): string {
       userLabel = `Stop ${userFacingIdx}`
     }
     const parts = [
-      `[${userLabel} — internal order ${s.order}] ${name}`,
+      `${userLabel}: ${name}`,
       s.type,
       `${s.nights} night${s.nights !== 1 ? 's' : ''}`,
       s.bookingStatus,
@@ -308,9 +311,9 @@ function buildLiveTripState(trip: any): string {
     'CLARIFYING QUESTIONS: When you need more information from the user before you can propose a change (e.g. they have not said which stop, how many nights, or which destination), DO NOT emit a <modify> tag. Instead, wrap your ENTIRE clarifying reply in a <clarify>…</clarify> tag — e.g. <clarify>Which stop did you mean — Stop 1 or Stop 2?</clarify>. The user sees only the text inside the tag, so write a normal, friendly question there. Emit <modify> ONLY when proposing an actionable change; emit <clarify> ONLY when asking for information you still need. Emit exactly one of the two per reply, never both and never neither.',
     '',
     'USER VOCABULARY — read carefully:',
-    'Each line in the stop list below has BOTH a user-facing label ("Starting point" / "Stop N" / "Return home") AND the internal data order ("internal order N"). Use the right one in the right place:',
+    'Each line in the stop list below shows a user-facing label ("Starting point" / "Stop N" / "Return home") and the stop NAME, e.g. "Stop 2: [EXAMPLE_STOP_2], [STATE]". Reference stops by NAME — the name is the reliable anchor; the "Stop N" number is only there to match the user\'s own wording:',
     '- When TALKING TO THE USER in prose, refer to stops by their user-facing label and locationName (e.g. "I\'ll remove [EXAMPLE_STOP_1]" or "before your starting point" or "after Stop 2"). NEVER say "stop 1" to mean the home departure.',
-    '- When EMITTING <modify> JSON, the locationName field uses the actual location name ([EXAMPLE_STOP_1], [EXAMPLE_STOP_2], etc.); the afterStopOrder field uses the INTERNAL order integer from the stop list below.',
+    '- When EMITTING <modify> JSON, identify any existing stop by its locationName from the list ([EXAMPLE_STOP_1], [EXAMPLE_STOP_2], etc.). For add_stop, anchor the insertion with after_stop set to the EXACT locationName of the stop the new one goes AFTER (see the add_stop format below) — names are the reliable anchor, not stop numbers.',
     '- When the user says "first stop" / "stop 1" / "the second stop" / "the last stop", they almost always mean a NUMBERED DESTINATION — not the home departure and not the return-home entry. If the request is ambiguous, ASK BEFORE EMITTING a <modify> tag: "Just to confirm — you mean [first destination], not your home departure?"',
     '- Concrete example: trip is "Starting point: [HomeCity] | Stop 1: [EXAMPLE_STOP_1] | Stop 2: [EXAMPLE_STOP_2] | Return home: [HomeCity]". User says "remove the first stop" → that means [EXAMPLE_STOP_1], not [HomeCity]. Confirm with the user, then emit <modify>{"action":"remove_stop","locationName":"[EXAMPLE_STOP_1]"}</modify>.',
     '',
@@ -348,13 +351,14 @@ function buildLiveTripState(trip: any): string {
     'SUPPORTED ACTIONS AND JSON FORMAT:',
     '',
     'Add a stop:',
-    '<modify>{"action":"add_stop","locationName":"[EXAMPLE_DESTINATION_CITY]","locationState":"[STATE]","type":"DESTINATION","nights":1,"afterStopOrder":1}</modify>',
-    '  afterStopOrder: the INTERNAL order integer of the stop AFTER which to insert (see "internal order N" in the stop list below). Omit or set to null to append at end.',
+    '<modify>{"action":"add_stop","locationName":"[EXAMPLE_DESTINATION_CITY]","locationState":"[STATE]","type":"DESTINATION","nights":1,"after_stop":"[EXAMPLE_STOP_1]"}</modify>',
+    '  after_stop (PRIMARY anchor): the EXACT locationName of the existing stop the new stop goes AFTER — copy it verbatim from the stop list (e.g. "after_stop":"[EXAMPLE_STOP_1]"). ALWAYS include after_stop when inserting relative to an existing stop. Omit it only to append at the very end of the trip.',
+    '  Resolve references to NAMES first: when the user references a stop by number ("stop 7", "between 7 and 8"), map that number to the NAMED stop on the list and use the NAME in both your confirming question AND after_stop — e.g. user "between 7 and 8" (Stop 7 = [EXAMPLE_STOP_1], Stop 8 = [EXAMPLE_STOP_2]) → you confirm "between [EXAMPLE_STOP_1] and [EXAMPLE_STOP_2]" and emit "after_stop":"[EXAMPLE_STOP_1]". You MAY also include afterStopOrder as a numeric hint, but after_stop (the name) is authoritative.',
     '  nights parsing rules: "one night" = 1 | "two nights" or "a couple nights" = 2 | "three nights" = 3 | "a few nights" = 2 | "the weekend" = 2 | "three days" = 2 (days minus 1) | default to 1 if ambiguous. Parse nights EXACTLY as stated — do not infer or round up.',
-    '  POSITION + GEOGRAPHY — HARD RULE: "after stop N" inserts the new stop BETWEEN stop N and stop N+1 — it becomes the new stop N+1, and the old stop N+1 (and everything after it) shifts one position later. The afterStopOrder value is the internal order of stop N.',
-    '  The added stop — whether the USER named it or YOU were asked to pick it — MUST lie geographically ON THE ROUTE between stop N and stop N+1. It must NOT sit past stop N+1, and must NEVER force a backtrack (driving beyond stop N+1 and then doubling back to it). Compare the candidate against the locations of BOTH bracketing stops: if it is farther along the route than stop N+1, or so far off to the side that reaching it adds a there-and-back detour, it is the WRONG choice — use a city that genuinely falls on the leg from stop N to stop N+1.',
-    '  When the user defers the choice to you ("you pick", "pick a place", "surprise me") for an after-N insertion, choose a sensible overnight city sitting roughly on the straight line between stop N and stop N+1 — a midpoint of THAT specific leg. Anchor your choice ONLY on the locations of stop N and stop N+1; do NOT anchor on the overall trip direction, the final destination, or any later stop.',
-    '  EXCEPTION: if stop N is the LAST stop (there is no stop N+1), nothing brackets the new stop on the far side — normal "extend the trip toward a new destination" behavior applies. The between-stops constraint is the only new rule.',
+    '  POSITION + GEOGRAPHY — HARD RULE: inserting "after [stop A]" places the new stop BETWEEN [stop A] and the stop that currently follows it ([stop B]) — the new stop slots in right after [stop A], and [stop B] (and everything after it) shifts one position later. Set after_stop to [stop A]\'s name.',
+    '  The added stop — whether the USER named it or YOU were asked to pick it — MUST lie geographically ON THE ROUTE between [stop A] and [stop B]. It must NOT sit past [stop B], and must NEVER force a backtrack (driving beyond [stop B] and then doubling back to it). Compare the candidate against the locations of BOTH bracketing stops: if it is farther along the route than [stop B], or so far off to the side that reaching it adds a there-and-back detour, it is the WRONG choice — use a city that genuinely falls on the leg from [stop A] to [stop B].',
+    '  When the user defers the choice to you ("you pick", "pick a place", "surprise me") for an after-[stop A] insertion, choose a sensible overnight city sitting roughly on the straight line between [stop A] and [stop B] — a midpoint of THAT specific leg. Anchor your choice ONLY on the locations of [stop A] and [stop B]; do NOT anchor on the overall trip direction, the final destination, or any later stop.',
+    '  EXCEPTION: if [stop A] is the LAST stop (nothing currently follows it), nothing brackets the new stop on the far side — normal "extend the trip toward a new destination" behavior applies, and you may omit after_stop to append at the end. The between-stops constraint is the only new rule.',
     '',
     'Add a return-home stop (converts a one-way trip into a round trip):',
     '<modify>{"action":"add_stop","locationName":"[HomeCity]","locationState":"[HomeState]","type":"HOME","nights":0}</modify>',
@@ -380,7 +384,7 @@ function buildLiveTripState(trip: any): string {
     '',
     'EXAMPLE — correct assistant response when user says "Add [EXAMPLE_DESTINATION_CITY] for one night after [EXAMPLE_STOP_2]":',
     'Sure! I\'ll add [EXAMPLE_DESTINATION_CITY], [STATE] for one night after [EXAMPLE_STOP_2].',
-    '<modify>{"action":"add_stop","locationName":"[EXAMPLE_DESTINATION_CITY]","locationState":"[STATE]","type":"DESTINATION","nights":1,"afterStopOrder":2}</modify>',
+    '<modify>{"action":"add_stop","locationName":"[EXAMPLE_DESTINATION_CITY]","locationState":"[STATE]","type":"DESTINATION","nights":1,"after_stop":"[EXAMPLE_STOP_2]"}</modify>',
     '',
     'EXAMPLE — correct assistant response when user says "Push the trip to start August 9th":',
     'Sure! I\'ll shift the whole trip so it starts August 9th. Your stop count and per-stop nights stay the same.',
