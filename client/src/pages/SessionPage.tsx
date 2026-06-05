@@ -319,15 +319,26 @@ export default function SessionPage() {
   }, [isProcessing, navigate])
 
   // "Cancel this plan" — soft-deletes (status=ARCHIVED via DELETE) the current
-  // session, clears the visit flag, and routes to /sessions/new where
-  // SessionNewPage will see no PLANNING candidate and createFresh.
+  // session, clears the visit flag, and creates a BRAND-NEW empty session,
+  // routing straight to it.
+  //
+  // SESSION-RESET-1: we deliberately do NOT route through /sessions/new here.
+  // SessionNewPage's silent-resume heuristics (Check A = lastVisitedSessionId,
+  // Check B = "updated < 5 min ago") can latch onto a stale sibling PLANNING
+  // session and resume IT instead of starting fresh — Check B still fires after
+  // a cancel (we only clear the Check-A flag). That dragged the cancelled-plan
+  // sibling's old conversation into the next request and produced the off-topic
+  // refusal (~50%, refresh "fixed" it). An EXPLICIT cancel must always land in a
+  // brand-new empty session, never a resumed one — so we create the fresh
+  // session directly (mirroring handleNewTrip) and bypass the resume logic.
   const handleCancel = useCallback(async () => {
     if (!sessionId || isProcessing) return
     setIsProcessing(true)
     try {
       await sessionsApi.delete(sessionId)
       sessionStorage.removeItem('lastVisitedSessionId')
-      navigate('/sessions/new', { replace: true })
+      const res = await sessionsApi.create({})
+      navigate(`/sessions/${res.data.id}`, { replace: true })
     } catch (err) {
       console.error('[SessionPage] handleCancel failed:', err)
       setIsProcessing(false)
