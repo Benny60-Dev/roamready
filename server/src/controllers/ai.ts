@@ -113,6 +113,52 @@ function parseItineraryBlock(text: string): any | null {
   }
 }
 
+// AI-MESA-9 — prose origin-assertion extractor. The AI-MESA-7 guard only inspects
+// the <itinerary> JSON, so a fabricated origin stated in PRE-ITINERARY PROSE (e.g.
+// the scripted "Got it — starting from <City>" / "I'll use your home address in
+// <City>" confirmation lines) slipped through (the Pittsburgh→Columbus and the
+// "home address in Phoenix" cases). This extractor scans an assistant reply for an
+// ORIGIN-ANCHORED assertion and returns the asserted city's first proper-noun token,
+// or null. It is deliberately origin-only: it NEVER matches destination phrasings
+// ("trip to X", "heading to X", "arrive in X"), so a destination city can never be
+// mistaken for an asserted origin. Single-token capture is sufficient — the guard
+// only needs the city's first token to check whether the user ever typed it.
+function extractAssertedOrigin(text: string): string | null {
+  const CITY = "([A-Za-z][A-Za-z'-]*)"
+  const PATTERNS = [
+    // "starting from Columbus" OR "starting from your home address in Phoenix"
+    "starting from\\s+(?:your\\s+home\\s+(?:address|base)\\s+(?:in|at)\\s+)?" + CITY,
+    "home\\s+(?:address|base)\\s+(?:in|at|is)\\s+" + CITY,   // "home address in Phoenix" / "home base is Denver"
+    "your\\s+home\\s+(?:in|is)\\s+" + CITY,                  // "your home in Phoenix"
+    CITY + "\\s+as\\s+(?:the|your)\\s+(?:starting point|home|departure)", // "Columbus as the starting point"
+    "(?:leaving|departing|depart)\\s+(?:from\\s+)?" + CITY,  // "leaving from Boise" / "departing Boise"
+    "set off from\\s+" + CITY,                               // "set off from Boise"
+    "kick off in\\s+" + CITY,                                // "kick off in Spokane"
+    "launch point is\\s+" + CITY,                            // "launch point is Reno"
+    "starting point is\\s+" + CITY,                          // "starting point is Austin"
+    "begin in\\s+" + CITY,                                   // "begin in Tucson"
+  ]
+  // Words that are never a real city (pronouns, articles, time/season words). The
+  // model sometimes writes "starting from your home base" (no city) or "departing
+  // tomorrow" — these must NOT be treated as an asserted origin.
+  const STOP = new Set([
+    'home', 'your', 'you', 'where', 'there', 'here', 'the', 'a', 'an', 'that',
+    'somewhere', 'it', 'we', 'i', 'today', 'tomorrow', 'soon', 'now', 'next',
+    'this', 'spring', 'summer', 'fall', 'winter', 'early', 'late',
+  ])
+  for (const p of PATTERNS) {
+    const m = text.match(new RegExp(p, 'i'))
+    const cand = m && m[1] && m[1].trim()
+    // Require the captured token to be a real proper noun (uppercase first letter)
+    // and not a stopword. The 'i' flag lets the ANCHOR match any case (sentence-
+    // initial or mid-sentence) while this check keeps CITY a proper noun.
+    if (cand && /^[A-Z]/.test(cand) && !STOP.has(cand.toLowerCase())) {
+      return cand
+    }
+  }
+  return null
+}
+
 // Stored trip/stop dates are UTC-midnight Prisma DateTime values. Reading them
 // with `new Date(d)` + local accessors (toLocaleDateString) shifts the calendar
 // day back one in negative-offset deploy zones — the same artifact fixed in the
@@ -732,6 +778,35 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
           )
           // Discard the fabricated itinerary; persist + return the canned ask instead.
           response = NO_ORIGIN_RESPONSE
+        }
+      }
+
+      // AI-MESA-9 — PROSE ORIGIN-ASSERTION GUARD (sibling to the itinerary check
+      // above). The AI-MESA-7 block only inspects the <itinerary> JSON, so a
+      // fabricated origin stated only in PRE-ITINERARY PROSE — e.g. the scripted
+      // "Got it — starting from <City>" / "I'll use your home address in <City>"
+      // confirmation lines — slipped through (Pittsburgh→Columbus; "home address
+      // in Phoenix"). This runs only when the turn was not already blocked, and
+      // computes its own norm/userText so the AI-MESA-7 block above is untouched.
+      if (response !== NO_ORIGIN_RESPONSE) {
+        const asserted = extractAssertedOrigin(response)
+        if (asserted) {
+          const normP = (s: unknown) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+          const userTextP = messages
+            .filter((m: any) => m.role === 'user')
+            .map((m: any) => normP(m.content))
+            .join(' ')
+          const firstTok = normP(asserted).split(' ')[0]
+          // Block only when the asserted origin's city token appears in NONE of the
+          // user's own messages — the model named a starting city the user never
+          // provided. Fail-safe: a phrasing mismatch only costs one extra ask.
+          if (firstTok.length > 0 && !userTextP.includes(firstTok)) {
+            console.warn(
+              '[AI origin-guard] no-home user, assistant prose asserts origin "%s" not present in any user message — replacing with origin ask. userId=%s sessionId=%s',
+              asserted, userId, sessionId ?? '(none)',
+            )
+            response = NO_ORIGIN_RESPONSE
+          }
         }
       }
     }
