@@ -78,6 +78,41 @@ const SOFT_CAP_NUDGE =
   '<itinerary>...</itinerary> JSON block now. Do not ask further clarifying ' +
   'questions unless absolutely necessary.'
 
+// AI-MESA-7 — deterministic origin guard. Prompt fixes (AI-MESA-4/5/6) could not
+// reliably stop the model fabricating an origin city for no-home users (7 runs,
+// 6 fabricated). When the guard below detects a fabricated HOME city, it replaces
+// the whole assistant turn with this canned ask. NO <itinerary> block here, so the
+// client's parseItinerary returns null and shows no Build button — the trip cannot
+// build until the user provides a real starting city.
+const NO_ORIGIN_RESPONSE =
+  "I don't have a home address on file for you yet, so I need one more thing before " +
+  "I can map this out: where will you be starting from? Once you give me your starting " +
+  "city, I'll put the whole trip together."
+
+// Server-side mirror of the client's parseItinerary (SessionPage.tsx). Extracts the
+// <itinerary>…</itinerary> JSON from an assistant reply and parses it. Returns the
+// parsed object, or null on no-match / parse failure. NEVER throws — the guard must
+// fail open (no itinerary detected → no block) rather than break the chat response.
+function parseItineraryBlock(text: string): any | null {
+  try {
+    let inner = text.match(/<itinerary>([\s\S]*?)<\/itinerary>/)?.[1]
+    if (!inner) inner = text.match(/<itinerary>([\s\S]*)/)?.[1]
+    if (!inner) return null
+    inner = inner.trim()
+    try {
+      return JSON.parse(inner)
+    } catch {
+      const m = inner.match(/\{[\s\S]*\}/)
+      if (m) {
+        try { return JSON.parse(m[0]) } catch { return null }
+      }
+      return null
+    }
+  } catch {
+    return null
+  }
+}
+
 // Stored trip/stop dates are UTC-midnight Prisma DateTime values. Reading them
 // with `new Date(d)` + local accessors (toLocaleDateString) shifts the calendar
 // day back one in negative-offset deploy zones — the same artifact fixed in the
@@ -640,6 +675,63 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
           // disambiguate — let the UI render a fallback notice; the
           // user knows what they asked for and can rephrase if needed.
           modifyTagMissing = true
+        }
+      }
+    }
+
+    // AI-MESA-7 — DETERMINISTIC ORIGIN GUARD (no-home users, planning mode only).
+    // Prompt-level fixes (AI-MESA-4/5/6) cannot reliably stop the model fabricating
+    // an origin to satisfy the mandatory order-1 HOME stop (7 runs → 6 fabricated).
+    // This server-side guard does not depend on model compliance: if a no-home user
+    // gets an itinerary whose HOME city was NEVER typed by them, that origin was
+    // invented, so we discard the whole itinerary and return a canned "where will you
+    // be starting from?" reply instead. The replaced response has no <itinerary>, so
+    // the client shows no Build button and the trip cannot build until a real origin
+    // is given. Fail-safe: a phrasing mismatch only costs the user one extra question.
+    //
+    // Fires ONLY when ALL hold:
+    //   - context !== 'modify'  (never touch modify-mode, which edits an existing trip)
+    //   - hasHomeOnFile === false  (home-on-file users keep their existing behavior)
+    //   - response contains a parseable <itinerary> whose stops[0].type === 'HOME'
+    //   - the HOME city appears in NONE of the user's own messages
+    const hasHomeOnFile = !!(userProfile.homeCity || userProfile.homeLocation)
+    if (context !== 'modify' && !hasHomeOnFile) {
+      const itin = parseItineraryBlock(response)
+      const homeStop = itin?.stops?.[0]
+      if (itin && homeStop?.type === 'HOME') {
+        const norm = (s: unknown) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+        const cityNorm = norm(homeStop.locationName)
+        const userText = messages
+          .filter((m: any) => m.role === 'user')
+          .map((m: any) => norm(m.content))
+          .join(' ')
+        // Primary signal: did the user ever type this city?
+        let userProvidedOrigin = cityNorm.length > 0 && userText.includes(cityNorm)
+        // Robustness against phrasing mismatch (conservative — only WIDENS what counts
+        // as user-provided, so it can only REDUCE false positives, never cause a
+        // fabricated city to slip through):
+        //  - the user typed the verbatim startAddress the model copied into the HOME stop, OR
+        //  - the user typed BOTH the city AND its state (state alone is never enough).
+        if (!userProvidedOrigin) {
+          const addrNorm = norm(homeStop.startAddress)
+          if (addrNorm.length > 0 && userText.includes(addrNorm)) {
+            userProvidedOrigin = true
+          }
+        }
+        if (!userProvidedOrigin) {
+          const stateNorm = norm(homeStop.locationState)
+          if (cityNorm.length > 0 && stateNorm.length > 0 &&
+              userText.includes(cityNorm) && userText.includes(stateNorm)) {
+            userProvidedOrigin = true
+          }
+        }
+        if (!userProvidedOrigin) {
+          console.warn(
+            '[AI origin-guard] no-home user, fabricated HOME city "%s" (state "%s") not present in any user message — blocking itinerary, asking for origin. userId=%s sessionId=%s',
+            homeStop.locationName, homeStop.locationState ?? '', userId, sessionId ?? '(none)',
+          )
+          // Discard the fabricated itinerary; persist + return the canned ask instead.
+          response = NO_ORIGIN_RESPONSE
         }
       }
     }
