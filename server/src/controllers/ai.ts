@@ -67,10 +67,19 @@ const VIBES = [
   'boreal lakes and birch forest',
 ]
 
-const HARD_CAP_RESPONSE =
-  "This planning session has gotten really long! 🗺️ To keep things snappy, " +
-  "let's wrap this one up and start fresh. Your conversation is saved — " +
-  "you can start a new trip and reference what we discussed."
+// Hard-cap copy is context-aware (planning vs modify) and honest: it states the
+// AI has STOPPED responding in THIS chat, what is actually saved, and how to
+// continue. It does NOT promise the conversation transcript carries over — a new
+// session/trip starts with empty conversation fields (see MODIFY-CAP-1).
+const HARD_CAP_RESPONSE_PLANNING =
+  "We've covered a lot in this planning session! 🗺️ I've reached my limit for this " +
+  "conversation, so I won't be able to respond here anymore. Your trip is saved — head " +
+  "to your dashboard to pick it up, or start a new planning session to keep going."
+
+const HARD_CAP_RESPONSE_MODIFY =
+  "We've made a lot of changes here! 🗺️ I've reached my limit for this conversation, so " +
+  "I won't be able to respond in this chat anymore. Your trip and all applied changes are " +
+  "saved — just close and reopen \"Modify with AI\" to start a fresh session and keep editing."
 
 const SOFT_CAP_NUDGE =
   '\n\nIMPORTANT: This conversation has gotten long. If you have enough information ' +
@@ -452,9 +461,12 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     if (messages.length >= HARD_CAP) {
       console.warn(
         `[AI chat] Hard cap hit on session ${sessionId ?? '(none)'}, ` +
-        `messages=${messages.length}, userId=${userId}`
+        `context=${context ?? 'planning'}, messages=${messages.length}, userId=${userId}`
       )
-      return res.json({ message: HARD_CAP_RESPONSE, hardCapReached: true })
+      const hardCapMessage = context === 'modify'
+        ? HARD_CAP_RESPONSE_MODIFY
+        : HARD_CAP_RESPONSE_PLANNING
+      return res.json({ message: hardCapMessage, hardCapReached: true })
     }
 
     // Soft cap: nudge Claude to wrap up by appending an instruction to its system
