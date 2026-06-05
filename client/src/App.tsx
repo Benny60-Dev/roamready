@@ -78,6 +78,18 @@ function TripDetailRedirect() {
   return <Navigate to={`/trips/${id}/map`} replace />
 }
 
+// SESSION-RESET-1: key SessionPage on the session id so switching between
+// sessions (e.g. cancel→new, or jumping between two trips) UNMOUNTS→REMOUNTS
+// with fresh state — exactly what a hard refresh does. Without the key, React
+// reuses the same SessionPage instance across /sessions/:id param changes,
+// carrying in-memory messages/itinerary AND the autosave hook into the next
+// session until the async hydrate resets them (a window the autosave/next-send
+// can race). The key makes every session a clean slate.
+function KeyedSessionPage() {
+  const { id } = useParams<{ id: string }>()
+  return <SessionPage key={id} />
+}
+
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated())
   const isPastGracePeriod = useAuthStore(s => s.isPastGracePeriod())
@@ -147,7 +159,7 @@ export default function App() {
           <Route path="/trips" element={<Navigate to="/dashboard" replace />} />
           <Route path="/trips/new" element={<Navigate to="/sessions/new" replace />} />
           <Route path="/sessions/new" element={<SessionNewPage />} />
-          <Route path="/sessions/:id" element={<SessionPage />} />
+          <Route path="/sessions/:id" element={<KeyedSessionPage />} />
           <Route path="/trips/:id" element={<TripDetailRedirect />} />
           <Route path="/trips/:id/map" element={<TripMapPage />} />
           <Route path="/trips/:id/booking" element={<TripBookingPage />} />
