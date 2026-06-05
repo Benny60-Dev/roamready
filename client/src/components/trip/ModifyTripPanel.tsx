@@ -43,13 +43,14 @@ interface ChatMsg {
   modifyAction?: ModifyAction
   modifyApplied?: boolean
   modifyCancelled?: boolean
-  /** Set to true by the server (modifyTagMissing in the /ai/chat response
-   *  envelope) when modify mode was active, the server retried once, and
-   *  the final response still lacked a <modify> tag. The render path adds
-   *  a small inline warning under the assistant bubble so the user knows
-   *  no change was applied — distinct from the "Apply" confirmation card
-   *  (which only renders when modifyAction is present and unapplied). */
-  modifyTagMissing?: boolean
+  /** Set to true when the server reported modifyOutcome==='failed' — modify
+   *  mode was active, the server retried once, and the final response carried
+   *  neither a <modify> nor a <clarify> tag (a genuine no-op). The render path
+   *  adds a small inline warning under the assistant bubble. NOT set for
+   *  'clarify' turns (the AI legitimately asking for more info), which render
+   *  as a plain question with no warning — distinct from the "Apply"
+   *  confirmation card (which renders when modifyAction is present). */
+  modifyFailed?: boolean
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -247,18 +248,19 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
       const apiMessages = newMessages.map(m => ({ role: m.role, content: m.content }))
       const res = await aiApi.chat(apiMessages, trip.id, 'modify')
       const aiText: string = res.data.message
-      // modifyTagMissing surfaces when the server retried once and still got
-      // no <modify> tag back. We attach it to the assistant message so the
-      // render path can show the inline warning notice — see the ChatMsg
-      // interface above + the notice block in the messages.map render.
-      const modifyTagMissing: boolean = res.data?.modifyTagMissing === true
+      // modifyOutcome is the server's three-state classification of a modify
+      // turn: 'proposal' (Apply card), 'clarify' (the AI asked for more info —
+      // NOT an error), or 'failed' (neither tag after a retry). We only surface
+      // the inline warning for 'failed'; 'clarify' renders as a plain question.
+      // See the ChatMsg interface above + the notice block in the render.
+      const modifyOutcome: string | undefined = res.data?.modifyOutcome
 
       const modifyAction = parseModify(aiText)
       const aiMsg: ChatMsg = {
         role: 'assistant',
         content: aiText,
         ...(modifyAction ? { modifyAction } : {}),
-        ...(modifyTagMissing ? { modifyTagMissing: true } : {}),
+        ...(modifyOutcome === 'failed' ? { modifyFailed: true } : {}),
       }
       setMessages(prev => [...prev, aiMsg])
     } catch (err: any) {
@@ -621,12 +623,14 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
               {msg.role === 'assistant' && msg.modifyAction && msg.modifyCancelled && (
                 <div className="mt-1 ml-0.5 text-[11px] text-gray-400">Cancelled</div>
               )}
-              {/* Modify-tag-missing notice — server retried once and still got
-                  prose with no <modify> block. Matches the styling tier of the
-                  Applied / Cancelled siblings above (text-[11px], ml-0.5,
-                  font-medium), in amber to signal "warning, action needed"
-                  without escalating to a destructive red. */}
-              {msg.role === 'assistant' && msg.modifyTagMissing && (
+              {/* Modify-failed notice — server retried once and still got prose
+                  with neither a <modify> nor a <clarify> tag (a genuine no-op).
+                  Clarifying questions (modifyOutcome==='clarify') do NOT set
+                  this flag, so they render without a warning. Matches the
+                  styling tier of the Applied / Cancelled siblings above
+                  (text-[11px], ml-0.5, font-medium), in amber to signal
+                  "warning, action needed" without escalating to a destructive red. */}
+              {msg.role === 'assistant' && msg.modifyFailed && (
                 <div className="mt-1 ml-0.5 text-[11px] text-amber-700 font-medium">
                   ⚠️ I couldn't apply that change automatically — try rephrasing your request.
                 </div>
