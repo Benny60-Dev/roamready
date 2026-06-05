@@ -305,6 +305,7 @@ function buildLiveTripState(trip: any): string {
     'NO change actually happens — the UI has no other way to apply modifications.',
     'Never say "Applied to trip", "Done!", "Added!", or any confirmation phrase without also emitting the <modify> tag.',
     'If you cannot determine all required parameters, ask the user — do not claim to have done it.',
+    'CLARIFYING QUESTIONS: When you need more information from the user before you can propose a change (e.g. they have not said which stop, how many nights, or which destination), DO NOT emit a <modify> tag. Instead, wrap your ENTIRE clarifying reply in a <clarify>…</clarify> tag — e.g. <clarify>Which stop did you mean — Stop 1 or Stop 2?</clarify>. The user sees only the text inside the tag, so write a normal, friendly question there. Emit <modify> ONLY when proposing an actionable change; emit <clarify> ONLY when asking for information you still need. Emit exactly one of the two per reply, never both and never neither.',
     '',
     'USER VOCABULARY — read carefully:',
     'Each line in the stop list below has BOTH a user-facing label ("Starting point" / "Stop N" / "Return home") AND the internal data order ("internal order N"). Use the right one in the right place:',
@@ -679,51 +680,58 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     const aiCtx = { userId, sessionId: sessionId ?? null, tripId: tripId ?? null }
     let response = await chatWithAI(messagesForAI, userProfile, recentSurpriseDestinations, surpriseVibe, aiCtx)
 
-    // Tracked across the retry path; surfaced to the client in the response
-    // envelope so the UI can render a fallback notice when modify mode was
-    // active, we attempted a retry, and the final response STILL has no
-    // <modify> tag.
-    let modifyTagMissing = false
+    // Three-state modify-mode outcome, surfaced to the client in the response
+    // envelope. 'proposal' = actionable change (<modify> tag); 'clarify' = the
+    // model intentionally asked the user for more info (<clarify> tag, NOT an
+    // error); 'failed' = neither tag after a retry (a genuine no-op the UI
+    // warns about). null for non-modify chats. This replaces the old binary
+    // modifyTagMissing, which conflated clarify questions with failures.
+    let modifyOutcome: 'proposal' | 'clarify' | 'failed' | null = null
 
     if (liveStateMsg) {
-      const hasTag = /<modify>/.test(response)
-      console.log('[AI modify] response hasModifyTag=%s preview=%s', hasTag, response.slice(0, 200))
+      const hasModify = /<modify>/.test(response)
+      const hasClarify = /<clarify>/.test(response)
+      console.log('[AI modify] response hasModify=%s hasClarify=%s preview=%s', hasModify, hasClarify, response.slice(0, 200))
 
-      // Auto-retry whenever a modify-mode response lacks a <modify> tag,
-      // regardless of whether the prose contains a hard-claim phrase. The
-      // previous gate on MOD_CLAIM_RE (matching "I'll add" / "Done!" / "✅"
-      // etc.) missed calm prose that should have included a tag — e.g.
-      // "Sure, here's what I'd do…" would skip retry and silently no-op.
-      // One retry only; if the second attempt also lacks a tag, set
-      // modifyTagMissing so the UI surfaces the failure instead of
-      // showing prose with no Apply affordance and no error.
-      if (!hasTag) {
-        console.warn('[AI modify] No <modify> tag detected in modification response — auto-retrying with reminder')
+      // Auto-retry ONLY when the model emitted NEITHER tag — then we can't tell
+      // whether it meant to propose a change or to ask a question. A reply that
+      // already carries <modify> (proposal) or <clarify> (intentional question)
+      // is a valid, self-declared outcome and needs no retry. One retry only;
+      // the reminder pushes the model to commit to exactly one tag.
+      if (!hasModify && !hasClarify) {
+        console.warn('[AI modify] No <modify>/<clarify> tag detected in modification response — auto-retrying with reminder')
         const retryMessages = [
           ...messagesForAI,
           { role: 'assistant' as const, content: annotateAppliedModify(response) },
           {
             role: 'user' as const,
             content:
-              '[SYSTEM REMINDER: Your previous reply did not include a <modify> JSON block, so NO change was applied. ' +
+              '[SYSTEM REMINDER: Your previous reply included neither a <modify> nor a <clarify> tag, so NO change was applied and the UI cannot tell what you intended. ' +
               'If the user\'s request requires a trip modification, repeat your response and include the correct <modify>{...}</modify> block now. ' +
-              'If the request does NOT require a modification (just a question or discussion), reply normally without a tag.]',
+              'If you instead need more information from the user before you can propose a change (a question or discussion turn), wrap your reply in a <clarify>...</clarify> tag. ' +
+              'Emit exactly one of <modify> or <clarify>.]',
           },
         ]
         const retryResponse = await chatWithAI(retryMessages, userProfile, recentSurpriseDestinations, surpriseVibe, aiCtx)
-        const retryHasTag = /<modify>/.test(retryResponse)
-        console.log('[AI modify] retry hasModifyTag=%s preview=%s', retryHasTag, retryResponse.slice(0, 200))
-        if (retryHasTag) {
+        const retryHasModify = /<modify>/.test(retryResponse)
+        const retryHasClarify = /<clarify>/.test(retryResponse)
+        console.log('[AI modify] retry hasModify=%s hasClarify=%s preview=%s', retryHasModify, retryHasClarify, retryResponse.slice(0, 200))
+        if (retryHasModify || retryHasClarify) {
           response = retryResponse
-        } else {
-          // Retry also produced no tag. Could be a legitimate question/
-          // discussion (no modification intended) or a genuine failure
-          // (modification intended but not emitted). The server can't
-          // disambiguate — let the UI render a fallback notice; the
-          // user knows what they asked for and can rephrase if needed.
-          modifyTagMissing = true
         }
+        // else: retry also produced neither tag — keep the original response;
+        // the classification below resolves it to 'failed'.
       }
+
+      // Classify the FINAL response into one of the three outcomes.
+      if (/<modify>/.test(response)) modifyOutcome = 'proposal'
+      else if (/<clarify>/.test(response)) modifyOutcome = 'clarify'
+      else modifyOutcome = 'failed'
+
+      // Unwrap any <clarify>…</clarify> so the user sees only the question
+      // text, never the raw tag (mirrors how the client strips <modify> from
+      // displayed prose). Done before persistence so reloaded history is clean.
+      response = response.replace(/<clarify>([\s\S]*?)<\/clarify>/g, '$1').trim()
     }
 
     // AI-MESA-7 — DETERMINISTIC ORIGIN GUARD (no-home users, planning mode only).
@@ -840,11 +848,11 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       }
     }
 
-    // modifyTagMissing surfaces to the client when modify mode was active,
-    // we retried once, and the final response STILL lacked a <modify> tag.
-    // For non-modify chats it stays false. The client (ModifyTripPanel)
-    // renders an inline notice under the assistant bubble when set.
-    res.json({ message: response, modifyTagMissing })
+    // modifyOutcome tells the client how to render a modify-mode turn:
+    // 'proposal' → Apply card, 'clarify' → plain question (no warning),
+    // 'failed' → the inline "couldn't apply" notice. null for non-modify
+    // chats. The client (ModifyTripPanel) only warns on 'failed'.
+    res.json({ message: response, modifyOutcome })
   } catch (err: any) {
     console.error('[AI chat error] message:', err?.message)
     console.error('[AI chat error] status:', err?.status)
