@@ -73,8 +73,8 @@ const VIBES = [
 // session/trip starts with empty conversation fields (see MODIFY-CAP-1).
 const HARD_CAP_RESPONSE_PLANNING =
   "We've covered a lot in this planning session! 🗺️ I've reached my limit for this " +
-  "conversation, so I won't be able to respond here anymore. Your trip is saved — head " +
-  "to your dashboard to pick it up, or start a new planning session to keep going."
+  "conversation, so I won't be able to respond here anymore. Your progress is saved — you " +
+  "can come back to this trip anytime, or start a fresh planning session to keep going."
 
 const HARD_CAP_RESPONSE_MODIFY =
   "We've made a lot of changes here! 🗺️ I've reached my limit for this conversation, so " +
