@@ -363,20 +363,28 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
             action.type === 'HOME' &&
             sortedStops.some((s: any) => s.type === 'HOME')
 
+          // MODIFY-ANCHOR-1: resolve the bracket stop by NAME first. The model is
+          // shown one number + the name per stop and anchors on after_stop (the exact
+          // locationName), which matches reliably. The numeric afterStopOrder is a
+          // fragile fallback (the model used to miscount it) — used only when
+          // after_stop is absent or doesn't match any current stop.
           let afterStop: any
+          let resolvedVia: 'returnHome' | 'name' | 'order' | 'append'
           if (forceAppendAsReturnHome) {
             afterStop = lastStop
-          } else if (action.afterStopOrder != null) {
-            afterStop = sortedStops.find((s: any) => s.order === action.afterStopOrder)
-          } else if (action.after_stop) {
-            afterStop = findStop(action.after_stop)
+            resolvedVia = 'returnHome'
           } else {
-            afterStop = lastStop
+            const byName = action.after_stop ? findStop(action.after_stop) : undefined
+            const byOrder = action.afterStopOrder != null
+              ? sortedStops.find((s: any) => s.order === action.afterStopOrder)
+              : undefined
+            afterStop = byName ?? byOrder ?? lastStop
+            resolvedVia = byName ? 'name' : byOrder ? 'order' : 'append'
           }
 
           const afterOrder = afterStop?.order ?? (lastStop?.order ?? 0)
           const newOrder = afterOrder + 1
-          console.log('[applyMod] position — forceAppendAsReturnHome:', forceAppendAsReturnHome, '| afterStop:', afterStop?.locationName, '| afterOrder:', afterOrder, '| newOrder:', newOrder)
+          console.log('[applyMod] position — forceAppendAsReturnHome:', forceAppendAsReturnHome, '| after_stop:', action.after_stop, '| resolvedVia:', resolvedVia, '| afterStop:', afterStop?.locationName, '| afterOrder:', afterOrder, '| newOrder:', newOrder)
 
           const payload = {
             locationName: cleanName,
