@@ -56,14 +56,24 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
   },
   ref,
 ) {
+  // MIC-SEND-1: submit while the mic is still listening. Recognition runs
+  // continuous:true, so we must STOP it on submit — otherwise stray dictation
+  // would repopulate the next turn's input and the recording UI would stay on.
+  // onToggleListening (= toggleListening) calls stopListening() when active;
+  // optional-chained because it's absent when the mic isn't wired (showMic false).
+  const handleSubmit = () => {
+    if (listening) onToggleListening?.()
+    onSubmit()
+  }
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      if (!disabled && !listening && value.trim()) onSubmit()
+      if (!disabled && value.trim()) handleSubmit()
     }
   }
 
-  const sendDisabled = !value.trim() || disabled || listening
+  const sendDisabled = !value.trim() || disabled
   const showMic = speechSupported && !!onToggleListening
 
   // Use `items-end` (NOT items-center) so when the textarea grows multi-line,
@@ -108,7 +118,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
         )}
         <button
           type="button"
-          onClick={onSubmit}
+          onClick={() => handleSubmit()}
           disabled={sendDisabled}
           aria-label="Send message"
           className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -150,7 +160,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
       )}
       <button
         type="button"
-        onClick={onSubmit}
+        onClick={() => handleSubmit()}
         disabled={sendDisabled}
         aria-label="Send message"
         className="btn-primary px-3 flex items-center gap-1 disabled:opacity-50"
