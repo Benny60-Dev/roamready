@@ -175,6 +175,11 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
   const [applying, setApplying] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  // MODIFY-RESET-1: number of messages seeded from persisted history when the
+  // panel opened. Loaded history is shown as scrollback but NOT posted to
+  // /ai/chat — sendMessage posts only messages added AFTER this boundary, so a
+  // reopened (even hard-capped) session starts fresh and never re-fires the cap.
+  const sessionStartLenRef = useRef(0)
 
   // Apple-style press-to-start / press-to-stop dictation. The hook captures
   // whatever the user has already typed before tapping the mic so dictation
@@ -195,16 +200,23 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
         const history: Array<{ role: 'user' | 'assistant'; content: string }> = res.data ?? []
         if (history.length === 0) {
           setMessages([{ role: 'assistant', content: GREETING(trip.name) }])
+          // Only the greeting was seeded → boundary 1, so a first send posts just
+          // the user's message.
+          sessionStartLenRef.current = 1
         } else {
           setMessages(history.map(m => {
             if (m.role !== 'assistant') return m
             const modifyAction = parseModify(m.content)
             return modifyAction ? { ...m, modifyAction, modifyApplied: true } : m
           }))
+          // history.length messages seeded → boundary excludes all loaded history
+          // from the posted array (it's displayed as scrollback only).
+          sessionStartLenRef.current = history.length
         }
       })
       .catch(() => {
         setMessages([{ role: 'assistant', content: GREETING(trip.name) }])
+        sessionStartLenRef.current = 1
       })
       .finally(() => setHistoryLoaded(true))
   }, [trip.id, isOpen])
@@ -245,7 +257,13 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
       // The server injects a live ground-truth state message on every modify call,
       // so we no longer send the (potentially stale) client-side system prompt.
       // Sending it would give Claude two conflicting stop lists.
-      const apiMessages = newMessages.map(m => ({ role: m.role, content: m.content }))
+      // MODIFY-RESET-1: post ONLY messages added during the current open session
+      // (everything after the seeded-history boundary). The full thread is still
+      // displayed above (setMessages(newMessages)); only the POSTED array is sliced,
+      // so reopening a hard-capped session starts fresh and never re-fires the cap.
+      const apiMessages = newMessages
+        .slice(sessionStartLenRef.current)
+        .map(m => ({ role: m.role, content: m.content }))
       const res = await aiApi.chat(apiMessages, trip.id, 'modify')
       const aiText: string = res.data.message
       // modifyOutcome is the server's three-state classification of a modify
