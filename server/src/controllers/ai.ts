@@ -9,8 +9,8 @@ import { parseTripDate } from '../utils/dates'
 // Soft cap: inject a "wrap up" system message and let Claude actually respond
 // (so it has a chance to emit the <itinerary> JSON block).
 // Hard cap: short-circuit purely for cost protection.
-const SOFT_CAP = 35
-const HARD_CAP = 60
+const SOFT_CAP = 600
+const HARD_CAP = 1000
 
 // Per-user daily AI call cap for non-paying, non-trial, non-owner accounts.
 // Quiet cost protection — NOT a marketing tier, NOT in FEATURE_GATES, NOT
