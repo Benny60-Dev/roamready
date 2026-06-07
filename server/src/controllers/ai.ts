@@ -697,6 +697,19 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       console.log('[AI surprise] excluding=%j vibe=%s', recentSurpriseDestinations, surpriseVibe)
     }
 
+    // ORIGIN-FIX — read any starting location captured on a PRIOR turn (persisted
+    // to PlanningSession.partialTripData after the AI emitted an <origin> tag) and
+    // fold it onto userProfile so services/ai.ts can suppress the no-home re-ask
+    // directive and tell the model the origin it already has. Planning-only in
+    // practice (modify never emits <origin>); guarded on sessionId.
+    if (sessionId) {
+      const sess = await prisma.planningSession.findUnique({
+        where: { id: sessionId },
+        select: { partialTripData: true },
+      })
+      ;(userProfile as any).capturedOrigin = (sess?.partialTripData as any)?.origin ?? null
+    }
+
     const aiCtx = { userId, sessionId: sessionId ?? null, tripId: tripId ?? null }
     let response = await chatWithAI(messagesForAI, userProfile, recentSurpriseDestinations, surpriseVibe, aiCtx)
 
@@ -836,6 +849,26 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             )
             response = NO_ORIGIN_RESPONSE
           }
+        }
+      }
+    }
+
+    // ORIGIN-FIX — capture the AI's structured <origin> tag (emitted on the turn
+    // it confirms the user's starting location). Strip it from the displayed
+    // message (mirrors the <clarify> unwrap) and persist it to the session so the
+    // no-home directive stops re-firing on later turns. Guarded on sessionId.
+    const originMatch = response.match(/<origin>([\s\S]*?)<\/origin>/)
+    if (originMatch) {
+      response = response.replace(/<origin>[\s\S]*?<\/origin>/g, '').trim()
+      const captured = originMatch[1].trim()
+      if (sessionId && captured) {
+        try {
+          await prisma.planningSession.update({
+            where: { id: sessionId },
+            data: { partialTripData: { origin: captured } },
+          })
+        } catch (e: any) {
+          console.error('[AI origin-capture] persist failed for sessionId=%s: %s', sessionId, e?.message)
         }
       }
     }

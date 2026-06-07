@@ -426,7 +426,11 @@ export default function SessionPage() {
     hydrating ? null : sessionId,
     {
       messages,
-      partialTripData: {},
+      // partialTripData is now SERVER-OWNED (holds the captured trip origin for
+      // the null-home re-ask fix). The client must NOT send it — the old
+      // `partialTripData: {}` here overwrote the column every autosave and would
+      // clobber the server-persisted origin. Omitted so the server's value
+      // survives; the client never reads it.
       ...(sessionTitle ? { title: sessionTitle } : {}),
     }
   )

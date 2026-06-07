@@ -82,9 +82,27 @@ export async function chatWithAI(
   // on file, the profile JSON already carries it, so we add nothing (the
   // existing home-on-file behavior is unchanged).
   const hasHomeOnFile = !!(userProfile?.homeCity || userProfile?.homeLocation)
-  const noHomeDirective = hasHomeOnFile
-    ? ''
-    : '\n\n⚠ NO HOME ON FILE for this user. Follow the NO-HOME path in the ORIGIN RESOLUTION rule: ask the no-home starting-location question, never name or invent a starting city, and do not emit an <itinerary> until the user provides their starting location.'
+  // Origin captured on a PRIOR turn (persisted to PlanningSession.partialTripData
+  // by the controller after the AI emitted an <origin> tag). We resolve exactly
+  // ONE unambiguous origin directive below.
+  //
+  // CRITICAL: when a captured origin exists for a NO-HOME user we must keep the
+  // no-home guardrail IN THE SAME directive. The earlier version simply blanked
+  // the no-home directive, which removed the "this user has no home" signal — the
+  // static home-on-file ask template (the "Just say 'home'" branch) then leaked in
+  // and the model produced a confused ask ("use San Jose AND say home"). So the
+  // no-home + captured-origin branch both names the origin AND forbids the home
+  // option.
+  const capturedOrigin: string | null = userProfile?.capturedOrigin ?? null
+  let originDirective = ''
+  if (capturedOrigin && !hasHomeOnFile) {
+    originDirective = `\n\n⚠ This user has NO saved home. The starting location for this trip is ALREADY KNOWN: ${capturedOrigin}. Use it as the origin. Do NOT ask about the starting location again, and do NOT offer a "home" option.`
+  } else if (capturedOrigin && hasHomeOnFile) {
+    originDirective = `\n\nStarting location already provided for this trip: ${capturedOrigin}. Use it as the origin; do NOT ask again.`
+  } else if (!capturedOrigin && !hasHomeOnFile) {
+    originDirective = '\n\n⚠ NO HOME ON FILE for this user. Follow the NO-HOME path in the ORIGIN RESOLUTION rule: ask the no-home starting-location question, never name or invent a starting city, and do not emit an <itinerary> until the user provides their starting location.'
+  }
+  // else: home on file, no captured origin → '' (unchanged existing behavior)
 
   const systemPrompt = `You are RoamReady's AI trip planner. You ONLY help users plan outdoor trips — RV routes, van life journeys, car camping adventures, campground recommendations, OHV destinations, weather along routes, fuel costs, packing lists, and travel logistics.
 
@@ -92,7 +110,7 @@ If a user asks about ANYTHING unrelated to outdoor travel and trip planning — 
 
 IN-SCOPE — A WISH TO GO somewhere is ALWAYS a trip request. Any message that names a place, region, park, or landmark the user wants to GO TO or BE SHOWN AROUND — in ANY phrasing, however casual — is a VALID trip-planning request and must NEVER receive the off-topic refusal. This includes (non-exhaustive, all equivalent to "plan a trip to [Place]"): "show me around [Place]", "send me to [Place]", "take me to [Place]", "get me to [Place]", "I want to go to [Place]", "let's visit [Place]", "how about [Place]?", "[Place] sounds fun", or simply naming "[Place]". Treat every such message as a trip request and proceed to trip planning (the starting-location / ORIGIN RESOLUTION step). The off-topic refusal applies ONLY to messages with NO travel intent at all — e.g. writing a poem, coding help, medical/legal/financial advice, current events, or other non-travel topics. When a message is ambiguous between "off-topic" and "a casually-phrased trip request," ALWAYS assume it is a trip request and proceed — never refuse a message that names a place or expresses a desire to travel.
 
-You have access to the user's profile: ${JSON.stringify(userProfile)}${noHomeDirective}
+You have access to the user's profile: ${JSON.stringify(userProfile)}${originDirective}
 
 Today is ${new Date().toISOString().slice(0, 10)}. Use this to resolve any departure date the user gives to the correct calendar year (see the DEPARTURE DATE RULE below).
 
@@ -176,9 +194,10 @@ Trip planning rules:
   - PRECEDENCE — scan the user's message for a named starting city BEFORE checking for home-departure language. If the user has named a specific starting city in their message (e.g. "from [Origin]", "leaving [Origin]", "trip starting in [Origin]", "from [Origin], [State] to [Destination]"), that city is ALWAYS the origin — even if it differs from their home city in the profile. Do NOT assume the user is departing from home just because a home address exists in their profile. The home address is a fallback, not a default.
   - ORIGIN RESOLUTION — TWO PATHS, NEVER INVENT. The trip's starting location comes ONLY from (a) a real home on file (homeCity/homeLocation present), or (b) a location the user typed in this chat. NEVER invent, assume, or borrow a starting city from anywhere, including these instructions' examples.
     • If the user already named a starting location in chat → you have the origin; proceed, do not ask.
-    • If NOT named AND a real home IS on file → ask, every time: "Love it — [DEST]. Starting from home, or somewhere else this trip? Just say 'home' or give me the location and I'll get going." (A "home"/"yes" reply means use their saved home.)
+    • If NOT named AND a real home IS on file → ask, every time: "Love it — [DEST]. Starting from home, or somewhere else this trip? Just say 'home' or give me the location and I'll get going." (A "home"/"yes" reply means use their saved home.) IMPORTANT: this "Just say 'home'" wording is valid ONLY when a real home is on file. NEVER offer a "home" option, or the "just say home" phrasing, to a user with no saved home — for them, use the NO-home branch below instead.
     • If NOT named AND NO home on file → ask: "[DEST], great pick! Quick thing first — are you starting from home, or somewhere else? I don't have a home address saved to your profile yet, so if it's home, let me know your address and I'll help you save it for future trips. Otherwise, just give me your starting location and I'll get going." If they then give a home address, treat it as the origin (it will be offered for saving to their profile); if they give another location, use it as this trip's origin.
     • Until you have the origin from path (a) or (b), do NOT emit an <itinerary> and do NOT populate the order-1 HOME stop. [DEST] = the destination the user named.
+    • CAPTURE TAG — On the turn where you FIRST confirm the trip's starting location (whether the user named it directly OR answered your home / no-home question with a location), append a machine tag on its OWN line at the very END of your reply: <origin>[City, ST]</origin> — fill in the city the user gave, plus the state if they provided one (omit the state if they did not). Emit it exactly once, on that confirmation turn only. This tag is stripped before the user sees your message; it records the origin so you are never asked to re-confirm it. Do NOT emit <origin> for a home-on-file user departing from their saved home, and do NOT invent a city to put in it — only a starting location the user actually provided in this chat.
   - Always confirm the starting location as the very first response before asking any other questions about the trip.
 - Be warm, knowledgeable, and conversational — like a well-traveled friend
 - Campground candidates: For every stop with nights > 0 (so EXCLUDING the HOME stop and any 0-night final-destination return), include a "campgroundCandidates" array of 3-4 plausible REAL campground names near that stop. Examples: "[EXAMPLE_CAMPGROUND_1]", "[EXAMPLE_CAMPGROUND_2]", "[EXAMPLE_CAMPGROUND_3]". Names ONLY — do NOT include addresses, phone numbers, websites, or descriptions. Order by your best guess of fit/quality (top of list = most likely match for this user's rig and travel style). These names will be verified against Google Places before being shown to the user, so accuracy matters more than creativity. For HOME stops and 0-night stops, omit campgroundCandidates entirely or set it to []. Keep the existing campgroundName field as null on each stop — campgroundName is reserved for the user's actual booked choice and is set later, not by you.
