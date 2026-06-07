@@ -89,7 +89,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
           ref={ref}
           rows={1}
           aria-label="Message RoamReady AI"
-          className="flex-1 bg-transparent outline-none text-sm py-2 resize-none overflow-y-auto"
+          className="chat-textarea-hero flex-1 bg-transparent outline-none text-sm py-2 resize-none overflow-y-auto"
           // fieldSizing isn't yet in TS lib types, so cast through CSSProperties.
           // The runtime CSS property is `field-sizing: content`; React/JSX accepts
           // it as the camelCased key via inline style. Falls back silently on

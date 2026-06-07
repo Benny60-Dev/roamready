@@ -103,6 +103,18 @@
   select {
     font-size: 16px !important;
   }
+
+  /* BUG-1: on touch, the wider fallback font (before/without Inter) can wrap the
+     hero placeholder to 3 lines. `field-sizing: content` sizes the box to the
+     empty VALUE and ignores the placeholder, and the inline minHeight floors it
+     at 2 lines (3.5rem) — so the 3rd line clips. Raise ONLY the hero textarea to
+     a 3-line floor on coarse pointers: 3×20px line-height + 8+8px padding,
+     border-box = 76px. Desktop (fine pointer) keeps the inline 2-line 3.5rem
+     floor untouched. `!important` beats the (non-important) inline minHeight,
+     same mechanism the font-size guard above relies on. */
+  .chat-textarea-hero {
+    min-height: 4.75rem !important;
+  }
 }
 
 .typing-dot {
