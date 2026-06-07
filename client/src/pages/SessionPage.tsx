@@ -963,8 +963,8 @@ export default function SessionPage() {
                 aria-hidden="true"
                 className="pointer-events-none select-none whitespace-nowrap overflow-hidden text-center absolute left-0 right-0 bottom-0"
                 style={{
-                  opacity: 0.10,
-                  fontWeight: 600,
+                  opacity: 0.16,
+                  fontWeight: 800,
                   letterSpacing: '-0.02em',
                   lineHeight: 1,
                   fontSize: 'clamp(36px, 7vw, 72px)',
