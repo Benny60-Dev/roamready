@@ -1586,22 +1586,32 @@ export default function SessionPage() {
                 <div ref={bottomRef} />
               </div>
 
-              {/* Mobile-only peek tab — shown when itinerary is ready */}
+              {/* Mobile-only peek tab — shown when itinerary is ready.
+                  Option B: route + stats on top, explicit full-width gold CTA
+                  below. The whole pill stays ONE button (full tap target) and
+                  still opens the BottomSheet preview via setSheetOpen(true). */}
               {itinerary && (
                 <button
                   type="button"
                   onClick={() => setSheetOpen(true)}
-                  className="lg:hidden flex items-center justify-between gap-2 mt-3 px-4 py-2.5 bg-[#E0F0F4] border border-[#1F6F8B]/20 rounded-xl text-sm hover:bg-[#1F6F8B]/10 transition-colors"
+                  aria-label="Preview your itinerary"
+                  className="lg:hidden flex flex-col gap-2.5 mt-3 px-4 py-3 bg-[#E0F0F4] border border-[#1F6F8B]/20 rounded-xl text-sm hover:bg-[#1F6F8B]/10 transition-colors"
                   style={{ borderWidth: '0.5px' }}
                 >
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                  {/* Info row — name (truncates) + nights/camp stats */}
+                  <div className="flex items-center gap-2 min-w-0 w-full">
                     <span className="text-base flex-shrink-0">🗺️</span>
                     <span className="font-medium text-[#1F6F8B] truncate">{itinerary.name}</span>
                     <span className="text-xs text-[#134756] flex-shrink-0">
                       · {itinerary.totalNights}n · ${Math.round(computeTripTotals(itinerary).campEst).toLocaleString()} camp
                     </span>
                   </div>
-                  <span className="text-sm text-[#1F6F8B] font-medium flex-shrink-0">Review →</span>
+                  {/* Full-width gold CTA — reuses .btn-primary (white text on
+                      #F7A829, hover #C9851A); replaces the old "Review →" span. */}
+                  <span className="btn-primary w-full flex items-center justify-center gap-1.5">
+                    <MapPin size={15} />
+                    Tap to preview your itinerary
+                  </span>
                 </button>
               )}
 
