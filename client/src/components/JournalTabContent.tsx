@@ -1,13 +1,25 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, Search, Star, MapPin, Pencil, X } from 'lucide-react'
-import { journalApi } from '../services/api'
+import { journalApi, visitedStatesApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import { useUIStore } from '../store/uiStore'
 import { JournalEntry, Trip } from '../types'
 import { formatTripDate, toYmd } from '../utils/dates'
 import { deriveTripStatus } from '../utils/tripStatus'
-import { normalizeStateCode } from './journal/stateUtils'
+import { normalizeStateCode, STATE_CODES } from './journal/stateUtils'
 import VisitedStatesBanner from './journal/VisitedStatesBanner'
+
+type StateTier = 'overnight' | 'passthrough' | 'none'
+interface ManualState {
+  state: string
+  visitType: string
+}
+/** Per-state metadata the phase-4 editor consumes (lock + current source). */
+export interface StateMeta {
+  derivedTier: StateTier
+  manualTier: StateTier
+  locked: boolean
+}
 
 /**
  * Journal tab content — the freeform travel-diary feed (Block: Journal step 4).
@@ -94,6 +106,23 @@ export default function JournalTabContent({ trips }: Props) {
     load()
   }, [])
 
+  // Manual visited-state marks (step 6b). Fetched separately from the feed so
+  // the editor (phase 4) can refetch just these after a mutation without
+  // reloading the whole journal. A failure is non-fatal — the map falls back to
+  // derived-only. refetchManualStates is the callback phase 4's editor calls.
+  const [manualStates, setManualStates] = useState<ManualState[]>([])
+  function refetchManualStates() {
+    visitedStatesApi
+      .list()
+      .then(res => setManualStates(res.data))
+      .catch(() => {
+        /* non-fatal: map shows derived-only */
+      })
+  }
+  useEffect(() => {
+    refetchManualStates()
+  }, [])
+
   // Count line — states/trips counted across ALL entries (not the filtered
   // view) so the header reads as a stable summary of the whole journal.
   const stateCount = new Set(entries.filter(e => e.state).map(e => e.state)).size
@@ -122,37 +151,85 @@ export default function JournalTabContent({ trips }: Props) {
     a.entryDate < b.entryDate ? 1 : a.entryDate > b.entryDate ? -1 : 0,
   )
 
-  // ── Visited-states rollup (client-side, derived; matches the Dashboard) ───
-  //   Completion is date-derived via deriveTripStatus — NOT the stale stored
-  //   Trip.status enum — so the map agrees with the Dashboard's Completed tab.
+  // ── Visited-states rollup (derived + manual; matches the Dashboard) ───────
+  //   DERIVED (date-derived via deriveTripStatus — NOT the stale stored
+  //   Trip.status enum — so the map agrees with the Dashboard's Completed tab):
   //     overnight   = completed-trip stops (non-HOME, nights >= 1)
   //     passthrough = completed-trip stops with nights === 0, PLUS journal
   //                   entries with a state — minus any already overnight
-  //     counter     = (overnight ∪ passthrough), excluding DC, of 50
+  //   MANUAL marks (step 6b) fold in with the locked rule:
+  //     derived-overnight is authoritative — a manual mark on such a state is
+  //     IGNORED (can't downgrade earned data). Otherwise overnight always wins
+  //     over passthrough in the final merge.
+  //   counter = (finalOvernight ∪ finalPassthrough), excluding DC, of 50.
+  //   stateMeta exposes per-state { derivedTier, manualTier, locked } for the
+  //   phase-4 editor (consumed there; returned here so it's ready).
+  // stateMeta is intentionally NOT destructured here yet — it's returned by the
+  // memo (computed + ready) and phase 4's editor will read it. Pulling it into a
+  // local now would trip noUnusedLocals before there's a consumer.
   const { overnight, passthrough, visitedCount } = useMemo(() => {
-    const overnightSet = new Set<string>()
-    const passSet = new Set<string>()
+    // Derived sets.
+    const derivedOvernight = new Set<string>()
+    const derivedPassthrough = new Set<string>()
     for (const trip of trips) {
       if (deriveTripStatus(trip) !== 'COMPLETED') continue
       for (const stop of trip.stops || []) {
         if (stop.type === 'HOME') continue
         const code = normalizeStateCode(stop.locationState)
         if (!code) continue
-        if (stop.nights >= 1) overnightSet.add(code)
-        else passSet.add(code)
+        if (stop.nights >= 1) derivedOvernight.add(code)
+        else derivedPassthrough.add(code)
       }
     }
     for (const e of entries) {
       const code = normalizeStateCode(e.state)
-      if (code) passSet.add(code)
+      if (code) derivedPassthrough.add(code)
     }
-    // Overnight wins over passthrough for the same state.
-    for (const code of overnightSet) passSet.delete(code)
+    for (const code of derivedOvernight) derivedPassthrough.delete(code)
+
+    // Raw manual marks (kept for the editor's display, independent of the lock).
+    const rawManual = new Map<string, StateTier>()
+    for (const m of manualStates) {
+      const code = normalizeStateCode(m.state)
+      if (!code) continue
+      rawManual.set(code, m.visitType === 'overnight' ? 'overnight' : 'passthrough')
+    }
+
+    // Apply manual marks with the lock rule, then resolve overnight-wins.
+    const finalOvernight = new Set<string>(derivedOvernight)
+    const finalPassthrough = new Set<string>(derivedPassthrough)
+    for (const [code, tier] of rawManual) {
+      if (derivedOvernight.has(code)) continue // locked — manual can't downgrade
+      if (tier === 'overnight') finalOvernight.add(code)
+      else finalPassthrough.add(code)
+    }
+    for (const code of finalOvernight) finalPassthrough.delete(code) // overnight wins
+
     // Counter is over the 50 states — DC is shown on the map but doesn't count.
-    const union = new Set<string>([...overnightSet, ...passSet])
+    const union = new Set<string>([...finalOvernight, ...finalPassthrough])
     union.delete('DC')
-    return { overnight: overnightSet, passthrough: passSet, visitedCount: union.size }
-  }, [trips, entries])
+
+    // Per-state metadata for the editor.
+    const meta = new Map<string, StateMeta>()
+    for (const code of STATE_CODES) {
+      meta.set(code, {
+        derivedTier: derivedOvernight.has(code)
+          ? 'overnight'
+          : derivedPassthrough.has(code)
+            ? 'passthrough'
+            : 'none',
+        manualTier: rawManual.get(code) ?? 'none',
+        locked: derivedOvernight.has(code),
+      })
+    }
+
+    return {
+      overnight: finalOvernight,
+      passthrough: finalPassthrough,
+      visitedCount: union.size,
+      stateMeta: meta,
+    }
+  }, [trips, entries, manualStates])
 
   // Group by trip; standalone (no tripId) entries fall into a trailing
   // "General" group. Map preserves insertion order, and we insert in

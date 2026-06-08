@@ -14,7 +14,7 @@
  */
 
 /** Canonical 50 states + DC. Kept in sync with usStatesGeo.ts (same set). */
-const STATE_NAMES: Record<string, string> = {
+export const STATE_NAMES: Record<string, string> = {
   AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California',
   CO: 'Colorado', CT: 'Connecticut', DE: 'Delaware', DC: 'District of Columbia',
   FL: 'Florida', GA: 'Georgia', HI: 'Hawaii', ID: 'Idaho', IL: 'Illinois',
@@ -28,6 +28,9 @@ const STATE_NAMES: Record<string, string> = {
   TX: 'Texas', UT: 'Utah', VT: 'Vermont', VA: 'Virginia', WA: 'Washington',
   WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming',
 }
+
+/** All 51 codes (50 states + DC), in declaration order. */
+export const STATE_CODES = Object.keys(STATE_NAMES)
 
 const VALID_CODES = new Set(Object.keys(STATE_NAMES))
 const NAME_TO_CODE = new Map(
