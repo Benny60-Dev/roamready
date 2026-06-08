@@ -1612,8 +1612,15 @@ export default function SessionPage() {
                 </button>
               )}
 
-              {/* Chat input — pinned to bottom */}
-              <div className="mt-3">
+              {/* Chat input — pinned to bottom. On mobile the fixed bottom nav
+                  (md:hidden, ~56px) overlays the viewport bottom, and this input
+                  sits in-flow at the base of the forced-height conversation
+                  wrapper — so without clearance the mic + Send clip behind the
+                  nav. Add bottom padding that clears the nav height PLUS the iOS
+                  home-indicator safe area (env() = 0 on non-notch, so no awkward
+                  gap there). Removed at md where there is no bottom nav. Mirrors
+                  the app's main `pb-32 md:pb-6` bottom-nav clearance pattern. */}
+              <div className="mt-3 pb-[calc(env(safe-area-inset-bottom)+4rem)] md:pb-0">
                 <ChatInput
                   ref={inputRef}
                   value={input}
