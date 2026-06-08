@@ -13,6 +13,7 @@ import TripCard from '../components/trip/TripCard'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
 import { useVoiceInput } from '../hooks/useVoiceInput'
 import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
+import { diag } from '../components/diagnosticsBus' // TEMP DIAGNOSTIC - REMOVE
 import { ChatInput } from '../components/ChatInput'
 import { selectGreeting } from '../utils/greeting'
 import { relativeTime } from '../utils/dates'
@@ -457,10 +458,12 @@ export default function SessionPage() {
   // Window-only — independent of the message-list scroll (listRef).
   const prevEmptyRef = useRef(true)
   useLayoutEffect(() => {
+    diag.edgeRuns++ // TEMP DIAGNOSTIC - REMOVE
     const empty = !messages.some(m => m.role === 'user')
     const justActivated = prevEmptyRef.current && !empty
     prevEmptyRef.current = empty
     if (!justActivated) return
+    diag.justActivated++ // TEMP DIAGNOSTIC - REMOVE
     // First user message → empty-state hero swaps to the conversation layout.
     // The textarea the user just typed into is STILL FOCUSED, so right after the
     // swap the browser scrolls it back into view (~84px on device), carrying the
