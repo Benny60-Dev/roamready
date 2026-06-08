@@ -645,6 +645,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       homeCity:     user?.homeCity     || undefined,
       homeState:    user?.homeState    || undefined,
       homeLocation: user?.homeLocation || undefined,
+      isFullTimeRVer: user?.isFullTimeRVer ?? false,
       rigs:         user?.rigs,
       travelProfile: user?.travelProfile,
       memberships:  user?.memberships?.map(m => m.type),

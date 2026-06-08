@@ -99,6 +99,10 @@ export async function chatWithAI(
     originDirective = `\n\n⚠ This user has NO saved home. The starting location for this trip is ALREADY KNOWN: ${capturedOrigin}. Use it as the origin. Do NOT ask about the starting location again, and do NOT offer a "home" option.`
   } else if (capturedOrigin && hasHomeOnFile) {
     originDirective = `\n\nStarting location already provided for this trip: ${capturedOrigin}. Use it as the origin; do NOT ask again.`
+  } else if (!capturedOrigin && !hasHomeOnFile && userProfile?.isFullTimeRVer) {
+    // Full-timer with no fixed home: ask the origin WITHOUT any mention of home
+    // or saving an address (a "home" framing is meaningless to them).
+    originDirective = '\n\n⚠ This user is a FULL-TIME RVer with no fixed home. Ask simply: "Where are you starting this trip from?" — do NOT mention home, a saved address, or saving an address. Never invent a city; do not emit an <itinerary> until they provide a starting location.'
   } else if (!capturedOrigin && !hasHomeOnFile) {
     originDirective = '\n\n⚠ NO HOME ON FILE for this user. Follow the NO-HOME path in the ORIGIN RESOLUTION rule: ask the no-home starting-location question, never name or invent a starting city, and do not emit an <itinerary> until the user provides their starting location.'
   }

@@ -892,7 +892,7 @@ export default function SessionPage() {
   // regardless of trip count. Keys purely on no-home-saved + empty-state + not-
   // dismissed-this-session. Saving sets user.homeLocation → this flips false →
   // card unmounts. Skip = local dismiss.
-  const showHomeCard = isEmptyState && !user?.homeLocation && !homeCardDismissed
+  const showHomeCard = isEmptyState && !user?.homeLocation && !user?.isFullTimeRVer && !user?.dismissedHomePrompt && !homeCardDismissed
 
   return (
     <>

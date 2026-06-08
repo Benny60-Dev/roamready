@@ -30,6 +30,8 @@ model User {
   homeZip             String?
   homeLat             Float?
   homeLng             Float?
+  isFullTimeRVer      Boolean  @default(false)
+  dismissedHomePrompt Boolean  @default(false)
   avatarUrl           String?
   subscriptionTier    SubscriptionTier     @default(FREE)
   subscriptionId      String?

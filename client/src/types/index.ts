@@ -28,6 +28,8 @@ export interface User {
   homeZip?: string
   homeLat?: number
   homeLng?: number
+  isFullTimeRVer?: boolean
+  dismissedHomePrompt?: boolean
   avatarUrl?: string
   subscriptionTier: SubscriptionTier
   subscriptionId?: string

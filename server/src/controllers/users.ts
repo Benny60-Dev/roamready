@@ -101,12 +101,14 @@ export async function updateMe(req: AuthRequest, res: Response, next: NextFuncti
     const {
       firstName, lastName, phone, avatarUrl,
       homeLocation, homeAddress, homeStreet, homeCity, homeState, homeZip, homeLat, homeLng,
+      isFullTimeRVer, dismissedHomePrompt,
     } = req.body
     const user = await prisma.user.update({
       where: { id: req.user!.id },
       data: {
         firstName, lastName, phone, avatarUrl,
         homeLocation, homeAddress, homeStreet, homeCity, homeState, homeZip, homeLat, homeLng,
+        isFullTimeRVer, dismissedHomePrompt,
       },
     })
     // Strip sensitive / server-only fields before responding — see

@@ -12,6 +12,7 @@ export default function ProfilePage() {
   const { user, setUser } = useAuthStore()
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   // Personal Information is an expand-in-place row (toggles the form below it
   // on /profile — it does NOT navigate, unlike the profileLinks rows).
   const [personalOpen, setPersonalOpen] = useState(false)
@@ -29,6 +30,7 @@ export default function ProfilePage() {
 
   const watchedCity  = watch('homeCity')  as string | undefined
   const watchedState = watch('homeState') as string | undefined
+  const watchedFullTimer = watch('isFullTimeRVer') as boolean | undefined
 
   function onPlaceChanged() {
     const place = autocompleteRef.current?.getPlace()
@@ -56,15 +58,21 @@ export default function ProfilePage() {
     setValue('homeLng',     lng,     { shouldDirty: true })
     setValue('homeAddress', full,    { shouldDirty: true })
     setValue('homeLocation', full,   { shouldDirty: true })
+    // Selecting a real address clears the full-timer flag (mutually exclusive).
+    setValue('isFullTimeRVer', false, { shouldDirty: true })
   }
 
   async function onSubmit(data: any) {
     setSaving(true)
+    setSaveError(null)
     try {
       const res = await usersApi.updateMe(data)
       setUser({ ...user!, ...res.data })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
+    } catch (e: any) {
+      console.error('[ProfilePage] save failed:', e?.response?.data || e?.message)
+      setSaveError("Couldn't save changes. Please try again.")
     } finally {
       setSaving(false)
     }
@@ -164,6 +172,7 @@ export default function ProfilePage() {
                   placeholder="Start typing your address…"
                   value={(watch('homeAddress') as string | undefined) || (watch('homeLocation') as string | undefined) || ''}
                   onChange={e => setValue('homeAddress', e.target.value, { shouldDirty: true })}
+                  disabled={!!watchedFullTimer}
                 />
               </Autocomplete>
             ) : (
@@ -180,6 +189,29 @@ export default function ProfilePage() {
               </p>
             )}
           </div>
+
+          {/* Full-time RVer toggle — mutually exclusive with a saved home base.
+              Checking it clears the 8 home fields (and disables the address input
+              above); selecting an address clears this (see onPlaceChanged). Saved
+              via the same onSubmit → updateMe. */}
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="w-4 h-4 accent-[#1F6F8B] rounded border-gray-300"
+              {...register('isFullTimeRVer')}
+              onChange={e => {
+                setValue('isFullTimeRVer', e.target.checked, { shouldDirty: true })
+                if (e.target.checked) {
+                  // Clear to null (NOT ''): homeLat/homeLng are Float? columns and
+                  // Prisma rejects '' → Float, which would throw the whole update.
+                  // null is valid for all eight (all nullable in schema).
+                  (['homeStreet', 'homeCity', 'homeState', 'homeZip', 'homeLat', 'homeLng', 'homeAddress', 'homeLocation'] as const)
+                    .forEach(f => setValue(f, null as any, { shouldDirty: true }))
+                }
+              }}
+            />
+            <span className="text-sm text-gray-800">I'm a full-time RVer (no fixed home base)</span>
+          </label>
 
           {/* Emergency contact name + phone removed (Block 6) — they were
               write-only (only the account holder sees their own Profile, so
@@ -198,9 +230,12 @@ export default function ProfilePage() {
           <input type="hidden" {...register('homeAddress')} />
           <input type="hidden" {...register('homeLocation')} />
 
-          <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2">
-            <Save size={15} /> {saving ? 'Saving...' : saved ? 'Saved!' : 'Save changes'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2">
+              <Save size={15} /> {saving ? 'Saving...' : saved ? 'Saved!' : 'Save changes'}
+            </button>
+            {saveError && <p className="text-sm text-red-600">{saveError}</p>}
+          </div>
         </form>
             </div>
           )}
