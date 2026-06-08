@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, Search, Star, MapPin, Pencil, X } from 'lucide-react'
 import { journalApi, visitedStatesApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
@@ -58,6 +58,14 @@ export default function JournalTabContent({ trips }: Props) {
   const [filter, setFilter] = useState<FilterKey>('all')
   const [composerOpen, setComposerOpen] = useState(false)
 
+  // Server full-text search (step 5 phase 3). searchResults is null when the
+  // box is empty (feed shows the full `entries` set); an array when a search is
+  // active. The full `entries` fetch is NEVER replaced by this — it still drives
+  // the map derivation, the count line, and the chip base set.
+  const [searchResults, setSearchResults] = useState<JournalEntry[] | null>(null)
+  const [searching, setSearching] = useState(false)
+  const searchSeq = useRef(0)
+
   const hasAccess = useAuthStore(s => s.hasAccess)
   const openPaywall = useUIStore(s => s.openPaywall)
 
@@ -116,26 +124,59 @@ export default function JournalTabContent({ trips }: Props) {
     refetchManualStates()
   }, [])
 
+  // Debounced server full-text search. When the box has text, hit the FTS
+  // endpoint (journalApi.list({ q })) ~275ms after the last keystroke and render
+  // those results in the feed. Empty box → no call, feed shows the full set.
+  // searchSeq guards against out-of-order / stale responses.
+  useEffect(() => {
+    const q = search.trim()
+    if (!q) {
+      searchSeq.current++ // invalidate any in-flight response
+      setSearchResults(null)
+      setSearching(false)
+      return
+    }
+    const seq = ++searchSeq.current
+    setSearching(true)
+    const t = setTimeout(() => {
+      journalApi
+        .list({ q })
+        .then(res => {
+          if (seq !== searchSeq.current) return // stale — a newer query superseded this
+          setSearchResults(res.data)
+          setSearching(false)
+        })
+        .catch(() => {
+          if (seq !== searchSeq.current) return
+          setSearchResults([]) // treat a failed search as no matches
+          setSearching(false)
+        })
+    }, 275)
+    return () => clearTimeout(t)
+  }, [search])
+
   // Count line — states/trips counted across ALL entries (not the filtered
   // view) so the header reads as a stable summary of the whole journal.
   const stateCount = new Set(entries.filter(e => e.state).map(e => e.state)).size
   const tripCount = new Set(entries.filter(e => e.tripId).map(e => e.tripId)).size
 
-  // ── Client-side filter (search + chips). Kept client-side for v1: the feed
-  //    is small and already fully fetched, so round-tripping the q/filter params
-  //    to the server would add latency without benefit. The list endpoint's
-  //    query params are wired and ready for when the feed grows large enough to
-  //    paginate.
-  const searchLower = search.trim().toLowerCase()
-  const filtered = entries.filter(e => {
+  // Feed source: server FTS results when searching, else the full set. The map
+  // memo + count line ALWAYS read the full `entries` set (never this) — search
+  // narrows only the visible feed, not the map/counts.
+  const isSearching = search.trim().length > 0
+  const baseEntries = isSearching ? (searchResults ?? []) : entries
+  // Show the searching state until the first results for the current query land
+  // (covers the pre-effect render + debounce + fetch); once results exist we keep
+  // them visible (with the inline "Searching…" hint) while a newer query loads.
+  const showSearchingState = isSearching && searchResults === null
+
+  // Chip filters run client-side on the displayed set (locked: chips client-side
+  // for v1). The search box no longer filters client-side — server FTS does it.
+  const filtered = baseEntries.filter(e => {
     if (filter === 'trip' && !e.tripId) return false
     if (filter === 'state' && !e.state) return false
     if (filter === 'campgrounds' && !(e.tags || []).some(t => t.toLowerCase().includes('campground'))) return false
     if (filter === 'loved' && !(e.rating != null && e.rating >= 4)) return false
-    if (searchLower) {
-      const hay = `${e.title || ''} ${e.body || ''}`.toLowerCase()
-      if (!hay.includes(searchLower)) return false
-    }
     return true
   })
 
@@ -264,7 +305,7 @@ export default function JournalTabContent({ trips }: Props) {
         </button>
       </div>
 
-      {/* Search */}
+      {/* Search (server full-text search) */}
       <div className="relative">
         <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input
@@ -273,6 +314,11 @@ export default function JournalTabContent({ trips }: Props) {
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
+        {searching && (
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">
+            Searching…
+          </span>
+        )}
       </div>
 
       {/* Filter chips */}
@@ -326,9 +372,17 @@ export default function JournalTabContent({ trips }: Props) {
             <Plus size={15} /> Add entry
           </button>
         </div>
+      ) : showSearchingState ? (
+        <div className="space-y-2">
+          {[1, 2].map(i => (
+            <div key={i} className="card h-20 animate-pulse bg-gray-50" />
+          ))}
+        </div>
       ) : filtered.length === 0 ? (
         <div className="card text-center py-12">
-          <p className="text-sm text-gray-500">No entries match this filter.</p>
+          <p className="text-sm text-gray-500">
+            {isSearching ? `No entries match “${search.trim()}”.` : 'No entries match this filter.'}
+          </p>
         </div>
       ) : (
         <div className="space-y-5">
