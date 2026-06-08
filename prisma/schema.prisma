@@ -75,6 +75,7 @@ model User {
   planningSessions    PlanningSession[]
   aiUsageLogs         AIUsageLog[]
   parties             TravelParty[]
+  journalEntries      JournalEntry[]
 }
 
 enum SubscriptionTier {
@@ -350,6 +351,7 @@ model Trip {
   stops          Stop[]
   planningSession PlanningSession?
   party          TravelParty?
+  journalEntries JournalEntry[]
 }
 
 enum TripStatus {
@@ -420,7 +422,7 @@ model Stop {
   campgroundCandidates   Json?
   createdAt              DateTime      @default(now())
   updatedAt              DateTime      @updatedAt
-  journalEntry           JournalEntry?
+  journalEntries         JournalEntry[]
 }
 
 enum StopType {
@@ -439,15 +441,30 @@ enum BookingStatus {
 
 model JournalEntry {
   id         String   @id @default(cuid())
-  stopId     String   @unique
-  stop       Stop     @relation(fields: [stopId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tripId     String?
+  trip       Trip?    @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  stopId     String?
+  stop       Stop?    @relation(fields: [stopId], references: [id], onDelete: SetNull)
+  entryDate  DateTime @default(now())
   title      String?
   body       String?
   rating     Int?
   photos     Json?
   actualCost Float?
+  state      String?
+  lat        Float?
+  lng        Float?
+  placeName  String?
+  tags       String[]
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  @@index([userId, entryDate])
+  @@index([userId, state])
+  @@index([tripId])
+  @@index([stopId])
 }
 
 model MaintenanceItem {

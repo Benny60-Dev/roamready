@@ -55,11 +55,19 @@ export async function upsertEntry(req: AuthRequest, res: Response, next: NextFun
     const stop = await verifyStopOwnership(req.params.stopId, req.user!.id)
     const { title, body, rating, actualCost } = req.body
 
-    const entry = await prisma.journalEntry.upsert({
-      where: { stopId: stop.id },
-      update: { title, body, rating, actualCost },
-      create: { stopId: stop.id, title, body, rating, actualCost },
-    })
+    // stopId is no longer unique (a stop can now hold multiple diary entries),
+    // so we can't use prisma.upsert({ where: { stopId } }). Preserve the existing
+    // one-entry-per-stop behavior by updating the first existing entry for this
+    // stop, or creating a new one with the owning userId (and denormalized tripId).
+    const existing = await prisma.journalEntry.findFirst({ where: { stopId: stop.id } })
+    const entry = existing
+      ? await prisma.journalEntry.update({
+          where: { id: existing.id },
+          data: { title, body, rating, actualCost },
+        })
+      : await prisma.journalEntry.create({
+          data: { userId: req.user!.id, stopId: stop.id, tripId: stop.tripId, title, body, rating, actualCost },
+        })
     res.json(entry)
   } catch (err) { next(err) }
 }
@@ -88,14 +96,17 @@ export async function uploadPhotos(req: AuthRequest, res: Response, next: NextFu
       uploadedUrls.push(`https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`)
     }
 
-    const existing = await prisma.journalEntry.findUnique({ where: { stopId: stop.id } })
+    const existing = await prisma.journalEntry.findFirst({ where: { stopId: stop.id } })
     const currentPhotos = (existing?.photos as string[]) || []
 
-    const entry = await prisma.journalEntry.upsert({
-      where: { stopId: stop.id },
-      update: { photos: [...currentPhotos, ...uploadedUrls] },
-      create: { stopId: stop.id, photos: uploadedUrls },
-    })
+    const entry = existing
+      ? await prisma.journalEntry.update({
+          where: { id: existing.id },
+          data: { photos: [...currentPhotos, ...uploadedUrls] },
+        })
+      : await prisma.journalEntry.create({
+          data: { userId: req.user!.id, stopId: stop.id, tripId: stop.tripId, photos: uploadedUrls },
+        })
 
     res.json(entry)
   } catch (err) { next(err) }
