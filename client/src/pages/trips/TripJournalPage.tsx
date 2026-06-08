@@ -194,6 +194,24 @@ export default function TripJournalPage() {
         <p className="text-sm text-gray-500">{trip.name}</p>
       </div>
 
+      {/* Top freeform CTA — surfaced above the stop cards so freeform
+          journaling is discoverable without scrolling past every stop. Opens
+          the SAME composer as the list below (shared handleAddFreeform handler,
+          same tap-time gating). The freeform entries themselves still render in
+          their section at the bottom. */}
+      <div className="card flex items-center justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-gray-900">Freeform journal entry</p>
+          <p className="text-xs text-gray-500">Capture the drive or the day — not tied to a stop.</p>
+        </div>
+        <button
+          onClick={handleAddFreeform}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors bg-[#F7A829] hover:bg-[#C9851A] flex-shrink-0"
+        >
+          <Plus size={16} /> Add a freeform journal entry
+        </button>
+      </div>
+
       {/* Per-stop entries (legacy upsert path — keeps actualCost + photos). */}
       <div className="space-y-3">
         <h2 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
@@ -217,19 +235,12 @@ export default function TripJournalPage() {
         </div>
       </div>
 
-      {/* Freeform entries (new diary endpoint — tripId set, no stopId). */}
+      {/* Freeform entries (new diary endpoint — tripId set, no stopId). The
+          "+ Add" button lives in the top CTA above; this section is the list. */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h2 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-            Freeform entries
-          </h2>
-          <button
-            onClick={handleAddFreeform}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors bg-[#F7A829] hover:bg-[#C9851A]"
-          >
-            <Plus size={16} /> Add a freeform journal entry
-          </button>
-        </div>
+        <h2 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+          Freeform entries
+        </h2>
 
         {ffLoading ? (
           <div className="space-y-2">
