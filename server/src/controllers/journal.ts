@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express'
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import multer from 'multer'
+import { Prisma } from '@prisma/client'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
@@ -47,6 +48,42 @@ export async function listEntries(req: AuthRequest, res: Response, next: NextFun
     const userId = req.user!.id
     const { tripId, state, tag, rating, q } = req.query
 
+    // ── Full-text search path (raw tsvector). When q is present, search the
+    //    generated `search` tsvector with websearch_to_tsquery (handles natural
+    //    input like "that RV park in Texas"), ranked by ts_rank. Structured
+    //    filters are applied in the same SQL. EVERYTHING is parameterized via
+    //    Prisma.sql — q and every filter are bind params, never interpolated.
+    if (typeof q === 'string' && q.trim()) {
+      const term = q.trim()
+      const conditions: Prisma.Sql[] = [
+        Prisma.sql`"userId" = ${userId}`,
+        Prisma.sql`"search" @@ websearch_to_tsquery('english', ${term})`,
+      ]
+      if (typeof tripId === 'string' && tripId) conditions.push(Prisma.sql`"tripId" = ${tripId}`)
+      if (typeof state === 'string' && state) conditions.push(Prisma.sql`"state" = ${state}`)
+      if (typeof tag === 'string' && tag) conditions.push(Prisma.sql`${tag} = ANY("tags")`)
+      if (typeof rating === 'string' && rating.trim()) {
+        const r = parseInt(rating, 10)
+        if (!Number.isNaN(r)) conditions.push(Prisma.sql`"rating" = ${r}`)
+      }
+
+      // Explicit column list (NOT SELECT *) so the `search` tsvector column is
+      // excluded — keeping the row shape identical to what findMany returns
+      // (findMany omits the Unsupported `search` field).
+      const entries = await prisma.$queryRaw<any[]>(Prisma.sql`
+        SELECT "id", "userId", "tripId", "stopId", "entryDate", "title", "body",
+               "rating", "photos", "actualCost", "state", "lat", "lng",
+               "placeName", "tags", "createdAt", "updatedAt"
+        FROM "JournalEntry"
+        WHERE ${Prisma.join(conditions, ' AND ')}
+        ORDER BY ts_rank("search", websearch_to_tsquery('english', ${term})) DESC,
+                 "entryDate" DESC
+      `)
+      res.json(entries)
+      return
+    }
+
+    // ── No q: structured-filter path (unchanged Prisma findMany). ──
     const where: any = { userId }
     if (typeof tripId === 'string' && tripId) where.tripId = tripId
     if (typeof state === 'string' && state) where.state = state
@@ -54,15 +91,6 @@ export async function listEntries(req: AuthRequest, res: Response, next: NextFun
     if (typeof rating === 'string' && rating.trim()) {
       const r = parseInt(rating, 10)
       if (!Number.isNaN(r)) where.rating = r
-    }
-    // Simple ILIKE search across title/body/placeName. Real tsvector FTS is step 5.
-    if (typeof q === 'string' && q.trim()) {
-      const term = q.trim()
-      where.OR = [
-        { title: { contains: term, mode: 'insensitive' } },
-        { body: { contains: term, mode: 'insensitive' } },
-        { placeName: { contains: term, mode: 'insensitive' } },
-      ]
     }
 
     const entries = await prisma.journalEntry.findMany({
