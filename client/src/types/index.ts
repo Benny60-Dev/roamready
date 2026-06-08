@@ -330,14 +330,26 @@ export interface TripFuelEstimate {
 
 export interface JournalEntry {
   id: string
-  stopId: string
-  title?: string
-  body?: string
-  rating?: number
+  userId: string
+  // Optional links — a freeform/standalone entry has neither; an in-trip
+  // entry has tripId; a per-stop entry has both stopId and tripId.
+  tripId?: string | null
+  stopId?: string | null
+  title?: string | null
+  body?: string | null
+  rating?: number | null
+  tags: string[]
+  entryDate: string
+  state?: string | null
+  lat?: number | null
+  lng?: number | null
+  placeName?: string | null
+  // Photos + actualCost are written by the legacy per-stop path; kept here so
+  // the existing TripJournalPage editor type-checks against the same model.
   photos?: string[]
-  actualCost?: number
+  actualCost?: number | null
   createdAt: string
-  updatedAt: string
+  updatedAt?: string
 }
 
 export interface MaintenanceItem {

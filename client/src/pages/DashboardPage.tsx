@@ -1,12 +1,13 @@
 import { useEffect, useState, Fragment } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Plus, Search, Calendar } from 'lucide-react'
+import { Plus, Search, Calendar, BookOpen } from 'lucide-react'
 import { tripsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import { Trip } from '../types'
 import TripCard from '../components/trip/TripCard'
 import ConfirmModal from '../components/ui/ConfirmModal'
 import ReservationsTabContent from '../components/dashboard/ReservationsTabContent'
+import JournalTabContent from '../components/JournalTabContent'
 import { deriveTripStatus } from '../utils/tripStatus'
 import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
 
@@ -14,11 +15,12 @@ import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
 // share a Trip-filter predicate, the Reservations tab renders different
 // content from a different unit of display (stops, not trips) so it carries
 // no `filter` field. The render code branches on `mode`.
-type TabKey = 'active' | 'completed' | 'all' | 'reservations'
+type TabKey = 'active' | 'completed' | 'all' | 'reservations' | 'journal'
 
 type TabEntry =
   | { key: 'active' | 'completed' | 'all'; label: string; mode: 'trips'; filter: (t: Trip) => boolean }
   | { key: 'reservations'; label: string; mode: 'reservations' }
+  | { key: 'journal'; label: string; mode: 'journal' }
 
 const TABS: TabEntry[] = [
   // "In Progress" = anything currently in motion or being planned. Both
@@ -38,6 +40,11 @@ const TABS: TabEntry[] = [
   // (ReservationsTabContent) rather than the per-trip grid the other three
   // tabs share.
   { key: 'reservations', label: 'Reservations', mode: 'reservations' },
+  // Journal (freeform travel diary) — another "different lens" tab. Like
+  // Reservations it renders its own content component (JournalTabContent) which
+  // fetches its own entries; it shares the lens-divider that precedes the
+  // Reservations tab rather than introducing a second one.
+  { key: 'journal', label: 'Journal', mode: 'journal' },
 ]
 
 // Reservations tab count — number of bookable stops across all trips with
@@ -171,7 +178,10 @@ export default function DashboardPage() {
       completed: { title: 'No completed trips yet', body: 'Your past adventures will appear here.' },
       all:       { title: 'No trips yet',       body: 'Start planning your next adventure.' },
     }
-    const key = (activeTab === 'reservations' ? 'active' : activeTab) as TripTabKey
+    // Reservations/Journal tabs branch to their own content before this runs;
+    // map them to 'active' defensively so the cast never indexes tabCopy with a
+    // non-trip key.
+    const key = (activeTab === 'reservations' || activeTab === 'journal' ? 'active' : activeTab) as TripTabKey
     return { ...tabCopy[key], showCta: key !== 'completed' }
   }
 
@@ -226,14 +236,24 @@ export default function DashboardPage() {
         <div className="flex gap-1 flex-wrap items-center" role="tablist" aria-label="Dashboard view">
           {TABS.map(tab => {
             const isReservationsTab = tab.mode === 'reservations'
-            const count = isReservationsTab
-              ? countReservations(trips)
-              : trips.filter(tab.filter).length
+            const isJournalTab = tab.mode === 'journal'
+            // Count: per-stop reservation count for Reservations; trip count for
+            // the status tabs; null for Journal (its entries aren't fetched at
+            // this level — JournalTabContent owns that data), so its pill shows
+            // no number. Direct discriminant checks let TS narrow tab.filter.
+            const count =
+              tab.mode === 'reservations'
+                ? countReservations(trips)
+                : tab.mode === 'journal'
+                  ? null
+                  : trips.filter(tab.filter).length
             const isActive = tab.key === activeTab
             return (
               <Fragment key={tab.key}>
                 {/* Thin vertical divider before the Reservations tab — signals
-                    a different lens (bookings, not trip-status). */}
+                    the shift to a different lens (bookings/journal, not
+                    trip-status). Journal sits after Reservations under the same
+                    divider, so it doesn't add its own. */}
                 {isReservationsTab && (
                   <span aria-hidden className="w-px self-stretch bg-gray-200 mx-1" />
                 )}
@@ -248,10 +268,11 @@ export default function DashboardPage() {
                   }`}
                   style={{ borderWidth: '0.5px' }}
                 >
-                  {/* Leading calendar icon on the Reservations tab to reinforce
-                      the "different lens" framing. */}
+                  {/* Leading icon on the lens tabs to reinforce the framing. */}
                   {isReservationsTab && <Calendar size={12} className="opacity-70" />}
-                  {tab.label} <span className="opacity-70">{count}</span>
+                  {isJournalTab && <BookOpen size={12} className="opacity-70" />}
+                  {tab.label}
+                  {count !== null && <span className="opacity-70">{count}</span>}
                 </button>
               </Fragment>
             )
@@ -268,6 +289,8 @@ export default function DashboardPage() {
         </div>
       ) : currentTab.mode === 'reservations' ? (
         <ReservationsTabContent trips={trips} />
+      ) : currentTab.mode === 'journal' ? (
+        <JournalTabContent trips={trips} />
       ) : filteredTrips.length === 0 ? (
         (() => {
           const { title, body, showCta } = emptyStateMessage()

@@ -246,8 +246,14 @@ export const maintenanceApi = {
 
 // Journal
 export const journalApi = {
-  getAll: () => api.get('/journal'),
-  getTrip: (tripId: string) => api.get(`/journal/${tripId}`),
+  // Freeform diary CRUD (step 3 endpoints). list() accepts optional query
+  // filters: { tripId, state, tag, rating, q }.
+  list: (params?: Record<string, string | number | undefined>) => api.get('/journal', { params }),
+  get: (id: string) => api.get(`/journal/${id}`),
+  create: (data: any) => api.post('/journal', data),
+  update: (id: string, data: any) => api.put(`/journal/${id}`, data),
+  delete: (id: string) => api.delete(`/journal/${id}`),
+  // Legacy per-stop journal (still live — TripJournalPage uses these).
   upsert: (stopId: string, data: any) => api.post(`/journal/${stopId}`, data),
   uploadPhotos: (stopId: string, formData: FormData) =>
     api.post(`/journal/${stopId}/photos`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
