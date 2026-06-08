@@ -259,6 +259,15 @@ export const journalApi = {
     api.post(`/journal/${stopId}/photos`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
 }
 
+// Visited states — manual marks for the Journal map (step 6b). Reads open;
+// writes Pro-gated server-side (requireFeature('tripJournal')).
+export const visitedStatesApi = {
+  list: () => api.get('/visited-states'),
+  upsert: (state: string, visitType: 'overnight' | 'passthrough') =>
+    api.put(`/visited-states/${state}`, { visitType }),
+  remove: (state: string) => api.delete(`/visited-states/${state}`),
+}
+
 // Feedback
 export const feedbackApi = {
   submit: (data: any) => api.post('/feedback', data),
