@@ -443,6 +443,7 @@ export default function SessionPage() {
     if (!list) return
     if (list.scrollHeight > list.clientHeight) {
       list.scrollTop = list.scrollHeight
+      diag.listScrolls++; diag.lastListScrollKind = 'listRef.scrollTop' // TEMP DIAGNOSTIC - REMOVE
     }
   }, [messages, typing])
 
