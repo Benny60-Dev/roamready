@@ -13,7 +13,6 @@ import TripCard from '../components/trip/TripCard'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
 import { useVoiceInput } from '../hooks/useVoiceInput'
 import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
-import { diag } from '../components/diagnosticsBus' // TEMP DIAGNOSTIC - REMOVE
 import { ChatInput } from '../components/ChatInput'
 import { selectGreeting } from '../utils/greeting'
 import { relativeTime } from '../utils/dates'
@@ -443,7 +442,6 @@ export default function SessionPage() {
     if (!list) return
     if (list.scrollHeight > list.clientHeight) {
       list.scrollTop = list.scrollHeight
-      diag.listScrolls++; diag.lastListScrollKind = 'listRef.scrollTop' // TEMP DIAGNOSTIC - REMOVE
     }
   }, [messages, typing])
 
@@ -459,63 +457,26 @@ export default function SessionPage() {
   // Window-only — independent of the message-list scroll (listRef).
   const prevEmptyRef = useRef(true)
   useLayoutEffect(() => {
-    diag.edgeRuns++ // TEMP DIAGNOSTIC - REMOVE
     const empty = !messages.some(m => m.role === 'user')
-    const justActivated = prevEmptyRef.current && !empty
+    if (prevEmptyRef.current && !empty) window.scrollTo(0, 0)
     prevEmptyRef.current = empty
-    if (!justActivated) return
-    diag.justActivated++ // TEMP DIAGNOSTIC - REMOVE
-    // First user message → empty-state hero swaps to the conversation layout.
-    // The textarea the user just typed into is STILL FOCUSED, so right after the
-    // swap the browser scrolls it back into view (~84px on device), carrying the
-    // sticky AppLayout header above the fold. A bare pre-paint scrollTo(0,0) lost
-    // this race because the focus-scroll happens as the new layout lays out.
-    // Fix: blur the input first (removes what the browser is trying to keep in
-    // view — also dismisses the soft keyboard, which is wanted post-send), reset
-    // now, then re-assert one frame later (after the swap paints) to beat any
-    // residual focus-scroll. WINDOW-only — never touches the message list
-    // (listRef), so it doesn't fight the committed scroll-to-bottom behavior.
-    ;(document.activeElement as HTMLElement | null)?.blur()
-    window.scrollTo(0, 0)
-    const raf = requestAnimationFrame(() => window.scrollTo(0, 0))
-    return () => cancelAnimationFrame(raf)
   }, [messages])
 
-  // Lock window scroll in active-conversation view so the WINDOW can never scroll.
-  // The dvh wrapper (:844) makes the document ~84px taller than the visual
-  // viewport, so the window becomes scrollable and the browser keeps restoring
-  // scrollY≈84, carrying the (sticky) header + top of the first reply above the
-  // fold — and scattered one-shot scrollTo(0,0) calls don't hold because the room
-  // still exists for the browser to re-scrolls into. Lock the REAL scroll root:
-  // on iOS Safari the document scroller is documentElement (html), NOT body — a
-  // `body { overflow:hidden }` lock is a no-op there. Locking html removes the
-  // scrollable room entirely, so scrollY physically cannot move to 84. Only the
-  // internal message list (listRef, overflow-y-auto) still scrolls. Capture and
-  // restore html's ORIGINAL overflow value (don't hardcode '') on cleanup / when
-  // returning to the empty state. Computes `empty` locally; above the early
-  // returns.
+  // Lock body scroll in active-conversation view so the WINDOW can never scroll.
+  // The dvh wrapper (:844) makes the document ~110px taller than the visual
+  // viewport, so the window becomes scrollable and ends up scrolled down,
+  // carrying the (sticky) header + top of the first reply above the fold — and a
+  // one-shot scrollTo(0,0) doesn't hold because the browser re-scrolls. With the
+  // body locked, only the internal message list (listRef, overflow-y-auto)
+  // scrolls. Restored on cleanup / when returning to the empty state. Computes
+  // `empty` locally (isEmptyState is derived later); above the early returns.
   useLayoutEffect(() => {
     const empty = !messages.some(m => m.role === 'user')
     if (empty) return
-    const html = document.documentElement
-    const prev = html.style.overflow
-    // ORDER MATTERS — reset to 0, THEN clamp. Locking first would freeze the
-    // window at whatever offset (~84px) the browser already scrolled to.
-    //  1. blur the focused textarea — removes what the browser is scrolling to
-    //     keep in view (also dismisses the soft keyboard, wanted post-send).
-    //  2. scrollTo(0,0) — pull the window back to the top.
-    //  3. lock the REAL scroll root (documentElement/html on iOS Safari) so the
-    //     ~84px of room is gone and the browser can't re-scroll.
-    //  4. scrollTo(0,0) insurance — with the room now gone, this sticks at 0
-    //     even if the browser nudged the window between steps 2 and 3.
-    // Pre-paint useLayoutEffect, so all of this lands before the scrolled-to-84
-    // state is ever painted. Original html overflow captured above + restored on
-    // cleanup (not hardcoded '').
-    ;(document.activeElement as HTMLElement | null)?.blur()
-    window.scrollTo(0, 0)
-    html.style.overflow = 'hidden'
-    window.scrollTo(0, 0)
-    return () => { html.style.overflow = prev }
+    window.scrollTo(0, 0)            // clear any residual offset before locking
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
   }, [messages])
 
   // Reset window scroll to the top on the hydrating→ready edge, when this page's
@@ -525,27 +486,6 @@ export default function SessionPage() {
   // (Pre-paint useLayoutEffect inside the hook → no jump.) See the hook for the
   // full rationale; window-only, so it never fights the chat's internal scroll.
   useScrollResetOnReady(!hydrating)
-
-  // Re-assert the WINDOW scroll-to-top AFTER late conversation content settles.
-  // useScrollResetOnReady (above) and the body-lock effect fire on the ready /
-  // messages edges, but the trip-summary pill is driven by `itinerary` — SEPARATE
-  // state from `messages` — and can mount a frame or two LATER than the message
-  // that produced it. When that pill inserts below the fold, the browser's
-  // scroll-anchoring nudges the window down ~84px, carrying the sticky AppLayout
-  // header above the viewport (measured on-device: scrollY stuck at 84, identical
-  // scrollH/innerH). `overflow-anchor: none` (index.css) removes the anchoring
-  // cause; this is the belt-and-suspenders re-assert. Keyed on messages.length +
-  // pill presence so it re-runs whenever late content lands; the rAF defers one
-  // frame so the reset happens AFTER the inserted node is laid out. WINDOW-only —
-  // it never touches the message list (listRef), so it cannot fight the committed
-  // scroll-to-bottom behavior (separate scroll containers). No-op in empty state.
-  useLayoutEffect(() => {
-    const empty = !messages.some(m => m.role === 'user')
-    if (empty) return
-    window.scrollTo(0, 0)
-    const raf = requestAnimationFrame(() => window.scrollTo(0, 0))
-    return () => cancelAnimationFrame(raf)
-  }, [messages.length, itinerary])
 
   // ── Continue-planning strip data ───────────────────────────────────────────
   // Fetched once on mount. Trips don't change while the user is inside this
