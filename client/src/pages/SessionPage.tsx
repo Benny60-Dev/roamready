@@ -497,10 +497,24 @@ export default function SessionPage() {
   useLayoutEffect(() => {
     const empty = !messages.some(m => m.role === 'user')
     if (empty) return
-    window.scrollTo(0, 0)            // clear any residual offset before locking
     const html = document.documentElement
     const prev = html.style.overflow
+    // ORDER MATTERS — reset to 0, THEN clamp. Locking first would freeze the
+    // window at whatever offset (~84px) the browser already scrolled to.
+    //  1. blur the focused textarea — removes what the browser is scrolling to
+    //     keep in view (also dismisses the soft keyboard, wanted post-send).
+    //  2. scrollTo(0,0) — pull the window back to the top.
+    //  3. lock the REAL scroll root (documentElement/html on iOS Safari) so the
+    //     ~84px of room is gone and the browser can't re-scroll.
+    //  4. scrollTo(0,0) insurance — with the room now gone, this sticks at 0
+    //     even if the browser nudged the window between steps 2 and 3.
+    // Pre-paint useLayoutEffect, so all of this lands before the scrolled-to-84
+    // state is ever painted. Original html overflow captured above + restored on
+    // cleanup (not hardcoded '').
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    window.scrollTo(0, 0)
     html.style.overflow = 'hidden'
+    window.scrollTo(0, 0)
     return () => { html.style.overflow = prev }
   }, [messages])
 
