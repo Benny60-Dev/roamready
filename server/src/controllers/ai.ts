@@ -99,6 +99,26 @@ const NO_ORIGIN_RESPONSE =
   "I'll help you save it for future trips; otherwise just give me your starting location " +
   "and I'll get going."
 
+// isOriginAsk — concept-based detection of an origin/home/departure-address ask,
+// used by the INVERTED origin guard below to catch a redundant ask when the
+// origin is already known. A fixed phrase-list leaks because the model
+// paraphrases (proven in the wild: "leaving from home in Sioux Falls, or a
+// different address" was NOT caught by the old fixed phrase-list). Instead we fire when an
+// origin/home/departure keyword appears inside a QUESTION clause. Per-clause
+// isolation (split on . ! ?) means a legitimate dates/party question in the same
+// reply ("when are you heading out, how many nights?") is NOT suppressed — only
+// the clause that both ends in "?" AND mentions origin/home/departure triggers.
+const ORIGIN_ASK_KEYWORDS = /\b(?:starting from|leaving from|departing from|depart from|start from|where (?:are|will) you (?:be )?(?:starting|leaving|departing)|from home|home in|your home|home address|home base|different address|different location|different place|another (?:address|location|place)|somewhere else|starting (?:point|location)|saved home|on file)\b/i
+function isOriginAsk(text: string | null | undefined): boolean {
+  if (!text) return false
+  for (const c of text.split(/(?<=[?.!])\s+/)) {
+    if (c.includes('?') && ORIGIN_ASK_KEYWORDS.test(c)) return true
+  }
+  // Statement-form safety net (NO_ORIGIN_RESPONSE opens with this, no "?" clause).
+  if (/\bi don't have a home address\b/i.test(text)) return true
+  return false
+}
+
 // Server-side mirror of the client's parseItinerary (SessionPage.tsx). Extracts the
 // <itinerary>…</itinerary> JSON from an assistant reply and parses it. Returns the
 // parsed object, or null on no-match / parse failure. NEVER throws — the guard must
@@ -892,6 +912,35 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             response = NO_ORIGIN_RESPONSE
           }
         }
+      }
+
+      // INVERTED ORIGIN GUARD — origin is KNOWN but the model re-asked anyway.
+      // capturedOrigin is set (deterministic from-X-to-Y capture, or a prior
+      // <origin> tag), yet the reply still emits the origin/home-ask — stochastic
+      // non-compliance, proven on "Nola" (origin "San Jose" captured + persisted,
+      // model asked anyway). Force one re-call with an unambiguous "already known,
+      // proceed now" reminder so the user never sees the redundant ask and gets a
+      // real plan. Mirrors the modify forced-retry above; the extra AI call only
+      // happens on this rare miss path. Inert when capturedOrigin is null (a
+      // legitimate no-origin ask passes through). MESA-7/9 above don't fire here:
+      // they require a fabricated/un-typed origin, but capturedOrigin is a
+      // user-typed city.
+      const capturedOrigin = (userProfile as any).capturedOrigin as string | null
+      if (capturedOrigin && isOriginAsk(response)) {
+        console.warn(
+          '[AI origin-guard] origin "%s" already known but model re-asked — forcing proceed. sessionId=%s',
+          capturedOrigin, sessionId ?? '(none)',
+        )
+        const retryMessages = [
+          ...messagesForAI,
+          { role: 'assistant' as const, content: response },
+          {
+            role: 'user' as const,
+            content: `[SYSTEM REMINDER: The starting location is ALREADY KNOWN: ${capturedOrigin}. Do NOT ask about the origin and do NOT offer a "home" option. Proceed NOW and plan the requested trip, emitting the <itinerary> block.]`,
+          },
+        ]
+        const retry = await chatWithAI(retryMessages, userProfile, recentSurpriseDestinations, surpriseVibe, aiCtx)
+        if (!isOriginAsk(retry)) response = retry
       }
     }
 
