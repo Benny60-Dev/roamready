@@ -76,6 +76,7 @@ model User {
   aiUsageLogs         AIUsageLog[]
   parties             TravelParty[]
   journalEntries      JournalEntry[]
+  visitedStates       VisitedState[]
 }
 
 enum SubscriptionTier {
@@ -465,6 +466,27 @@ model JournalEntry {
   @@index([userId, state])
   @@index([tripId])
   @@index([stopId])
+}
+
+// Manual visited-state marks (Journal map, step 6b — scope Option B). The map's
+// primary source is DERIVED (computed client-side from completed trips); these
+// rows are the user's MANUAL overrides for drive-through states with no stop and
+// for backfilling pre-RoamReady travel. Merge rule lives client-side:
+// derived-overnight is authoritative and wins, so a manual row never downgrades
+// earned trip data. visitType is a free String constrained to
+// "overnight" | "passthrough" at the Zod layer (phase 2), matching the locked
+// decision to avoid a second enum migration.
+model VisitedState {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  state     String   // 2-letter code (DC allowed)
+  visitType String   // "overnight" | "passthrough"
+  firstSeen DateTime @default(now())
+  lastSeen  DateTime @updatedAt
+
+  @@unique([userId, state])
+  @@index([userId])
 }
 
 model MaintenanceItem {
