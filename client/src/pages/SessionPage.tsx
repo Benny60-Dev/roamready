@@ -481,21 +481,27 @@ export default function SessionPage() {
     return () => cancelAnimationFrame(raf)
   }, [messages])
 
-  // Lock body scroll in active-conversation view so the WINDOW can never scroll.
-  // The dvh wrapper (:844) makes the document ~110px taller than the visual
-  // viewport, so the window becomes scrollable and ends up scrolled down,
-  // carrying the (sticky) header + top of the first reply above the fold — and a
-  // one-shot scrollTo(0,0) doesn't hold because the browser re-scrolls. With the
-  // body locked, only the internal message list (listRef, overflow-y-auto)
-  // scrolls. Restored on cleanup / when returning to the empty state. Computes
-  // `empty` locally (isEmptyState is derived later); above the early returns.
+  // Lock window scroll in active-conversation view so the WINDOW can never scroll.
+  // The dvh wrapper (:844) makes the document ~84px taller than the visual
+  // viewport, so the window becomes scrollable and the browser keeps restoring
+  // scrollY≈84, carrying the (sticky) header + top of the first reply above the
+  // fold — and scattered one-shot scrollTo(0,0) calls don't hold because the room
+  // still exists for the browser to re-scrolls into. Lock the REAL scroll root:
+  // on iOS Safari the document scroller is documentElement (html), NOT body — a
+  // `body { overflow:hidden }` lock is a no-op there. Locking html removes the
+  // scrollable room entirely, so scrollY physically cannot move to 84. Only the
+  // internal message list (listRef, overflow-y-auto) still scrolls. Capture and
+  // restore html's ORIGINAL overflow value (don't hardcode '') on cleanup / when
+  // returning to the empty state. Computes `empty` locally; above the early
+  // returns.
   useLayoutEffect(() => {
     const empty = !messages.some(m => m.role === 'user')
     if (empty) return
     window.scrollTo(0, 0)            // clear any residual offset before locking
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = prev }
+    const html = document.documentElement
+    const prev = html.style.overflow
+    html.style.overflow = 'hidden'
+    return () => { html.style.overflow = prev }
   }, [messages])
 
   // Reset window scroll to the top on the hydrating→ready edge, when this page's

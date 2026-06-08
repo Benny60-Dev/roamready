@@ -6,7 +6,7 @@
 // to the originals unchanged, and restores them on unmount).
 //
 // Surfaces:
-//   build       — bundle marker; bump to confirm a fresh load (currently v5)
+//   build       — bundle marker; bump to confirm a fresh load (currently v6)
 //   scrollY     — window.scrollY (live, sampled)
 //   scrollH     — document.documentElement.scrollHeight
 //   innerH      — window.innerHeight
@@ -30,7 +30,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { diag } from './diagnosticsBus'
 
-const BUILD = 'v5'
+const BUILD = 'v6'
 
 // Pull the first stack frame that isn't this file's wrapper, so lastSrc points
 // at the actual caller of scrollTo/scrollIntoView. Best-effort across engines.
