@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { Home, LayoutDashboard, Compass, User, Menu, X, LogOut, ChevronDown, Clock, HelpCircle } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuthStore } from '../../store/authStore'
 import { authApi } from '../../services/api'
 import SessionsPanel from '../sessions/SessionsPanel'
@@ -14,12 +14,35 @@ export default function AppLayout() {
   const isInGracePeriod = useAuthStore(s => s.isInGracePeriod())
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const profileRef = useRef<HTMLDivElement>(null)
 
   async function handleLogout() {
     await authApi.logout()
     logout()
     navigate('/login')
   }
+
+  // Close the profile dropdown on any click/tap outside it (trigger + menu are
+  // both inside profileRef, so tapping the avatar still toggles via its onClick
+  // without this closing it first). Gated on profileOpen so the listener only
+  // exists while open; removed on close/unmount (no leak). Mirrors the app's
+  // existing click-away pattern (components/OhvResourceBlock.tsx).
+  useEffect(() => {
+    if (!profileOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [profileOpen])
+
+  // Also dismiss on navigation (e.g. tapping a bottom-nav item) so the menu
+  // never lingers across route changes.
+  useEffect(() => {
+    setProfileOpen(false)
+  }, [pathname])
 
   // Home now IS the AI planning canvas. Its `to` is /sessions/new, which
   // SessionNewPage immediately redirects to /sessions/:id (resume the latest
@@ -130,7 +153,7 @@ export default function AppLayout() {
                 but no code creates Notification rows, so the bell would have nothing to show.
                 Restore (alongside a producer + dropdown panel) when the in-app notification
                 feed is wired up. */}
-            <div className="relative">
+            <div className="relative" ref={profileRef}>
               <button
                 onClick={() => setProfileOpen(!profileOpen)}
                 className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-lg hover:bg-gray-100"
@@ -146,7 +169,6 @@ export default function AppLayout() {
               {profileOpen && (
                 <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl border border-gray-200 shadow-sm py-1 z-50"
                   style={{ borderWidth: '0.5px' }}
-                  onBlur={() => setProfileOpen(false)}
                 >
                   <NavLink to="/profile" className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => setProfileOpen(false)}>
                     <User size={15} /> Profile
