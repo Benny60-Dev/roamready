@@ -9,6 +9,7 @@ import BottomSheet from '../components/ui/BottomSheet'
 import ConfirmModal from '../components/ui/ConfirmModal'
 import ConfirmVehiclesModal, { type ConfirmVehiclesResult } from '../components/trip/ConfirmVehiclesModal'
 import SaveHomeAddressModal from '../components/trip/SaveHomeAddressModal'
+import HomeBaseCard from '../components/trip/HomeBaseCard'
 import type { HomeAddress } from '../components/ui/AddressAutocomplete'
 import TripCard from '../components/trip/TripCard'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
@@ -231,6 +232,9 @@ export default function SessionPage() {
   // filtered client-side — no new endpoint.
   const [planningTrips, setPlanningTrips] = useState<Trip[]>([])
   const [tripsLoading, setTripsLoading] = useState(true)
+  // "Add your home base" card (Option 2). homeCardDismissed = local Skip for this
+  // session. The card shows for any no-home user on the empty-state hero.
+  const [homeCardDismissed, setHomeCardDismissed] = useState(false)
   // Disables the header buttons during the async create/delete dance so a
   // double-tap can't fire two requests or navigate twice.
   const [isProcessing, setIsProcessing] = useState(false)
@@ -884,6 +888,11 @@ export default function SessionPage() {
   // updatedAt desc in the fetch effect.
   const recentPlanning = planningTrips.slice(0, 3)
   const showContinueStrip = isEmptyState && !tripsLoading && planningTrips.length > 0
+  // "Add your home base" card: shown to ANY no-home user on the empty-state hero,
+  // regardless of trip count. Keys purely on no-home-saved + empty-state + not-
+  // dismissed-this-session. Saving sets user.homeLocation → this flips false →
+  // card unmounts. Skip = local dismiss.
+  const showHomeCard = isEmptyState && !user?.homeLocation && !homeCardDismissed
 
   return (
     <>
@@ -1397,6 +1406,10 @@ export default function SessionPage() {
               )}
 
               <div className="w-full max-w-[600px]">
+                {/* Option-2 first-trip home-base card — no-home user, no trip
+                    built yet. Sits above the hero input; self-terminates once
+                    home is saved (gate flips) or Skip is tapped (local state). */}
+                {showHomeCard && <HomeBaseCard onSkip={() => setHomeCardDismissed(true)} />}
                 <ChatInput
                   ref={inputRef}
                   value={input}

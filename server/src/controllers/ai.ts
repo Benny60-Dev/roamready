@@ -169,6 +169,27 @@ function extractAssertedOrigin(text: string): string | null {
   return null
 }
 
+// ORIGIN-CAPTURE — deterministic extraction of an explicit "from X to Y" origin
+// from the USER's own message (NOT the assistant reply — distinct from the
+// extractAssertedOrigin guard above, which validates AI output post-response).
+// When a user writes "create a trip from San Jose to Jacksonville", San Jose IS
+// the origin (PRECEDENCE) — we capture it BEFORE the prompt is built so the
+// no-home directive never fires and the model is never asked to referee. Returns
+// the origin string (e.g. "San Jose" or "San Jose, CA") or null. Conservative:
+// requires a proper-noun origin AND a proper-noun destination ("to [A-Z]"), and
+// rejects time/relative first-tokens so "from morning to night" / "from Tuesday
+// to Friday" never capture.
+function extractFromXtoY(text: string | undefined | null): string | null {
+  if (!text) return null
+  const m = text.match(/\b[Ff]rom\s+([A-Z][\w.'-]*(?:\s+[A-Z][\w.'-]*){0,3}(?:,\s*(?:[A-Z]{2}|[A-Z][a-z]+))?)\s+to\s+[A-Z]/)
+  if (!m) return null
+  const origin = m[1].trim()
+  const firstTok = origin.split(/[\s,]+/)[0].toLowerCase()
+  const STOP = new Set(['monday','tuesday','wednesday','thursday','friday','saturday','sunday','january','february','march','april','may','june','july','august','september','october','november','december','morning','noon','afternoon','evening','night','midnight','today','tomorrow','yesterday','home','work','here','there','point'])
+  if (STOP.has(firstTok)) return null
+  return origin
+}
+
 // Stored trip/stop dates are UTC-midnight Prisma DateTime values. Reading them
 // with `new Date(d)` + local accessors (toLocaleDateString) shifts the calendar
 // day back one in negative-offset deploy zones — the same artifact fixed in the
@@ -708,6 +729,27 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
         select: { partialTripData: true },
       })
       ;(userProfile as any).capturedOrigin = (sess?.partialTripData as any)?.origin ?? null
+    }
+
+    // ORIGIN-CAPTURE (deterministic) — if no origin is captured yet, scan THIS
+    // turn's user message for an explicit "from X to Y" route and capture X as the
+    // origin. Setting userProfile.capturedOrigin here (before chatWithAI below)
+    // takes effect THIS turn — the gate in services/ai.ts then suppresses the
+    // no-home ask, so a user who wrote "from San Jose to Jacksonville" is never
+    // asked for an origin they already gave. We do NOT overwrite an existing
+    // capturedOrigin (a deliberately-provided origin wins). Persist for future
+    // turns best-effort; a write failure must not break the turn. Coexists with
+    // the AI's <origin> tag (last-write-wins; different cases).
+    if (!(userProfile as any).capturedOrigin) {
+      const detected = extractFromXtoY(lastUserMsg?.content)
+      if (detected) {
+        ;(userProfile as any).capturedOrigin = detected
+        if (sessionId) {
+          await prisma.planningSession
+            .update({ where: { id: sessionId }, data: { partialTripData: { origin: detected } } })
+            .catch((e: any) => console.error('[AI origin-capture:from-x-to-y] persist failed for sessionId=%s: %s', sessionId, e?.message))
+        }
+      }
     }
 
     const aiCtx = { userId, sessionId: sessionId ?? null, tripId: tripId ?? null }
