@@ -954,18 +954,21 @@ export default function SessionPage() {
                   clamp(48,12vw,120) overlapped the disclosure noticeably. */}
               <div
                 aria-hidden="true"
-                className="pointer-events-none select-none whitespace-nowrap overflow-hidden text-center absolute left-0 right-0 bottom-0"
-                style={{
-                  opacity: 0.16,
-                  fontWeight: 800,
-                  letterSpacing: '-0.02em',
-                  lineHeight: 1,
-                  fontSize: 'clamp(36px, 7vw, 72px)',
-                }}
+                className="pointer-events-none select-none overflow-hidden text-center absolute left-0 right-0 bottom-0"
+                // opacity is intentionally inline + full (1) for now so it's a
+                // one-line dial-down after seeing it on device (likely ~0.4–0.6).
+                style={{ opacity: 1 }}
               >
-                <span style={{ color: '#1F6F8B' }}>Roam</span>
-                <span style={{ color: '#F7A829' }}>Ready</span>
-                <span style={{ color: '#1F6F8B' }}>.ai</span>
+                <img
+                  src="/roamready-wordmark.svg"
+                  alt=""
+                  className="inline-block"
+                  // Match the OLD text watermark's exact responsive sizing:
+                  // height tracks the former fontSize clamp(36px,7vw,72px) — same
+                  // mobile floor (36px), 7vw mid-range, desktop cap (72px). width
+                  // auto keeps the wordmark's aspect ratio.
+                  style={{ height: 'clamp(36px, 7vw, 72px)', width: 'auto' }}
+                />
               </div>
 
               {/* Hero greeting */}
