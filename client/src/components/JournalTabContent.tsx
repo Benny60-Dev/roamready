@@ -5,6 +5,9 @@ import { useAuthStore } from '../store/authStore'
 import { useUIStore } from '../store/uiStore'
 import { JournalEntry, Trip } from '../types'
 import { formatTripDate, toYmd } from '../utils/dates'
+import { deriveTripStatus } from '../utils/tripStatus'
+import { normalizeStateCode } from './journal/stateUtils'
+import VisitedStatesBanner from './journal/VisitedStatesBanner'
 
 /**
  * Journal tab content — the freeform travel-diary feed (Block: Journal step 4).
@@ -119,6 +122,38 @@ export default function JournalTabContent({ trips }: Props) {
     a.entryDate < b.entryDate ? 1 : a.entryDate > b.entryDate ? -1 : 0,
   )
 
+  // ── Visited-states rollup (client-side, derived; matches the Dashboard) ───
+  //   Completion is date-derived via deriveTripStatus — NOT the stale stored
+  //   Trip.status enum — so the map agrees with the Dashboard's Completed tab.
+  //     overnight   = completed-trip stops (non-HOME, nights >= 1)
+  //     passthrough = completed-trip stops with nights === 0, PLUS journal
+  //                   entries with a state — minus any already overnight
+  //     counter     = (overnight ∪ passthrough), excluding DC, of 50
+  const { overnight, passthrough, visitedCount } = useMemo(() => {
+    const overnightSet = new Set<string>()
+    const passSet = new Set<string>()
+    for (const trip of trips) {
+      if (deriveTripStatus(trip) !== 'COMPLETED') continue
+      for (const stop of trip.stops || []) {
+        if (stop.type === 'HOME') continue
+        const code = normalizeStateCode(stop.locationState)
+        if (!code) continue
+        if (stop.nights >= 1) overnightSet.add(code)
+        else passSet.add(code)
+      }
+    }
+    for (const e of entries) {
+      const code = normalizeStateCode(e.state)
+      if (code) passSet.add(code)
+    }
+    // Overnight wins over passthrough for the same state.
+    for (const code of overnightSet) passSet.delete(code)
+    // Counter is over the 50 states — DC is shown on the map but doesn't count.
+    const union = new Set<string>([...overnightSet, ...passSet])
+    union.delete('DC')
+    return { overnight: overnightSet, passthrough: passSet, visitedCount: union.size }
+  }, [trips, entries])
+
   // Group by trip; standalone (no tripId) entries fall into a trailing
   // "General" group. Map preserves insertion order, and we insert in
   // entryDate-desc order, so trip groups appear by their most-recent entry.
@@ -139,7 +174,12 @@ export default function JournalTabContent({ trips }: Props) {
 
   return (
     <div className="space-y-5">
-      {/* ── Map banner slots in here in step 6 — intentionally left empty. ── */}
+      {/* Visited-states choropleth (collapsible; lazy-loads its geometry). */}
+      <VisitedStatesBanner
+        overnight={overnight}
+        passthrough={passthrough}
+        visitedCount={visitedCount}
+      />
 
       {/* Count line + Add entry */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
