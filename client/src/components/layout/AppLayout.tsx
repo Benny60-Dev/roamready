@@ -46,7 +46,7 @@ export default function AppLayout() {
   ]
 
   return (
-    <div className="min-h-screen bg-rr-bg flex flex-col overflow-x-clip">
+    <div className="min-h-[100dvh] bg-rr-bg flex flex-col overflow-x-clip">
       {/* Top Nav */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40" style={{ borderBottomWidth: '0.5px' }}>
         <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
