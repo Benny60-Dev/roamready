@@ -5,6 +5,7 @@ import multer from 'multer'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
+import type { JournalCreateInput, JournalUpdateInput } from '../schemas'
 
 const s3 = new S3Client({
   region: process.env.AWS_REGION || 'us-east-1',
@@ -25,30 +26,140 @@ async function verifyStopOwnership(stopId: string, userId: string) {
   return stop
 }
 
-export async function getAllJournals(req: AuthRequest, res: Response, next: NextFunction) {
+/** Verifies the trip exists AND belongs to req.user. Throws 404 otherwise.
+ *  Used when an entry links to a trip, so a caller can't attach their entry
+ *  to a trip they don't own. */
+async function verifyTripOwnership(tripId: string, userId: string) {
+  const trip = await prisma.trip.findFirst({
+    where: { id: tripId, userId },
+    select: { id: true },
+  })
+  if (!trip) throw new AppError('Trip not found', 404)
+}
+
+// ─── Freeform diary CRUD ────────────────────────────────────────────────────
+// JournalEntry is a per-user diary: userId required, tripId/stopId optional
+// links. Ownership is by userId (never the Stop->Trip chain the legacy per-stop
+// path below uses). state auto-resolves from a linked Stop when not supplied.
+
+export async function listEntries(req: AuthRequest, res: Response, next: NextFunction) {
   try {
+    const userId = req.user!.id
+    const { tripId, state, tag, rating, q } = req.query
+
+    const where: any = { userId }
+    if (typeof tripId === 'string' && tripId) where.tripId = tripId
+    if (typeof state === 'string' && state) where.state = state
+    if (typeof tag === 'string' && tag) where.tags = { has: tag }
+    if (typeof rating === 'string' && rating.trim()) {
+      const r = parseInt(rating, 10)
+      if (!Number.isNaN(r)) where.rating = r
+    }
+    // Simple ILIKE search across title/body/placeName. Real tsvector FTS is step 5.
+    if (typeof q === 'string' && q.trim()) {
+      const term = q.trim()
+      where.OR = [
+        { title: { contains: term, mode: 'insensitive' } },
+        { body: { contains: term, mode: 'insensitive' } },
+        { placeName: { contains: term, mode: 'insensitive' } },
+      ]
+    }
+
     const entries = await prisma.journalEntry.findMany({
-      where: { stop: { trip: { userId: req.user!.id } } },
-      include: { stop: { include: { trip: true } } },
-      orderBy: { createdAt: 'desc' },
+      where,
+      orderBy: { entryDate: 'desc' },
     })
     res.json(entries)
   } catch (err) { next(err) }
 }
 
-export async function getTripJournal(req: AuthRequest, res: Response, next: NextFunction) {
+export async function getEntry(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const trip = await prisma.trip.findFirst({ where: { id: req.params.tripId, userId: req.user!.id } })
-    if (!trip) throw new AppError('Trip not found', 404)
-
-    const entries = await prisma.journalEntry.findMany({
-      where: { stop: { tripId: req.params.tripId } },
-      include: { stop: true },
-      orderBy: { stop: { order: 'asc' } },
+    const entry = await prisma.journalEntry.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
     })
-    res.json(entries)
+    if (!entry) throw new AppError('Journal entry not found', 404)
+    res.json(entry)
   } catch (err) { next(err) }
 }
+
+export async function createEntry(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.id
+    const input: JournalCreateInput = req.body
+
+    // Verify any linked trip/stop belong to the caller before persisting.
+    if (input.tripId) await verifyTripOwnership(input.tripId, userId)
+
+    // state auto-resolve: if linked to a stop and state was omitted (key
+    // absent), inherit the stop's locationState. An explicit `state: null`
+    // counts as set and is preserved.
+    let resolvedState = input.state ?? null
+    if (input.stopId) {
+      const stop = await verifyStopOwnership(input.stopId, userId)
+      if (input.state === undefined) resolvedState = stop.locationState ?? null
+    }
+
+    const entry = await prisma.journalEntry.create({
+      data: {
+        userId,
+        tripId: input.tripId ?? null,
+        stopId: input.stopId ?? null,
+        title: input.title ?? null,
+        body: input.body,
+        rating: input.rating ?? null,
+        tags: input.tags ?? [],
+        placeName: input.placeName ?? null,
+        lat: input.lat ?? null,
+        lng: input.lng ?? null,
+        state: resolvedState,
+        // entryDate omitted -> Prisma applies @default(now())
+        ...(input.entryDate ? { entryDate: input.entryDate } : {}),
+      },
+    })
+    res.status(201).json(entry)
+  } catch (err) { next(err) }
+}
+
+export async function updateEntry(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.id
+    const id = req.params.id
+    const input: JournalUpdateInput = req.body
+
+    const existing = await prisma.journalEntry.findFirst({ where: { id, userId } })
+    if (!existing) throw new AppError('Journal entry not found', 404)
+
+    if (input.tripId) await verifyTripOwnership(input.tripId, userId)
+
+    // .strict() guarantees only schema keys are present, so spreading is safe.
+    const data: any = { ...input }
+
+    // state auto-resolve only when this update (re)links a stop and doesn't
+    // explicitly set state. Updates that leave stopId untouched keep state as-is.
+    if (input.stopId) {
+      const stop = await verifyStopOwnership(input.stopId, userId)
+      if (input.state === undefined) data.state = stop.locationState ?? null
+    }
+
+    const updated = await prisma.journalEntry.update({ where: { id }, data })
+    res.json(updated)
+  } catch (err) { next(err) }
+}
+
+export async function deleteEntry(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const existing = await prisma.journalEntry.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+    })
+    if (!existing) throw new AppError('Journal entry not found', 404)
+
+    await prisma.journalEntry.delete({ where: { id: req.params.id } })
+    res.json({ message: 'Journal entry deleted' })
+  } catch (err) { next(err) }
+}
+
+// ─── Legacy per-stop journal (still live) ───────────────────────────────────
 
 export async function upsertEntry(req: AuthRequest, res: Response, next: NextFunction) {
   try {

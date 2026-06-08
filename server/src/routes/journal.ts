@@ -1,15 +1,37 @@
 import { Router } from 'express'
 import { requireAuth, requireFeature } from '../middleware/auth'
 import { requireVerifiedEmail } from '../middleware/requireVerifiedEmail'
-import { getAllJournals, getTripJournal, upsertEntry, uploadPhotos } from '../controllers/journal'
+import { validateBody } from '../middleware/validate'
+import { JournalCreateSchema, JournalUpdateSchema } from '../schemas'
+import {
+  listEntries,
+  getEntry,
+  createEntry,
+  updateEntry,
+  deleteEntry,
+  upsertEntry,
+  uploadPhotos,
+} from '../controllers/journal'
 
 export const journalRouter = Router()
 journalRouter.use(requireAuth, requireVerifiedEmail)
 
-// Reads stay open: a downgraded user can still see their own past journal
-// entries. Only writes are gated.
-journalRouter.get('/', getAllJournals as any)
-journalRouter.get('/:tripId', getTripJournal as any)
-journalRouter.post('/:stopId', requireFeature('tripJournal'), upsertEntry as any)
-journalRouter.put('/:stopId', requireFeature('tripJournal'), upsertEntry as any)
+// ─── Freeform diary CRUD ────────────────────────────────────────────────────
+// Reads stay OPEN to all authenticated users (a downgraded user can still read
+// their own diary). Writes keep the PRO gate via requireFeature('tripJournal').
+journalRouter.get('/', listEntries as any)
+journalRouter.post('/', requireFeature('tripJournal'), validateBody(JournalCreateSchema), createEntry as any)
+
+// ─── Legacy per-stop journal (still live) ───────────────────────────────────
+// The TripJournalPage UI POSTs to /journal/:stopId (upsert) and
+// /journal/:stopId/photos. Registered BEFORE the /:id diary routes so the
+// more specific /:stopId/photos path resolves, and kept at their original
+// paths so the client needs no change. POST /:stopId does not collide with
+// POST / above (param vs no-param).
 journalRouter.post('/:stopId/photos', requireFeature('tripJournal'), uploadPhotos as any)
+journalRouter.post('/:stopId', requireFeature('tripJournal'), upsertEntry as any)
+
+// ─── Diary entry by id ──────────────────────────────────────────────────────
+journalRouter.get('/:id', getEntry as any)
+journalRouter.put('/:id', requireFeature('tripJournal'), validateBody(JournalUpdateSchema), updateEntry as any)
+journalRouter.delete('/:id', requireFeature('tripJournal'), deleteEntry as any)
