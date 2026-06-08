@@ -458,8 +458,23 @@ export default function SessionPage() {
   const prevEmptyRef = useRef(true)
   useLayoutEffect(() => {
     const empty = !messages.some(m => m.role === 'user')
-    if (prevEmptyRef.current && !empty) window.scrollTo(0, 0)
+    const justActivated = prevEmptyRef.current && !empty
     prevEmptyRef.current = empty
+    if (!justActivated) return
+    // First user message → empty-state hero swaps to the conversation layout.
+    // The textarea the user just typed into is STILL FOCUSED, so right after the
+    // swap the browser scrolls it back into view (~84px on device), carrying the
+    // sticky AppLayout header above the fold. A bare pre-paint scrollTo(0,0) lost
+    // this race because the focus-scroll happens as the new layout lays out.
+    // Fix: blur the input first (removes what the browser is trying to keep in
+    // view — also dismisses the soft keyboard, which is wanted post-send), reset
+    // now, then re-assert one frame later (after the swap paints) to beat any
+    // residual focus-scroll. WINDOW-only — never touches the message list
+    // (listRef), so it doesn't fight the committed scroll-to-bottom behavior.
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    window.scrollTo(0, 0)
+    const raf = requestAnimationFrame(() => window.scrollTo(0, 0))
+    return () => cancelAnimationFrame(raf)
   }, [messages])
 
   // Lock body scroll in active-conversation view so the WINDOW can never scroll.
