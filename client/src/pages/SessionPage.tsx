@@ -1,16 +1,14 @@
-import { useCallback, useState, useRef, useEffect, type CSSProperties } from 'react'
+import { useCallback, useState, useRef, useEffect, useLayoutEffect, type CSSProperties } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { MapPin, Tent, Users, Loader, Plus, X, Sparkles, ChevronDown, ChevronUp, ChevronRight, Check, Info } from 'lucide-react'
-import { aiApi, sessionsApi, tripsApi, usersApi } from '../services/api'
+import { aiApi, sessionsApi, tripsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import { ChatMessage, Trip, Rig } from '../types'
 import { VEHICLE_LABELS } from './profile/RigPage'
 import BottomSheet from '../components/ui/BottomSheet'
 import ConfirmModal from '../components/ui/ConfirmModal'
 import ConfirmVehiclesModal, { type ConfirmVehiclesResult } from '../components/trip/ConfirmVehiclesModal'
-import SaveHomeAddressModal from '../components/trip/SaveHomeAddressModal'
 import HomeBaseCard from '../components/trip/HomeBaseCard'
-import type { HomeAddress } from '../components/ui/AddressAutocomplete'
 import TripCard from '../components/trip/TripCard'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
 import { useVoiceInput } from '../hooks/useVoiceInput'
@@ -248,18 +246,10 @@ export default function SessionPage() {
   // through with the pre-Block-8 behavior in that case.
   const [confirmVehiclesOpen, setConfirmVehiclesOpen] = useState(false)
 
-  // First-trip home-address capture. When a user promotes their first trip and
-  // has no saved home address yet, we stash the resolved starting location here
-  // to drive the SaveHomeAddressModal opt-in. The trip is already built; this
-  // only gates the hop to its map. null = no prompt pending.
-  const [saveHomePrompt, setSaveHomePrompt] = useState<
-    { tripId: string; address: string; city?: string; state?: string } | null
-  >(null)
-  const [savingHome, setSavingHome] = useState(false)
-
   const bottomRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
-  const { user, setUser } = useAuthStore()
+  const { user } = useAuthStore()
   const navigate = useNavigate()
 
   // Apple-style press-to-start / press-to-stop dictation. The hook captures
@@ -439,15 +429,55 @@ export default function SessionPage() {
     }
   )
 
-  // block:'nearest' so this no-ops when the bottom sentinel is already visible
-  // (short exchange that fits → no scroll, the New trip/Cancel header stays put)
-  // but still scrolls the minimum to reveal the latest message when the
-  // conversation overflows. The default block:'start' scrolled ALL scrollable
-  // ancestors — including the WINDOW on mobile (dvh > visual viewport) — even
-  // when nothing needed scrolling, carrying the non-sticky header off the top.
+  // Keep the latest message in view by scrolling ONLY the message-list
+  // container (listRef) — never the window. scrollIntoView (even block:'nearest')
+  // walks every scrollable ancestor, and on mobile the dvh-based wrapper height
+  // (:844) makes the WINDOW scrollable, so it dragged the non-sticky header and
+  // the top of the reply off-screen on the first short reply. Setting the
+  // container's own scrollTop contains the scroll to the chat history.
+  // Guarded on actual overflow: when the exchange fits, do nothing → the
+  // conversation stays top-anchored (anchor-to-top, scroll-only-on-overflow).
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    const list = listRef.current
+    if (!list) return
+    if (list.scrollHeight > list.clientHeight) {
+      list.scrollTop = list.scrollHeight
+    }
   }, [messages, typing])
+
+  // Reset the WINDOW scroll on the empty→active transition (first user message
+  // sent). On mobile, tapping the empty-state hero input lifts the soft keyboard
+  // and the browser scrolls the window down; when the active layout mounts its
+  // (now sticky) header at document-top, the leftover window.scrollY would
+  // otherwise leave the header/first reply above the viewport. useLayoutEffect
+  // runs before paint → no flash of the scrolled position. Must live ABOVE the
+  // hydrating/hydrationError early returns (Rules of Hooks); isEmptyState is
+  // recomputed locally here since it's derived later in the body. prevEmptyRef
+  // gates it to the true→false edge so it only fires on the first user message.
+  // Window-only — independent of the message-list scroll (listRef).
+  const prevEmptyRef = useRef(true)
+  useLayoutEffect(() => {
+    const empty = !messages.some(m => m.role === 'user')
+    if (prevEmptyRef.current && !empty) window.scrollTo(0, 0)
+    prevEmptyRef.current = empty
+  }, [messages])
+
+  // Lock body scroll in active-conversation view so the WINDOW can never scroll.
+  // The dvh wrapper (:844) makes the document ~110px taller than the visual
+  // viewport, so the window becomes scrollable and ends up scrolled down,
+  // carrying the (sticky) header + top of the first reply above the fold — and a
+  // one-shot scrollTo(0,0) doesn't hold because the browser re-scrolls. With the
+  // body locked, only the internal message list (listRef, overflow-y-auto)
+  // scrolls. Restored on cleanup / when returning to the empty state. Computes
+  // `empty` locally (isEmptyState is derived later); above the early returns.
+  useLayoutEffect(() => {
+    const empty = !messages.some(m => m.role === 'user')
+    if (empty) return
+    window.scrollTo(0, 0)            // clear any residual offset before locking
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [messages])
 
   // Reset window scroll to the top on the hydrating→ready edge, when this page's
   // tall content first mounts. The global <ScrollToTop> fires once on pathname
@@ -765,30 +795,9 @@ export default function SessionPage() {
       // back to a session that's now COMPLETED.
       sessionStorage.removeItem('lastVisitedSessionId')
 
-      // First-trip home-address capture. If the user has no saved home address
-      // yet and we resolved a real starting location, offer to remember it (the
-      // SaveHomeAddressModal is opt-in only). The trip is fully built at this
-      // point — the modal just gates navigation to the map so the user decides
-      // before leaving the canvas. Override-safe: this is the ONLY writer of
-      // User.home* outside /profile, and it fires only when homeLocation is
-      // empty, so a one-off per-trip start never overwrites a saved home.
-      const startStop = itinerary.stops?.[0]
-      const startState: string | undefined = startStop?.locationState || undefined
-      if (!user?.homeLocation && homeStopName && homeStopName !== 'Start') {
-        setCreating(false)
-        setSaveHomePrompt({
-          tripId,
-          // Prefer the AI-captured verbatim full street address (HOME stop's
-          // optional startAddress) so the modal title + AddressAutocomplete
-          // seed show what the user actually typed; fall back to "City, ST"
-          // when only a city was given. city/state stay city/state for the
-          // save path — unchanged.
-          address: startStop?.startAddress || [homeStopName, startState].filter(Boolean).join(', '),
-          city: homeStopName,
-          state: startState,
-        })
-        return
-      }
+      // Home-address capture is handled up front by the HomeBaseCard / full-timer
+      // flow (and deterministic origin capture), so the build flow goes straight
+      // to the map with no opt-in popup.
       navigate(`/trips/${tripId}/map`)
     } catch (e: any) {
       console.error('[buildItinerary] failed:', e)
@@ -803,35 +812,6 @@ export default function SessionPage() {
       setBuildError(e?.response?.data?.message || e?.message || 'Something went wrong. Please try again.')
       setCreating(false)
     }
-  }
-
-  // Resolve the first-trip home-address opt-in, then proceed to the trip map.
-  // (true, address) persists the user's REAL structured address (all 8 fields,
-  // captured by the modal's Places autocomplete) to their profile; (false)
-  // ("Not now", Escape, or backdrop) saves nothing — the trip's start city
-  // still drives planning. No city-centroid middle path anymore (PROF-2).
-  async function handleSaveHomeDone(saveAsHome: boolean, address?: HomeAddress) {
-    const prompt = saveHomePrompt
-    if (!prompt) return
-    if (saveAsHome && address) {
-      setSavingHome(true)
-      try {
-        // Persist the full 8-field address straight from the modal — no reliance
-        // on the getMe geocode backfill, because we already have street/zip/lat/lng.
-        const res = await usersApi.updateMe(address)
-        setUser({ ...user!, ...res.data })
-      } catch (e) {
-        // Non-fatal: the opt-in is a convenience. If the save fails, don't
-        // strand the user away from their freshly built trip — they can set
-        // a home address later from their profile.
-        console.error('[SaveHomeAddress] updateMe failed (non-fatal):', e)
-      } finally {
-        setSavingHome(false)
-      }
-    }
-    const tripId = prompt.tripId
-    setSaveHomePrompt(null)
-    navigate(`/trips/${tripId}/map`)
   }
 
   const cleanText = (text: string) => text
@@ -914,7 +894,7 @@ export default function SessionPage() {
           conversation. */}
       {!isEmptyState && (
         <div
-          className="flex justify-between items-center px-4 py-2 border-b border-gray-100"
+          className="sticky top-0 z-10 bg-white flex justify-between items-center px-4 py-2 border-b border-gray-100"
           style={{ borderBottomWidth: '0.5px' }}
         >
           <div className="min-w-0">
@@ -1578,7 +1558,7 @@ export default function SessionPage() {
           ) : (
             // ── Active conversation: history + bottom-pinned input ────────────
             <>
-              <div className="flex-1 min-w-0 overflow-y-auto space-y-3 pb-2">
+              <div ref={listRef} className="flex-1 min-w-0 overflow-y-auto space-y-3 pb-2">
                 {messages.map((msg, i) => (
                   <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div
@@ -1760,15 +1740,6 @@ export default function SessionPage() {
         />
       )}
 
-      {/* First-trip home-address opt-in. Opens after a successful promote when
-          the user has no saved home address yet; gates the hop to the trip map.
-          See buildItinerary + handleSaveHomeDone. */}
-      <SaveHomeAddressModal
-        isOpen={!!saveHomePrompt}
-        address={saveHomePrompt?.address || ''}
-        isSaving={savingHome}
-        onDone={handleSaveHomeDone}
-      />
     </div>
 
     {/* Continue planning strip — sibling of the viewport-locked canvas above so it

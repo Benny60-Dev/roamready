@@ -19,6 +19,10 @@ export default defineConfig({
   server: {
     host: true,
     port: 3000,
+    // DEV-only: allow the ngrok tunnel host so Vite doesn't reject the request
+    // with "Blocked request. This host is not allowed." when the phone loads the
+    // app over HTTPS via the tunnel. Localhost/LAN access still works.
+    allowedHosts: ['handling-jackal-omit.ngrok-free.dev'],
     proxy: {
       '/api': {
         target: 'http://localhost:3001',
