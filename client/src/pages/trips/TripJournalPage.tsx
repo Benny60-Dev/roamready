@@ -187,7 +187,7 @@ export default function TripJournalPage() {
       <Breadcrumb items={[
         { label: 'Dashboard', href: '/dashboard' },
         { label: trip.name, href: `/trips/${id}/map` },
-        { label: 'Journal' },
+        { label: 'Trip Journal' },
       ]} />
       <div>
         <h1 className="text-xl font-medium text-gray-900">Trip Journal</h1>

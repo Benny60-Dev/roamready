@@ -1473,7 +1473,7 @@ export default function TripMapPage() {
           to={`/trips/${id}/journal`}
           className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1F6F8B] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
         >
-          <BookOpen size={13} /> Journal
+          <BookOpen size={13} /> Trip Journal
         </Link>
         <Link
           to={`/packing/${id}`}
