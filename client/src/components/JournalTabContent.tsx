@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, Search, Star, MapPin, Pencil, X } from 'lucide-react'
 import { journalApi } from '../services/api'
+import { useAuthStore } from '../store/authStore'
+import { useUIStore } from '../store/uiStore'
 import { JournalEntry, Trip } from '../types'
 import { formatTripDate, toYmd } from '../utils/dates'
 
@@ -47,6 +49,23 @@ export default function JournalTabContent({ trips }: Props) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<FilterKey>('all')
   const [composerOpen, setComposerOpen] = useState(false)
+
+  const hasAccess = useAuthStore(s => s.hasAccess)
+  const openPaywall = useUIStore(s => s.openPaywall)
+
+  // Gate the write entry-point at TAP time, not submit time: a non-Pro user
+  // should see the upgrade prompt the moment they tap "+ Add entry", never
+  // after filling out a full entry. Uses the same client mirror of the server
+  // hasAccess('tripJournal') check (server enforces it again via
+  // requireFeature('tripJournal') on POST /journal). The global 403 interceptor
+  // stays as a safety net for stale client state.
+  function handleAddEntry() {
+    if (!hasAccess('tripJournal')) {
+      openPaywall('tripJournal')
+      return
+    }
+    setComposerOpen(true)
+  }
 
   const tripNameById = useMemo(() => {
     const m = new Map<string, string>()
@@ -129,7 +148,7 @@ export default function JournalTabContent({ trips }: Props) {
           {stateCount === 1 ? 'state' : 'states'} · {tripCount} {tripCount === 1 ? 'trip' : 'trips'}
         </p>
         <button
-          onClick={() => setComposerOpen(true)}
+          onClick={handleAddEntry}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors bg-[#F7A829] hover:bg-[#C9851A]"
         >
           <Plus size={16} /> Add entry
@@ -192,7 +211,7 @@ export default function JournalTabContent({ trips }: Props) {
             Capture a memory from the road — notes, ratings, and the places you loved.
           </p>
           <button
-            onClick={() => setComposerOpen(true)}
+            onClick={handleAddEntry}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors bg-[#F7A829] hover:bg-[#C9851A]"
           >
             <Plus size={15} /> Add entry
