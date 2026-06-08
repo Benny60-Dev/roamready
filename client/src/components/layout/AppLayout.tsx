@@ -5,6 +5,7 @@ import { useAuthStore } from '../../store/authStore'
 import { authApi } from '../../services/api'
 import SessionsPanel from '../sessions/SessionsPanel'
 import { VerificationBanner } from '../auth/VerificationBanner'
+import DiagnosticOverlay from '../DiagnosticOverlay' // TEMP DIAGNOSTIC - REMOVE
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -47,6 +48,7 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-[100dvh] bg-rr-bg flex flex-col overflow-x-clip">
+      <DiagnosticOverlay /> {/* TEMP DIAGNOSTIC - REMOVE */}
       {/* Top Nav */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40" style={{ borderBottomWidth: '0.5px' }}>
         <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
