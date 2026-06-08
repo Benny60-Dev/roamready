@@ -49,13 +49,14 @@
     @apply text-gray-600 px-4 py-2 rounded-lg font-medium text-sm hover:bg-gray-100 transition-colors;
   }
   .input {
-    /* Resting state must be clearly visible BEFORE focus (iOS especially):
-       a full 1px medium-soft gray border + a faint off-white interior fill so
-       each field reads as a distinct well unfocused. The previous 0.5px
-       gray-200 border rendered near-invisible (sub-pixel borders barely show on
-       mobile). Focus keeps the blue ring + border and brightens the fill to
-       white. */
-    @apply w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#1F6F8B]/20 focus:border-[#1F6F8B] transition-colors;
+    /* Resting state must be clearly visible BEFORE focus (iOS especially). The
+       border is the primary lever: a full 1px gray-400 (#9ca3af) medium gray
+       reads clearly against BOTH white cards and the light-gray page behind
+       them. Resting fill is white (not gray-50) — on a white card a gray fill
+       added no separation and only muddied contrast; the stronger border does
+       the work. Focus keeps the blue ring + border. (gray-300/gray-50 from
+       caa8084 was still too faint on mobile.) */
+    @apply w-full bg-white border border-gray-400 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1F6F8B]/20 focus:border-[#1F6F8B] transition-colors;
   }
   .label {
     @apply block text-sm font-medium text-gray-700 mb-1;
