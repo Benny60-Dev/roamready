@@ -857,7 +857,13 @@ export async function createTrip(req: AuthRequest, res: Response, next: NextFunc
 // rebuild). The trip/stop API contract still exposes a singular `journalEntry`
 // (the live per-stop journal feature is still one-entry-per-stop), so collapse
 // the relation list to its first element when shaping responses. The full diary
-// UI in a later step will consume the list directly.
+// UI consumes the list directly via GET /journal.
+//
+// IMPORTANT: callers MUST include journalEntries with `orderBy: { createdAt:
+// 'asc' }` so this [0] pick is DETERMINISTIC — the oldest entry (the original
+// per-stop entry written via the upsert path) is the one the trip UI edits.
+// Without an explicit order Prisma returns rows in arbitrary order, which would
+// make the singular pick non-deterministic if a stop ever holds >1 entry.
 function collapseJournal<S extends { journalEntries?: unknown[] }>(
   stop: S,
 ): Omit<S, 'journalEntries'> & { journalEntry: unknown } {
@@ -869,7 +875,7 @@ export async function getTrip(req: AuthRequest, res: Response, next: NextFunctio
   try {
     const trip = await prisma.trip.findFirst({
       where: { id: req.params.id, userId: req.user!.id },
-      include: { stops: { orderBy: { order: 'asc' }, include: { journalEntries: true } } },
+      include: { stops: { orderBy: { order: 'asc' }, include: { journalEntries: { orderBy: { createdAt: 'asc' } } } } },
     })
     if (!trip) throw new AppError('Trip not found', 404)
     res.json({ ...trip, stops: trip.stops.map(collapseJournal) })
@@ -994,7 +1000,7 @@ export async function shiftTripDates(req: AuthRequest, res: Response, next: Next
       // frontend can pass response.data straight into onTripUpdated().
       return tx.trip.findUnique({
         where: { id: trip.id },
-        include: { stops: { orderBy: { order: 'asc' }, include: { journalEntries: true } } },
+        include: { stops: { orderBy: { order: 'asc' }, include: { journalEntries: { orderBy: { createdAt: 'asc' } } } } },
       })
     })
 
@@ -1025,7 +1031,7 @@ export async function getStops(req: AuthRequest, res: Response, next: NextFuncti
     const stops = await prisma.stop.findMany({
       where: { tripId: req.params.id },
       orderBy: { order: 'asc' },
-      include: { journalEntries: true },
+      include: { journalEntries: { orderBy: { createdAt: 'asc' } } },
     })
     res.json(stops.map(collapseJournal))
   } catch (err) { next(err) }

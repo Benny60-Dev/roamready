@@ -268,7 +268,7 @@ function Stars({ rating }: { rating: number }) {
   )
 }
 
-function EntryCard({ entry }: { entry: JournalEntry }) {
+export function EntryCard({ entry }: { entry: JournalEntry }) {
   // Per scope: per-stop entries (stopId present) get a blue left-edge; freeform
   // / standalone entries get a gold left-edge with a pencil marker. Pine
   // (#3E5540) is reserved and intentionally NOT used here.
@@ -327,7 +327,18 @@ function EntryCard({ entry }: { entry: JournalEntry }) {
 
 /** "+ Add entry" composer — creates a standalone (trip-less) entry via
  *  POST /journal. Body required; title/rating/tags/date optional. */
-function AddEntryModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+export function AddEntryModal({
+  onClose,
+  onCreated,
+  link,
+}: {
+  onClose: () => void
+  onCreated: () => void
+  /** Optional links merged into the create payload. The Dashboard composer omits
+   *  this (standalone entry); the in-trip freeform button passes
+   *  { tripId, stopId: null } so the entry attaches to the trip but no stop. */
+  link?: { tripId?: string; stopId?: string | null }
+}) {
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [rating, setRating] = useState<number | null>(null)
@@ -354,6 +365,7 @@ function AddEntryModal({ onClose, onCreated }: { onClose: () => void; onCreated:
         rating: rating ?? undefined,
         tags: tags.length ? tags : undefined,
         entryDate: entryDate || undefined,
+        ...(link ?? {}),
       })
       onCreated()
     } catch (e: any) {
