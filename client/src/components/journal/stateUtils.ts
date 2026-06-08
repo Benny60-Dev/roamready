@@ -32,6 +32,18 @@ export const STATE_NAMES: Record<string, string> = {
 /** All 51 codes (50 states + DC), in declaration order. */
 export const STATE_CODES = Object.keys(STATE_NAMES)
 
+export type StateTier = 'overnight' | 'passthrough' | 'none'
+
+/** Per-state metadata for the visited-states map + editor. derivedTier is the
+ *  auto-computed status (completed trips + journal entries); manualTier is the
+ *  user's raw manual mark; locked = the state is derived-overnight (authoritative
+ *  — a manual mark can't downgrade it). */
+export interface StateMeta {
+  derivedTier: StateTier
+  manualTier: StateTier
+  locked: boolean
+}
+
 const VALID_CODES = new Set(Object.keys(STATE_NAMES))
 const NAME_TO_CODE = new Map(
   Object.entries(STATE_NAMES).map(([code, name]) => [name.toLowerCase(), code]),

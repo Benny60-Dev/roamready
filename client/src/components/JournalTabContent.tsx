@@ -6,19 +6,12 @@ import { useUIStore } from '../store/uiStore'
 import { JournalEntry, Trip } from '../types'
 import { formatTripDate, toYmd } from '../utils/dates'
 import { deriveTripStatus } from '../utils/tripStatus'
-import { normalizeStateCode, STATE_CODES } from './journal/stateUtils'
+import { normalizeStateCode, STATE_CODES, type StateTier, type StateMeta } from './journal/stateUtils'
 import VisitedStatesBanner from './journal/VisitedStatesBanner'
 
-type StateTier = 'overnight' | 'passthrough' | 'none'
 interface ManualState {
   state: string
   visitType: string
-}
-/** Per-state metadata the phase-4 editor consumes (lock + current source). */
-export interface StateMeta {
-  derivedTier: StateTier
-  manualTier: StateTier
-  locked: boolean
 }
 
 /**
@@ -164,10 +157,7 @@ export default function JournalTabContent({ trips }: Props) {
   //   counter = (finalOvernight ∪ finalPassthrough), excluding DC, of 50.
   //   stateMeta exposes per-state { derivedTier, manualTier, locked } for the
   //   phase-4 editor (consumed there; returned here so it's ready).
-  // stateMeta is intentionally NOT destructured here yet — it's returned by the
-  // memo (computed + ready) and phase 4's editor will read it. Pulling it into a
-  // local now would trip noUnusedLocals before there's a consumer.
-  const { overnight, passthrough, visitedCount } = useMemo(() => {
+  const { overnight, passthrough, visitedCount, stateMeta } = useMemo(() => {
     // Derived sets.
     const derivedOvernight = new Set<string>()
     const derivedPassthrough = new Set<string>()
@@ -256,6 +246,8 @@ export default function JournalTabContent({ trips }: Props) {
         overnight={overnight}
         passthrough={passthrough}
         visitedCount={visitedCount}
+        stateMeta={stateMeta}
+        refetchManualStates={refetchManualStates}
       />
 
       {/* Count line + Add entry */}

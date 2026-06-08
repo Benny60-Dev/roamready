@@ -1,5 +1,9 @@
 import { lazy, Suspense, useState } from 'react'
-import { ChevronDown, Map as MapIcon } from 'lucide-react'
+import { ChevronDown, Map as MapIcon, Pencil } from 'lucide-react'
+import { useAuthStore } from '../../store/authStore'
+import { useUIStore } from '../../store/uiStore'
+import EditStatesModal from './EditStatesModal'
+import type { StateMeta } from './stateUtils'
 
 /**
  * Collapsible banner that hosts the visited-states choropleth at the top of the
@@ -27,10 +31,32 @@ interface Props {
   overnight: Set<string>
   passthrough: Set<string>
   visitedCount: number
+  stateMeta: Map<string, StateMeta>
+  /** Re-runs visitedStatesApi.list() so the map/counter update after an edit. */
+  refetchManualStates: () => void
 }
 
-export default function VisitedStatesBanner({ overnight, passthrough, visitedCount }: Props) {
+export default function VisitedStatesBanner({
+  overnight,
+  passthrough,
+  visitedCount,
+  stateMeta,
+  refetchManualStates,
+}: Props) {
   const [collapsed, setCollapsed] = useState(readCollapsed)
+  const [editOpen, setEditOpen] = useState(false)
+  const hasAccess = useAuthStore(s => s.hasAccess)
+  const openPaywall = useUIStore(s => s.openPaywall)
+
+  // Gate at the entry point (tap), not mid-edit: a non-Pro user never enters the
+  // editor. Reading the map stays open to all; only editing is Pro-gated.
+  function handleEdit() {
+    if (!hasAccess('tripJournal')) {
+      openPaywall('tripJournal')
+      return
+    }
+    setEditOpen(true)
+  }
 
   function toggle() {
     setCollapsed(prev => {
@@ -68,6 +94,14 @@ export default function VisitedStatesBanner({ overnight, passthrough, visitedCou
 
       {!collapsed && (
         <div className="mt-4 pt-4 border-t border-gray-100">
+          <div className="flex justify-end mb-2">
+            <button
+              onClick={handleEdit}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-[#1F6F8B] hover:underline"
+            >
+              <Pencil size={12} /> Edit my states
+            </button>
+          </div>
           <Suspense
             fallback={<div className="h-48 rounded-lg bg-gray-50 animate-pulse" aria-hidden="true" />}
           >
@@ -78,6 +112,14 @@ export default function VisitedStatesBanner({ overnight, passthrough, visitedCou
             />
           </Suspense>
         </div>
+      )}
+
+      {editOpen && (
+        <EditStatesModal
+          stateMeta={stateMeta}
+          onChanged={refetchManualStates}
+          onClose={() => setEditOpen(false)}
+        />
       )}
     </div>
   )
