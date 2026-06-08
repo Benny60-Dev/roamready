@@ -11,6 +11,13 @@
   html {
     overflow-x: hidden; /* iOS Safari: prevent any child from widening page scroll */
     overflow-x: clip;   /* better where supported: no new stacking context */
+    /* Disable browser scroll-anchoring on the document scroll root. Without
+       this, late async content insertion (e.g. a conversation's message bubble
+       + trip-summary pill mounting after the one-shot window scroll-reset) makes
+       the browser shift scrollTop down ~84px to "keep" the prior content in
+       view, clipping the AppLayout header above the fold. No downside elsewhere:
+       every page resets the window to the top on navigation anyway. */
+    overflow-anchor: none;
   }
   body {
     font-family: 'Inter', sans-serif;
@@ -20,6 +27,7 @@
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
     overflow-x: clip;
+    overflow-anchor: none;
   }
   h1, h2, h3, h4, h5, h6 {
     font-weight: 500;

@@ -487,6 +487,27 @@ export default function SessionPage() {
   // full rationale; window-only, so it never fights the chat's internal scroll.
   useScrollResetOnReady(!hydrating)
 
+  // Re-assert the WINDOW scroll-to-top AFTER late conversation content settles.
+  // useScrollResetOnReady (above) and the body-lock effect fire on the ready /
+  // messages edges, but the trip-summary pill is driven by `itinerary` — SEPARATE
+  // state from `messages` — and can mount a frame or two LATER than the message
+  // that produced it. When that pill inserts below the fold, the browser's
+  // scroll-anchoring nudges the window down ~84px, carrying the sticky AppLayout
+  // header above the viewport (measured on-device: scrollY stuck at 84, identical
+  // scrollH/innerH). `overflow-anchor: none` (index.css) removes the anchoring
+  // cause; this is the belt-and-suspenders re-assert. Keyed on messages.length +
+  // pill presence so it re-runs whenever late content lands; the rAF defers one
+  // frame so the reset happens AFTER the inserted node is laid out. WINDOW-only —
+  // it never touches the message list (listRef), so it cannot fight the committed
+  // scroll-to-bottom behavior (separate scroll containers). No-op in empty state.
+  useLayoutEffect(() => {
+    const empty = !messages.some(m => m.role === 'user')
+    if (empty) return
+    window.scrollTo(0, 0)
+    const raf = requestAnimationFrame(() => window.scrollTo(0, 0))
+    return () => cancelAnimationFrame(raf)
+  }, [messages.length, itinerary])
+
   // ── Continue-planning strip data ───────────────────────────────────────────
   // Fetched once on mount. Trips don't change while the user is inside this
   // session (promoting via Build Itinerary navigates away to /trips/:id/map),
