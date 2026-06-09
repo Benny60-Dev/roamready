@@ -668,6 +668,14 @@ export default function SessionPage() {
 
   function onBuildItineraryClick() {
     if (!itinerary || !sessionId || creating) return
+    // Close the mobile itinerary bottom sheet the moment the user commits to
+    // building. On the phone the Build button lives INSIDE that sheet (z-81);
+    // without this, opening the vehicle-confirmation modal (z-50) below would
+    // leave the modal buried behind the still-open sheet. One overlay at a time
+    // — the sheet steps aside so the vehicle picker is reachable. Harmless on
+    // the no-rig / ad-hoc paths (the sheet just closes as building begins) and
+    // a no-op on desktop, where the Build button is an in-flow sidebar control.
+    setSheetOpen(false)
     // No rig at all → no toad question to ask, no rigId to attach, no
     // ad-hoc vehicle UI useful (the user hasn't set up their profile yet).
     // Promote with empty vehicle data — matches pre-Block-8 behavior so
