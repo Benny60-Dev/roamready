@@ -1,7 +1,7 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
-import { Camera, Star, DollarSign, Save, Plus } from 'lucide-react'
+import { Star, DollarSign, Save, Plus, Trash2 } from 'lucide-react'
 import { tripsApi, journalApi } from '../../services/api'
 import { Trip, Stop, JournalEntry } from '../../types'
 import { useAuthStore } from '../../store/authStore'
@@ -28,7 +28,11 @@ function StopJournal({ stop, badge }: { stop: Stop; badge: 'S' | 'H' | 'F' | num
   const [entry, setEntry] = useState<Partial<JournalEntry>>(stop.journalEntry || {})
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
+  const [deleting, setDeleting] = useState(false)
+  // The entry's row id, if one exists. Seeded from the server-provided
+  // stop.journalEntry and updated when an upsert creates a fresh row, so the
+  // Delete button reflects the live state (and never targets a stale id).
+  const [entryId, setEntryId] = useState<string | undefined>(stop.journalEntry?.id)
 
   async function save() {
     // Gate at Save-tap, client-side, so a non-Pro user sees the paywall
@@ -41,7 +45,9 @@ function StopJournal({ stop, badge }: { stop: Stop; badge: 'S' | 'H' | 'F' | num
     }
     setSaving(true)
     try {
-      await journalApi.upsert(stop.id, { title: entry.title, body: entry.body, rating: entry.rating, actualCost: entry.actualCost })
+      const res = await journalApi.upsert(stop.id, { title: entry.title, body: entry.body, rating: entry.rating, actualCost: entry.actualCost })
+      // Capture the row id so a just-created entry becomes immediately deletable.
+      if (res.data?.id) setEntryId(res.data.id)
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (e: any) {
@@ -55,21 +61,24 @@ function StopJournal({ stop, badge }: { stop: Stop; badge: 'S' | 'H' | 'F' | num
     }
   }
 
-  function handleAddPhotosClick() {
-    // Same tap-time gate as Save — don't let a non-Pro user pick files only to
-    // have the upload 403.
-    if (!hasAccess('tripJournal')) {
-      openPaywall('tripJournal')
-      return
+  // Delete the JournalEntry row ONLY — the Stop is never touched (the FK lives
+  // on the entry as onDelete:SetNull). After delete, reset the local form to an
+  // empty composer so the card reverts to "no entry yet".
+  async function deleteEntry() {
+    if (!entryId) return
+    if (!window.confirm("Delete this journal entry? This can't be undone.")) return
+    setDeleting(true)
+    try {
+      await journalApi.delete(entryId)
+      setEntry({})
+      setEntryId(undefined)
+    } catch (e: any) {
+      if (!(e?.response?.status === 403 && e?.response?.data?.code === 'FEATURE_GATED')) {
+        console.error('[StopJournal] delete failed:', e)
+      }
+    } finally {
+      setDeleting(false)
     }
-    fileRef.current?.click()
-  }
-
-  async function uploadPhotos(files: FileList) {
-    const fd = new FormData()
-    Array.from(files).forEach(f => fd.append('photos', f))
-    const res = await journalApi.uploadPhotos(stop.id, fd)
-    setEntry(e => ({ ...e, photos: res.data.photos }))
   }
 
   return (
@@ -108,7 +117,10 @@ function StopJournal({ stop, badge }: { stop: Stop; badge: 'S' | 'H' | 'F' | num
         </div>
       </div>
 
-      {/* Photos */}
+      {/* Photos — DISPLAY-ONLY for launch. Existing stored photos still render;
+          the "Add photos" upload affordance is intentionally hidden (no storage
+          wired yet). journalApi.uploadPhotos + the server endpoint remain intact
+          so this can be re-enabled later by restoring the control. */}
       {entry.photos && entry.photos.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {entry.photos.map((url, i) => (
@@ -118,10 +130,13 @@ function StopJournal({ stop, badge }: { stop: Stop; badge: 'S' | 'H' | 'F' | num
       )}
 
       <div className="flex gap-2">
-        <button onClick={handleAddPhotosClick} className="btn-ghost flex items-center gap-1.5 text-sm">
-          <Camera size={14} /> Add photos
-        </button>
-        <input ref={fileRef} type="file" multiple accept="image/*" className="hidden" onChange={e => e.target.files && uploadPhotos(e.target.files)} />
+        {/* Delete only appears once a saved entry exists for this stop. It
+            removes the JournalEntry row, never the stop. */}
+        {entryId && (
+          <button onClick={deleteEntry} disabled={deleting} className="btn-ghost flex items-center gap-1.5 text-sm text-red-600 hover:bg-red-50">
+            <Trash2 size={14} /> {deleting ? 'Deleting...' : 'Delete entry'}
+          </button>
+        )}
         <button onClick={save} disabled={saving} className="btn-primary flex items-center gap-1.5 text-sm ml-auto">
           <Save size={14} /> {saving ? 'Saving...' : saved ? 'Saved!' : 'Save'}
         </button>
@@ -146,6 +161,8 @@ export default function TripJournalPage() {
   const [ffLoading, setFfLoading] = useState(true)
   const [ffError, setFfError] = useState(false)
   const [composerOpen, setComposerOpen] = useState(false)
+  // Edit mode reuses the same composer; non-null = editing that freeform entry.
+  const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -177,6 +194,33 @@ export default function TripJournalPage() {
       return
     }
     setComposerOpen(true)
+  }
+
+  // Edit a freeform entry — same tap-time Pro gate, opens the shared modal in
+  // edit mode (PUT /journal/:id under the hood).
+  function handleEditFreeform(e: JournalEntry) {
+    if (!hasAccess('tripJournal')) {
+      openPaywall('tripJournal')
+      return
+    }
+    setEditingEntry(e)
+  }
+
+  // Delete a freeform entry — confirm, DELETE /journal/:id (entry row only),
+  // then reload the freeform list.
+  async function handleDeleteFreeform(entryId: string) {
+    if (!hasAccess('tripJournal')) {
+      openPaywall('tripJournal')
+      return
+    }
+    if (!window.confirm("Delete this journal entry? This can't be undone.")) return
+    try {
+      await journalApi.delete(entryId)
+      loadFreeform()
+    } catch (e: any) {
+      if (e?.response?.status === 403 && e?.response?.data?.code === 'FEATURE_GATED') return
+      console.error('[TripJournalPage] freeform delete failed:', e)
+    }
   }
 
   if (loading) return <div className="flex justify-center py-20"><div className="w-6 h-6 border-2 border-[#1F6F8B] border-t-transparent rounded-full animate-spin" /></div>
@@ -265,7 +309,15 @@ export default function TripJournalPage() {
                 orphaned per-stop entry (its stop was deleted; the FK SetNull
                 dropped it into this list) — label it instead of rendering an
                 anonymous freeform card. */}
-            {freeform.map(e => <EntryCard key={e.id} entry={e} showRemovedStopOrigin />)}
+            {freeform.map(e => (
+              <EntryCard
+                key={e.id}
+                entry={e}
+                showRemovedStopOrigin
+                onEdit={handleEditFreeform}
+                onDelete={handleDeleteFreeform}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -276,6 +328,17 @@ export default function TripJournalPage() {
           onClose={() => setComposerOpen(false)}
           onCreated={() => {
             setComposerOpen(false)
+            loadFreeform()
+          }}
+        />
+      )}
+
+      {editingEntry && (
+        <AddEntryModal
+          entry={editingEntry}
+          onClose={() => setEditingEntry(null)}
+          onCreated={() => {
+            setEditingEntry(null)
             loadFreeform()
           }}
         />
