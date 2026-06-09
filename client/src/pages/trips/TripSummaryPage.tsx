@@ -120,6 +120,17 @@ interface TimelineEntry {
   transitNote?: string | null
 }
 
+// Stable id for a route POI (JOURNAL-ROUTESTOP). crypto.randomUUID() is the
+// ideal source but is UNDEFINED on insecure origins (plain HTTP, e.g. testing
+// over a LAN IP) — calling it there threw and silently killed the "+ Add"
+// button. Fall back to a timestamp+random id, which only needs to be
+// unique-enough within one trip's POI list (a local stable key, not a security
+// token), so it has no crypto requirement.
+function makePoiId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  return 'poi_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10)
+}
+
 // ─── Build timeline ───────────────────────────────────────────────────────────
 // Rules:
 //  • DRIVE and immediate STAY share the same calendar date (arrive same day)
@@ -1135,7 +1146,7 @@ export default function TripSummaryPage() {
         // Stable id (JOURNAL-ROUTESTOP) so this POI can carry a journal entry
         // keyed by routePoiId. Assigned once at add time and persisted in the
         // itinerary JSON; survives reorders/duration edits.
-        i !== entryIdx ? e : { ...e, pointsOfInterest: [...(e.pointsOfInterest ?? []), { id: crypto.randomUUID(), name, durationMinutes }] }
+        i !== entryIdx ? e : { ...e, pointsOfInterest: [...(e.pointsOfInterest ?? []), { id: makePoiId(), name, durationMinutes }] }
       )
       persistItinerary(next)
       return next
@@ -1153,7 +1164,7 @@ export default function TripSummaryPage() {
   const addPOIWithDetails = (entryIdx: number, poi: POI) => {
     // Same stable-id assignment as addPOI — suggestions arrive without an id,
     // so mint one (keep any pre-existing id defensively) before persisting.
-    const withId: POI = { ...poi, id: poi.id ?? crypto.randomUUID() }
+    const withId: POI = { ...poi, id: poi.id ?? makePoiId() }
     setEntries(prev => {
       const next = prev.map((e, i) =>
         i !== entryIdx ? e : { ...e, pointsOfInterest: [...(e.pointsOfInterest ?? []), withId] }
