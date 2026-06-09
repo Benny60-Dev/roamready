@@ -1602,7 +1602,16 @@ export default function SessionPage() {
                   nav plus the notch inset (env), not the full nav+input again. 4rem
                   replaces the over-reserved 7.5rem guess. md:pb-2 = desktop spacing
                   (input in-flow there). */}
-              <div ref={listRef} className="flex-1 min-w-0 overflow-y-auto space-y-3 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-2">
+              <div ref={listRef} className="flex-1 min-w-0 overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-2">
+                {/* Bottom-anchor on mobile: an inner min-h-full flex column with
+                    justify-end rests a SHORT conversation at the bottom (last
+                    message just above the pinned input) instead of top-stacking it
+                    and leaving a large empty gap below — that gap, not the pb, was
+                    the remaining dead space. When the history overflows min-h-full
+                    the wrapper grows and scrolls normally (newest at the bottom).
+                    md:block md:min-h-0 restores desktop's top-anchored flow.
+                    space-y-3 moved here from the scroll box. */}
+                <div className="min-h-full flex flex-col justify-end space-y-3 md:block md:min-h-0">
                 {messages.map((msg, i) => (
                   <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div
@@ -1625,6 +1634,7 @@ export default function SessionPage() {
                   </div>
                 )}
                 <div ref={bottomRef} />
+                </div>
               </div>
 
               {/* Mobile-only peek tab — shown when itinerary is ready.
