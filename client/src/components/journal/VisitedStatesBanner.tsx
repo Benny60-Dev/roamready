@@ -208,32 +208,48 @@ export default function VisitedStatesBanner({
             </div>
           </div>
 
-          {mapMode === 'states' ? (
-            <Suspense
-              fallback={<div className="h-48 rounded-lg bg-gray-50 animate-pulse" aria-hidden="true" />}
-            >
-              <JournalStatesMap
-                overnight={overnight}
-                passthrough={passthrough}
-                visitedCount={visitedCount}
-                entries={entries}
-                showPins={showPins}
-              />
-            </Suspense>
-          ) : (
-            // Lazy + mounted ONLY here (mode === 'trips') so States-only users
-            // never download the Google Maps bundle or load tiles.
-            <Suspense
-              fallback={<div className="h-48 rounded-lg bg-gray-50 animate-pulse" aria-hidden="true" />}
-            >
-              <AllTripsMap
-                trips={trips}
-                entries={entries}
-                showControls={false}
-                className="h-48 rounded-lg overflow-hidden border border-gray-100"
-              />
-            </Suspense>
-          )}
+          {/* ONE fixed-size map box. The states choropleth ALWAYS defines the
+              box's dimensions (it's an AlbersUSA SVG, viewBox 960×600 rendered
+              w-full h-auto → height = width × 600/960, plus its counter +
+              caption rows). In Trips mode the choropleth stays mounted but
+              `invisible` so it still reserves that exact footprint, and the
+              trips map is overlaid absolutely to fill the identical box — so
+              flipping States↔Trips swaps content with zero layout shift, like
+              flipping a card in place. The choropleth keeps its current size;
+              the trips map conforms to it (not the other way around). */}
+          <div className="relative">
+            <div className={mapMode === 'trips' ? 'invisible' : ''} aria-hidden={mapMode === 'trips'}>
+              <Suspense
+                fallback={<div className="h-48 rounded-lg bg-gray-50 animate-pulse" aria-hidden="true" />}
+              >
+                <JournalStatesMap
+                  overnight={overnight}
+                  passthrough={passthrough}
+                  visitedCount={visitedCount}
+                  entries={entries}
+                  showPins={showPins}
+                />
+              </Suspense>
+            </div>
+
+            {/* Lazy + mounted ONLY in Trips mode, so States-only users never
+                download the Google Maps bundle or load tiles. Absolutely
+                positioned to fill the same box the choropleth defines. */}
+            {mapMode === 'trips' && (
+              <div className="absolute inset-0">
+                <Suspense
+                  fallback={<div className="h-full rounded-lg bg-gray-50 animate-pulse" aria-hidden="true" />}
+                >
+                  <AllTripsMap
+                    trips={trips}
+                    entries={entries}
+                    showControls={false}
+                    className="h-full rounded-lg overflow-hidden"
+                  />
+                </Suspense>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
