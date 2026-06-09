@@ -189,25 +189,76 @@ function extractAssertedOrigin(text: string): string | null {
   return null
 }
 
-// ORIGIN-CAPTURE — deterministic extraction of an explicit "from X to Y" origin
-// from the USER's own message (NOT the assistant reply — distinct from the
+// ORIGIN-CAPTURE — deterministic extraction of an explicit route origin from the
+// USER's own message (NOT the assistant reply — distinct from the
 // extractAssertedOrigin guard above, which validates AI output post-response).
-// When a user writes "create a trip from San Jose to Jacksonville", San Jose IS
-// the origin (PRECEDENCE) — we capture it BEFORE the prompt is built so the
-// no-home directive never fires and the model is never asked to referee. Returns
-// the origin string (e.g. "San Jose" or "San Jose, CA") or null. Conservative:
-// requires a proper-noun origin AND a proper-noun destination ("to [A-Z]"), and
-// rejects time/relative first-tokens so "from morning to night" / "from Tuesday
-// to Friday" never capture.
+// When a user writes "create a trip from San Jose to Jacksonville" (or "to
+// Jacksonville from san jose"), San Jose IS the origin (PRECEDENCE) — we capture
+// it BEFORE the prompt is built so the no-home directive never fires and the
+// model is never asked to referee. Returns the origin string (e.g. "San Jose" or
+// "San Jose, CA"), title-cased if the user typed it lowercase, or null.
+//
+// Accepts BOTH word orders — "from X to Y" AND "to Y from X" — and lowercase /
+// mixed-case origins ("san jose"). Conservative guards keep false captures rare
+// (a missed capture just means the model asks for the origin — far safer than
+// silently using a wrong one):
+//   • origin's first token must not be a non-place word (pronoun, article,
+//     time/idiom word) — rejects "from morning to night", "from work to …",
+//     "from the coast to …", "from bad to worse", etc.
+//   • PROPER-NOUN SIGNAL: at least one of origin/destination must contain a
+//     capital letter (a real named place). This rejects all-lowercase idioms
+//     ("from bad to worse", "from dawn to dusk") while still accepting the
+//     common mixed-case phrasings ("to New Orleans from san jose").
 function extractFromXtoY(text: string | undefined | null): string | null {
   if (!text) return null
-  const m = text.match(/\b[Ff]rom\s+([A-Z][\w.'-]*(?:\s+[A-Z][\w.'-]*){0,3}(?:,\s*(?:[A-Z]{2}|[A-Z][a-z]+))?)\s+to\s+[A-Z]/)
-  if (!m) return null
-  const origin = m[1].trim()
+  const WORD = "[A-Za-z][A-Za-z.'-]*"
+  const NOT_KW = "(?!(?:to|from)\\b)"            // a route keyword is never a city token
+  const ORIGIN = `(${NOT_KW}${WORD}(?:\\s+${NOT_KW}${WORD}){0,3}(?:,\\s*[A-Za-z]{2,})?)`
+  const DEST   = `(${NOT_KW}${WORD}(?:\\s+${NOT_KW}${WORD}){0,3})`
+
+  let origin: string | null = null
+  let dest: string | null = null
+  let m = text.match(new RegExp(`\\bfrom\\s+${ORIGIN}\\s+to\\s+${DEST}`, 'i'))   // from X to Y
+  if (m) { origin = m[1]; dest = m[2] }
+  else {
+    m = text.match(new RegExp(`\\bto\\s+${DEST}\\s+from\\s+${ORIGIN}`, 'i'))      // to Y from X
+    if (m) { dest = m[1]; origin = m[2] }
+  }
+  if (!origin || !dest) return null
+  origin = origin.trim()
+  dest = dest.trim()
+
+  // Guard 1 — first origin token must not be a non-place word.
+  const STOP = new Set([
+    'monday','tuesday','wednesday','thursday','friday','saturday','sunday',
+    'january','february','march','april','may','june','july','august','september','october','november','december',
+    'morning','noon','afternoon','evening','night','midnight','today','tomorrow','yesterday',
+    'home','work','here','there','point','to','from','the','a','an','my','our','your',
+    'now','time','start','finish','scratch','nowhere','everywhere','anywhere','somewhere',
+    'it','this','that','bad','worse','dawn','dusk',
+  ])
   const firstTok = origin.split(/[\s,]+/)[0].toLowerCase()
-  const STOP = new Set(['monday','tuesday','wednesday','thursday','friday','saturday','sunday','january','february','march','april','may','june','july','august','september','october','november','december','morning','noon','afternoon','evening','night','midnight','today','tomorrow','yesterday','home','work','here','there','point'])
   if (STOP.has(firstTok)) return null
-  return origin
+
+  // Guard 2 — proper-noun signal: at least one side must be a named place.
+  if (!/[A-Z]/.test(origin) && !/[A-Z]/.test(dest)) return null
+
+  return normalizeOriginCase(origin)
+}
+
+// Title-case an origin only when the user typed it all-lowercase ("san jose" →
+// "San Jose"); a value the user already cased (or that carries a state code) is
+// preserved verbatim. Keeps the captured origin tidy for the prompt directive.
+function normalizeOriginCase(s: string): string {
+  if (/[A-Z]/.test(s)) return s
+  return s
+    .split(',')
+    .map((part, i) => {
+      const p = part.trim()
+      if (i > 0 && p.length === 2) return p.toUpperCase() // ", ca" → ", CA"
+      return p.split(/\s+/).map(w => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ')
+    })
+    .join(', ')
 }
 
 // Stored trip/stop dates are UTC-midnight Prisma DateTime values. Reading them
