@@ -42,16 +42,23 @@ function tripSortKey(t: Trip): number {
 }
 
 /** Creates the HTML element used as an AdvancedMarkerElement's content.
- *  Copied/simplified from TripMapPage.makeMarkerContent — a plain per-trip
- *  colored dot (no badge text). Journaled stops get a gold OUTLINE ring (Phase
- *  C): the dot keeps its trip color inside, a 3px white border separates it
- *  from a gold spread-shadow ring — so the ring reads on every trip color. */
+ *  Copied/adapted from TripMapPage.makeMarkerContent — a per-trip colored dot
+ *  (no badge text). Journaled stops (Phase C) get a BOLD gold treatment: a
+ *  solid gold #F7A829 disc with the trip color as a smaller core, separated by
+ *  a thin white ring so the core reads on every trip color. The gold is
+ *  visually dominant so a journaled stop is obvious at a glance while still
+ *  showing which trip it belongs to. Plain stops keep the colored dot + white
+ *  border. */
 function makeMarkerContent(color: string, isJournaled: boolean): HTMLElement {
   const div = document.createElement('div')
-  // Gold ring = a hard (no-blur) 2px spread box-shadow OUTSIDE the white
-  // border, layered before the usual drop shadow.
-  const ring = isJournaled ? `0 0 0 2px ${JOURNAL_RING}, ` : ''
-  div.style.cssText = `width:18px;height:18px;border-radius:50%;background:${color};border:3px solid white;box-shadow:${ring}0 2px 6px rgba(0,0,0,0.3);cursor:pointer`
+  if (isJournaled) {
+    // Layered box-shadows on a small colored core: 1.5px white separator, then
+    // a bold 6px solid gold ring (the "disc"), then the drop shadow. Total
+    // ~27px — bigger than a plain dot, reinforcing the at-a-glance read.
+    div.style.cssText = `width:12px;height:12px;border-radius:50%;background:${color};box-shadow:0 0 0 1.5px #fff, 0 0 0 7.5px ${JOURNAL_RING}, 0 2px 6px rgba(0,0,0,0.35);cursor:pointer`
+  } else {
+    div.style.cssText = `width:18px;height:18px;border-radius:50%;background:${color};border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);cursor:pointer`
+  }
   div.dataset.journaled = String(isJournaled)
   return div
 }
@@ -234,14 +241,35 @@ export default function JournalMapPage() {
     setMapInstance(map)
   }, [])
 
-  // Open a stop's popup and bring it into view. Simplified from TripMapPage's
-  // focusStop: pan to the stop, then nudge the camera up a touch so the popup
-  // card (which anchors above the marker) has room.
+  // Open a stop's popup and recenter so the FULL card is on-screen no matter
+  // where the stop sits (edges, corners, top). Copied/adapted from
+  // TripMapPage.focusStop: panTo first recenters the stop horizontally (the
+  // popup is width-centered on it via OverlayViewF's x:-width/2, so a recentered
+  // stop keeps the card clear of the left/right edges); then panBy nudges the
+  // stop down into the lower-center so the card — which opens ABOVE the marker —
+  // clears the top edge.
   const focusStop = useCallback((stop: StopWithTrip) => {
     setSelectedStop(stop)
     if (mapInstance && stop.latitude != null && stop.longitude != null) {
       mapInstance.panTo({ lat: stop.latitude, lng: stop.longitude })
-      mapInstance.panBy(0, -120)
+      // This popup is shorter than TripMapPage's (name + trip + journal block,
+      // no weather/alerts/book): ~220px card + 36px marker-to-card gap + 24px
+      // breathing room above.
+      const NEEDED_CLEARANCE_PX = 220 + 36 + 24  // = 280
+      const mapH = mapInstance.getDiv()?.clientHeight ?? 550
+      // Marker's final screen-y after panBy = mapH/2 + offset, so
+      // offset >= NEEDED_CLEARANCE_PX - mapH/2 puts the card's top at the
+      // viewport top (with breathing room baked in). Floor of 80px so a stop
+      // on a tall map still drops below center a little.
+      const idealOffset = Math.max(NEEDED_CLEARANCE_PX - mapH / 2, 80)
+      // Safety cap: never push the marker past 30% below center — keeps the
+      // marker itself visible on short maps even if the card is taller than half
+      // the viewport.
+      const capOffset = mapH * 0.3
+      const offset = Math.min(idealOffset, capOffset)
+      // panBy(0, NEGATIVE) moves the map CENTER up, which makes the marker
+      // appear LOWER on screen — the room we want above it for the card.
+      mapInstance.panBy(0, -offset)
     }
   }, [mapInstance])
 
