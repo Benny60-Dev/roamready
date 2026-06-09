@@ -166,6 +166,8 @@ export default function JournalMapPage() {
 
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null)
   const [selectedStop, setSelectedStop] = useState<StopWithTrip | null>(null)
+  // Trip-filter (Phase D): null = "All trips"; otherwise isolate one trip.
+  const [filterTripId, setFilterTripId] = useState<string | null>(null)
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([])
   const polylinesRef = useRef<google.maps.Polyline[]>([])
 
@@ -262,6 +264,19 @@ export default function JournalMapPage() {
     return out
   }, [trips, colorByTrip])
 
+  // Trip-filter applied (Phase D): "All trips" (filterTripId null) shows
+  // everything; otherwise only the selected trip's stops + route. Markers,
+  // polylines, and fitBounds all key off these so isolating a trip hides the
+  // rest AND reframes to fit just it.
+  const visibleStops = useMemo(
+    () => (filterTripId ? stopsWithCoords.filter(s => s.tripId === filterTripId) : stopsWithCoords),
+    [stopsWithCoords, filterTripId],
+  )
+  const visibleRoutes = useMemo(
+    () => (filterTripId ? routes.filter(r => r.tripId === filterTripId) : routes),
+    [routes, filterTripId],
+  )
+
   const onMapLoad = useCallback((map: google.maps.Map) => {
     setMapInstance(map)
   }, [])
@@ -296,9 +311,9 @@ export default function JournalMapPage() {
     markersRef.current.forEach(m => { m.map = null })
     markersRef.current = []
 
-    if (!mapInstance || !stopsWithCoords.length) return
+    if (!mapInstance || !visibleStops.length) return
 
-    stopsWithCoords.forEach(stop => {
+    visibleStops.forEach(stop => {
       const marker = new window.google.maps.marker.AdvancedMarkerElement({
         position: { lat: stop.latitude!, lng: stop.longitude! },
         map: mapInstance,
@@ -308,7 +323,7 @@ export default function JournalMapPage() {
       marker.addListener('click', () => focusStop(stop))
       markersRef.current.push(marker)
     })
-  }, [mapInstance, stopsWithCoords, entryByStop, focusStop])
+  }, [mapInstance, visibleStops, entryByStop, focusStop])
 
   // ── Straight-line route polylines, one per trip (Phase B) ────────────────────
   // Imperative, mirroring the markersRef discipline: clear the old set, then
@@ -317,9 +332,9 @@ export default function JournalMapPage() {
     polylinesRef.current.forEach(p => p.setMap(null))
     polylinesRef.current = []
 
-    if (!mapInstance || !routes.length) return
+    if (!mapInstance || !visibleRoutes.length) return
 
-    routes.forEach(route => {
+    visibleRoutes.forEach(route => {
       const polyline = new window.google.maps.Polyline({
         path: route.path,
         map: mapInstance,
@@ -329,7 +344,7 @@ export default function JournalMapPage() {
       })
       polylinesRef.current.push(polyline)
     })
-  }, [mapInstance, routes])
+  }, [mapInstance, visibleRoutes])
 
   // Cleanup markers + polylines on unmount.
   useEffect(() => () => {
@@ -337,21 +352,24 @@ export default function JournalMapPage() {
     polylinesRef.current.forEach(p => p.setMap(null))
   }, [])
 
-  // ── fitBounds over every visible stop (copied pattern from TripMapPage) ──────
+  // ── fitBounds over the VISIBLE stops (copied pattern from TripMapPage) ───────
+  // Re-runs on filter change: isolating a trip reframes to fit just it; "All
+  // trips" fits everything. Operates imperatively after mount, so it doesn't
+  // touch the stable DEFAULT_CENTER prop.
   useEffect(() => {
-    if (!mapInstance || stopsWithCoords.length === 0) return
+    if (!mapInstance || visibleStops.length === 0) return
 
     // A single stop yields a zero-size bounds that fitBounds would blow up to
     // max zoom — center on it at a sane fixed zoom instead.
-    if (stopsWithCoords.length < 2) {
-      const s = stopsWithCoords[0]
+    if (visibleStops.length < 2) {
+      const s = visibleStops[0]
       mapInstance.setCenter({ lat: s.latitude!, lng: s.longitude! })
       mapInstance.setZoom(10)
       return
     }
 
     const bounds = new window.google.maps.LatLngBounds()
-    for (const s of stopsWithCoords) bounds.extend({ lat: s.latitude!, lng: s.longitude! })
+    for (const s of visibleStops) bounds.extend({ lat: s.latitude!, lng: s.longitude! })
 
     // All coords identical → same degenerate case.
     if (bounds.getNorthEast().equals(bounds.getSouthWest())) {
@@ -361,24 +379,29 @@ export default function JournalMapPage() {
     }
 
     mapInstance.fitBounds(bounds, { top: 72, right: 60, bottom: 60, left: 60 })
-  }, [mapInstance, stopsWithCoords])
+  }, [mapInstance, visibleStops])
 
   const hasStops = stopsWithCoords.length > 0
 
-  // Minimal color key — only trips that actually have a pin on the map, in the
-  // same stable order the palette was assigned. Phase D's filter chips will
-  // supersede this; for now it just helps read the colors.
-  const legend = useMemo(() => {
+  // Trip-filter chips — one per trip that has a pin on the map, in the same
+  // stable order the palette was assigned, each carrying its route color. The
+  // chips replace the Phase B corner legend (trip identity + color live here).
+  const tripChips = useMemo(() => {
     const seen = new Set<string>()
     const rows: Array<{ id: string, name: string, color: string }> = []
-    const visibleTripIds = new Set(stopsWithCoords.map(s => s.tripId))
+    const tripIdsWithPins = new Set(stopsWithCoords.map(s => s.tripId))
     for (const t of [...trips].sort((a, b) => tripSortKey(a) - tripSortKey(b))) {
-      if (!visibleTripIds.has(t.id) || seen.has(t.id)) continue
+      if (!tripIdsWithPins.has(t.id) || seen.has(t.id)) continue
       seen.add(t.id)
       rows.push({ id: t.id, name: t.name, color: colorByTrip.get(t.id) ?? ACTIVE_COLOR })
     }
     return rows
   }, [trips, stopsWithCoords, colorByTrip])
+
+  // If the isolated trip disappears (data reload), fall back to "All trips".
+  useEffect(() => {
+    if (filterTripId && !tripChips.some(c => c.id === filterTripId)) setFilterTripId(null)
+  }, [filterTripId, tripChips])
 
   return (
     <div className="-mx-4 -my-6">
@@ -388,6 +411,54 @@ export default function JournalMapPage() {
         <span className="text-gray-300 text-xs">›</span>
         <span className="text-xs text-gray-700 font-medium">Memory map</span>
       </div>
+
+      {/* Trip-filter chips (Phase D). Single-select: "All trips" or one trip.
+          Mirrors the Journal feed's chip styling; scrolls horizontally on narrow
+          screens instead of wrapping. Each per-trip chip carries its route color. */}
+      {!loading && !error && hasStops && (
+        <div
+          className="flex-shrink-0 bg-white border-b border-gray-100 px-4 py-2 flex gap-1.5 overflow-x-auto"
+          role="tablist"
+          aria-label="Trip filters"
+        >
+          <button
+            role="tab"
+            aria-selected={filterTripId === null}
+            onClick={() => setFilterTripId(null)}
+            className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              filterTripId === null
+                ? 'bg-[#1F6F8B] text-white'
+                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+            style={{ borderWidth: '0.5px' }}
+          >
+            All trips
+          </button>
+          {tripChips.map(chip => {
+            const active = filterTripId === chip.id
+            return (
+              <button
+                key={chip.id}
+                role="tab"
+                aria-selected={active}
+                onClick={() => setFilterTripId(chip.id)}
+                className={`flex-shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  active
+                    ? 'bg-[#1F6F8B] text-white'
+                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                }`}
+                style={{ borderWidth: '0.5px' }}
+              >
+                <span
+                  className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-1 ring-black/5"
+                  style={{ backgroundColor: chip.color }}
+                />
+                {chip.name}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       <div className="relative" style={{ height: 'calc(100vh - 120px)' }}>
         {loading ? (
@@ -437,20 +508,6 @@ export default function JournalMapPage() {
                 </OverlayViewF>
               )}
             </GoogleMap>
-
-            {/* Minimal color key (Phase D chips will supersede this). */}
-            {legend.length > 0 && (
-              <div className="absolute bottom-6 left-4 bg-white rounded-xl border border-gray-200 px-3 py-2.5 shadow-md z-10 max-w-[220px]" style={{ borderWidth: '0.5px' }}>
-                <div className="space-y-1.5">
-                  {legend.map(row => (
-                    <div key={row.id} className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: row.color }} />
-                      <span className="text-xs text-gray-700 truncate">{row.name}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </>
         ) : (
           <div className="h-full flex items-center justify-center bg-gray-100 text-sm text-gray-500">
