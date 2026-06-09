@@ -1760,12 +1760,12 @@ export default function TripSummaryPage() {
                       const isEditing = editingLegToOrder === leg.toOrder
 
                       return (
-                        <div key={i} className={`${isEditing ? 'flex flex-col items-start gap-1.5 md:flex-row md:flex-nowrap md:items-center md:justify-between md:gap-2' : 'flex flex-wrap md:flex-nowrap items-center justify-between gap-2'} py-2 pl-6 border-b border-gray-50 last:border-0`}>
+                        <div key={i} className="flex flex-col items-start gap-1 md:flex-row md:items-center md:justify-between md:gap-2 py-2 pl-6 border-b border-gray-50 last:border-0">
                           <span className="text-sm text-gray-700 min-w-0">
                             {legLabel(leg.fromOrder, null)} → {legLabel(leg.toOrder, leg.toState)}
                             <span className="text-xs text-gray-400"> · {Math.round(leg.miles).toLocaleString()} mi</span>
                           </span>
-                          <div className={isEditing ? 'flex flex-wrap md:flex-nowrap items-center gap-2 md:gap-1.5 text-sm w-full md:w-auto md:flex-shrink-0' : 'flex items-center gap-1.5 flex-shrink-0 text-sm'}>
+                          <div className="flex flex-wrap items-center gap-1.5 text-sm w-full md:w-auto md:flex-shrink-0">
                             {isEditing ? (
                               <>
                                 <span className="text-gray-400 line-through">${fmtMoney(Math.round(leg.cost))}</span>
