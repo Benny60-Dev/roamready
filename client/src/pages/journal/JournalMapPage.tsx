@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { GoogleMap, useJsApiLoader, OverlayViewF } from '@react-google-maps/api'
-import { X, BookOpen } from 'lucide-react'
+import { X, BookOpen, Spline } from 'lucide-react'
 import { tripsApi, journalApi } from '../../services/api'
 import { parseTripDate } from '../../utils/dates'
 import { deriveTripStatus } from '../../utils/tripStatus'
@@ -34,6 +34,17 @@ const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 
 // fitBounds, and focusStop's panTo all stick. (TripMapPage memoizes its center
 // for the same reason — see its center useMemo.)
 const DEFAULT_CENTER = { lat: 39.5, lng: -98.35 }
+
+// "Show routes" preference persists across sessions, mirroring the banner's
+// pin/collapse prefs. Default ON — only an explicit 'false' hides the lines.
+const ROUTES_KEY = 'roamready-journal-map-routes'
+function readShowRoutes(): boolean {
+  try {
+    return localStorage.getItem(ROUTES_KEY) !== 'false'
+  } catch {
+    return true
+  }
+}
 
 // ── Per-trip palette (Phase B) ────────────────────────────────────────────────
 // The active/primary trip is RV Blue; every other trip cycles the ramp below in
@@ -168,6 +179,8 @@ export default function JournalMapPage() {
   const [selectedStop, setSelectedStop] = useState<StopWithTrip | null>(null)
   // Trip-filter (Phase D): null = "All trips"; otherwise isolate one trip.
   const [filterTripId, setFilterTripId] = useState<string | null>(null)
+  // "Show routes" toggle — hide the connecting lines for a pins-only view.
+  const [showRoutes, setShowRoutes] = useState(readShowRoutes)
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([])
   const polylinesRef = useRef<google.maps.Polyline[]>([])
 
@@ -281,6 +294,19 @@ export default function JournalMapPage() {
     setMapInstance(map)
   }, [])
 
+  // Persist the routes-visibility preference across sessions.
+  const toggleRoutes = useCallback(() => {
+    setShowRoutes(prev => {
+      const next = !prev
+      try {
+        localStorage.setItem(ROUTES_KEY, String(next))
+      } catch {
+        /* storage unavailable (private mode) — pref just won't persist */
+      }
+      return next
+    })
+  }, [])
+
   // Open a stop's popup AND pan so the marker + its anchored card are both
   // visible. Copied from TripMapPage.focusStop. Safe now that DEFAULT_CENTER is
   // a stable ref — without that, the re-render from setSelectedStop would re-fire
@@ -332,7 +358,9 @@ export default function JournalMapPage() {
     polylinesRef.current.forEach(p => p.setMap(null))
     polylinesRef.current = []
 
-    if (!mapInstance || !visibleRoutes.length) return
+    // Routes off → clear (done above) and draw nothing, for a pins-only view.
+    // Markers, rings, popups, and filter chips are unaffected.
+    if (!mapInstance || !showRoutes || !visibleRoutes.length) return
 
     visibleRoutes.forEach(route => {
       const polyline = new window.google.maps.Polyline({
@@ -344,7 +372,7 @@ export default function JournalMapPage() {
       })
       polylinesRef.current.push(polyline)
     })
-  }, [mapInstance, visibleRoutes])
+  }, [mapInstance, visibleRoutes, showRoutes])
 
   // Cleanup markers + polylines on unmount.
   useEffect(() => () => {
@@ -412,51 +440,63 @@ export default function JournalMapPage() {
         <span className="text-xs text-gray-700 font-medium">Memory map</span>
       </div>
 
-      {/* Trip-filter chips (Phase D). Single-select: "All trips" or one trip.
-          Mirrors the Journal feed's chip styling; scrolls horizontally on narrow
-          screens instead of wrapping. Each per-trip chip carries its route color. */}
+      {/* Trip-filter chips (Phase D) + "Show routes" toggle. The chips scroll
+          horizontally on narrow screens; the toggle stays pinned on the right.
+          Chip/toggle styling mirrors the Journal feed's filter chips. */}
       {!loading && !error && hasStops && (
-        <div
-          className="flex-shrink-0 bg-white border-b border-gray-100 px-4 py-2 flex gap-1.5 overflow-x-auto"
-          role="tablist"
-          aria-label="Trip filters"
-        >
+        <div className="flex-shrink-0 bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-2">
+          <div className="flex gap-1.5 overflow-x-auto flex-1" role="tablist" aria-label="Trip filters">
+            <button
+              role="tab"
+              aria-selected={filterTripId === null}
+              onClick={() => setFilterTripId(null)}
+              className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                filterTripId === null
+                  ? 'bg-[#1F6F8B] text-white'
+                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+              style={{ borderWidth: '0.5px' }}
+            >
+              All trips
+            </button>
+            {tripChips.map(chip => {
+              const active = filterTripId === chip.id
+              return (
+                <button
+                  key={chip.id}
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setFilterTripId(chip.id)}
+                  className={`flex-shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    active
+                      ? 'bg-[#1F6F8B] text-white'
+                      : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+                  style={{ borderWidth: '0.5px' }}
+                >
+                  <span
+                    className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-1 ring-black/5"
+                    style={{ backgroundColor: chip.color }}
+                  />
+                  {chip.name}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Routes-visibility toggle — pinned right, doesn't scroll with chips. */}
           <button
-            role="tab"
-            aria-selected={filterTripId === null}
-            onClick={() => setFilterTripId(null)}
-            className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              filterTripId === null
+            onClick={toggleRoutes}
+            aria-pressed={showRoutes}
+            className={`flex-shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              showRoutes
                 ? 'bg-[#1F6F8B] text-white'
                 : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
             }`}
             style={{ borderWidth: '0.5px' }}
           >
-            All trips
+            <Spline size={12} /> Show routes
           </button>
-          {tripChips.map(chip => {
-            const active = filterTripId === chip.id
-            return (
-              <button
-                key={chip.id}
-                role="tab"
-                aria-selected={active}
-                onClick={() => setFilterTripId(chip.id)}
-                className={`flex-shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  active
-                    ? 'bg-[#1F6F8B] text-white'
-                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-                }`}
-                style={{ borderWidth: '0.5px' }}
-              >
-                <span
-                  className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-1 ring-black/5"
-                  style={{ backgroundColor: chip.color }}
-                />
-                {chip.name}
-              </button>
-            )
-          })}
         </div>
       )}
 
