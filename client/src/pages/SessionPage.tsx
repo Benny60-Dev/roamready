@@ -998,8 +998,12 @@ export default function SessionPage() {
         resolves against auto and COLLAPSES to content height (the wrapper sized
         to the conversation, so Δ/GAP shrank as it grew). So size to the viewport
         directly, subtracting the FULL chrome chain ONCE:
-          app header h-14 (3.5rem) + main pt-6 (1.5rem) + main pb-32 (8rem mobile)
-          = 13rem  ·  md: pt-6 (1.5) + pb-6 (1.5) + header (3.5) = 6.5rem.
+          app header ~3.75rem (h-14 56px + 0.5px border + h-1 gradient 4px)
+          + main pt-6 (1.5rem) + main pb-32 (8rem mobile) = 13.25rem
+          ·  md: header (3.5) + pt-6 (1.5) + pb-6 (1.5) = 6.5rem.
+        On mobile the header is now position:fixed, so its ~3.75rem is reserved
+        as the app-shell's pt-[3.75rem] (AppLayout) instead of an in-flow header
+        — the space is still subtracted here, just sourced from shell padding.
         That equals exactly main's content box, so the wrapper fills it (constant
         Δ/GAP regardless of length) WITHOUT exceeding it — no taller-than-viewport
         document, so iOS has nothing to scroll on keyboard-focus (winY stays 0).
@@ -1009,7 +1013,7 @@ export default function SessionPage() {
         keyboard scroll; min-h-full then under-filled. This is the corrected value.
         In empty state we drop the lock so the hero + Continue-planning strip
         stack to natural height. */}
-    <div ref={diagWrapperRef} className={`flex flex-col${isEmptyState ? '' : ' min-h-[calc(100dvh-13rem)] md:h-[calc(100dvh-6.5rem)]'}`}>
+    <div ref={diagWrapperRef} className={`flex flex-col${isEmptyState ? '' : ' min-h-[calc(100dvh-13.25rem)] md:h-[calc(100dvh-6.5rem)]'}`}>
       {/* DIAG v1 — TEMPORARY measurement overlay (active conversation only). */}
       {!isEmptyState && (
         <ConversationDiag listRef={listRef} wrapperRef={diagWrapperRef} inputRef={diagInputRef} />
