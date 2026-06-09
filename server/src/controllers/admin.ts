@@ -4,14 +4,72 @@ import { AuthRequest } from '../middleware/auth'
 import { stripe } from '../services/stripe'
 import { analyzeFeedbackAI } from '../services/ai'
 
+// ── Date-derived trip completion ─────────────────────────────────────────────
+// The stored Trip.status enum is vestigial — nothing sets COMPLETED anymore
+// (status is date-derived everywhere user-facing). So `count({ where: status:
+// 'COMPLETED' })` was ~always 0. Mirror the client's deriveTripStatus
+// (client/src/utils/tripStatus.ts — keep in sync) here: a trip is COMPLETED when
+// today is past its effective end date, with the same stop-date fallback the
+// client uses (Trip.start/end can be null on promoted-then-shifted trips).
+
+type TripDates = {
+  startDate: Date | null
+  endDate: Date | null
+  stops: { arrivalDate: Date | null; departureDate: Date | null }[]
+}
+
+/** Normalize a DateTime to local noon on its UTC calendar day — matches the
+ *  client's parseTripDate so the day-boundary comparison agrees. */
+function toLocalNoon(value: Date | null): Date | null {
+  if (!value || isNaN(value.getTime())) return null
+  return new Date(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), 12, 0, 0, 0)
+}
+
+function isDerivedCompleted(trip: TripDates): boolean {
+  let start = toLocalNoon(trip.startDate)
+  let end = toLocalNoon(trip.endDate)
+  if (!start || !end) {
+    const stops = trip.stops ?? []
+    if (!start) {
+      const firstDated = stops.find(s => s.arrivalDate != null)
+      start = toLocalNoon(firstDated?.arrivalDate ?? null)
+    }
+    if (!end) {
+      let lastDated: TripDates['stops'][number] | null = null
+      for (let i = stops.length - 1; i >= 0; i--) {
+        if (stops[i].departureDate != null) { lastDated = stops[i]; break }
+      }
+      end = toLocalNoon(lastDated?.departureDate ?? null)
+    }
+  }
+  // Genuinely undated → PLANNING (not completed). Both ends required, mirroring
+  // deriveTripStatus's guard before the > end check.
+  if (!start || !end) return false
+  const now = new Date()
+  const todayAnchor = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0)
+  return todayAnchor > end
+}
+
 export async function getMetrics(_req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const [totalUsers, proUsers, totalTrips, completedTrips] = await Promise.all([
+    // tripsForStatus: all trips with the fields deriveTripStatus needs. Admin-
+    // only + low-frequency, so a full scan with stops is acceptable here.
+    const [totalUsers, proUsers, totalTrips, tripsForStatus] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { subscriptionTier: 'PRO' } }),
       prisma.trip.count(),
-      prisma.trip.count({ where: { status: 'COMPLETED' } }),
+      prisma.trip.findMany({
+        select: {
+          startDate: true,
+          endDate: true,
+          stops: {
+            orderBy: { order: 'asc' },
+            select: { arrivalDate: true, departureDate: true },
+          },
+        },
+      }),
     ])
+    const completedTrips = tripsForStatus.filter(isDerivedCompleted).length
 
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
     const newUsers = await prisma.user.count({ where: { createdAt: { gte: thirtyDaysAgo } } })

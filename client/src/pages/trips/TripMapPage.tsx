@@ -1662,11 +1662,14 @@ export default function TripMapPage() {
                               <span className="text-sm">Set start date</span>
                             </button>
                           )}
-                          {/* Start now — visible next to the date line in the
-                              closed state. Suppressed when there are no stop
-                              dates because shiftDates would 400 without an
-                              anchor (mirrors trips.ts:587). */}
-                          {hasStopDates && (
+                          {/* Start now — a date-shift shortcut ("move the trip to
+                              start today"), only meaningful for a trip that hasn't
+                              started yet. Gated on derived PLANNING so it doesn't
+                              linger on active/completed trips (the stale-"Start now"
+                              bug). Also suppressed when there are no stop dates
+                              because shiftDates would 400 without an anchor
+                              (mirrors trips.ts:587). */}
+                          {hasStopDates && deriveTripStatus(trip) === 'PLANNING' && (
                             <button
                               onClick={handleStartNow}
                               disabled={savingDate}
