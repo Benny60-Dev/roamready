@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { MapPin, Phone, Star, Wrench, Package, Mountain, Navigation, Globe } from 'lucide-react'
+import { MapPin, Phone, Star, Wrench, Mountain, Navigation, Globe } from 'lucide-react'
 import { resourcesApi } from '../services/api'
 
 /**
@@ -32,7 +32,6 @@ import { resourcesApi } from '../services/api'
  */
 const HUB_TILES = [
   { to: '/maintenance',      icon: Wrench,   label: 'Maintenance',      desc: 'Rig service tracker' },
-  { to: '/roadmap',          icon: Package,  label: 'Product Roadmap',  desc: "What we're shipping next" },
   { to: '/ohv-destinations', icon: Mountain, label: 'OHV Destinations', desc: 'Off-highway parks & trails' },
   // Van Destinations + Car Camping tiles hidden (post-launch revisit): they were
   // national keyword lists with hardcoded decorations, redundant with the trip
