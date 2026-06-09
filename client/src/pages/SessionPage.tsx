@@ -202,69 +202,6 @@ function stripUnrequestedReturnLeg(
   return { ...itinerary, stops: slicedStops, totalNights, totalMiles: null, estimatedFuel: null }
 }
 
-// ─── KB DIAG — TEMPORARY keyboard-occlusion measurement (mobile, active conv) ──
-// Read-only on-screen readout to measure how far the chat input bottom sits
-// BEHIND the iOS soft keyboard, before adding the real visualViewport fix.
-// Anchored to the BOTTOM of the visual viewport (just above the keyboard) so it
-// stays visible while the keyboard is open, like the prior DIAG v2 did. Changes
-// NO layout/scroll/input code — it only measures and prints. Remove this whole
-// component (and its <KbDiag/> render + the kbInputRef ref) once the numbers are
-// captured and the real fix lands.
-function KbDiag({ inputRef }: { inputRef: React.RefObject<HTMLDivElement | null> }) {
-  const [r, setR] = useState<Record<string, number | string | null>>({})
-  const selfRef = useRef<HTMLDivElement>(null)
-  const [topPx, setTopPx] = useState(64)
-  useEffect(() => {
-    function measure() {
-      const vv = window.visualViewport
-      const innerH = Math.round(window.innerHeight)
-      const vvH = vv ? Math.round(vv.height) : null
-      const vvOff = vv ? Math.round(vv.offsetTop) : null
-      const inp = inputRef.current
-      const inpBot = inp ? Math.round(inp.getBoundingClientRect().bottom) : null
-      // keyboard inset = layout viewport height − visual viewport height
-      const kbd = vvH != null ? innerH - vvH : null
-      // occlusion = how far the input bottom sits BELOW the visible (keyboard-
-      // excluded) viewport bottom. POSITIVE = hidden behind the keyboard.
-      const occ =
-        inpBot != null && vvH != null && vvOff != null ? inpBot - (vvOff + vvH) : null
-
-      // Pin the overlay just above the keyboard: a position:fixed element is laid
-      // out against the LAYOUT viewport, so to sit at the bottom of the (shrunken)
-      // VISUAL viewport we set top = offsetTop + height − selfHeight.
-      const selfH = selfRef.current?.offsetHeight ?? 90
-      if (vv) setTopPx(Math.max(8, Math.round(vv.offsetTop + vv.height - selfH - 8)))
-
-      setR({ innerH, vvH, vvOff, kbd, inpBot, occ })
-    }
-    measure()
-    const raf = requestAnimationFrame(measure)
-    window.addEventListener('resize', measure)
-    window.visualViewport?.addEventListener('resize', measure)
-    window.visualViewport?.addEventListener('scroll', measure)
-    return () => {
-      cancelAnimationFrame(raf)
-      window.removeEventListener('resize', measure)
-      window.visualViewport?.removeEventListener('resize', measure)
-      window.visualViewport?.removeEventListener('scroll', measure)
-    }
-  }, [inputRef])
-
-  return (
-    <div
-      ref={selfRef}
-      style={{ top: topPx, left: 8 }}
-      className="lg:hidden fixed z-[200] pointer-events-none select-none bg-black/80 text-white font-mono text-[10px] leading-tight rounded px-2 py-1.5 max-w-[62vw]"
-    >
-      <div className="font-bold text-[#F7A829]">KB DIAG</div>
-      <div>innerH {String(r.innerH)} · vvH {String(r.vvH)} · vvOff {String(r.vvOff)}</div>
-      <div className="text-[#F7A829]">kbd inset {String(r.kbd)}</div>
-      <div>inp.bot {String(r.inpBot)}</div>
-      <div className="text-[#7FD1E0]">occlusion {String(r.occ)} (+ = hidden)</div>
-    </div>
-  )
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function SessionPage() {
@@ -312,9 +249,6 @@ export default function SessionPage() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
-  // KB DIAG (TEMPORARY — remove with <KbDiag/>): ref on the input WRAPPER so the
-  // keyboard-occlusion readout can measure its getBoundingClientRect().bottom.
-  const kbInputRef = useRef<HTMLDivElement>(null)
   const { user } = useAuthStore()
   const navigate = useNavigate()
 
@@ -961,7 +895,7 @@ export default function SessionPage() {
         to the conversation, so Δ/GAP shrank as it grew). So size to the viewport
         directly, subtracting the FULL chrome chain ONCE:
           app header ~3.75rem (h-14 56px + 0.5px border + h-1 gradient 4px)
-          + main pt-6 (1.5rem) + main pb-32 (8rem mobile) = 13.25rem
+          + main pt-2 (0.5rem) + main pb-32 (8rem mobile) = 12.25rem
           ·  md: header (3.5) + pt-6 (1.5) + pb-6 (1.5) = 6.5rem.
         On mobile the header is now position:fixed, so its ~3.75rem is reserved
         as the app-shell's pt-[3.75rem] (AppLayout) instead of an in-flow header
@@ -981,9 +915,7 @@ export default function SessionPage() {
         a bounded box so it scrolls INTERNALLY between the fixed header and the
         fixed input — min-h let the column grow with the conversation and rode the
         in-flow input off-screen. md keeps its existing definite `h` (input in-flow). */}
-    <div className={`flex flex-col${isEmptyState ? '' : ' h-[calc(100dvh-13.25rem)] md:h-[calc(100dvh-6.5rem)]'}`}>
-      {/* KB DIAG — TEMPORARY keyboard-occlusion readout (active conversation only). */}
-      {!isEmptyState && <KbDiag inputRef={kbInputRef} />}
+    <div className={`flex flex-col${isEmptyState ? '' : ' h-[calc(100dvh-12.25rem)] md:h-[calc(100dvh-6.5rem)]'}`}>
       {/* Header row — title + last-edited timestamp on the left, "New trip" /
           "Cancel this plan" actions on the right. Hidden in the empty state
           because no plan exists yet, so "Cancel this plan" is meaningless and
@@ -1662,11 +1594,15 @@ export default function SessionPage() {
           ) : (
             // ── Active conversation: history + bottom-pinned input ────────────
             <>
-              {/* Mobile bottom padding clears the now-fixed input (≈3.5rem nav +
-                  input height) so the last message can scroll above it; the input's
-                  opaque bg masks any overlap. md:pb-2 restores the desktop spacing
-                  (input is in-flow there, no clearance needed). Tune 7.5rem on device. */}
-              <div ref={listRef} className="flex-1 min-w-0 overflow-y-auto space-y-3 pb-[calc(7.5rem+env(safe-area-inset-bottom))] md:pb-2">
+              {/* Mobile bottom padding so the last message scrolls clear of the
+                  fixed input; the input's opaque bg masks any overlap. The wrapper's
+                  definite height already subtracts main's pb-32 (8rem), so the list
+                  bottom sits ~8rem above the viewport — already above the nav. This
+                  pb therefore only needs to cover the input's own height above the
+                  nav plus the notch inset (env), not the full nav+input again. 4rem
+                  replaces the over-reserved 7.5rem guess. md:pb-2 = desktop spacing
+                  (input in-flow there). */}
+              <div ref={listRef} className="flex-1 min-w-0 overflow-y-auto space-y-3 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-2">
                 {messages.map((msg, i) => (
                   <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div
@@ -1737,7 +1673,6 @@ export default function SessionPage() {
                   The message list (above) carries matching bottom padding so its
                   last message clears this pinned input. */}
               <div
-                ref={kbInputRef}
                 className="fixed left-0 right-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 bg-rr-bg px-4 pt-2 md:static md:bottom-auto md:left-auto md:right-auto md:z-auto md:bg-transparent md:px-0 md:pt-0 md:mt-3"
               >
                 <ChatInput

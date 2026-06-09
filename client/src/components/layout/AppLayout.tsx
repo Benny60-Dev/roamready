@@ -230,8 +230,12 @@ export default function AppLayout() {
         </div>
       )}
 
-      {/* Main content */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 pt-6 pb-32 md:pb-6">
+      {/* Main content. Mobile pt-2 (was pt-6): the fixed header already sits
+          flush at the top via the shell's pt-[3.75rem]; pt-6 added a ~24px dead
+          gap between the gradient line and content. md:pt-6 keeps the desktop
+          spacing (in-flow header). NOTE: this is a global mobile change — every
+          page's top spacing tightens on mobile. */}
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 pt-2 pb-32 md:pt-6 md:pb-6">
         <Outlet />
       </main>
 
