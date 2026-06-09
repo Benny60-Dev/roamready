@@ -348,6 +348,27 @@ export interface ResourceResult {
   googleMapsUrl: string | null
 }
 
+// Great-circle distance between two lat/lng points. Only the RELATIVE order
+// matters for sorting, so the Earth-radius unit (km here) is irrelevant — we
+// never surface the value. Returns Infinity for a missing coordinate so such
+// results sort to the very end rather than jumping to the top.
+function haversineKm(
+  aLat: number,
+  aLng: number,
+  bLat: number | null,
+  bLng: number | null,
+): number {
+  if (bLat == null || bLng == null) return Infinity
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const R = 6371 // km
+  const dLat = toRad(bLat - aLat)
+  const dLng = toRad(bLng - aLng)
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(s))
+}
+
 export async function searchResourcesNearby(
   query: string,
   lat: number,
@@ -362,15 +383,18 @@ export async function searchResourcesNearby(
   // param can't 400 the request. Floor at 1 mi to avoid a zero-radius circle.
   const radiusMeters = Math.min(Math.max(radiusMiles, 1) * 1609, 50000)
 
+  // Request a wider set (20) than we return (10): searchText ranks by Google
+  // relevance, so the 10 closest by real distance aren't necessarily its top
+  // 10. We over-fetch, sort by distance to the user, then trim to 10.
   const places = await placesTextSearch(query, fieldMask, ctx, {
     locationBias: { circle: { center: { latitude: lat, longitude: lng }, radius: radiusMeters } },
-    maxResultCount: 10,
+    maxResultCount: 20,
   })
   // null (transport failure / missing key) and [] (no hits) both collapse to an
   // empty list — the controller decides not to cache an empty result.
   if (places === null || places.length === 0) return []
 
-  return places.slice(0, 10).map((place: any) => ({
+  const mapped: ResourceResult[] = places.map((place: any) => ({
     id: place.id,
     name: place.displayName?.text ?? '',
     address: place.formattedAddress ?? null,
@@ -385,4 +409,16 @@ export async function searchResourcesNearby(
     website: place.websiteUri ?? null,
     googleMapsUrl: place.googleMapsUri ?? null,
   }))
+
+  // Rank closest-first like Google Maps "near me". searchText returns relevance
+  // order, so a 2mi result can sit below a 25mi one — sort by haversine distance
+  // to the user's GPS. Results with no coordinate sort last (haversineKm →
+  // Infinity). Then trim to the closest 10.
+  mapped.sort(
+    (a, b) =>
+      haversineKm(lat, lng, a.latitude, a.longitude) -
+      haversineKm(lat, lng, b.latitude, b.longitude),
+  )
+
+  return mapped.slice(0, 10)
 }
