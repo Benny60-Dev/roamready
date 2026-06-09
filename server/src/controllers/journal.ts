@@ -246,6 +246,53 @@ export async function upsertEntry(req: AuthRequest, res: Response, next: NextFun
   } catch (err) { next(err) }
 }
 
+// ─── Route-POI journal (itinerary "stops along the way") ────────────────────
+// Route POIs are id-less JSON in Trip.itinerary, NOT Stop rows, so an entry
+// can't hang a stopId. Instead it's keyed by the POI's stable client-generated
+// id (routePoiId). One entry per POI: update the existing one or create a new
+// one — same update-or-create shape as the per-stop upsert, scoped by userId.
+// stopId stays null; placeName is the POI name so the entry remains readable if
+// the POI is later removed/regenerated (it then demotes into the freeform list,
+// mirroring how a deleted Stop's entry demotes via onDelete:SetNull).
+export async function upsertRoutePoiEntry(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const routePoiId = req.params.routePoiId
+    const { tripId, placeName, title, body, rating } = req.body
+    if (!tripId) throw new AppError('tripId is required', 400)
+    // Ownership: the entry attaches to this trip, so the caller must own it.
+    await verifyTripOwnership(tripId, req.user!.id)
+
+    const existing = await prisma.journalEntry.findFirst({
+      where: { routePoiId, userId: req.user!.id },
+    })
+    const entry = existing
+      ? await prisma.journalEntry.update({
+          where: { id: existing.id },
+          data: {
+            title,
+            body,
+            rating,
+            // Backfill the POI name only when missing — never clobber a value a
+            // user may have edited via the generic PUT /journal/:id edit path.
+            ...(existing.placeName == null ? { placeName: placeName ?? null } : {}),
+          },
+        })
+      : await prisma.journalEntry.create({
+          data: {
+            userId: req.user!.id,
+            tripId,
+            routePoiId,
+            stopId: null,
+            title,
+            body,
+            rating,
+            placeName: placeName ?? null,
+          },
+        })
+    res.json(entry)
+  } catch (err) { next(err) }
+}
+
 export async function uploadPhotos(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const stop = await verifyStopOwnership(req.params.stopId, req.user!.id)

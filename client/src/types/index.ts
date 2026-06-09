@@ -335,6 +335,10 @@ export interface JournalEntry {
   // entry has tripId; a per-stop entry has both stopId and tripId.
   tripId?: string | null
   stopId?: string | null
+  // Route-POI link (JOURNAL-ROUTESTOP): set when the entry belongs to an
+  // itinerary "stop along the way" POI (keyed by the POI's stable id) rather
+  // than a Stop row. stopId stays null for these.
+  routePoiId?: string | null
   title?: string | null
   body?: string | null
   rating?: number | null
@@ -463,6 +467,11 @@ export interface LiveForecast {
 export type StopWeather = HistoricalWeather | LiveForecast
 
 export interface POI {
+  // Stable client-generated id (crypto.randomUUID), assigned at add time so a
+  // route POI can carry a journal entry keyed by routePoiId (JOURNAL-ROUTESTOP).
+  // Optional: POIs added before this shipped have none and are simply not
+  // journalable (degrade gracefully) until re-added — never assume it exists.
+  id?: string
   name: string
   durationMinutes: number
   // Block 16 — optional short description carried over when a POI was added

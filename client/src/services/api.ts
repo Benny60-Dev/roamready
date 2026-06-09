@@ -257,6 +257,10 @@ export const journalApi = {
   upsert: (stopId: string, data: any) => api.post(`/journal/${stopId}`, data),
   uploadPhotos: (stopId: string, formData: FormData) =>
     api.post(`/journal/${stopId}/photos`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  // Route-POI journal (itinerary "stops along the way"). Keyed by the POI's
+  // stable id, not a stopId. data: { tripId, placeName, body, title?, rating? }.
+  // Edit/delete reuse the generic update()/delete() above (PUT/DELETE /journal/:id).
+  upsertRoutePoi: (routePoiId: string, data: any) => api.post(`/journal/route-poi/${routePoiId}`, data),
 }
 
 // Visited states — manual marks for the Journal map (step 6b). Reads open;
