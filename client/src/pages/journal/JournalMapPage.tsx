@@ -440,51 +440,25 @@ export default function JournalMapPage() {
         <span className="text-xs text-gray-700 font-medium">Memory map</span>
       </div>
 
-      {/* Trip-filter chips (Phase D) + "Show routes" toggle. The chips scroll
-          horizontally on narrow screens; the toggle stays pinned on the right.
-          Chip/toggle styling mirrors the Journal feed's filter chips. */}
+      {/* Control bar: trip-selector dropdown (left, flexes) + "Show routes"
+          toggle (right). One compact row, no horizontal scroll, fits mobile. */}
       {!loading && !error && hasStops && (
         <div className="flex-shrink-0 bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-2">
-          <div className="flex gap-1.5 overflow-x-auto flex-1" role="tablist" aria-label="Trip filters">
-            <button
-              role="tab"
-              aria-selected={filterTripId === null}
-              onClick={() => setFilterTripId(null)}
-              className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                filterTripId === null
-                  ? 'bg-[#1F6F8B] text-white'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}
-              style={{ borderWidth: '0.5px' }}
-            >
-              All trips
-            </button>
-            {tripChips.map(chip => {
-              const active = filterTripId === chip.id
-              return (
-                <button
-                  key={chip.id}
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setFilterTripId(chip.id)}
-                  className={`flex-shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    active
-                      ? 'bg-[#1F6F8B] text-white'
-                      : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-                  }`}
-                  style={{ borderWidth: '0.5px' }}
-                >
-                  <span
-                    className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-1 ring-black/5"
-                    style={{ backgroundColor: chip.color }}
-                  />
-                  {chip.name}
-                </button>
-              )
-            })}
-          </div>
+          {/* Trip selector — full names, no truncation; the dropdown handles
+              long names. Drives the same filterTripId the filter logic reads. */}
+          <select
+            className="input flex-1 min-w-0"
+            aria-label="Filter by trip"
+            value={filterTripId ?? ''}
+            onChange={e => setFilterTripId(e.target.value || null)}
+          >
+            <option value="">All trips</option>
+            {tripChips.map(chip => (
+              <option key={chip.id} value={chip.id}>{chip.name}</option>
+            ))}
+          </select>
 
-          {/* Routes-visibility toggle — pinned right, doesn't scroll with chips. */}
+          {/* Routes-visibility toggle — pinned right. */}
           <button
             onClick={toggleRoutes}
             aria-pressed={showRoutes}
