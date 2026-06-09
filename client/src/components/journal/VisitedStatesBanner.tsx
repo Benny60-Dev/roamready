@@ -1,9 +1,10 @@
 import { lazy, Suspense, useState } from 'react'
-import { ChevronDown, Map as MapIcon, Pencil } from 'lucide-react'
+import { ChevronDown, Map as MapIcon, Pencil, MapPin } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useUIStore } from '../../store/uiStore'
 import EditStatesModal from './EditStatesModal'
 import type { StateMeta } from './stateUtils'
+import type { JournalEntry } from '../../types'
 
 /**
  * Collapsible banner that hosts the visited-states choropleth at the top of the
@@ -18,10 +19,20 @@ import type { StateMeta } from './stateUtils'
 const JournalStatesMap = lazy(() => import('./JournalStatesMap'))
 
 const COLLAPSE_KEY = 'roamready-journal-map-collapsed'
+const PINS_KEY = 'roamready-journal-pins-shown'
 
 function readCollapsed(): boolean {
   try {
     return localStorage.getItem(COLLAPSE_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+// Pins default OFF (key absent → false); only 'true' turns them on.
+function readPinsShown(): boolean {
+  try {
+    return localStorage.getItem(PINS_KEY) === 'true'
   } catch {
     return false
   }
@@ -34,6 +45,8 @@ interface Props {
   stateMeta: Map<string, StateMeta>
   /** Re-runs visitedStatesApi.list() so the map/counter update after an edit. */
   refetchManualStates: () => void
+  /** Full journal entry set — projected to pins when the toggle is on. */
+  entries: JournalEntry[]
 }
 
 export default function VisitedStatesBanner({
@@ -42,9 +55,11 @@ export default function VisitedStatesBanner({
   visitedCount,
   stateMeta,
   refetchManualStates,
+  entries,
 }: Props) {
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [editOpen, setEditOpen] = useState(false)
+  const [showPins, setShowPins] = useState(readPinsShown)
   const hasAccess = useAuthStore(s => s.hasAccess)
   const openPaywall = useUIStore(s => s.openPaywall)
 
@@ -65,6 +80,19 @@ export default function VisitedStatesBanner({
         localStorage.setItem(COLLAPSE_KEY, String(next))
       } catch {
         /* storage unavailable (private mode) — pref just won't persist */
+      }
+      return next
+    })
+  }
+
+  // Pins are display-only — no gating. Persist the preference across sessions.
+  function togglePins() {
+    setShowPins(prev => {
+      const next = !prev
+      try {
+        localStorage.setItem(PINS_KEY, String(next))
+      } catch {
+        /* storage unavailable — pref just won't persist */
       }
       return next
     })
@@ -94,7 +122,16 @@ export default function VisitedStatesBanner({
 
       {!collapsed && (
         <div className="mt-4 pt-4 border-t border-gray-100">
-          <div className="flex justify-end mb-2">
+          <div className="flex items-center justify-end gap-3 mb-2">
+            <button
+              onClick={togglePins}
+              aria-pressed={showPins}
+              className={`inline-flex items-center gap-1.5 text-xs font-medium transition-colors ${
+                showPins ? 'text-[#C9851A]' : 'text-gray-500 hover:text-[#1F6F8B]'
+              }`}
+            >
+              <MapPin size={12} /> {showPins ? 'Hide pins' : 'Show pins'}
+            </button>
             <button
               onClick={handleEdit}
               className="inline-flex items-center gap-1.5 text-xs font-medium text-[#1F6F8B] hover:underline"
@@ -109,6 +146,8 @@ export default function VisitedStatesBanner({
               overnight={overnight}
               passthrough={passthrough}
               visitedCount={visitedCount}
+              entries={entries}
+              showPins={showPins}
             />
           </Suspense>
         </div>

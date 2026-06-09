@@ -289,6 +289,7 @@ export default function JournalTabContent({ trips }: Props) {
         visitedCount={visitedCount}
         stateMeta={stateMeta}
         refetchManualStates={refetchManualStates}
+        entries={entries}
       />
 
       {/* Count line + Add entry */}

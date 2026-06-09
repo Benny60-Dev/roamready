@@ -19,6 +19,14 @@ export interface UsState {
 
 export const US_ALBERS_VIEWBOX = '0 0 960 600'
 
+/** Fitted geoAlbersUsa params from the SAME projection that generated the paths
+ *  above. The runtime pin projector (albersUsa.ts) bakes these so journal-entry
+ *  lat/lng land in the exact 960x600 coordinate space of the states. */
+export const US_ALBERS_PROJECTION = {
+  scale: 1229.9094920122677,
+  translate: [515.7498290720735, 295.4844247274167] as [number, number],
+}
+
 export const US_STATES: UsState[] = [
   {
     "code": "AK",

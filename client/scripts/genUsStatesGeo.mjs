@@ -98,6 +98,14 @@ export interface UsState {
 
 export const US_ALBERS_VIEWBOX = '0 0 ${WIDTH} ${HEIGHT}'
 
+/** Fitted geoAlbersUsa params from the SAME projection that generated the paths
+ *  above. The runtime pin projector (albersUsa.ts) bakes these so journal-entry
+ *  lat/lng land in the exact ${WIDTH}x${HEIGHT} coordinate space of the states. */
+export const US_ALBERS_PROJECTION = {
+  scale: ${projection.scale()},
+  translate: [${projection.translate()[0]}, ${projection.translate()[1]}] as [number, number],
+}
+
 export const US_STATES: UsState[] = ${JSON.stringify(out, null, 2)}
 `
 
