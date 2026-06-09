@@ -1,6 +1,5 @@
 import { lazy, Suspense, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { ChevronDown, Map as MapIcon, Pencil, Globe } from 'lucide-react'
+import { ChevronDown, Map as MapIcon, Pencil } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useUIStore } from '../../store/uiStore'
 import EditStatesModal from './EditStatesModal'
@@ -73,7 +72,6 @@ export default function VisitedStatesBanner({
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [editOpen, setEditOpen] = useState(false)
   const [mapMode, setMapMode] = useState<MapMode>(readMapMode)
-  const navigate = useNavigate()
   const hasAccess = useAuthStore(s => s.hasAccess)
   const openPaywall = useUIStore(s => s.openPaywall)
 
@@ -153,25 +151,16 @@ export default function VisitedStatesBanner({
               ))}
             </div>
 
-            <div className="flex items-center gap-3">
-              {/* Reading the all-trips memory map is open to all — no gating.
-                  Stays visible in both modes. */}
+            {/* Edit my states is a States-only control. (Trips mode gets its
+                own dropdown + routes toggle from AllTripsMap below.) */}
+            {mapMode === 'states' && (
               <button
-                onClick={() => navigate('/journal/map')}
+                onClick={handleEdit}
                 className="inline-flex items-center gap-1.5 text-xs font-medium text-[#1F6F8B] hover:underline"
               >
-                <Globe size={12} /> View full map
+                <Pencil size={12} /> Edit my states
               </button>
-              {/* Edit my states is a States-only control. */}
-              {mapMode === 'states' && (
-                <button
-                  onClick={handleEdit}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-[#1F6F8B] hover:underline"
-                >
-                  <Pencil size={12} /> Edit my states
-                </button>
-              )}
-            </div>
+            )}
           </div>
 
           {/* ONE fixed-size map box. The states choropleth ALWAYS defines the
@@ -207,7 +196,7 @@ export default function VisitedStatesBanner({
                   <AllTripsMap
                     trips={trips}
                     entries={entries}
-                    showControls={false}
+                    showControls
                     className="h-full rounded-lg overflow-hidden"
                   />
                 </Suspense>
