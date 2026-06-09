@@ -215,11 +215,14 @@ export async function upsertEntry(req: AuthRequest, res: Response, next: NextFun
             body,
             rating,
             actualCost,
-            // Backfill coords/placeName from the stop only where the entry is
-            // still missing them — never overwrite a value that's already set.
+            // Backfill coords/placeName/state from the stop only where the entry
+            // is still missing them — never overwrite a value that's already set.
+            // placeName/state keep the entry readable if the stop is later
+            // deleted (FK SetNull demotes it to the freeform list).
             ...(existing.lat == null ? { lat: stop.latitude ?? null } : {}),
             ...(existing.lng == null ? { lng: stop.longitude ?? null } : {}),
             ...(existing.placeName == null ? { placeName: stop.locationName ?? null } : {}),
+            ...(existing.state == null ? { state: stop.locationState ?? null } : {}),
           },
         })
       : await prisma.journalEntry.create({
@@ -231,10 +234,12 @@ export async function upsertEntry(req: AuthRequest, res: Response, next: NextFun
             body,
             rating,
             actualCost,
-            // New per-stop entry inherits the stop's coords + name for the map pin.
+            // New per-stop entry inherits the stop's coords + name/state — for
+            // the map pin, and so it stays identifiable after a stop delete.
             lat: stop.latitude ?? null,
             lng: stop.longitude ?? null,
             placeName: stop.locationName ?? null,
+            state: stop.locationState ?? null,
           },
         })
     res.json(entry)
@@ -271,10 +276,29 @@ export async function uploadPhotos(req: AuthRequest, res: Response, next: NextFu
     const entry = existing
       ? await prisma.journalEntry.update({
           where: { id: existing.id },
-          data: { photos: [...currentPhotos, ...uploadedUrls] },
+          data: {
+            photos: [...currentPhotos, ...uploadedUrls],
+            // Same null-only backfill as upsertEntry: a photo upload shouldn't
+            // leave the entry less identifiable than a text save would.
+            ...(existing.lat == null ? { lat: stop.latitude ?? null } : {}),
+            ...(existing.lng == null ? { lng: stop.longitude ?? null } : {}),
+            ...(existing.placeName == null ? { placeName: stop.locationName ?? null } : {}),
+            ...(existing.state == null ? { state: stop.locationState ?? null } : {}),
+          },
         })
       : await prisma.journalEntry.create({
-          data: { userId: req.user!.id, stopId: stop.id, tripId: stop.tripId, photos: uploadedUrls },
+          data: {
+            userId: req.user!.id,
+            stopId: stop.id,
+            tripId: stop.tripId,
+            photos: uploadedUrls,
+            // Photo-first entries inherit the stop's coords + name/state too,
+            // matching upsertEntry's create branch.
+            lat: stop.latitude ?? null,
+            lng: stop.longitude ?? null,
+            placeName: stop.locationName ?? null,
+            state: stop.locationState ?? null,
+          },
         })
 
     res.json(entry)

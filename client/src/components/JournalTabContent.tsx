@@ -433,12 +433,19 @@ function Stars({ rating }: { rating: number }) {
   )
 }
 
-export function EntryCard({ entry }: { entry: JournalEntry }) {
+export function EntryCard({ entry, showRemovedStopOrigin }: { entry: JournalEntry; showRemovedStopOrigin?: boolean }) {
   // Per scope: per-stop entries (stopId present) get a blue left-edge; freeform
   // / standalone entries get a gold left-edge with a pencil marker. Pine
   // (#3E5540) is reserved and intentionally NOT used here.
   const isStopEntry = !!entry.stopId
   const edgeColor = isStopEntry ? '#1F6F8B' : '#F7A829'
+
+  // Orphaned per-stop entry: the stop was deleted (FK SetNull cleared stopId)
+  // but the save path denormalized the stop's name into placeName, so we can
+  // still say where it came from. Opt-in (TripJournalPage's freeform list)
+  // because a placeName on a stop-less entry only implies a removed stop in
+  // that context — authored freeform entries never carry one.
+  const isRemovedStopEntry = !!showRemovedStopOrigin && !isStopEntry && !!entry.placeName
 
   const body = (entry.body || '').trim()
   const snippet = body.length > 180 ? `${body.slice(0, 180)}…` : body
@@ -455,12 +462,19 @@ export function EntryCard({ entry }: { entry: JournalEntry }) {
               )}
               {entry.title}
             </h3>
+          ) : isRemovedStopEntry ? (
+            <h3 className="text-sm font-medium text-gray-900 truncate">{entry.placeName}</h3>
           ) : (
             !isStopEntry && (
               <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#C9851A]">
                 <Pencil size={11} aria-hidden="true" /> Freeform
               </span>
             )
+          )}
+          {isRemovedStopEntry && (
+            <p className="text-[11px] text-gray-400 italic mt-0.5">
+              from a removed stop{entry.state ? ` · ${entry.placeName}, ${entry.state}` : ''}
+            </p>
           )}
         </div>
         <span className="text-[11px] text-gray-400 flex-shrink-0">
