@@ -988,19 +988,28 @@ export default function SessionPage() {
 
   return (
     <>
-    {/* Outer wrapper height: fill the parent <main> ONLY in active-conversation
-        state, where the chat history needs a definite parent height so its
-        flex-1 overflow-y-auto can resolve and the input pins to the bottom.
-        FILL, don't re-subtract: <main> already reserves the mobile bottom nav
-        via its pb-32 (md:pb-6), so this wrapper uses min-h-full/md:h-full to
-        fill the content box main gives it — it must NOT also subtract 8rem for
-        the nav (the prior min-h-[calc(100dvh-8rem)] double-counted that 128px,
-        making the document taller than the viewport so iOS scrolled the whole
-        page ~422px up on keyboard-focus, and left a static dead-space gap). One
-        reservation, in <main>, only. In empty state we drop the fill so the hero
-        + disclosure stack to their natural height and the sibling Continue-
-        planning strip sits above the fold. */}
-    <div ref={diagWrapperRef} className={`flex flex-col${isEmptyState ? '' : ' min-h-full md:h-full'}`}>
+    {/* Outer wrapper height — active-conversation only (the chat history needs a
+        DEFINITE parent height so its flex-1 overflow-y-auto resolves and the
+        input pins to the bottom).
+
+        Why a viewport calc and not h-full/min-h-full: the parent <main>
+        (AppLayout) is `flex-1` but is NOT itself a flex container, so its
+        `height` property is `auto` — a child `height:100%`/`min-height:100%`
+        resolves against auto and COLLAPSES to content height (the wrapper sized
+        to the conversation, so Δ/GAP shrank as it grew). So size to the viewport
+        directly, subtracting the FULL chrome chain ONCE:
+          app header h-14 (3.5rem) + main pt-6 (1.5rem) + main pb-32 (8rem mobile)
+          = 13rem  ·  md: pt-6 (1.5) + pb-6 (1.5) + header (3.5) = 6.5rem.
+        That equals exactly main's content box, so the wrapper fills it (constant
+        Δ/GAP regardless of length) WITHOUT exceeding it — no taller-than-viewport
+        document, so iOS has nothing to scroll on keyboard-focus (winY stays 0).
+        The bottom-nav clearance is still reserved ONCE (main's pb-32, the 8rem
+        term here matches it). The prior min-h-[calc(100dvh-8rem)] under-subtracted
+        (only the nav, missing header+pt) → 80px too tall → overflow → the 422px
+        keyboard scroll; min-h-full then under-filled. This is the corrected value.
+        In empty state we drop the lock so the hero + Continue-planning strip
+        stack to natural height. */}
+    <div ref={diagWrapperRef} className={`flex flex-col${isEmptyState ? '' : ' min-h-[calc(100dvh-13rem)] md:h-[calc(100dvh-6.5rem)]'}`}>
       {/* DIAG v1 — TEMPORARY measurement overlay (active conversation only). */}
       {!isEmptyState && (
         <ConversationDiag listRef={listRef} wrapperRef={diagWrapperRef} inputRef={diagInputRef} />
