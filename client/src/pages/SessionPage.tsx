@@ -533,20 +533,20 @@ export default function SessionPage() {
     }
   )
 
-  // Rest the conversation at the BOTTOM — latest message just above the input,
-  // ready to type, no manual scroll-down. Scroll ONLY the message-list container
-  // (listRef.scrollTop), NEVER the window and NEVER scrollIntoView (which walks
-  // every scrollable ancestor and previously dragged the header / reply
-  // off-screen). The frozen mobile header (Step 1, position:fixed) now makes a
-  // hard scroll-to-bottom safe — it can't be clipped or dragged — so we dropped
-  // the old scroll-only-on-overflow guard that left short exchanges top-anchored.
-  // When the content fits, scrollTop = scrollHeight clamps to the max (0 here),
-  // a harmless no-op. Deps include messages + typing so it runs AFTER the new
-  // content renders and scrollHeight reflects it.
+  // Keep the latest message in view by scrolling ONLY the message-list
+  // container (listRef) — never the window. scrollIntoView (even block:'nearest')
+  // walks every scrollable ancestor, and on mobile the dvh-based wrapper height
+  // (:844) makes the WINDOW scrollable, so it dragged the non-sticky header and
+  // the top of the reply off-screen on the first short reply. Setting the
+  // container's own scrollTop contains the scroll to the chat history.
+  // Guarded on actual overflow: when the exchange fits, do nothing → the
+  // conversation stays top-anchored (anchor-to-top, scroll-only-on-overflow).
   useEffect(() => {
     const list = listRef.current
     if (!list) return
-    list.scrollTop = list.scrollHeight
+    if (list.scrollHeight > list.clientHeight) {
+      list.scrollTop = list.scrollHeight
+    }
   }, [messages, typing])
 
   // Reset the WINDOW scroll on the empty→active transition (first user message
