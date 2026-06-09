@@ -202,105 +202,6 @@ function stripUnrequestedReturnLeg(
   return { ...itinerary, stops: slicedStops, totalNights, totalMiles: null, estimatedFuel: null }
 }
 
-// ─── DIAG v1 — TEMPORARY measurement overlay (mobile, active conversation) ──────
-// Read-only on-screen readout to diagnose the mobile dead-space + rest-at-bottom
-// layout interaction (bottom-nav clearance reserved ~3x). NO layout/scroll code
-// is changed by this — it only measures and prints. Remove this whole component
-// (and its <ConversationDiag/> render + the diagWrapperRef/diagInputRef refs)
-// once the numbers are captured and the real fix lands.
-function ConversationDiag({
-  listRef,
-  wrapperRef,
-  inputRef,
-}: {
-  listRef: React.RefObject<HTMLDivElement | null>
-  wrapperRef: React.RefObject<HTMLDivElement | null>
-  inputRef: React.RefObject<HTMLDivElement | null>
-}) {
-  const [r, setR] = useState<Record<string, number | string | null>>({})
-  // v2: own height so we can pin the overlay's BOTTOM to the visual viewport's
-  // bottom (just above the keyboard) instead of letting it scroll away.
-  const selfRef = useRef<HTMLDivElement>(null)
-  const [topPx, setTopPx] = useState(64)
-  useEffect(() => {
-    function measure() {
-      const vv = window.visualViewport
-      const innerH = Math.round(window.innerHeight)
-      const vvH = vv ? Math.round(vv.height) : null
-      const main = document.querySelector('main')
-      const nav = document.querySelector('nav.fixed.bottom-0') as HTMLElement | null
-      const list = listRef.current
-      const wrap = wrapperRef.current
-      const inp = inputRef.current
-      const mainBottom = main ? Math.round(main.getBoundingClientRect().bottom) : null
-      const wrapBottom = wrap ? Math.round(wrap.getBoundingClientRect().bottom) : null
-      const navTop = nav ? Math.round(nav.getBoundingClientRect().top) : null
-      const inpBottom = inp ? Math.round(inp.getBoundingClientRect().bottom) : null
-      const gap = navTop != null && inpBottom != null ? navTop - inpBottom : null
-
-      // Pin the overlay just above the keyboard: a position:fixed element is
-      // laid out against the LAYOUT viewport, so to sit at the bottom of the
-      // (shrunken) VISUAL viewport we set top = offsetTop + height - selfHeight.
-      // Updated on every vv resize/scroll so it tracks the keyboard.
-      const selfH = selfRef.current?.offsetHeight ?? 130
-      if (vv) setTopPx(Math.max(8, Math.round(vv.offsetTop + vv.height - selfH - 8)))
-
-      setR({
-        innerH,
-        vvH,
-        kbd: vvH != null ? innerH - vvH : null,
-        mainBottom,
-        wrapBottom,
-        vpBottom: innerH,
-        wrapVsVp: wrapBottom != null ? innerH - wrapBottom : null,
-        scrollTop: list ? Math.round(list.scrollTop) : null,
-        scrollH: list ? list.scrollHeight : null,
-        clientH: list ? list.clientHeight : null,
-        overflow: list ? (list.scrollHeight > list.clientHeight ? 'Y' : 'N') : null,
-        inpBottom,
-        navTop,
-        GAP: gap,
-        // Page-scroll state — shows whether the PAGE/window scrolls when the
-        // keyboard opens (the thing that scrolled v1 out of view).
-        winScrollY: Math.round(window.scrollY),
-        docTop: Math.round(document.documentElement.scrollTop),
-        vvOffTop: vv ? Math.round(vv.offsetTop) : null,
-      })
-    }
-    measure()
-    const raf = requestAnimationFrame(measure)
-    // capture-phase scroll catches the inner list scroll too (it bubbles in
-    // capture from the descendant scroller), plus window/resize/visualViewport.
-    window.addEventListener('scroll', measure, true)
-    window.addEventListener('resize', measure)
-    window.visualViewport?.addEventListener('resize', measure)
-    window.visualViewport?.addEventListener('scroll', measure)
-    return () => {
-      cancelAnimationFrame(raf)
-      window.removeEventListener('scroll', measure, true)
-      window.removeEventListener('resize', measure)
-      window.visualViewport?.removeEventListener('resize', measure)
-      window.visualViewport?.removeEventListener('scroll', measure)
-    }
-  }, [listRef, wrapperRef, inputRef])
-
-  return (
-    <div
-      ref={selfRef}
-      style={{ top: topPx, left: 8 }}
-      className="lg:hidden fixed z-[200] pointer-events-none select-none bg-black/80 text-white font-mono text-[10px] leading-tight rounded px-2 py-1.5 max-w-[62vw]"
-    >
-      <div className="font-bold text-[#F7A829]">DIAG v2</div>
-      <div>innerH {String(r.innerH)} · vvH {String(r.vvH)} · kbd {String(r.kbd)}</div>
-      <div>main.bot {String(r.mainBottom)}</div>
-      <div>wrap.bot {String(r.wrapBottom)} / vp {String(r.vpBottom)} (Δ {String(r.wrapVsVp)})</div>
-      <div>list st {String(r.scrollTop)} sH {String(r.scrollH)} cH {String(r.clientH)} ovf {String(r.overflow)}</div>
-      <div className="text-[#F7A829]">inp.bot {String(r.inpBottom)} · nav.top {String(r.navTop)} · GAP {String(r.GAP)}</div>
-      <div className="text-[#7FD1E0]">winY {String(r.winScrollY)} · docTop {String(r.docTop)} · vvOff {String(r.vvOffTop)}</div>
-    </div>
-  )
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function SessionPage() {
@@ -348,11 +249,6 @@ export default function SessionPage() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
-  // DIAG v1 (TEMPORARY — remove with ConversationDiag): refs for the
-  // conversation wrapper and the input wrapper so the diagnostic readout can
-  // measure their rects. No behavior depends on these.
-  const diagWrapperRef = useRef<HTMLDivElement>(null)
-  const diagInputRef = useRef<HTMLDivElement>(null)
   const { user } = useAuthStore()
   const navigate = useNavigate()
 
@@ -1013,11 +909,7 @@ export default function SessionPage() {
         keyboard scroll; min-h-full then under-filled. This is the corrected value.
         In empty state we drop the lock so the hero + Continue-planning strip
         stack to natural height. */}
-    <div ref={diagWrapperRef} className={`flex flex-col${isEmptyState ? '' : ' min-h-[calc(100dvh-13.25rem)] md:h-[calc(100dvh-6.5rem)]'}`}>
-      {/* DIAG v1 — TEMPORARY measurement overlay (active conversation only). */}
-      {!isEmptyState && (
-        <ConversationDiag listRef={listRef} wrapperRef={diagWrapperRef} inputRef={diagInputRef} />
-      )}
+    <div className={`flex flex-col${isEmptyState ? '' : ' min-h-[calc(100dvh-13.25rem)] md:h-[calc(100dvh-6.5rem)]'}`}>
       {/* Header row — title + last-edited timestamp on the left, "New trip" /
           "Cancel this plan" actions on the right. Hidden in the empty state
           because no plan exists yet, so "Cancel this plan" is meaningless and
@@ -1756,7 +1648,7 @@ export default function SessionPage() {
                   ~64px on top, which was stacking into the dead-space gap. Keep
                   only the iOS home-indicator safe-area inset (env() = 0 on
                   non-notch devices, so no awkward gap). Removed at md (no nav). */}
-              <div ref={diagInputRef} className="mt-3 pb-[env(safe-area-inset-bottom)] md:pb-0">
+              <div className="mt-3 pb-[env(safe-area-inset-bottom)] md:pb-0">
                 <ChatInput
                   ref={inputRef}
                   value={input}
