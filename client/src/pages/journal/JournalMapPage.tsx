@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { GoogleMap, useJsApiLoader, OverlayViewF } from '@react-google-maps/api'
+import { GoogleMap, useJsApiLoader } from '@react-google-maps/api'
 import { X, BookOpen } from 'lucide-react'
 import { tripsApi, journalApi } from '../../services/api'
 import { parseTripDate } from '../../utils/dates'
@@ -144,16 +144,8 @@ export default function JournalMapPage() {
 
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null)
   const [selectedStop, setSelectedStop] = useState<StopWithTrip | null>(null)
-  // Same mobile breakpoint TripMapPage uses (window.innerWidth < 768).
-  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([])
   const polylinesRef = useRef<google.maps.Polyline[]>([])
-
-  useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth < 768)
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
 
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
@@ -252,49 +244,15 @@ export default function JournalMapPage() {
     setMapInstance(map)
   }, [])
 
-  // Open a stop's popup. Behaviour branches by viewport:
-  //
-  //  • MOBILE (< 768px): the popup is a FIXED, screen-centered card (rendered
-  //    below), not anchored to the marker — so the desktop clearance math
-  //    doesn't apply and would only shove the map to a confusing spot. Just
-  //    gently center the marker behind the card so it's visible; the card stays
-  //    put regardless of where the stop sits.
-  //
-  //  • DESKTOP (≥ 768px): the marker-anchored OverlayViewF popup + clearance
-  //    pan (copied/adapted from TripMapPage.focusStop). panTo recenters the
-  //    stop horizontally (the popup is width-centered via OverlayViewF's
-  //    x:-width/2, so it clears the left/right edges); panBy then drops the stop
-  //    into the lower-center so the card — which opens ABOVE the marker —
-  //    clears the top edge.
+  // Open a stop's popup. The popup is a fixed, screen-centered card (rendered
+  // below) on EVERY viewport, so it's always fully visible no matter where the
+  // tapped marker sits or what the current zoom/position is. We therefore do
+  // NOT touch the map camera at all here — no panTo/panBy/zoom. (The prior
+  // clearance-pan math was the source of the "map flies to a far-away place on
+  // tap" bug on both mobile and desktop.)
   const focusStop = useCallback((stop: StopWithTrip) => {
     setSelectedStop(stop)
-    if (!mapInstance || stop.latitude == null || stop.longitude == null) return
-
-    if (isMobile) {
-      mapInstance.panTo({ lat: stop.latitude, lng: stop.longitude })
-      return
-    }
-
-    mapInstance.panTo({ lat: stop.latitude, lng: stop.longitude })
-    // This popup is shorter than TripMapPage's (name + trip + journal block,
-    // no weather/alerts/book): ~220px card + 36px marker-to-card gap + 24px
-    // breathing room above.
-    const NEEDED_CLEARANCE_PX = 220 + 36 + 24  // = 280
-    const mapH = mapInstance.getDiv()?.clientHeight ?? 550
-    // Marker's final screen-y after panBy = mapH/2 + offset, so
-    // offset >= NEEDED_CLEARANCE_PX - mapH/2 puts the card's top at the
-    // viewport top (with breathing room baked in). Floor of 80px so a stop
-    // on a tall map still drops below center a little.
-    const idealOffset = Math.max(NEEDED_CLEARANCE_PX - mapH / 2, 80)
-    // Safety cap: never push the marker past 30% below center — keeps the
-    // marker itself visible on short maps even if the card is taller than half
-    // the viewport.
-    const capOffset = mapH * 0.3
-    const offset = Math.min(idealOffset, capOffset)
-    // panBy(0, NEGATIVE) moves the map CENTER up, which makes the marker
-    // appear LOWER on screen — the room we want above it for the card.
-    mapInstance.panBy(0, -offset)
-  }, [mapInstance, isMobile])
+  }, [])
 
   // ── Imperative markers (copied pattern from TripMapPage) ─────────────────────
   useEffect(() => {
@@ -419,31 +377,14 @@ export default function JournalMapPage() {
               options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy', mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID' }}
               onLoad={onMapLoad}
               onClick={() => setSelectedStop(null)}
-            >
-              {/* DESKTOP: marker-anchored popup — same OverlayViewF pattern as
-                  TripMapPage (copied), trimmed to name + trip + journal entry.
-                  On mobile this is replaced by the centered card below. */}
-              {!isMobile && selectedStop?.latitude != null && selectedStop?.longitude != null && (
-                <OverlayViewF
-                  position={{ lat: selectedStop.latitude, lng: selectedStop.longitude }}
-                  mapPaneName="floatPane"
-                  getPixelPositionOffset={(width, height) => ({ x: -width / 2, y: -height - 36 })}
-                  zIndex={1000}
-                >
-                  <JournalStopPopup
-                    stop={selectedStop}
-                    entry={entryByStop.get(selectedStop.id)}
-                    onClose={() => setSelectedStop(null)}
-                  />
-                </OverlayViewF>
-              )}
-            </GoogleMap>
+            />
 
-            {/* MOBILE: a fixed, screen-centered card — independent of the
-                marker's screen position, so it's always fully visible no matter
-                where the tapped stop sits. A light scrim dismisses on tap. The
-                card width is capped to the viewport with side margins. */}
-            {isMobile && selectedStop && (
+            {/* One popup style on every viewport: a fixed, screen-centered card
+                — independent of the marker's screen position and of the map
+                camera, so it's always fully visible and the map never has to
+                move. A light scrim dismisses on tap; the card width is capped to
+                the viewport (max-w-sm) with side margins so it fits any screen. */}
+            {selectedStop && (
               <div
                 className="absolute inset-0 z-20 flex items-center justify-center px-4"
                 onClick={() => setSelectedStop(null)}
