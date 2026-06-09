@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { GoogleMap, useJsApiLoader, OverlayViewF } from '@react-google-maps/api'
-import { X, BookOpen, Spline } from 'lucide-react'
+import { X, BookOpen, Spline, ArrowLeft } from 'lucide-react'
 import { tripsApi, journalApi } from '../../services/api'
 import { parseTripDate } from '../../utils/dates'
 import { deriveTripStatus } from '../../utils/tripStatus'
@@ -433,9 +433,16 @@ export default function JournalMapPage() {
 
   return (
     <div className="-mx-4 -my-6">
-      {/* Breadcrumb strip — mirrors TripMapPage */}
+      {/* Breadcrumb strip — mirrors TripMapPage. First crumb is the back link to
+          the RoamReady Journal feed (where "View full map" lives), so this page
+          isn't a navigation dead-end. */}
       <div className="flex-shrink-0 bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-1.5">
-        <Link to="/dashboard" className="text-xs text-[#1F6F8B] hover:text-[#134756] transition-colors">Dashboard</Link>
+        <Link
+          to="/dashboard?tab=journal"
+          className="inline-flex items-center gap-1 text-xs text-[#1F6F8B] hover:text-[#134756] transition-colors"
+        >
+          <ArrowLeft size={13} /> Journal
+        </Link>
         <span className="text-gray-300 text-xs">›</span>
         <span className="text-xs text-gray-700 font-medium">Memory map</span>
       </div>
