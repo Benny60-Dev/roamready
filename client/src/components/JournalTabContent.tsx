@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, Search, Star, MapPin, Pencil, X } from 'lucide-react'
+import { Plus, Search, Star, MapPin, Pencil, Trash2, X } from 'lucide-react'
 import { journalApi, visitedStatesApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import { useUIStore } from '../store/uiStore'
@@ -57,6 +57,8 @@ export default function JournalTabContent({ trips }: Props) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<FilterKey>('all')
   const [composerOpen, setComposerOpen] = useState(false)
+  // Edit mode reuses the same modal; non-null = editing that entry.
+  const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null)
 
   // Server full-text search (step 5 phase 3). searchResults is null when the
   // box is empty (feed shows the full `entries` set); an array when a search is
@@ -81,6 +83,33 @@ export default function JournalTabContent({ trips }: Props) {
       return
     }
     setComposerOpen(true)
+  }
+
+  // Edit affordance — same tap-time Pro gate as create; opens the shared modal
+  // in edit mode. Reading is open, but mutating an entry is a gated write.
+  function handleEditEntry(e: JournalEntry) {
+    if (!hasAccess('tripJournal')) {
+      openPaywall('tripJournal')
+      return
+    }
+    setEditingEntry(e)
+  }
+
+  // Delete affordance — confirm, then DELETE /journal/:id (removes ONLY the
+  // JournalEntry row; any linked stop is untouched), then reload the feed.
+  async function handleDeleteEntry(entryId: string) {
+    if (!hasAccess('tripJournal')) {
+      openPaywall('tripJournal')
+      return
+    }
+    if (!window.confirm("Delete this journal entry? This can't be undone.")) return
+    try {
+      await journalApi.delete(entryId)
+      load()
+    } catch (e: any) {
+      if (e?.response?.status === 403 && e?.response?.data?.code === 'FEATURE_GATED') return
+      console.error('[JournalTabContent] delete failed:', e)
+    }
   }
 
   const tripNameById = useMemo(() => {
@@ -395,7 +424,7 @@ export default function JournalTabContent({ trips }: Props) {
               </h2>
               <div className="space-y-2">
                 {g.entries.map(e => (
-                  <EntryCard key={e.id} entry={e} />
+                  <EntryCard key={e.id} entry={e} onEdit={handleEditEntry} onDelete={handleDeleteEntry} />
                 ))}
               </div>
             </div>
@@ -408,6 +437,17 @@ export default function JournalTabContent({ trips }: Props) {
           onClose={() => setComposerOpen(false)}
           onCreated={() => {
             setComposerOpen(false)
+            load()
+          }}
+        />
+      )}
+
+      {editingEntry && (
+        <AddEntryModal
+          entry={editingEntry}
+          onClose={() => setEditingEntry(null)}
+          onCreated={() => {
+            setEditingEntry(null)
             load()
           }}
         />
@@ -433,7 +473,22 @@ function Stars({ rating }: { rating: number }) {
   )
 }
 
-export function EntryCard({ entry, showRemovedStopOrigin }: { entry: JournalEntry; showRemovedStopOrigin?: boolean }) {
+export function EntryCard({
+  entry,
+  showRemovedStopOrigin,
+  onEdit,
+  onDelete,
+}: {
+  entry: JournalEntry
+  showRemovedStopOrigin?: boolean
+  // Opt-in actions (mirrors showRemovedStopOrigin): when a parent passes these,
+  // the card renders Edit/Delete affordances and delegates the work upward. The
+  // card stays presentational — confirm + journalApi calls + reload live in the
+  // parent. Cards rendered without these props (none today, but keep it safe)
+  // are read-only exactly as before.
+  onEdit?: (entry: JournalEntry) => void
+  onDelete?: (entryId: string) => void
+}) {
   // Per scope: per-stop entries (stopId present) get a blue left-edge; freeform
   // / standalone entries get a gold left-edge with a pencil marker. Pine
   // (#3E5540) is reserved and intentionally NOT used here.
@@ -477,9 +532,33 @@ export function EntryCard({ entry, showRemovedStopOrigin }: { entry: JournalEntr
             </p>
           )}
         </div>
-        <span className="text-[11px] text-gray-400 flex-shrink-0">
-          {formatTripDate(entry.entryDate, 'MMM d, yyyy')}
-        </span>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <span className="text-[11px] text-gray-400">
+            {formatTripDate(entry.entryDate, 'MMM d, yyyy')}
+          </span>
+          {onEdit && (
+            <button
+              type="button"
+              onClick={() => onEdit(entry)}
+              className="p-1 rounded-md text-gray-400 hover:text-[#1F6F8B] hover:bg-gray-100 transition-colors"
+              aria-label="Edit entry"
+              title="Edit entry"
+            >
+              <Pencil size={14} />
+            </button>
+          )}
+          {onDelete && (
+            <button
+              type="button"
+              onClick={() => onDelete(entry.id)}
+              className="p-1 rounded-md text-gray-400 hover:text-red-600 hover:bg-gray-100 transition-colors"
+              aria-label="Delete entry"
+              title="Delete entry"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
       {snippet && <p className="text-xs text-gray-600 mt-0.5 whitespace-pre-line">{snippet}</p>}
@@ -504,25 +583,34 @@ export function EntryCard({ entry, showRemovedStopOrigin }: { entry: JournalEntr
   )
 }
 
-/** "+ Add entry" composer — creates a standalone (trip-less) entry via
- *  POST /journal. Body required; title/rating/tags/date optional. */
+/** Journal entry composer. Creates a standalone (trip-less) entry via
+ *  POST /journal, OR — when an `entry` is passed — edits it in place via
+ *  PUT /journal/:id. Body required; title/rating/tags/date optional. */
 export function AddEntryModal({
   onClose,
   onCreated,
   link,
+  entry,
 }: {
   onClose: () => void
   onCreated: () => void
   /** Optional links merged into the create payload. The Dashboard composer omits
    *  this (standalone entry); the in-trip freeform button passes
-   *  { tripId, stopId: null } so the entry attaches to the trip but no stop. */
+   *  { tripId, stopId: null } so the entry attaches to the trip but no stop.
+   *  Ignored in edit mode (the entry's links don't change). */
   link?: { tripId?: string; stopId?: string | null }
+  /** When present, the modal is in EDIT mode: fields pre-fill from this entry
+   *  and Save calls journalApi.update(entry.id, …) instead of create. */
+  entry?: JournalEntry
 }) {
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
-  const [rating, setRating] = useState<number | null>(null)
-  const [tagsInput, setTagsInput] = useState('')
-  const [entryDate, setEntryDate] = useState(toYmd(new Date()))
+  const isEdit = !!entry
+  const [title, setTitle] = useState(entry?.title ?? '')
+  const [body, setBody] = useState(entry?.body ?? '')
+  const [rating, setRating] = useState<number | null>(entry?.rating ?? null)
+  const [tagsInput, setTagsInput] = useState((entry?.tags ?? []).join(', '))
+  const [entryDate, setEntryDate] = useState(
+    entry?.entryDate ? toYmd(new Date(entry.entryDate)) : toYmd(new Date()),
+  )
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -538,14 +626,26 @@ export function AddEntryModal({
       .map(t => t.trim())
       .filter(Boolean)
     try {
-      await journalApi.create({
-        body: body.trim(),
-        title: title.trim() || undefined,
-        rating: rating ?? undefined,
-        tags: tags.length ? tags : undefined,
-        entryDate: entryDate || undefined,
-        ...(link ?? {}),
-      })
+      if (isEdit) {
+        // Edit: PUT the mutable fields. Links (tripId/stopId) are intentionally
+        // not sent — editing text shouldn't move an entry between trip/stop.
+        await journalApi.update(entry!.id, {
+          body: body.trim(),
+          title: title.trim() || null,
+          rating: rating ?? null,
+          tags,
+          entryDate: entryDate || undefined,
+        })
+      } else {
+        await journalApi.create({
+          body: body.trim(),
+          title: title.trim() || undefined,
+          rating: rating ?? undefined,
+          tags: tags.length ? tags : undefined,
+          entryDate: entryDate || undefined,
+          ...(link ?? {}),
+        })
+      }
       onCreated()
     } catch (e: any) {
       // The global axios interceptor already opens the shared PaywallModal on a
@@ -571,7 +671,7 @@ export function AddEntryModal({
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-medium text-gray-900">New journal entry</h2>
+          <h2 className="font-medium text-gray-900">{isEdit ? 'Edit journal entry' : 'New journal entry'}</h2>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100">
             <X size={18} />
           </button>
@@ -655,7 +755,7 @@ export function AddEntryModal({
             disabled={saving}
             className="btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {saving ? 'Saving…' : 'Save entry'}
+            {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Save entry'}
           </button>
         </div>
       </div>
