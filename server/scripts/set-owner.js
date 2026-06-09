@@ -7,6 +7,13 @@
 // from the ROOT .env. To target prod, override DATABASE_URL at run time, e.g.
 //   DATABASE_URL="postgres://...prod..." node server/scripts/set-owner.js you@x.com true
 //
+// SSL: for prod / Render's EXTERNAL Postgres, ALSO set PGSSL=true — Render
+// resets non-SSL connections (ECONNRESET). PGSSL=true (or "require") connects
+// with ssl { rejectUnauthorized: false } (still encrypted; Render's cert chain
+// isn't in the default trust store). Unset PGSSL → no ssl option, so local dev
+// connections are unchanged. e.g.
+//   DATABASE_URL="...render external..." PGSSL=true node server/scripts/set-owner.js you@x.com true
+//
 // Safety: case-insensitive email match (signup does not normalize case), one
 // email per run (no bulk update), aborts if zero or >1 rows match, and prints
 // the before/after value + affected row count so the operator sees exactly
@@ -59,7 +66,17 @@ function fail(message) {
   console.log(`Database: ${dbLabel}`);
   console.log(`Request : set isOwner = ${newValue} for "${email}" (case-insensitive match)\n`);
 
-  const c = new Client({ connectionString: process.env.DATABASE_URL });
+  // Opt-in SSL for Render's external Postgres (PGSSL=true|require). Off by
+  // default so local dev connects exactly as before. rejectUnauthorized:false
+  // keeps the connection encrypted while accepting Render's non-default cert.
+  const pgssl = String(process.env.PGSSL || '').toLowerCase();
+  const useSsl = pgssl === 'true' || pgssl === 'require';
+  if (useSsl) console.log('SSL     : enabled (rejectUnauthorized: false)');
+
+  const c = new Client({
+    connectionString: process.env.DATABASE_URL,
+    ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+  });
   await c.connect();
   try {
     // 2. Case-insensitive lookup. Select all matches so we can refuse to act
