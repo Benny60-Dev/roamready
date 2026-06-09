@@ -143,6 +143,26 @@ export default function HelpPage() {
           </ul>
         </section>
 
+        {/* Product Roadmap — public feedback/voting board. Moved here from the
+            Resources "Tools & guides" hub; Help is the natural home for "what's
+            coming + submit feedback". The /roadmap page stays public + unchanged. */}
+        <section
+          className="bg-white"
+          style={{ border: '0.5px solid #E8E4DA', borderRadius: 8, padding: 24 }}
+        >
+          <h2 className="text-base font-medium text-gray-900 mb-2">Product Roadmap</h2>
+          <p className="text-sm text-gray-700 mb-3">
+            See what we&apos;re building next, what&apos;s already shipped, and vote on the
+            features that matter most to you.
+          </p>
+          <Link
+            to="/roadmap"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-[#1F6F8B] hover:underline"
+          >
+            View the Product Roadmap →
+          </Link>
+        </section>
+
         {/* Known issues */}
         <section
           className="bg-white"
