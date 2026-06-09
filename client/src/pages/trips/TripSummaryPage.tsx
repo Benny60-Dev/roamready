@@ -529,6 +529,8 @@ export default function TripSummaryPage() {
   // editor — that behavior is unchanged by the group collapse).
   const [campGroupExpanded, setCampGroupExpanded] = useState(false)
   const [fuelGroupExpanded, setFuelGroupExpanded] = useState(false)
+  // Scroll target for the top "Est. total" stat → Cost breakdown section.
+  const costBreakdownRef = useRef<HTMLDivElement>(null)
   const itinerarySaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Block 15 — one debounce timer per stopId for stayActivities saves. Keyed
   // by stopId so simultaneous edits to two different stops don't clobber each
@@ -1317,6 +1319,7 @@ export default function TripSummaryPage() {
               value={`$${Math.round(tripTotals.hasAnyActuals ? tripTotals.actualTotal : tripTotals.plannedTotal).toLocaleString()}`}
               label={tripTotals.hasAnyActuals ? 'Actual' : 'Est. total'}
               shortLabel={tripTotals.hasAnyActuals ? 'actual' : 'est.'}
+              onClick={() => costBreakdownRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
             />
           </div>
         </div>
@@ -1566,7 +1569,7 @@ export default function TripSummaryPage() {
           Number.isInteger(n) ? n.toLocaleString() : n.toFixed(2)
 
         return (
-      <div className="card-lg">
+      <div className="card-lg" ref={costBreakdownRef}>
         {/* Section heading — larger weight + bottom rule so it reads as
             a proper section header, not a row label. Sentence case ("Cost
             breakdown") matches the rest of the page's heading style. */}
@@ -2017,15 +2020,25 @@ function TimePicker({ value, onChange, className }: {
 // the same height on mobile and desktop. The short/full label swap is
 // preserved verbatim: mobile shows "miles / nights / stops / est." inline,
 // desktop swaps to the full "Total miles / Nights / Stops / Est. total".
-function StatCell({ value, label, shortLabel }: { value: string; label: string; shortLabel: string }) {
-  return (
-    <div className="flex items-baseline gap-1.5">
-      <span className="text-lg font-medium text-[#1F6F8B]">{value}</span>
+function StatCell({ value, label, shortLabel, onClick }: { value: string; label: string; shortLabel: string; onClick?: () => void }) {
+  const inner = (
+    <>
+      {/* hover:underline only the number when interactive; keep its size/weight. */}
+      <span className={`text-lg font-medium text-[#1F6F8B]${onClick ? ' hover:underline' : ''}`}>{value}</span>
       <span className="text-xs text-gray-500">
-        <span className="sm:hidden">{shortLabel}</span>
-        <span className="hidden sm:inline">{label}</span>
+        <span className="sm:hidden">{shortLabel}{onClick ? ' ↓' : ''}</span>
+        <span className="hidden sm:inline">{label}{onClick ? ' ↓' : ''}</span>
       </span>
-    </div>
+    </>
+  )
+  // Interactive variant — button so it's keyboard-accessible; otherwise the
+  // plain non-interactive cell renders exactly as before.
+  return onClick ? (
+    <button type="button" onClick={onClick} className="flex items-baseline gap-1.5 cursor-pointer">
+      {inner}
+    </button>
+  ) : (
+    <div className="flex items-baseline gap-1.5">{inner}</div>
   )
 }
 
