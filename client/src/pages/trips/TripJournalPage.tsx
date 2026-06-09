@@ -261,7 +261,11 @@ export default function TripJournalPage() {
           </div>
         ) : (
           <div className="space-y-2">
-            {freeform.map(e => <EntryCard key={e.id} entry={e} />)}
+            {/* showRemovedStopOrigin: an entry here with a placeName is an
+                orphaned per-stop entry (its stop was deleted; the FK SetNull
+                dropped it into this list) — label it instead of rendering an
+                anonymous freeform card. */}
+            {freeform.map(e => <EntryCard key={e.id} entry={e} showRemovedStopOrigin />)}
           </div>
         )}
       </div>
