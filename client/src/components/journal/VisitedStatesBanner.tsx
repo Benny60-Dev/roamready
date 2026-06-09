@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown, Map as MapIcon, Pencil, MapPin, Globe } from 'lucide-react'
+import { ChevronDown, Map as MapIcon, Pencil, Globe } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useUIStore } from '../../store/uiStore'
 import EditStatesModal from './EditStatesModal'
@@ -25,7 +25,6 @@ const JournalStatesMap = lazy(() => import('./JournalStatesMap'))
 const AllTripsMap = lazy(() => import('./AllTripsMap'))
 
 const COLLAPSE_KEY = 'roamready-journal-map-collapsed'
-const PINS_KEY = 'roamready-journal-pins-shown'
 const MODE_KEY = 'roamready-journal-map-mode'
 
 type MapMode = 'states' | 'trips'
@@ -33,15 +32,6 @@ type MapMode = 'states' | 'trips'
 function readCollapsed(): boolean {
   try {
     return localStorage.getItem(COLLAPSE_KEY) === 'true'
-  } catch {
-    return false
-  }
-}
-
-// Pins default OFF (key absent → false); only 'true' turns them on.
-function readPinsShown(): boolean {
-  try {
-    return localStorage.getItem(PINS_KEY) === 'true'
   } catch {
     return false
   }
@@ -63,7 +53,8 @@ interface Props {
   stateMeta: Map<string, StateMeta>
   /** Re-runs visitedStatesApi.list() so the map/counter update after an edit. */
   refetchManualStates: () => void
-  /** Full journal entry set — projected to pins when the toggle is on. */
+  /** Full journal entry set — fed to the trips mini-map for its gold journal
+   *  rings. (The states choropleth no longer renders entry pins.) */
   entries: JournalEntry[]
   /** All trips (with stop coords) — fed to the inline trips mini-map. Already
    *  loaded by JournalTabContent for the choropleth derivation; no refetch. */
@@ -81,7 +72,6 @@ export default function VisitedStatesBanner({
 }: Props) {
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [editOpen, setEditOpen] = useState(false)
-  const [showPins, setShowPins] = useState(readPinsShown)
   const [mapMode, setMapMode] = useState<MapMode>(readMapMode)
   const navigate = useNavigate()
   const hasAccess = useAuthStore(s => s.hasAccess)
@@ -109,19 +99,6 @@ export default function VisitedStatesBanner({
     })
   }
 
-  // Pins are display-only — no gating. Persist the preference across sessions.
-  function togglePins() {
-    setShowPins(prev => {
-      const next = !prev
-      try {
-        localStorage.setItem(PINS_KEY, String(next))
-      } catch {
-        /* storage unavailable — pref just won't persist */
-      }
-      return next
-    })
-  }
-
   // Persist the States/Trips choice across sessions.
   function selectMode(mode: MapMode) {
     setMapMode(mode)
@@ -143,7 +120,7 @@ export default function VisitedStatesBanner({
           <MapIcon size={16} className="text-[#1F6F8B]" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-900">States visited</p>
+          <p className="text-sm font-medium text-gray-900">States visited &amp; trips taken</p>
           <p className="text-xs text-gray-500">
             {visitedCount} of 50 states · tap to {collapsed ? 'show' : 'hide'} the map
           </p>
@@ -185,25 +162,14 @@ export default function VisitedStatesBanner({
               >
                 <Globe size={12} /> View full map
               </button>
-              {/* Show pins / Edit my states are States-only controls. */}
+              {/* Edit my states is a States-only control. */}
               {mapMode === 'states' && (
-                <>
-                  <button
-                    onClick={togglePins}
-                    aria-pressed={showPins}
-                    className={`inline-flex items-center gap-1.5 text-xs font-medium transition-colors ${
-                      showPins ? 'text-[#C9851A]' : 'text-gray-500 hover:text-[#1F6F8B]'
-                    }`}
-                  >
-                    <MapPin size={12} /> {showPins ? 'Hide pins' : 'Show pins'}
-                  </button>
-                  <button
-                    onClick={handleEdit}
-                    className="inline-flex items-center gap-1.5 text-xs font-medium text-[#1F6F8B] hover:underline"
-                  >
-                    <Pencil size={12} /> Edit my states
-                  </button>
-                </>
+                <button
+                  onClick={handleEdit}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-[#1F6F8B] hover:underline"
+                >
+                  <Pencil size={12} /> Edit my states
+                </button>
               )}
             </div>
           </div>
@@ -226,8 +192,6 @@ export default function VisitedStatesBanner({
                   overnight={overnight}
                   passthrough={passthrough}
                   visitedCount={visitedCount}
-                  entries={entries}
-                  showPins={showPins}
                 />
               </Suspense>
             </div>
