@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { Home, LayoutDashboard, Compass, User, Menu, X, LogOut, ChevronDown, Clock, HelpCircle } from 'lucide-react'
+import { Home, LayoutDashboard, Compass, User, Menu, X, LogOut, ChevronDown, Clock, HelpCircle, Shield } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { useAuthStore } from '../../store/authStore'
 import { authApi } from '../../services/api'
@@ -225,6 +225,23 @@ export default function AppLayout() {
                   {label}
                 </NavLink>
               ))}
+              {/* Owner-only — mirrors the desktop Admin link (gated by
+                  user?.isOwner). Placed after Help so it reads as an extra
+                  owner item. Bottom tab bar (fixed 4-item grid) is untouched. */}
+              {user?.isOwner && (
+                <NavLink
+                  to="/admin"
+                  onClick={() => setSidebarOpen(false)}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm ${
+                      isActive ? 'bg-[#E0F0F4] text-[#1F6F8B] font-medium' : 'text-gray-600 hover:bg-gray-100'
+                    }`
+                  }
+                >
+                  <Shield size={18} />
+                  Admin
+                </NavLink>
+              )}
             </nav>
           </div>
         </div>
