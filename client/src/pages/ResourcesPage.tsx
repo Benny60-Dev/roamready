@@ -87,9 +87,10 @@ export default function ResourcesPage() {
           users who recognized them there map the same metaphor here. */}
       <div>
         <h2 className="text-sm font-medium text-gray-700 mb-2">Tools &amp; guides</h2>
-        {/* Compact tile grid — 3 tiles after hiding Van/Car. Mobile 2-col,
-            tablet/desktop 3-across (one clean row). */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {/* Compact tile grid — 2 tiles (Maintenance, OHV) after Roadmap moved to
+            Help. Mobile 2-col full width; on sm+ keep the two tiles compact and
+            centered (max-w-md + mx-auto) rather than left-aligned in a wide row. */}
+        <div className="grid grid-cols-2 gap-2 sm:max-w-md sm:mx-auto">
           {HUB_TILES.map(({ to, icon: Icon, label, desc }) => (
             <Link
               key={to}
