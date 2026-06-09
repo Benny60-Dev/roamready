@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { GoogleMap, useJsApiLoader } from '@react-google-maps/api'
+import { GoogleMap, useJsApiLoader, OverlayViewF } from '@react-google-maps/api'
 import { X, BookOpen } from 'lucide-react'
 import { tripsApi, journalApi } from '../../services/api'
 import { parseTripDate } from '../../utils/dates'
@@ -23,6 +23,17 @@ import type { Trip, Stop, JournalEntry } from '../../types'
 // ── Map config (copied from TripMapPage) ──────────────────────────────────────
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' }
 const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 'geometry', 'places']
+
+// THE LINCHPIN: a STABLE center reference. @react-google-maps/api re-applies
+// map.setCenter whenever the `center` prop's reference changes — and an inline
+// object literal is a new reference on every render, so it would snap the map
+// back to this US-center point on EVERY re-render (including the one triggered
+// by selecting a stop), fighting panTo/fitBounds and causing the "tap a stop →
+// map flies to mid-US" jump. Hoisting it to a module constant keeps the ref
+// stable: setCenter fires once on mount and never again, so user zoom/pan,
+// fitBounds, and focusStop's panTo all stick. (TripMapPage memoizes its center
+// for the same reason — see its center useMemo.)
+const DEFAULT_CENTER = { lat: 39.5, lng: -98.35 }
 
 // ── Per-trip palette (Phase B) ────────────────────────────────────────────────
 // The active/primary trip is RV Blue; every other trip cycles the ramp below in
@@ -70,21 +81,20 @@ interface StopWithTrip extends Stop {
 
 /** Trimmed copy of TripMapPage's StopPopup — name, which trip, and the linked
  *  journal entry's title + snippet if one exists. No weather / booking / nights
- *  controls. Desktop renders it via OverlayViewF (fixed w-72 so the anchor math
- *  is stable); mobile renders it as a centered card (fullWidth → fills the
- *  responsive max-width wrapper, fitting any phone). */
+ *  controls. Rendered via OverlayViewF anchored to the marker (fixed w-72 so the
+ *  anchor math is stable), with a downward triangle pointer at the marker —
+ *  identical anchoring on every viewport. */
 function JournalStopPopup({
-  stop, entry, onClose, fullWidth = false,
+  stop, entry, onClose,
 }: {
   stop: StopWithTrip
   entry: JournalEntry | undefined
   onClose: () => void
-  fullWidth?: boolean
 }) {
   const snippet = entry?.body ? entry.body.trim().slice(0, 140) : ''
   return (
-    <div className={`flex flex-col items-center${fullWidth ? ' w-full' : ''}`}>
-      <div className={`bg-white rounded-xl shadow-xl p-4 ${fullWidth ? 'w-full' : 'w-72'}`}>
+    <div className="flex flex-col items-center">
+      <div className="bg-white rounded-xl shadow-xl p-4 w-72">
         <div className="flex items-start justify-between gap-2 mb-1.5">
           <div className="flex items-center gap-1.5 min-w-0">
             <span
@@ -126,6 +136,18 @@ function JournalStopPopup({
           <p className="text-xs text-gray-400 mt-1">No journal entry for this stop yet.</p>
         )}
       </div>
+      {/* Triangle pointer — sibling of the card, pointing down at the marker.
+          marginTop:-1px overlaps the card's bottom edge by 1px to hide the seam.
+          Copied from TripMapPage's StopPopup. */}
+      <svg
+        width="20"
+        height="8"
+        viewBox="0 0 20 8"
+        className="block"
+        style={{ marginTop: '-1px', filter: 'drop-shadow(0 4px 4px rgba(0,0,0,0.06))' }}
+      >
+        <path d="M0 0 L10 8 L20 0 Z" fill="white" />
+      </svg>
     </div>
   )
 }
@@ -244,15 +266,30 @@ export default function JournalMapPage() {
     setMapInstance(map)
   }, [])
 
-  // Open a stop's popup. The popup is a fixed, screen-centered card (rendered
-  // below) on EVERY viewport, so it's always fully visible no matter where the
-  // tapped marker sits or what the current zoom/position is. We therefore do
-  // NOT touch the map camera at all here — no panTo/panBy/zoom. (The prior
-  // clearance-pan math was the source of the "map flies to a far-away place on
-  // tap" bug on both mobile and desktop.)
+  // Open a stop's popup AND pan so the marker + its anchored card are both
+  // visible. Copied from TripMapPage.focusStop. Safe now that DEFAULT_CENTER is
+  // a stable ref — without that, the re-render from setSelectedStop would re-fire
+  // setCenter to US-center and override this panTo (the old jump bug).
   const focusStop = useCallback((stop: StopWithTrip) => {
     setSelectedStop(stop)
-  }, [])
+    if (mapInstance && stop.latitude != null && stop.longitude != null) {
+      mapInstance.panTo({ lat: stop.latitude, lng: stop.longitude })
+      // Clearance for the trimmed journal card (shorter than TripMapPage's full
+      // card): ~220px card + 36px marker-to-triangle gap + 24px breathing room.
+      const NEEDED_CLEARANCE_PX = 220 + 36 + 24  // = 280
+      const mapH = mapInstance.getDiv()?.clientHeight ?? 550
+      // Marker's final screen-y after panBy = mapH/2 + offset, so
+      // offset >= NEEDED_CLEARANCE_PX - mapH/2 puts the card's top at the
+      // viewport top (breathing room baked in). 80px floor; cap at 30% below
+      // center so the marker stays visible on short maps.
+      const idealOffset = Math.max(NEEDED_CLEARANCE_PX - mapH / 2, 80)
+      const capOffset = mapH * 0.3
+      const offset = Math.min(idealOffset, capOffset)
+      // panBy(0, NEGATIVE) moves the map CENTER up → marker appears LOWER on
+      // screen, leaving room above for the upward-opening card.
+      mapInstance.panBy(0, -offset)
+    }
+  }, [mapInstance])
 
   // ── Imperative markers (copied pattern from TripMapPage) ─────────────────────
   useEffect(() => {
@@ -373,33 +410,34 @@ export default function JournalMapPage() {
             <GoogleMap
               mapContainerStyle={MAP_CONTAINER_STYLE}
               zoom={4}
-              center={{ lat: 39.5, lng: -98.35 }}
+              center={DEFAULT_CENTER}
               options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy', mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID' }}
               onLoad={onMapLoad}
               onClick={() => setSelectedStop(null)}
-            />
-
-            {/* One popup style on every viewport: a fixed, screen-centered card
-                — independent of the marker's screen position and of the map
-                camera, so it's always fully visible and the map never has to
-                move. A light scrim dismisses on tap; the card width is capped to
-                the viewport (max-w-sm) with side margins so it fits any screen. */}
-            {selectedStop && (
-              <div
-                className="absolute inset-0 z-20 flex items-center justify-center px-4"
-                onClick={() => setSelectedStop(null)}
-              >
-                <div className="absolute inset-0 bg-black/20" aria-hidden="true" />
-                <div className="relative w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            >
+              {/* Marker-anchored popup — same OverlayViewF pattern as
+                  TripMapPage (copied verbatim), identical on every viewport.
+                  position tracks the stop's geographic point so the card + its
+                  triangle pointer stay glued to the right marker as the map
+                  pans; getPixelPositionOffset centers the card over the marker
+                  and lifts it (height + 36px) so the pointer tip sits just above
+                  the marker. */}
+              {selectedStop?.latitude != null && selectedStop?.longitude != null && (
+                <OverlayViewF
+                  position={{ lat: selectedStop.latitude, lng: selectedStop.longitude }}
+                  mapPaneName="floatPane"
+                  getPixelPositionOffset={(width, height) => ({ x: -width / 2, y: -height - 36 })}
+                  zIndex={1000}
+                >
                   <JournalStopPopup
                     stop={selectedStop}
                     entry={entryByStop.get(selectedStop.id)}
                     onClose={() => setSelectedStop(null)}
-                    fullWidth
                   />
-                </div>
-              </div>
-            )}
+                </OverlayViewF>
+              )}
+            </GoogleMap>
+
             {/* Minimal color key (Phase D chips will supersede this). */}
             {legend.length > 0 && (
               <div className="absolute bottom-6 left-4 bg-white rounded-xl border border-gray-200 px-3 py-2.5 shadow-md z-10 max-w-[220px]" style={{ borderWidth: '0.5px' }}>
