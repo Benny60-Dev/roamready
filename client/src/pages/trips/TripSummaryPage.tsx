@@ -2025,9 +2025,22 @@ function StatCell({ value, label, shortLabel, onClick }: { value: string; label:
     <>
       {/* hover:underline only the number when interactive; keep its size/weight. */}
       <span className={`text-lg font-medium text-[#1F6F8B]${onClick ? ' hover:underline' : ''}`}>{value}</span>
-      <span className="text-xs text-gray-500">
-        <span className="sm:hidden">{shortLabel}{onClick ? ' ↓' : ''}</span>
-        <span className="hidden sm:inline">{label}{onClick ? ' ↓' : ''}</span>
+      {/* whitespace-nowrap: the value + label + "View breakdown ↓" affordance all
+          stay on one baseline so the interactive cell's height matches the other
+          three stats and the divide-x row stays aligned. */}
+      <span className="text-xs text-gray-500 whitespace-nowrap">
+        <span className="sm:hidden">{shortLabel}</span>
+        <span className="hidden sm:inline">{label}</span>
+        {onClick && (
+          <>
+            <span className="text-gray-300"> · </span>
+            {/* Explicit tap affordance — shorter on mobile so it doesn't crowd. */}
+            <span className="text-[#1F6F8B] hover:underline">
+              <span className="sm:hidden">breakdown ↓</span>
+              <span className="hidden sm:inline">View breakdown ↓</span>
+            </span>
+          </>
+        )}
       </span>
     </>
   )
