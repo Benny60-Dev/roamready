@@ -72,6 +72,7 @@ import { EmailVerificationGate } from './components/auth/EmailVerificationGate'
 const TripMapPage     = lazy(() => import('./pages/trips/TripMapPage'))
 const TripSummaryPage = lazy(() => import('./pages/trips/TripSummaryPage'))
 const HelpPage        = lazy(() => import('./pages/HelpPage'))
+const JournalMapPage  = lazy(() => import('./pages/journal/JournalMapPage'))
 
 function TripDetailRedirect() {
   const { id } = useParams<{ id: string }>()
@@ -165,6 +166,7 @@ export default function App() {
           <Route path="/trips/:id/booking" element={<TripBookingPage />} />
           <Route path="/trips/:id/itinerary" element={<TripSummaryPage />} />
           <Route path="/trips/:id/journal" element={<TripJournalPage />} />
+          <Route path="/journal/map" element={<JournalMapPage />} />
           <Route path="/packing/:tripId" element={<PackingListPage />} />
           {/* /reservations retired in Block 5 — bookings are now the
               Reservations tab on the merged Dashboard. The redirect targets

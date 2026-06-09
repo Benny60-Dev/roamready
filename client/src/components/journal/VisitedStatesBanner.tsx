@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState } from 'react'
-import { ChevronDown, Map as MapIcon, Pencil, MapPin } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ChevronDown, Map as MapIcon, Pencil, MapPin, Globe } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useUIStore } from '../../store/uiStore'
 import EditStatesModal from './EditStatesModal'
@@ -60,6 +61,7 @@ export default function VisitedStatesBanner({
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [editOpen, setEditOpen] = useState(false)
   const [showPins, setShowPins] = useState(readPinsShown)
+  const navigate = useNavigate()
   const hasAccess = useAuthStore(s => s.hasAccess)
   const openPaywall = useUIStore(s => s.openPaywall)
 
@@ -123,6 +125,13 @@ export default function VisitedStatesBanner({
       {!collapsed && (
         <div className="mt-4 pt-4 border-t border-gray-100">
           <div className="flex items-center justify-end gap-3 mb-2">
+            {/* Reading the all-trips memory map is open to all — no gating. */}
+            <button
+              onClick={() => navigate('/journal/map')}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-[#1F6F8B] hover:underline"
+            >
+              <Globe size={12} /> View full map
+            </button>
             <button
               onClick={togglePins}
               aria-pressed={showPins}
