@@ -70,18 +70,21 @@ interface StopWithTrip extends Stop {
 
 /** Trimmed copy of TripMapPage's StopPopup — name, which trip, and the linked
  *  journal entry's title + snippet if one exists. No weather / booking / nights
- *  controls. Rendered via OverlayViewF, same as TripMapPage. */
+ *  controls. Desktop renders it via OverlayViewF (fixed w-72 so the anchor math
+ *  is stable); mobile renders it as a centered card (fullWidth → fills the
+ *  responsive max-width wrapper, fitting any phone). */
 function JournalStopPopup({
-  stop, entry, onClose,
+  stop, entry, onClose, fullWidth = false,
 }: {
   stop: StopWithTrip
   entry: JournalEntry | undefined
   onClose: () => void
+  fullWidth?: boolean
 }) {
   const snippet = entry?.body ? entry.body.trim().slice(0, 140) : ''
   return (
-    <div className="flex flex-col items-center">
-      <div className="bg-white rounded-xl shadow-xl p-4 w-72">
+    <div className={`flex flex-col items-center${fullWidth ? ' w-full' : ''}`}>
+      <div className={`bg-white rounded-xl shadow-xl p-4 ${fullWidth ? 'w-full' : 'w-72'}`}>
         <div className="flex items-start justify-between gap-2 mb-1.5">
           <div className="flex items-center gap-1.5 min-w-0">
             <span
@@ -141,8 +144,16 @@ export default function JournalMapPage() {
 
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null)
   const [selectedStop, setSelectedStop] = useState<StopWithTrip | null>(null)
+  // Same mobile breakpoint TripMapPage uses (window.innerWidth < 768).
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([])
   const polylinesRef = useRef<google.maps.Polyline[]>([])
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
@@ -241,37 +252,49 @@ export default function JournalMapPage() {
     setMapInstance(map)
   }, [])
 
-  // Open a stop's popup and recenter so the FULL card is on-screen no matter
-  // where the stop sits (edges, corners, top). Copied/adapted from
-  // TripMapPage.focusStop: panTo first recenters the stop horizontally (the
-  // popup is width-centered on it via OverlayViewF's x:-width/2, so a recentered
-  // stop keeps the card clear of the left/right edges); then panBy nudges the
-  // stop down into the lower-center so the card — which opens ABOVE the marker —
-  // clears the top edge.
+  // Open a stop's popup. Behaviour branches by viewport:
+  //
+  //  • MOBILE (< 768px): the popup is a FIXED, screen-centered card (rendered
+  //    below), not anchored to the marker — so the desktop clearance math
+  //    doesn't apply and would only shove the map to a confusing spot. Just
+  //    gently center the marker behind the card so it's visible; the card stays
+  //    put regardless of where the stop sits.
+  //
+  //  • DESKTOP (≥ 768px): the marker-anchored OverlayViewF popup + clearance
+  //    pan (copied/adapted from TripMapPage.focusStop). panTo recenters the
+  //    stop horizontally (the popup is width-centered via OverlayViewF's
+  //    x:-width/2, so it clears the left/right edges); panBy then drops the stop
+  //    into the lower-center so the card — which opens ABOVE the marker —
+  //    clears the top edge.
   const focusStop = useCallback((stop: StopWithTrip) => {
     setSelectedStop(stop)
-    if (mapInstance && stop.latitude != null && stop.longitude != null) {
+    if (!mapInstance || stop.latitude == null || stop.longitude == null) return
+
+    if (isMobile) {
       mapInstance.panTo({ lat: stop.latitude, lng: stop.longitude })
-      // This popup is shorter than TripMapPage's (name + trip + journal block,
-      // no weather/alerts/book): ~220px card + 36px marker-to-card gap + 24px
-      // breathing room above.
-      const NEEDED_CLEARANCE_PX = 220 + 36 + 24  // = 280
-      const mapH = mapInstance.getDiv()?.clientHeight ?? 550
-      // Marker's final screen-y after panBy = mapH/2 + offset, so
-      // offset >= NEEDED_CLEARANCE_PX - mapH/2 puts the card's top at the
-      // viewport top (with breathing room baked in). Floor of 80px so a stop
-      // on a tall map still drops below center a little.
-      const idealOffset = Math.max(NEEDED_CLEARANCE_PX - mapH / 2, 80)
-      // Safety cap: never push the marker past 30% below center — keeps the
-      // marker itself visible on short maps even if the card is taller than half
-      // the viewport.
-      const capOffset = mapH * 0.3
-      const offset = Math.min(idealOffset, capOffset)
-      // panBy(0, NEGATIVE) moves the map CENTER up, which makes the marker
-      // appear LOWER on screen — the room we want above it for the card.
-      mapInstance.panBy(0, -offset)
+      return
     }
-  }, [mapInstance])
+
+    mapInstance.panTo({ lat: stop.latitude, lng: stop.longitude })
+    // This popup is shorter than TripMapPage's (name + trip + journal block,
+    // no weather/alerts/book): ~220px card + 36px marker-to-card gap + 24px
+    // breathing room above.
+    const NEEDED_CLEARANCE_PX = 220 + 36 + 24  // = 280
+    const mapH = mapInstance.getDiv()?.clientHeight ?? 550
+    // Marker's final screen-y after panBy = mapH/2 + offset, so
+    // offset >= NEEDED_CLEARANCE_PX - mapH/2 puts the card's top at the
+    // viewport top (with breathing room baked in). Floor of 80px so a stop
+    // on a tall map still drops below center a little.
+    const idealOffset = Math.max(NEEDED_CLEARANCE_PX - mapH / 2, 80)
+    // Safety cap: never push the marker past 30% below center — keeps the
+    // marker itself visible on short maps even if the card is taller than half
+    // the viewport.
+    const capOffset = mapH * 0.3
+    const offset = Math.min(idealOffset, capOffset)
+    // panBy(0, NEGATIVE) moves the map CENTER up, which makes the marker
+    // appear LOWER on screen — the room we want above it for the card.
+    mapInstance.panBy(0, -offset)
+  }, [mapInstance, isMobile])
 
   // ── Imperative markers (copied pattern from TripMapPage) ─────────────────────
   useEffect(() => {
@@ -397,9 +420,10 @@ export default function JournalMapPage() {
               onLoad={onMapLoad}
               onClick={() => setSelectedStop(null)}
             >
-              {/* Tap-a-stop details popup — same OverlayViewF pattern as
-                  TripMapPage (copied), trimmed to name + trip + journal entry. */}
-              {selectedStop?.latitude != null && selectedStop?.longitude != null && (
+              {/* DESKTOP: marker-anchored popup — same OverlayViewF pattern as
+                  TripMapPage (copied), trimmed to name + trip + journal entry.
+                  On mobile this is replaced by the centered card below. */}
+              {!isMobile && selectedStop?.latitude != null && selectedStop?.longitude != null && (
                 <OverlayViewF
                   position={{ lat: selectedStop.latitude, lng: selectedStop.longitude }}
                   mapPaneName="floatPane"
@@ -414,6 +438,27 @@ export default function JournalMapPage() {
                 </OverlayViewF>
               )}
             </GoogleMap>
+
+            {/* MOBILE: a fixed, screen-centered card — independent of the
+                marker's screen position, so it's always fully visible no matter
+                where the tapped stop sits. A light scrim dismisses on tap. The
+                card width is capped to the viewport with side margins. */}
+            {isMobile && selectedStop && (
+              <div
+                className="absolute inset-0 z-20 flex items-center justify-center px-4"
+                onClick={() => setSelectedStop(null)}
+              >
+                <div className="absolute inset-0 bg-black/20" aria-hidden="true" />
+                <div className="relative w-full max-w-sm" onClick={e => e.stopPropagation()}>
+                  <JournalStopPopup
+                    stop={selectedStop}
+                    entry={entryByStop.get(selectedStop.id)}
+                    onClose={() => setSelectedStop(null)}
+                    fullWidth
+                  />
+                </div>
+              </div>
+            )}
             {/* Minimal color key (Phase D chips will supersede this). */}
             {legend.length > 0 && (
               <div className="absolute bottom-6 left-4 bg-white rounded-xl border border-gray-200 px-3 py-2.5 shadow-md z-10 max-w-[220px]" style={{ borderWidth: '0.5px' }}>
