@@ -119,13 +119,21 @@ export async function createEntry(req: AuthRequest, res: Response, next: NextFun
     // Verify any linked trip/stop belong to the caller before persisting.
     if (input.tripId) await verifyTripOwnership(input.tripId, userId)
 
-    // state auto-resolve: if linked to a stop and state was omitted (key
-    // absent), inherit the stop's locationState. An explicit `state: null`
-    // counts as set and is preserved.
+    // Auto-resolve state + coords from a linked stop: when stopId is present and
+    // a field was OMITTED by the caller (key absent), inherit it from the stop.
+    // An explicitly-sent value (including null) is preserved — we only fill gaps.
+    // This is what gives per-stop diary entries map pins (step 7); freeform
+    // entries (no stopId) keep null coords and get no pin.
     let resolvedState = input.state ?? null
+    let resolvedLat = input.lat ?? null
+    let resolvedLng = input.lng ?? null
+    let resolvedPlaceName = input.placeName ?? null
     if (input.stopId) {
       const stop = await verifyStopOwnership(input.stopId, userId)
       if (input.state === undefined) resolvedState = stop.locationState ?? null
+      if (input.lat === undefined) resolvedLat = stop.latitude ?? null
+      if (input.lng === undefined) resolvedLng = stop.longitude ?? null
+      if (input.placeName === undefined) resolvedPlaceName = stop.locationName ?? null
     }
 
     const entry = await prisma.journalEntry.create({
@@ -137,9 +145,9 @@ export async function createEntry(req: AuthRequest, res: Response, next: NextFun
         body: input.body,
         rating: input.rating ?? null,
         tags: input.tags ?? [],
-        placeName: input.placeName ?? null,
-        lat: input.lat ?? null,
-        lng: input.lng ?? null,
+        placeName: resolvedPlaceName,
+        lat: resolvedLat,
+        lng: resolvedLng,
         state: resolvedState,
         // entryDate omitted -> Prisma applies @default(now())
         ...(input.entryDate ? { entryDate: input.entryDate } : {}),
@@ -202,10 +210,32 @@ export async function upsertEntry(req: AuthRequest, res: Response, next: NextFun
     const entry = existing
       ? await prisma.journalEntry.update({
           where: { id: existing.id },
-          data: { title, body, rating, actualCost },
+          data: {
+            title,
+            body,
+            rating,
+            actualCost,
+            // Backfill coords/placeName from the stop only where the entry is
+            // still missing them — never overwrite a value that's already set.
+            ...(existing.lat == null ? { lat: stop.latitude ?? null } : {}),
+            ...(existing.lng == null ? { lng: stop.longitude ?? null } : {}),
+            ...(existing.placeName == null ? { placeName: stop.locationName ?? null } : {}),
+          },
         })
       : await prisma.journalEntry.create({
-          data: { userId: req.user!.id, stopId: stop.id, tripId: stop.tripId, title, body, rating, actualCost },
+          data: {
+            userId: req.user!.id,
+            stopId: stop.id,
+            tripId: stop.tripId,
+            title,
+            body,
+            rating,
+            actualCost,
+            // New per-stop entry inherits the stop's coords + name for the map pin.
+            lat: stop.latitude ?? null,
+            lng: stop.longitude ?? null,
+            placeName: stop.locationName ?? null,
+          },
         })
     res.json(entry)
   } catch (err) { next(err) }
