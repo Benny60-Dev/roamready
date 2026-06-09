@@ -5,7 +5,7 @@ import {
   Download, Share2, Sparkles, Car, Tent, Star, Bed,
   MapPin, XCircle, Plus, Check, RefreshCw, ArrowRight, Clock,
   Pencil, Trash2, Wand2, Fuel, ChevronDown, ChevronRight, Info,
-  Loader2,
+  Loader2, BookOpen,
 } from 'lucide-react'
 const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel'))
 import ConfirmModal from '../../components/ui/ConfirmModal'
@@ -1300,6 +1300,16 @@ export default function TripSummaryPage() {
           >
             <Wand2 size={14} /> Modify with AI
           </button>
+          {/* Trip Journal nav — mirrors the Map page's action so the two pages
+              stay consistent (same BookOpen icon). Styled as the other
+              btn-outline actions; the row's flex-wrap keeps it from overflowing
+              on narrow screens. */}
+          <Link
+            to={`/trips/${id}/journal`}
+            className="btn-outline text-sm flex items-center gap-1.5"
+          >
+            <BookOpen size={14} /> Trip Journal
+          </Link>
           <button className="btn-outline text-sm flex items-center gap-1.5"><Share2 size={14} /> Share</button>
           <button
             onClick={handleDownloadPDF}
