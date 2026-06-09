@@ -448,6 +448,14 @@ model JournalEntry {
   trip       Trip?    @relation(fields: [tripId], references: [id], onDelete: SetNull)
   stopId     String?
   stop       Stop?    @relation(fields: [stopId], references: [id], onDelete: SetNull)
+  // Route-POI link (JOURNAL-ROUTESTOP). Itinerary "stops along the way" are
+  // id-less JSON POIs in Trip.itinerary, NOT Stop rows, so they can't hang a
+  // stopId. Instead the entry is keyed by the POI's stable client-generated id.
+  // No FK/relation: POIs aren't a table. Nullable — only route-POI entries set
+  // it. If the POI is later removed or the itinerary regenerated, the entry
+  // survives (placeName keeps it readable) and demotes into the freeform list,
+  // mirroring how a deleted Stop's entry demotes via onDelete:SetNull.
+  routePoiId String?
   entryDate  DateTime @default(now())
   title      String?
   body       String?
@@ -471,6 +479,7 @@ model JournalEntry {
   @@index([userId, state])
   @@index([tripId])
   @@index([stopId])
+  @@index([routePoiId])
   @@index([search], type: Gin)
 }
 

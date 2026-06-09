@@ -1132,7 +1132,10 @@ export default function TripSummaryPage() {
     const durationMinutes = addingPOIDuration[entryIdx] ?? 30
     setEntries(prev => {
       const next = prev.map((e, i) =>
-        i !== entryIdx ? e : { ...e, pointsOfInterest: [...(e.pointsOfInterest ?? []), { name, durationMinutes }] }
+        // Stable id (JOURNAL-ROUTESTOP) so this POI can carry a journal entry
+        // keyed by routePoiId. Assigned once at add time and persisted in the
+        // itinerary JSON; survives reorders/duration edits.
+        i !== entryIdx ? e : { ...e, pointsOfInterest: [...(e.pointsOfInterest ?? []), { id: crypto.randomUUID(), name, durationMinutes }] }
       )
       persistItinerary(next)
       return next
@@ -1148,9 +1151,12 @@ export default function TripSummaryPage() {
   // debounced saveItinerary PUT — so arrival recompute (in DayCard, summed
   // from pointsOfInterest.durationMinutes) updates for free on next render.
   const addPOIWithDetails = (entryIdx: number, poi: POI) => {
+    // Same stable-id assignment as addPOI — suggestions arrive without an id,
+    // so mint one (keep any pre-existing id defensively) before persisting.
+    const withId: POI = { ...poi, id: poi.id ?? crypto.randomUUID() }
     setEntries(prev => {
       const next = prev.map((e, i) =>
-        i !== entryIdx ? e : { ...e, pointsOfInterest: [...(e.pointsOfInterest ?? []), poi] }
+        i !== entryIdx ? e : { ...e, pointsOfInterest: [...(e.pointsOfInterest ?? []), withId] }
       )
       persistItinerary(next)
       return next

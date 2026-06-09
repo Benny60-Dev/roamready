@@ -10,6 +10,7 @@ import {
   updateEntry,
   deleteEntry,
   upsertEntry,
+  upsertRoutePoiEntry,
   uploadPhotos,
 } from '../controllers/journal'
 
@@ -29,6 +30,10 @@ journalRouter.post('/', requireFeature('tripJournal'), validateBody(JournalCreat
 // paths so the client needs no change. POST /:stopId does not collide with
 // POST / above (param vs no-param).
 journalRouter.post('/:stopId/photos', requireFeature('tripJournal'), uploadPhotos as any)
+// Route-POI upsert (itinerary "stops along the way"). Literal "route-poi"
+// prefix + two segments, so it never collides with POST /:stopId (one segment)
+// or the /:id diary routes (one segment). Keyed on the POI's stable client id.
+journalRouter.post('/route-poi/:routePoiId', requireFeature('tripJournal'), upsertRoutePoiEntry as any)
 journalRouter.post('/:stopId', requireFeature('tripJournal'), upsertEntry as any)
 
 // ─── Diary entry by id ──────────────────────────────────────────────────────
