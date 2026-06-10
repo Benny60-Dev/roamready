@@ -64,13 +64,13 @@ export default function HelpPage() {
           ABOVE the gradient divider so they read as a header band, mirroring
           AppLayout's header → strip order. */}
       {isAuthenticated && (
-        <div className="max-w-[720px] mx-auto px-4 pt-2">
+        <div className="max-w-[720px] mx-auto px-4 pt-1">
           <Link to="/dashboard" className="text-sm text-[#1F6F8B] hover:underline">
             ← Home
           </Link>
         </div>
       )}
-      <div className="max-w-[720px] mx-auto px-4 pt-2 pb-4 text-center">
+      <div className="max-w-[720px] mx-auto px-4 pt-1 pb-3 text-center">
         <Link to="/" className="inline-flex items-center gap-2">
           <img src="/roamready-icon.png" alt="RoamReady" className="h-7 w-auto object-contain" />
           <span className="font-medium text-xl">
