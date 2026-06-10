@@ -9,8 +9,9 @@
 // + retitled in the same pass.
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, MessageSquare } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
+import { useUIStore } from '../store/uiStore'
 
 const FAQ: { q: string; a: string }[] = [
   {
@@ -55,43 +56,40 @@ const FAQ: { q: string; a: string }[] = [
 export default function HelpPage() {
   const [openIdx, setOpenIdx] = useState<number | null>(null)
   const isAuthenticated = useAuthStore(s => s.isAuthenticated())
+  const openFeedbackModal = useUIStore(s => s.openFeedbackModal)
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#F5F4F2' }}>
-      {/* Wordmark header — matches VerifyEmailPage's standalone treatment.
-          Both authed and unauthed users see this; authed users lose the
-          AppLayout chrome temporarily but get a "back to dashboard" link
-          below for an easy return path. */}
-      <div className="pt-10 pb-6 flex flex-col items-center gap-3">
-        <Link to="/" className="text-2xl">
-          <span style={{ color: '#1F6F8B' }}>Roam</span>
-          <span style={{ color: '#F7A829' }}>ready</span>
-          <span style={{ color: '#1F6F8B' }}>.ai</span>
-        </Link>
+    <div className="min-h-screen bg-rr-bg">
+      {/* Thin sunset-gradient accent strip — same 4px hairline AppLayout uses
+          at the top of the app shell. The page stays standalone (public route,
+          outside AppLayout chrome) but borrows this one brand cue. */}
+      <div className="h-1 w-full" style={{ background: 'var(--rr-sunset-gradient)' }} />
+
+      {/* Branded hero (Option 3) — icon + canonical capital-R wordmark, the
+          page title (moved out of the body so it isn't shown twice), and a
+          one-line subtitle. Authed users get a small "back to dashboard" link
+          since they temporarily lose the AppLayout nav on this standalone page. */}
+      <div className="max-w-[720px] mx-auto px-4 pt-8 pb-6 text-center">
         {isAuthenticated && (
-          <Link to="/dashboard" className="text-xs text-[#1F6F8B] hover:underline">
+          <Link to="/dashboard" className="inline-block text-xs text-[#1F6F8B] hover:underline mb-4">
             ← Back to dashboard
           </Link>
         )}
+        <Link to="/" className="inline-flex items-center gap-2 mb-4">
+          <img src="/roamready-icon.png" alt="RoamReady" className="h-7 w-auto object-contain" />
+          <span className="font-medium text-xl">
+            <span style={{ color: '#1F6F8B' }}>Roam</span><span style={{ color: '#F7A829' }}>Ready</span><span style={{ color: '#1F6F8B' }}>.ai</span>
+          </span>
+        </Link>
+        <h1 className="text-3xl sm:text-4xl font-medium text-gray-900">Help &amp; Support</h1>
+        <p className="text-gray-500 mt-2">
+          We&apos;re a small team. We use the product. We read every message.
+        </p>
       </div>
 
       <div className="max-w-[720px] mx-auto px-4 pb-12 space-y-6">
-        {/* Title + intro */}
-        <div>
-          <h1 className="text-2xl font-medium text-gray-900 mb-2">Help &amp; Support</h1>
-          <p className="text-sm text-gray-700 leading-relaxed">
-            We started RoamReady because trip planning for RV trips is harder than it should be —
-            and as RVers ourselves, we wanted something better. We're a small team. We use the
-            product. We read every message. Got a question, found a bug, or just want to say hi?
-            Reach out anytime.
-          </p>
-        </div>
-
         {/* Contact card */}
-        <section
-          className="bg-white"
-          style={{ border: '0.5px solid #E8E4DA', borderRadius: 8, padding: 24 }}
-        >
+        <section className="card-lg">
           <h2 className="text-base font-medium text-gray-900 mb-2">Get in touch</h2>
           <p className="text-sm text-gray-700">
             Email us at{' '}
@@ -108,10 +106,7 @@ export default function HelpPage() {
         </section>
 
         {/* FAQ */}
-        <section
-          className="bg-white"
-          style={{ border: '0.5px solid #E8E4DA', borderRadius: 8, padding: 24 }}
-        >
+        <section className="card-lg">
           <h2 className="text-base font-medium text-gray-900 mb-4">Frequently asked questions</h2>
           <ul className="divide-y" style={{ borderColor: '#E8E4DA' }}>
             {FAQ.map((item, i) => {
@@ -146,43 +141,38 @@ export default function HelpPage() {
         {/* Product Roadmap — public feedback/voting board. Moved here from the
             Resources "Tools & guides" hub; Help is the natural home for "what's
             coming + submit feedback". The /roadmap page stays public + unchanged. */}
-        <section
-          className="bg-white"
-          style={{ border: '0.5px solid #E8E4DA', borderRadius: 8, padding: 24 }}
-        >
+        <section className="card-lg">
           <h2 className="text-base font-medium text-gray-900 mb-2">Product Roadmap</h2>
           <p className="text-sm text-gray-700 mb-3">
             See what we&apos;re building next, what&apos;s already shipped, and vote on the
             features that matter most to you.
           </p>
-          <Link
-            to="/roadmap"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-[#1F6F8B] hover:underline"
-          >
-            View the Product Roadmap →
-          </Link>
+          <div className="flex flex-wrap items-center gap-4">
+            <Link
+              to="/roadmap"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-[#1F6F8B] hover:underline"
+            >
+              View the Product Roadmap →
+            </Link>
+            {/* Same feedback modal RoadmapPage opens (useUIStore.openFeedbackModal;
+                FeedbackModal is mounted app-wide in App.tsx, so it works on this
+                standalone route too). Styled btn-outline, not a gold CTA. */}
+            <button
+              type="button"
+              onClick={openFeedbackModal}
+              className="btn-outline text-sm inline-flex items-center gap-1.5"
+            >
+              <MessageSquare size={14} /> Submit feedback
+            </button>
+          </div>
         </section>
 
         {/* Known issues */}
-        <section
-          className="bg-white"
-          style={{ border: '0.5px solid #E8E4DA', borderRadius: 8, padding: 24 }}
-        >
+        <section className="card-lg">
           <h2 className="text-base font-medium text-gray-900 mb-3">Known issues</h2>
-          <p className="text-sm text-gray-700 mb-3">A few things we're aware of and working on:</p>
-          <ul className="text-sm text-gray-700 leading-relaxed space-y-2 list-disc pl-5">
-            <li>
-              On iPhone Safari, the page sometimes renders too zoomed-in after login or after
-              tapping the trip planner. Workaround: pinch to zoom out and it&apos;ll snap back to
-              normal. Real fix in the works.
-            </li>
-            <li>
-              Trip journal photo uploads are temporarily disabled while we sort out storage —
-              text journal entries still work.
-            </li>
-          </ul>
-          <p className="text-xs italic text-gray-500 mt-4">
-            Found something else? Email us — we read every one.
+          <p className="text-sm text-gray-700 leading-relaxed">
+            No known issues right now — everything&apos;s running smoothly. Spot something? Email us
+            and we&apos;ll jump on it.
           </p>
         </section>
 
