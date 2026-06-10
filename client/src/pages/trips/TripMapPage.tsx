@@ -1468,30 +1468,38 @@ export default function TripMapPage() {
           reach the Itinerary route from this page, so the tab would be
           redundant. Tab bar lives only on this page; other trip pages
           render their own layouts. */}
-      <div className="flex-shrink-0 bg-white border-b border-gray-100 px-2 flex flex-wrap lg:flex-nowrap items-center gap-0.5">
+      {/* Each action is its own pill (rounded-full, 0.5px hairline border) laid
+          out in a gap-2 flex-wrap row, so on a narrow screen the pills wrap to
+          the next line cleanly instead of cramping. Behavior is unchanged — only
+          the container styling went from bare link → pill. */}
+      <div className="flex-shrink-0 bg-white border-b border-gray-100 px-2 py-2 flex flex-wrap items-center gap-2">
         <Link
           to={`/trips/${id}/journal`}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1F6F8B] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-full hover:bg-gray-50 hover:text-[#1F6F8B] transition-colors whitespace-nowrap flex-shrink-0"
+          style={{ borderWidth: '0.5px' }}
         >
           <BookOpen size={13} /> Trip Journal
         </Link>
         <Link
           to={`/packing/${id}`}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1F6F8B] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-full hover:bg-gray-50 hover:text-[#1F6F8B] transition-colors whitespace-nowrap flex-shrink-0"
+          style={{ borderWidth: '0.5px' }}
         >
           <Package size={13} /> Packing list
         </Link>
         <button
           onClick={() => setShareOpen(true)}
           disabled={!trip}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1F6F8B] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-full hover:bg-gray-50 hover:text-[#1F6F8B] transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50"
+          style={{ borderWidth: '0.5px' }}
         >
           <Share2 size={13} /> Share
         </button>
         <button
           onClick={handleExportPdf}
           disabled={downloadingPdf}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 hover:text-[#1F6F8B] hover:bg-gray-50 rounded-md transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-full hover:bg-gray-50 hover:text-[#1F6F8B] transition-colors whitespace-nowrap flex-shrink-0 disabled:opacity-50"
+          style={{ borderWidth: '0.5px' }}
         >
           <Download size={13} /> {downloadingPdf ? 'Generating...' : 'PDF'}
         </button>
