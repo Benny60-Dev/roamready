@@ -51,11 +51,39 @@ const LATE_NIGHT: GreetingTemplate[] = [
 
 const STORAGE_KEY = 'roamready:lastGreetingKey'
 
+// Single source of truth for the hour-bucket boundaries. Both the SessionPage
+// greeting pools and the plain Dashboard salutation derive from this.
+type TimeBucket = 'morning' | 'afternoon' | 'evening' | 'late'
+
+function timeBucket(hour: number): TimeBucket {
+  if (hour >= 5 && hour <= 11) return 'morning'
+  if (hour >= 12 && hour <= 17) return 'afternoon'
+  if (hour >= 18 && hour <= 20) return 'evening'
+  return 'late' // [21,23] or [0,4]
+}
+
+const POOL_BY_BUCKET: Record<TimeBucket, GreetingTemplate[]> = {
+  morning: MORNING,
+  afternoon: AFTERNOON,
+  evening: EVENING,
+  late: LATE_NIGHT,
+}
+
 function timePool(hour: number): GreetingTemplate[] {
-  if (hour >= 5 && hour <= 11) return MORNING
-  if (hour >= 12 && hour <= 17) return AFTERNOON
-  if (hour >= 18 && hour <= 20) return EVENING
-  return LATE_NIGHT // [21,23] or [0,4]
+  return POOL_BY_BUCKET[timeBucket(hour)]
+}
+
+const SALUTATION_BY_BUCKET: Record<TimeBucket, string> = {
+  morning: 'Good morning',
+  afternoon: 'Good afternoon',
+  evening: 'Good evening',
+  late: 'Up late',
+}
+
+// Plain time-of-day salutation — no name, no punctuation — for headers that
+// compose their own sentence (e.g. the Dashboard "Good morning, Benny" h1).
+export function getSalutation(date: Date = new Date()): string {
+  return SALUTATION_BY_BUCKET[timeBucket(date.getHours())]
 }
 
 // Drop the {firstName} placeholder cleanly when we don't have a name.

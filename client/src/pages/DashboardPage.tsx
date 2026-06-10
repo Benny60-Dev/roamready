@@ -9,6 +9,7 @@ import ConfirmModal from '../components/ui/ConfirmModal'
 import ReservationsTabContent from '../components/dashboard/ReservationsTabContent'
 import JournalTabContent from '../components/JournalTabContent'
 import { deriveTripStatus } from '../utils/tripStatus'
+import { getSalutation } from '../utils/greeting'
 import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
 
 // Tabs are data-driven via a discriminated union — three trip-status tabs
@@ -95,6 +96,11 @@ export default function DashboardPage() {
   const [deleting, setDeleting] = useState(false)
 
   const { user } = useAuthStore()
+
+  // Time-aware salutation, same hour buckets as the Home greeting. Computed
+  // once per mount; the late-night variant reads as a question ("Up late,
+  // Benny?") so it gets its own punctuation branch in the h1.
+  const salutation = getSalutation()
 
   useEffect(() => {
     tripsApi.getAll()
@@ -203,7 +209,11 @@ export default function DashboardPage() {
           create → /sessions/:id). */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-xl font-medium text-gray-900">Good morning, {user?.firstName}</h1>
+          <h1 className="text-xl font-medium text-gray-900">
+            {salutation === 'Up late'
+              ? <>Up late, {user?.firstName}?</>
+              : <>{salutation}, {user?.firstName}</>}
+          </h1>
           <p className="text-sm text-gray-500">Your trip dashboard</p>
         </div>
         <Link
