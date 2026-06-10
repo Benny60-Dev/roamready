@@ -9,32 +9,9 @@ import { isFounderEligible } from '../config/founderPricing'
 import { isDisposableEmail } from '../utils/disposableEmails'
 import { generateVerificationToken, sendVerificationEmail } from '../services/emailVerification'
 import { validatePassword } from '../utils/passwordPolicy'
+import { getClientOrigin } from '../utils/clientOrigin'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
-
-// When requests arrive via Vite's dev proxy (e.g. from http://10.0.0.214:3000),
-// the proxy sets x-forwarded-host to the original hostname:port.
-// This lets server-side redirects go back to the correct host instead of localhost.
-function getClientOrigin(req: Request): string {
-  // Prefer the explicitly-configured client origin. In production the OAuth
-  // callback arrives through a Render rewrite, so x-forwarded-host is the API's
-  // host — deriving the origin from it would redirect to the API (which has no
-  // /auth/callback route) instead of the client. CLIENT_URL is the source of
-  // truth when set; the x-forwarded-host derivation is only a fallback for
-  // environments where CLIENT_URL isn't configured.
-  if (process.env.CLIENT_URL) {
-    return process.env.CLIENT_URL
-  }
-  const fwdHost = req.headers['x-forwarded-host']
-  if (fwdHost) {
-    const host = Array.isArray(fwdHost) ? fwdHost[0] : fwdHost
-    const proto = Array.isArray(req.headers['x-forwarded-proto'])
-      ? req.headers['x-forwarded-proto'][0]
-      : (req.headers['x-forwarded-proto'] as string | undefined) || 'http'
-    return `${proto}://${host}`
-  }
-  return 'http://localhost:3000'
-}
 
 function generateTokens(userId: string) {
   const accessToken = jwt.sign({ userId }, process.env.JWT_SECRET!, { expiresIn: '15m' })

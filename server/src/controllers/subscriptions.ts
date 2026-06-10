@@ -4,6 +4,7 @@ import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
 import { stripe, createStripeCustomer, createCheckoutSession, createPortalSession } from '../services/stripe'
+import { getClientOrigin } from '../utils/clientOrigin'
 
 // Same client + env-var setup as auth.ts:10 (forgotPassword email). Kept as
 // a per-controller singleton rather than extracted to a shared helper because
@@ -22,18 +23,6 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 const replyToEmail = process.env.REPLY_TO_EMAIL ?? 'support@roamready.ai'
 const supportEmail = process.env.SUPPORT_EMAIL ?? 'support@roamready.ai'
 const billingEmail = process.env.BILLING_EMAIL ?? 'billing@roamready.ai'
-
-function getClientOrigin(req: AuthRequest): string {
-  const fwdHost = req.headers['x-forwarded-host']
-  if (fwdHost) {
-    const host = Array.isArray(fwdHost) ? fwdHost[0] : fwdHost
-    const proto = Array.isArray(req.headers['x-forwarded-proto'])
-      ? req.headers['x-forwarded-proto'][0]
-      : (req.headers['x-forwarded-proto'] as string | undefined) || 'http'
-    return `${proto}://${host}`
-  }
-  return process.env.CLIENT_URL || 'http://localhost:3000'
-}
 
 /** Allowlist of price IDs this server is configured to accept. Computed at
  *  request time (rather than module load) so that an env-var change on a
