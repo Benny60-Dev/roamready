@@ -164,12 +164,18 @@ function MapLegend({ combinedSH }: { combinedSH: boolean }) {
   // When the trip is a 2-stop home→home loop, both endpoints share a single
   // marker labeled 'S/H' — surface that as one combined legend row instead of
   // two redundant Start/Finish entries that would point at the same point.
+  //
+  // Non-combined: ONE finish row. A trip's last stop is badged either 'H'
+  // (loop, ends home) or 'F' (one-way) — never both — and the map draws every
+  // finish endpoint orange with the character 'F' (H is transformed H→F, all
+  // endpoints forced MC.home). So the legend mirrors that exactly: a single
+  // 'F'/orange/"Finish" row. Listing H and F separately printed a literal 'H'
+  // the map never draws and a gray 'F' that didn't match the orange marker.
   const endpointEntries = combinedSH
     ? [{ letter: 'S/H', color: MC.home, label: 'Start · Finish' }]
     : [
-        { letter: 'S', color: MC.home,     label: formatStopBadgeLabel('S') },
-        { letter: 'H', color: MC.home,     label: formatStopBadgeLabel('H') },
-        { letter: 'F', color: MC.unbooked, label: formatStopBadgeLabel('F') },
+        { letter: 'S', color: MC.home, label: 'Start' },
+        { letter: 'F', color: MC.home, label: 'Finish' },
       ]
   return (
     <div className="absolute bottom-6 left-4 bg-white rounded-xl border border-gray-200 px-3 py-2.5 shadow-md z-10" style={{ borderWidth: '0.5px' }}>
