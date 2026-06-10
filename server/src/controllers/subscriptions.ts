@@ -320,9 +320,31 @@ export async function handleWebhook(req: Request, res: Response, next: NextFunct
         if (user) {
           const priceId = sub.items.data[0]?.price?.id
           const tier = tierFromPriceId(priceId)
+          // Dual-shape period read: pre-basil API versions (< 2025-03-31)
+          // carry current_period_end at the subscription's top level;
+          // post-basil payloads moved it to items.data[].current_period_end.
+          // Webhook payload shape follows the SENDER's API version (CLI /
+          // dashboard endpoint), not our pinned client apiVersion, so we
+          // must accept both. The top-level-only read made new Date(NaN)
+          // throw inside prisma.user.update — a 500 on exactly the
+          // matched-user path.
+          const cpe = sub.current_period_end
+            ?? sub.items?.data?.[0]?.current_period_end
+          const hasPeriodEnd = typeof cpe === 'number' && cpe > 0
+          if (!hasPeriodEnd) {
+            // OMIT subscriptionEndsAt rather than writing null — the
+            // existing value drives the paid-through grace period
+            // (middleware/auth.ts).
+            console.warn(
+              `[StripeWebhook] subscription.updated missing current_period_end (both shapes) for sub ${sub.id}`
+            )
+          }
           await prisma.user.update({
             where: { id: user.id },
-            data: { subscriptionTier: tier, subscriptionEndsAt: new Date(sub.current_period_end * 1000) },
+            data: {
+              subscriptionTier: tier,
+              ...(hasPeriodEnd ? { subscriptionEndsAt: new Date(cpe * 1000) } : {}),
+            },
           })
         }
         break
