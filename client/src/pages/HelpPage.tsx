@@ -65,16 +65,20 @@ export default function HelpPage() {
           outside AppLayout chrome) but borrows this one brand cue. */}
       <div className="h-1 w-full" style={{ background: 'var(--rr-sunset-gradient)' }} />
 
-      {/* Branded hero (Option 3) — icon + canonical capital-R wordmark, the
-          page title (moved out of the body so it isn't shown twice), and a
-          one-line subtitle. Authed users get a small "back to dashboard" link
-          since they temporarily lose the AppLayout nav on this standalone page. */}
-      <div className="max-w-[720px] mx-auto px-4 pt-8 pb-6 text-center">
-        {isAuthenticated && (
-          <Link to="/dashboard" className="inline-block text-xs text-[#1F6F8B] hover:underline mb-4">
-            ← Back to dashboard
+      {/* Top-left "Home" link — pinned to the page top-left so it doesn't push
+          the centered hero off-axis. Authed only (these users temporarily lose
+          the AppLayout nav on this standalone public route). */}
+      {isAuthenticated && (
+        <div className="max-w-[720px] mx-auto px-4 pt-4">
+          <Link to="/dashboard" className="text-sm text-[#1F6F8B] hover:underline">
+            ← Home
           </Link>
-        )}
+        </div>
+      )}
+
+      {/* Branded hero (Option 3) — icon + canonical capital-R wordmark and the
+          page title, truly centered with nothing inline beside them. */}
+      <div className="max-w-[720px] mx-auto px-4 pt-6 pb-6 text-center">
         <Link to="/" className="inline-flex items-center gap-2 mb-4">
           <img src="/roamready-icon.png" alt="RoamReady" className="h-7 w-auto object-contain" />
           <span className="font-medium text-xl">
@@ -82,9 +86,6 @@ export default function HelpPage() {
           </span>
         </Link>
         <h1 className="text-3xl sm:text-4xl font-medium text-gray-900">Help &amp; Support</h1>
-        <p className="text-gray-500 mt-2">
-          We&apos;re a small team. We use the product. We read every message.
-        </p>
       </div>
 
       <div className="max-w-[720px] mx-auto px-4 pb-12 space-y-6">
@@ -101,7 +102,7 @@ export default function HelpPage() {
             </a>
           </p>
           <p className="text-xs italic text-gray-500 mt-2">
-            We read every email — usually reply within a day.
+            We&apos;re a small team — we use the product, read every email, and usually reply within a day.
           </p>
         </section>
 
