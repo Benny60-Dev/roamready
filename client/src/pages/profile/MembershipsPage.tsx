@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { PlusCircle, Trash2, CheckCircle } from 'lucide-react'
 import { usersApi } from '../../services/api'
@@ -19,6 +19,14 @@ export default function MembershipsPage() {
   const [saving, setSaving] = useState(false)
   const [selectedType, setSelectedType] = useState<string>('')
   const { register, handleSubmit, reset } = useForm()
+  const formRef = useRef<HTMLDivElement>(null)
+
+  // The add form renders at the bottom of the page, below both membership
+  // grids, so opening it from an "Available to add" card lands below the fold
+  // and the click looks like a no-op. Scroll the form into view once it mounts.
+  useEffect(() => {
+    if (showForm) formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [showForm])
 
   useEffect(() => {
     usersApi.getMemberships().then(res => {
@@ -181,7 +189,7 @@ export default function MembershipsPage() {
       )}
 
       {showForm && (
-        <div className="card-lg">
+        <div className="card-lg" ref={formRef}>
           <h3 className="font-medium text-gray-900 mb-4">Add membership</h3>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
