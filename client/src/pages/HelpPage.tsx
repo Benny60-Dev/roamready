@@ -60,14 +60,9 @@ export default function HelpPage() {
 
   return (
     <div className="min-h-screen bg-rr-bg">
-      {/* Thin sunset-gradient accent strip — same 4px hairline AppLayout uses
-          at the top of the app shell. The page stays standalone (public route,
-          outside AppLayout chrome) but borrows this one brand cue. */}
-      <div className="h-1 w-full" style={{ background: 'var(--rr-sunset-gradient)' }} />
-
-      {/* Top-left "Home" link — pinned to the page top-left so it doesn't push
-          the centered hero off-axis. Authed only (these users temporarily lose
-          the AppLayout nav on this standalone public route). */}
+      {/* Masthead — "← Home" (authed) then the centered icon + wordmark, both
+          ABOVE the gradient divider so they read as a header band, mirroring
+          AppLayout's header → strip order. */}
       {isAuthenticated && (
         <div className="max-w-[720px] mx-auto px-4 pt-4">
           <Link to="/dashboard" className="text-sm text-[#1F6F8B] hover:underline">
@@ -75,23 +70,32 @@ export default function HelpPage() {
           </Link>
         </div>
       )}
-
-      {/* Branded hero (Option 3) — icon + canonical capital-R wordmark and the
-          page title, truly centered with nothing inline beside them. */}
-      <div className="max-w-[720px] mx-auto px-4 pt-6 pb-6 text-center">
-        <Link to="/" className="inline-flex items-center gap-2 mb-4">
+      <div className="max-w-[720px] mx-auto px-4 pt-4 pb-5 text-center">
+        <Link to="/" className="inline-flex items-center gap-2">
           <img src="/roamready-icon.png" alt="RoamReady" className="h-7 w-auto object-contain" />
           <span className="font-medium text-xl">
             <span style={{ color: '#1F6F8B' }}>Roam</span><span style={{ color: '#F7A829' }}>Ready</span><span style={{ color: '#1F6F8B' }}>.ai</span>
           </span>
         </Link>
+      </div>
+
+      {/* Sunset-gradient divider — now sits BELOW the masthead (Home + wordmark),
+          the same 4px hairline AppLayout uses under its header. */}
+      <div className="h-1 w-full" style={{ background: 'var(--rr-sunset-gradient)' }} />
+
+      <div className="max-w-[720px] mx-auto px-4 pt-8 pb-6 text-center">
         <h1 className="text-3xl sm:text-4xl font-medium text-gray-900">Help &amp; Support</h1>
       </div>
 
       <div className="max-w-[720px] mx-auto px-4 pb-12 space-y-6">
         {/* Contact card */}
         <section className="card-lg">
-          <h2 className="text-base font-medium text-gray-900 mb-2">Get in touch</h2>
+          <p className="text-sm text-gray-700 leading-relaxed mb-3">
+            We started RoamReady because trip planning for RV trips is harder than it should be —
+            and as RVers ourselves, we wanted something better. We're a small team. We use the
+            product. We read every message. Got a question, found a bug, or just want to say hi?
+            Reach out anytime.
+          </p>
           <p className="text-sm text-gray-700">
             Email us at{' '}
             <a
@@ -100,9 +104,6 @@ export default function HelpPage() {
             >
               support@roamready.ai
             </a>
-          </p>
-          <p className="text-xs italic text-gray-500 mt-2">
-            We&apos;re a small team — we use the product, read every email, and usually reply within a day.
           </p>
         </section>
 
