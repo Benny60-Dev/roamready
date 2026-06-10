@@ -45,9 +45,13 @@ model User {
   /// Lifetime founder rate eligibility — set at signup based on whether
   /// the user joined before FOUNDER_CUTOFF_DATE (see config/founderPricing.ts).
   /// Drives Stripe price ID selection in createCheckout AND the price/badge
-  /// display on PricingPage + PaywallModal. Once true, this never flips —
-  /// founders keep their rate even if they cancel and re-subscribe later.
+  /// display on PricingPage + PaywallModal. Demoted to false by the
+  /// customer.subscription.deleted webhook when a founder VOLUNTARILY
+  /// cancels (ToS forfeiture); involuntary churn (payment failure) keeps it.
   founderPricing      Boolean              @default(false)
+  /// Set when founderPricing is demoted by a voluntary cancellation —
+  /// audit trail for "why is this pre-cutoff user paying the regular rate".
+  founderRateForfeitedAt DateTime?
   /// Email verification state. New signups start at false; the magic-link
   /// flow (controllers/emailVerification.ts) flips this to true when the
   /// token is consumed. NOT backfilled for existing users — every account

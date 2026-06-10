@@ -332,10 +332,38 @@ export async function handleWebhook(req: Request, res: Response, next: NextFunct
         const sub = event.data.object as any
         const user = await prisma.user.findFirst({ where: { subscriptionId: sub.id } })
         if (user) {
+          // ToS forfeiture (Founding Member Pricing): a founder who
+          // VOLUNTARILY cancels loses the founder rate — demoting the flag
+          // here automatically aligns the client price display, the client
+          // price-ID selection, and the FOUNDER_INELIGIBLE checkout guard,
+          // since they all key off user.founderPricing. Involuntary churn
+          // (payment_failed / payment_disputed / reason absent) keeps the
+          // rate; Stripe marks voluntary portal/API cancellations with
+          // cancellation_details.reason === 'cancellation_requested'.
+          // subscriptionEndsAt is intentionally untouched (paid-through
+          // grace period, see middleware/auth.ts).
+          const forfeitsFounderRate =
+            (user as any).founderPricing === true &&
+            sub.cancellation_details?.reason === 'cancellation_requested'
           await prisma.user.update({
             where: { id: user.id },
-            data: { subscriptionTier: 'FREE', subscriptionId: null },
+            // Cast matches auth.ts: the generated Prisma client may be stale
+            // (DLL lock prevents regenerate while the dev server runs); the
+            // DB columns exist via the migration.
+            data: {
+              subscriptionTier: 'FREE',
+              subscriptionId: null,
+              ...(forfeitsFounderRate
+                ? { founderPricing: false, founderRateForfeitedAt: new Date() }
+                : {}),
+            } as any,
           })
+          if (forfeitsFounderRate) {
+            console.log(
+              `[StripeWebhook] founder rate forfeited for userId=${user.id} ` +
+              `(voluntary cancellation, sub=${sub.id})`
+            )
+          }
         }
         break
       }
