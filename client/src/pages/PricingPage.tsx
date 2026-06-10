@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Check, Info } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { subscriptionsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import type { User } from '../types'
@@ -26,14 +26,20 @@ const FOUNDER_PRO_PRICING = {
   annualBilled: 69.99,
 } as const
 
+/** Regular (non-founder) Pro pricing — the public-facing default, and the
+ *  struck-through anchor shown next to the founder rate. Single source for
+ *  both the PLANS Pro entry and effectiveProPricing's fallback. */
+const REGULAR_PRO_PRICING = {
+  monthlyPrice: 8.99,
+  annualPrice: 7.49,     // $89.99 / 12 = $7.4992 — per-month equivalent
+  annualBilled: 89.99,
+} as const
+
 /** Returns the effective pricing for the Pro card based on user state.
  *  Founder users see FOUNDER_PRO_PRICING; everyone else (including
- *  logged-out visitors) sees the regular prices baked into the PLANS
- *  entry. */
+ *  logged-out visitors) sees REGULAR_PRO_PRICING. */
 function effectiveProPricing(user: User | null) {
-  return user?.founderPricing
-    ? FOUNDER_PRO_PRICING
-    : { monthlyPrice: 8.99, annualPrice: 7.49, annualBilled: 89.99 }
+  return user?.founderPricing ? FOUNDER_PRO_PRICING : REGULAR_PRO_PRICING
 }
 
 /** Annual-vs-monthly savings percentage, rounded to nearest whole. Used
@@ -121,10 +127,8 @@ const PLANS: Array<{
     name: 'Pro',
     // Regular Pro prices — used for non-founder users (and as the public-
     // facing default for logged-out visitors). Founder users see
-    // FOUNDER_PRO_PRICING (defined below) overlaid at render time.
-    monthlyPrice: 8.99,
-    annualPrice: 7.49,     // $89.99 / 12 = $7.4992 — per-month equivalent
-    annualBilled: 89.99,
+    // FOUNDER_PRO_PRICING overlaid at render time.
+    ...REGULAR_PRO_PRICING,
     description: 'Everything you need for a great trip.',
     features: PRO_FEATURES,
     // CTA computed at render time via getCta(). The literal here is unused
@@ -261,6 +265,15 @@ export default function PricingPage() {
                     what communicates "this $0 still gets you everything for
                     a week." */}
                 <div className="text-3xl font-medium text-gray-900">
+                  {/* Founder monthly view: regular price struck through as the
+                      inline anchor (replaces the old hover-only tooltip). The
+                      annual anchor lives on the "billed annually" line below,
+                      where the comparable $89.99-vs-$69.99 numbers sit. */}
+                  {showFounderBadge && !annual && (
+                    <s className="text-lg font-normal text-gray-400 mr-1.5">
+                      ${REGULAR_PRO_PRICING.monthlyPrice}
+                    </s>
+                  )}
                   ${annual ? displayPrices.annualPrice : displayPrices.monthlyPrice}
                   <span className="text-sm font-normal text-gray-500">/mo</span>
                 </div>
@@ -271,27 +284,35 @@ export default function PricingPage() {
                     so the user sees both numbers at the same glance — not
                     one prominent number and one footnote. */}
                 {annual && displayPrices.annualBilled && (
-                  <p className="text-sm text-gray-600 mt-1">${displayPrices.annualBilled} billed annually</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {showFounderBadge && (
+                      <s className="text-gray-400 mr-1">${REGULAR_PRO_PRICING.annualBilled}</s>
+                    )}
+                    ${displayPrices.annualBilled} billed annually
+                    {/* Savings chip — same teal pill tokens as the Free card's
+                        trial badge (amber stays CTA-only). */}
+                    {showFounderBadge && (
+                      <span
+                        className="ml-1.5 inline-block text-xs font-medium px-2 py-0.5 rounded-full align-middle whitespace-nowrap"
+                        style={{ backgroundColor: '#E0F0F4', color: '#134756' }}
+                      >
+                        Save $20/yr
+                      </span>
+                    )}
+                  </p>
                 )}
                 {/* Lifetime-locked founder rate badge — only renders on the
                     Pro card for users whose server-side founderPricing flag
-                    is true. Info icon + native title= for the hover tooltip
-                    on desktop; an always-visible one-line caveat sits
-                    underneath so the cancel-forfeit rule is also disclosed
-                    on mobile (where title= tooltips don't fire). Wording
-                    here is the short form; the ToS Founding Member Pricing
-                    section has the full clause. */}
+                    is true. The full cancel-forfeit caveat is always-visible
+                    small print (no hover tooltip — useless on mobile); the
+                    ToS Founding Member Pricing section has the full clause. */}
                 {showFounderBadge && (
                   <div className="mt-2">
-                    <p
-                      className="text-xs text-[#0F766E] font-medium inline-flex items-center gap-1 cursor-help"
-                      title="Stay subscribed to keep this rate. If you cancel and rejoin later, you'll pay the regular price at that time."
-                    >
+                    <p className="text-xs text-[#0F766E] font-medium">
                       Lifetime founder rate
-                      <Info size={12} aria-hidden="true" />
                     </p>
                     <p className="text-[11px] text-[#5F5E5A] mt-0.5">
-                      Stay subscribed to keep this rate.
+                      Locked in while you stay subscribed — cancel and rejoin later and you&apos;ll pay the regular rate.
                     </p>
                   </div>
                 )}

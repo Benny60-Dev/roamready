@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { X, Check, Zap, Info } from 'lucide-react'
+import { X, Check, Zap } from 'lucide-react'
 import { subscriptionsApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 import { PRO_FEATURES } from '../../config/pricing'
@@ -206,24 +206,43 @@ export default function PaywallModal({ feature, redirectOnDismiss, onClose }: Pr
                 sync manually (no shared constant yet — backlog candidate). */}
             <p className="text-xs text-gray-500 mb-2">Everything you need for a great trip.</p>
             <div className="text-2xl font-medium text-gray-900">
+              {/* Founder monthly view: regular price struck through as the
+                  inline anchor — mirrors PricingPage. The annual anchor lives
+                  on the "billed annually" line where the comparable numbers sit. */}
+              {user?.founderPricing && !annual && (
+                <s className="text-base font-normal text-gray-400 mr-1.5">${REGULAR_DISPLAY.monthly}</s>
+              )}
               ${annual ? display.annualPerMo : display.monthly}
               <span className="text-sm text-gray-500 font-normal">/mo</span>
             </div>
-            {annual && <div className="text-xs text-gray-500">${display.annualBilled} billed annually</div>}
-            {/* Lifetime-locked founder rate badge — mirrors PricingPage.
-                Info icon + native title= for desktop hover; one-line caveat
-                below for the mobile case where title tooltips don't fire. */}
+            {annual && (
+              <div className="text-xs text-gray-500">
+                {user?.founderPricing && (
+                  <s className="text-gray-400 mr-1">${REGULAR_DISPLAY.annualBilled}</s>
+                )}
+                ${display.annualBilled} billed annually
+                {/* Savings chip — same teal pill tokens as PricingPage's trial
+                    badge (amber stays CTA-only). */}
+                {user?.founderPricing && (
+                  <span
+                    className="ml-1.5 inline-block text-xs font-medium px-2 py-0.5 rounded-full align-middle whitespace-nowrap"
+                    style={{ backgroundColor: '#E0F0F4', color: '#134756' }}
+                  >
+                    Save $20/yr
+                  </span>
+                )}
+              </div>
+            )}
+            {/* Lifetime-locked founder rate badge — mirrors PricingPage. Full
+                cancel-forfeit caveat is always-visible small print (no hover
+                tooltip — useless on mobile). */}
             {user?.founderPricing && (
               <div className="mt-1">
-                <p
-                  className="text-xs text-[#1F6F8B] font-medium inline-flex items-center gap-1 cursor-help"
-                  title="Stay subscribed to keep this rate. If you cancel and rejoin later, you'll pay the regular price at that time."
-                >
+                <p className="text-xs text-[#1F6F8B] font-medium">
                   Lifetime founder rate
-                  <Info size={12} aria-hidden="true" />
                 </p>
                 <p className="text-[11px] text-[#5F5E5A] mt-0.5">
-                  Stay subscribed to keep this rate.
+                  Locked in while you stay subscribed — cancel and rejoin later and you&apos;ll pay the regular rate.
                 </p>
               </div>
             )}
