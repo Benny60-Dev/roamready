@@ -11,15 +11,10 @@
 // fallback, single sending identity.
 import { Resend } from 'resend'
 import { prisma } from '../utils/prisma'
+import { fbRef } from '../utils/fbRef'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const supportEmail = process.env.SUPPORT_EMAIL ?? 'support@roamready.ai'
-
-/** Short reference code embedded in every email subject about a feedback
- *  item. MUST stay in sync with fbRef in AdminFeedbackPage.tsx — the admin
- *  UI's "Find in Gmail" search and mailto Reply subjects are keyed on the
- *  same [FB-XXXX] token, which is what makes replies thread with these. */
-const fbRef = (id: string) => `FB-${id.slice(-4).toUpperCase()}`
 
 type FeedbackRow = {
   id: string
@@ -68,6 +63,7 @@ export async function sendFeedbackNotification(
     ['Importance', feedback.importance || '—'],
     ['Screen', feedback.screen || '—'],
     ['From', `${submitterName} <${submitterEmail}>`],
+    ['Ref', fbRef(feedback.id)],
     ['Feedback ID', feedback.id],
   ]
   if (attachments.length) lines.push(['Screenshots', String(attachments.length)])
@@ -158,6 +154,7 @@ export async function sendFeedbackAcknowledgment(feedback: FeedbackRow): Promise
     <p>If we plan it, you'll see it appear on our <strong>public roadmap</strong> — that's where ideas graduate to once they're on the way.</p>
     <p>Hit reply if you want to add anything — it goes straight to us.</p>
     <p>— The RoamReady team</p>
+    <p style="color:#9ca3af;font-size:12px">Reference: ${fbRef(feedback.id)}</p>
   `.trim()
 
   const text =
@@ -169,7 +166,7 @@ export async function sendFeedbackAcknowledgment(feedback: FeedbackRow): Promise
     `\n${feedback.body}\n\n` +
     `If we plan it, you'll see it appear on our public roadmap — that's where ideas graduate to once they're on the way.\n\n` +
     `Hit reply if you want to add anything — it goes straight to us.\n\n` +
-    `— The RoamReady team`
+    `— The RoamReady team\n\nReference: ${fbRef(feedback.id)}`
 
   await resend.emails.send({
     from: fromAddress ?? 'RoamReady <onboarding@resend.dev>',
@@ -182,4 +179,71 @@ export async function sendFeedbackAcknowledgment(feedback: FeedbackRow): Promise
   })
 
   console.log('[feedbackNotification] acknowledgment sent to submitter for feedback', feedback.id)
+}
+
+/** "Your request shipped!" notice, sent when an admin moves an item to
+ *  SHIPPED. Same fire-and-forget contract as the other senders, with one
+ *  twist: returns whether a send ACTUALLY happened so the caller can stamp
+ *  shippedNotifiedAt only on real success (the stamp is the idempotency
+ *  guard — a failed or skipped send leaves it null so a later transition
+ *  can retry). No submitter email → warn + return false, never throw. */
+export async function sendFeedbackShippedNotification(feedback: FeedbackRow): Promise<boolean> {
+  const user = feedback.userId
+    ? await prisma.user.findUnique({
+        where: { id: feedback.userId },
+        select: { email: true, firstName: true },
+      })
+    : null
+  if (!user?.email) {
+    console.warn('[feedbackNotification] no submitter email for feedback', feedback.id, '— skipping shipped notice')
+    return false
+  }
+  const firstName = user.firstName ?? 'there'
+
+  const fromAddress = process.env.FROM_EMAIL
+  if (!fromAddress) {
+    console.warn(
+      '[feedbackNotification] FROM_EMAIL is not set — falling back to Resend sandbox sender. ' +
+      'Set FROM_EMAIL in .env once your domain is verified in the Resend dashboard.'
+    )
+  }
+
+  const clientOrigin = process.env.CLIENT_URL || 'http://localhost:3000'
+  const roadmapUrl = `${clientOrigin}/roadmap`
+  const ref = fbRef(feedback.id)
+  const snippet = feedback.body.length > 200 ? `${feedback.body.slice(0, 200)}…` : feedback.body
+
+  const html = `
+    <p>Hi ${escapeHtml(firstName)},</p>
+    <p>Good news — the ${feedback.type === 'BUG_REPORT' ? 'fix' : 'feature'} you asked for has <strong>shipped</strong>! 🎉</p>
+    <p>Here's what you sent us:</p>
+    ${feedback.title ? `<p style="font-weight:500">${escapeHtml(feedback.title)}</p>` : ''}
+    <p style="white-space:pre-wrap;border-left:3px solid #1F6F8B;padding-left:12px">${escapeHtml(snippet)}</p>
+    <p>It's live now — you'll find it in the app, and on our <a href="${roadmapUrl}">public roadmap</a> under Shipped.</p>
+    <p>Hit reply and tell us how it works for you — it goes straight to us.</p>
+    <p>— The RoamReady team</p>
+    <p style="color:#9ca3af;font-size:12px">Reference: ${ref}</p>
+  `.trim()
+
+  const text =
+    `Hi ${firstName},\n\n` +
+    `Good news — the ${feedback.type === 'BUG_REPORT' ? 'fix' : 'feature'} you asked for has shipped!\n\n` +
+    `Here's what you sent us:\n` +
+    (feedback.title ? `${feedback.title}\n` : '') +
+    `${snippet}\n\n` +
+    `It's live now — you'll find it in the app, and on our public roadmap under Shipped: ${roadmapUrl}\n\n` +
+    `Hit reply and tell us how it works for you — it goes straight to us.\n\n` +
+    `— The RoamReady team\n\nReference: ${ref}`
+
+  await resend.emails.send({
+    from: fromAddress ?? 'RoamReady <onboarding@resend.dev>',
+    to: user.email,
+    reply_to: supportEmail,
+    subject: `Good news — your request shipped [${ref}] — RoamReady`,
+    html,
+    text,
+  })
+
+  console.log('[feedbackNotification] shipped notice sent to submitter for feedback', feedback.id)
+  return true
 }
