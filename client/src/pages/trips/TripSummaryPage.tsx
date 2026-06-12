@@ -759,6 +759,12 @@ export default function TripSummaryPage() {
     if (!trip) return
     setDownloadingPdf(true)
     try {
+      // Pro gate — pdfExport feature parity (same pattern as the packing-list
+      // PDF). Free users 403 FEATURE_GATED here; the central axios interceptor
+      // opens the paywall and the catch below bails without the error alert.
+      // To ungate, delete this one call.
+      await tripsApi.exportPdf(trip.id)
+
       // Block 15 — entries[].stop.stayActivities is the live in-memory edit
       // target for the per-stay shared list; trip.stops[] is whatever came
       // back from the last fetch and goes stale after edits (the
@@ -828,7 +834,12 @@ export default function TripSummaryPage() {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-    } catch (err) {
+    } catch (err: any) {
+      // FEATURE_GATED 403 → paywall already opened by the central interceptor;
+      // skip the generic alert so the user isn't double-narrated.
+      if (err?.response?.status === 403 && err?.response?.data?.code === 'FEATURE_GATED') {
+        return
+      }
       console.error('[PDF] generation failed:', err)
       alert('PDF generation failed. Please try again.')
     } finally {

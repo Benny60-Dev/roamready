@@ -1397,6 +1397,12 @@ export default function TripMapPage() {
     if (downloadingPdf || !trip) return
     setDownloadingPdf(true)
     try {
+      // Pro gate — pdfExport feature parity (same pattern as the packing-list
+      // PDF). Free users 403 FEATURE_GATED here; the central axios interceptor
+      // opens the paywall and the catch below bails without the error alert.
+      // To ungate, delete this one call.
+      await tripsApi.exportPdf(trip.id)
+
       // Fetch static map image and convert to blob URL
       // (react-pdf v4 uses Buffer to decode data: URLs in the browser — passing a blob URL avoids that)
       let mapBlobUrl: string | null = null
@@ -1428,7 +1434,12 @@ export default function TripMapPage() {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-    } catch (err) {
+    } catch (err: any) {
+      // FEATURE_GATED 403 → paywall already opened by the central interceptor;
+      // skip the generic alert so the user isn't double-narrated.
+      if (err?.response?.status === 403 && err?.response?.data?.code === 'FEATURE_GATED') {
+        return
+      }
       console.error('PDF export failed', err)
       alert('PDF generation failed. Please try again.')
     } finally {
