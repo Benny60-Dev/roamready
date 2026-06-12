@@ -146,8 +146,8 @@ export default function HelpPage() {
         <section className="card-lg">
           <h2 className="text-base font-medium text-gray-900 mb-2">Product Roadmap</h2>
           <p className="text-sm text-gray-700 mb-3">
-            See what we&apos;re building next, what&apos;s already shipped, and vote on the
-            features that matter most to you.
+            See what we&apos;re building next, what&apos;s already been completed, and vote
+            on the features that matter most to you.
           </p>
           <div className="flex flex-wrap items-center gap-4">
             <Link

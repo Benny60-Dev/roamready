@@ -91,7 +91,9 @@ export default function RoadmapPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Column title="Planned" items={data.planned} color="bg-blue-50 text-blue-700" />
             <Column title="In Progress" items={data.inProgress} color="bg-amber-50 text-amber-700" />
-            <Column title="Shipped" items={data.shipped} color="bg-[#CCFBF1] text-[#0D5F58]" />
+            {/* Display label only — the API/enum value stays SHIPPED; "Completed"
+                is the plain-language word for the public audience. */}
+            <Column title="Completed" items={data.shipped} color="bg-[#CCFBF1] text-[#0D5F58]" />
           </div>
         )}
       </div>
