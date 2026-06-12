@@ -102,9 +102,9 @@ export async function chatWithAI(
   } else if (!capturedOrigin && !hasHomeOnFile && userProfile?.isFullTimeRVer) {
     // Full-timer with no fixed home: ask the origin WITHOUT any mention of home
     // or saving an address (a "home" framing is meaningless to them).
-    originDirective = '\n\n⚠ This user is a FULL-TIME RVer with no fixed home. Ask simply: "Where are you starting this trip from?" — do NOT mention home, a saved address, or saving an address. Never invent a city; do not emit an <itinerary> until they provide a starting location.'
+    originDirective = '\n\n⚠ This user is a FULL-TIME RVer with no fixed home. FIRST check whether their message already names a starting point ("from Mesa", "leaving from Phoenix", "starting in Denver") — if it does, that IS the origin: emit the <origin> tag with it and proceed with planning; do NOT ask. Only when no origin has been stated anywhere in the conversation, ask simply: "Where are you starting this trip from?" — do NOT mention home, a saved address, or saving an address. Never invent a city; do not emit an <itinerary> until you have a user-stated starting location.'
   } else if (!capturedOrigin && !hasHomeOnFile) {
-    originDirective = '\n\n⚠ NO HOME ON FILE for this user. Follow the NO-HOME path in the ORIGIN RESOLUTION rule: ask the no-home starting-location question, never name or invent a starting city, and do not emit an <itinerary> until the user provides their starting location.'
+    originDirective = '\n\n⚠ NO HOME ON FILE for this user. FIRST check whether the user\'s message already names a starting point ("from Mesa", "leaving from Phoenix", "starting in Denver") — if it does, that IS the origin: emit the <origin> tag with it and proceed with planning; do NOT ask the starting-location question. Only when no origin has been stated anywhere in the conversation, follow the NO-HOME path in the ORIGIN RESOLUTION rule: ask the no-home starting-location question. Never name or invent a starting city, and do not emit an <itinerary> until the user has provided a starting location.'
   }
   // else: home on file, no captured origin → '' (unchanged existing behavior)
 
@@ -126,6 +126,8 @@ export async function chatWithAI(
 If a user asks about ANYTHING unrelated to outdoor travel and trip planning — politics, relationships, medical advice, legal advice, other products, general knowledge questions, or any other off-topic subject — respond with exactly this: "I'm RoamReady's trip planning assistant and I can only help with outdoor travel planning. Is there a trip I can help you plan today?" Do not engage with off-topic questions under any circumstances (but a message that names a place to go or expresses a wish to travel is IN SCOPE — see the IN-SCOPE rule below — so proceed with planning). Do not be rude but be firm and redirect immediately back to trip planning. Stay focused on helping users plan amazing outdoor adventures.
 
 IN-SCOPE — A WISH TO GO somewhere is ALWAYS a trip request. Any message that names a place, region, park, or landmark the user wants to GO TO or BE SHOWN AROUND — in ANY phrasing, however casual — is a VALID trip-planning request and must NEVER receive the off-topic refusal. This includes (non-exhaustive, all equivalent to "plan a trip to [Place]"): "show me around [Place]", "send me to [Place]", "take me to [Place]", "get me to [Place]", "I want to go to [Place]", "let's visit [Place]", "how about [Place]?", "[Place] sounds fun", or simply naming "[Place]". Treat every such message as a trip request and proceed to trip planning (the starting-location / ORIGIN RESOLUTION step). The off-topic refusal applies ONLY to messages with NO travel intent at all — e.g. writing a poem, coding help, medical/legal/financial advice, current events, or other non-travel topics. When a message is ambiguous between "off-topic" and "a casually-phrased trip request," ALWAYS assume it is a trip request and proceed — never refuse a message that names a place or expresses a desire to travel.
+
+ALSO ALWAYS IN SCOPE — questions about RoamReady itself, this conversation, the itinerary being built, or what is displayed on screen (e.g. "why isn't it showing on the list on the right?", "where did my stop go?", "what does this button do?"). Answer them helpfully, or honestly explain what you can and cannot see — you see the conversation and the trip plan you have emitted, but NOT the live page layout, so say so plainly when asked about specific UI elements rather than refusing. The off-topic refusal is ONLY for genuinely unrelated topics, never for questions about the app or the plan in progress.
 
 You have access to the user's profile: ${JSON.stringify(userProfile)}${originDirective}
 
@@ -220,7 +222,7 @@ ${originAskBullets}
 
 ⚠ ONE-WAY IS THE UNCONDITIONAL DEFAULT ⚠
 
-The final stop in your JSON MUST be the user's DESTINATION — NEVER the home city — unless the user explicitly used one of these round-trip phrases: "round trip", "round-trip", "coming back home", "returning home", "back home", "end at home", "back to [home city]", "heading home after".
+The final stop in your JSON MUST be the user's DESTINATION — NEVER the home city — unless the user explicitly used one of these round-trip phrases: "round trip", "round-trip", "coming back home", "returning home", "back home", "end at home", "heading home after", "and back", "there and back", "return" / "returning", or "back to [their starting city]" — where the starting city is the trip's origin from ANY source (their typed origin or profile home), not only a saved home. (Keep this list in sync with client/src/utils/roundTripIntent.ts — the client guard strips return legs the user didn't ask for using the same phrases.)
 
 Do NOT append a stop that returns to the home city for a one-way request. A trip to [EXAMPLE_DESTINATION_A] ends in [EXAMPLE_DESTINATION_A]. A trip to [EXAMPLE_DESTINATION_B] ends in [EXAMPLE_DESTINATION_B]. A "you pick" surprise trip ends at whatever destination you chose. When none of the round-trip phrases above appear in the conversation, build a one-way trip — full stop.
 
@@ -322,7 +324,11 @@ Always match transit stops to actual driving distance — add them when a leg wo
   const model = 'claude-sonnet-4-5'
   const response = await client.messages.create({
     model,
-    max_tokens: 4096,
+    // AI-PACK-1 treatment for the planning chat: a long multi-stop itinerary
+    // (prose + full <itinerary> JSON) can exceed 4096 output tokens; the old
+    // cap truncated mid-JSON and the client's tolerant parser used to accept
+    // the fragment silently.
+    max_tokens: 8192,
     system: combinedSystem,
     messages: cleanMessages,
   })
@@ -337,6 +343,16 @@ Always match transit stops to actual driving distance — add them when a leg wo
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
     }).catch(() => {})
+  }
+
+  if (response.stop_reason !== 'end_turn') {
+    // Anything other than a natural finish (max_tokens above all) means the
+    // reply may be cut mid-itinerary — log loudly so truncation incidents are
+    // diagnosable; the client refuses unterminated <itinerary> blocks.
+    console.error(
+      '[chatWithAI] unexpected stop_reason=%s (output may be truncated) user=%s session=%s outputTokens=%d',
+      response.stop_reason, ctx?.userId ?? '?', ctx?.sessionId ?? '?', response.usage.output_tokens,
+    )
   }
 
   return response.content[0].type === 'text' ? response.content[0].text : ''
