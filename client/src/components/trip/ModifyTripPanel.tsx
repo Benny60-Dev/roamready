@@ -384,7 +384,16 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
         if (duplicate && !isReturnHomeAdd) {
           // Throw instead of the old silent no-op bubble: the card shows this
           // verbatim and stays unapplied — never a false success.
-          throw new Error(`${duplicate.locationName} is already on your trip (stop #${duplicate.order})`)
+          // Report the USER-VISIBLE stop number: the displayed list labels the
+          // HOME departure "Starting point" and numbers only the stops after
+          // it, while DB `order` counts HOME — duplicate.order would be off
+          // by one (e.g. Moab shown as #3 but order=4).
+          const visibleNumber =
+            sortedStops.filter((s: any) => s.type !== 'HOME').findIndex((s: any) => s.id === duplicate.id) + 1
+          const where = duplicate.type === 'HOME'
+            ? 'as your home stop'
+            : `(stop #${visibleNumber})`
+          throw new Error(`${duplicate.locationName} is already on your trip ${where}`)
         }
 
         // Position resolution:
