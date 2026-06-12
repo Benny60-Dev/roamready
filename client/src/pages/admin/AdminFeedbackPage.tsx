@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { Wand2, Loader } from 'lucide-react'
-import { adminApi, feedbackApi } from '../../services/api'
+import { adminApi } from '../../services/api'
 import { Feedback } from '../../types'
 
 const STATUS_OPTIONS = ['NEW', 'PLANNED', 'IN_PROGRESS', 'SHIPPED', 'DECLINED']
@@ -27,9 +27,9 @@ export default function AdminFeedbackPage() {
     }
   }
 
-  async function updateStatus(id: string, status: string) {
-    await feedbackApi.updateStatus(id, status)
-    setFeedback(prev => prev.map(f => f.id === id ? { ...f, status: status as any } : f))
+  async function updateItem(id: string, patch: { status?: string; isPublic?: boolean }) {
+    await adminApi.updateFeedback(id, patch)
+    setFeedback(prev => prev.map(f => f.id === id ? { ...f, ...patch } as Feedback : f))
   }
 
   const filtered = filter === 'ALL' ? feedback : feedback.filter(f => f.status === filter || f.type === filter)
@@ -81,14 +81,25 @@ export default function AdminFeedbackPage() {
                   {item.title && <p className="text-xs text-gray-500 mt-0.5">{item.body}</p>}
                   {item.user && <p className="text-xs text-gray-400 mt-0.5">{item.user.email}</p>}
                 </div>
-                <select
-                  value={item.status}
-                  onChange={e => updateStatus(item.id, e.target.value)}
-                  className="text-xs border border-gray-200 rounded px-2 py-1 flex-shrink-0"
-                  style={{ borderWidth: '0.5px' }}
-                >
-                  {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+                <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                  <select
+                    value={item.status}
+                    onChange={e => updateItem(item.id, { status: e.target.value })}
+                    className="text-xs border border-gray-200 rounded px-2 py-1"
+                    style={{ borderWidth: '0.5px' }}
+                  >
+                    {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={item.isPublic}
+                      onChange={e => updateItem(item.id, { isPublic: e.target.checked })}
+                      className="rounded"
+                    />
+                    Public
+                  </label>
+                </div>
               </div>
             </div>
           ))}

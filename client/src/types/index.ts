@@ -5,7 +5,7 @@ export type TripStatus = 'PLANNING' | 'ACTIVE' | 'COMPLETED' | 'DRAFT'
 export type StopType = 'DESTINATION' | 'OVERNIGHT_ONLY' | 'HOME'
 export type BookingStatus = 'NOT_BOOKED' | 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'WAITLISTED'
 export type MaintenanceStatus = 'OK' | 'DUE_SOON' | 'OVERDUE'
-export type FeedbackType = 'FEATURE_REQUEST' | 'BUG_REPORT' | 'GENERAL' | 'CAMPGROUND_REVIEW'
+export type FeedbackType = 'FEATURE_REQUEST' | 'BUG_REPORT' | 'GENERAL'
 export type FeedbackStatus = 'NEW' | 'PLANNED' | 'IN_PROGRESS' | 'SHIPPED' | 'DECLINED'
 
 export interface User {

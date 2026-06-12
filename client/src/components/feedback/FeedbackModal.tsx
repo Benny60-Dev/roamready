@@ -13,20 +13,45 @@ interface FormData {
   title: string
   body: string
   importance: string
-  isPublic: boolean
 }
 
 export default function FeedbackModal({ onClose }: Props) {
   const [rating, setRating] = useState(0)
   const [hoverRating, setHoverRating] = useState(0)
   const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const { register, handleSubmit } = useForm<FormData>({
-    defaultValues: { type: 'FEATURE_REQUEST', isPublic: true }
+    defaultValues: { type: 'FEATURE_REQUEST' }
   })
 
   async function onSubmit(data: FormData) {
-    await feedbackApi.submit({ ...data, rating, screen: window.location.pathname })
-    setSubmitted(true)
+    setError(null)
+    setSubmitting(true)
+    try {
+      // Empty optional fields are omitted (not sent as '' / 0) — the server's
+      // .strict() Zod schema expects absent, not empty.
+      await feedbackApi.submit({
+        type: data.type,
+        title: data.title.trim() || undefined,
+        body: data.body,
+        importance: data.importance || undefined,
+        rating: rating || undefined,
+        screen: window.location.pathname,
+      })
+      setSubmitted(true)
+    } catch (err: any) {
+      const status = err?.response?.status
+      if (status === 403 && err?.response?.data?.error === 'EMAIL_VERIFICATION_REQUIRED') {
+        setError('Please verify your email to send feedback.')
+      } else if (status === 401) {
+        setError('Please log in to send feedback.')
+      } else {
+        setError('Could not send feedback — please try again.')
+      }
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -44,6 +69,7 @@ export default function FeedbackModal({ onClose }: Props) {
             </div>
             <p className="font-medium text-gray-900 mb-1">Thanks for your feedback!</p>
             <p className="text-sm text-gray-500">It helps us make RoamReady better for everyone.</p>
+            <p className="text-xs text-gray-400 mt-2">We read every submission. Items appear on the public roadmap once they're planned.</p>
             <button onClick={onClose} className="btn-primary mt-4">Close</button>
           </div>
         ) : (
@@ -54,7 +80,6 @@ export default function FeedbackModal({ onClose }: Props) {
                 <option value="FEATURE_REQUEST">Feature Request</option>
                 <option value="BUG_REPORT">Bug Report</option>
                 <option value="GENERAL">General Feedback</option>
-                <option value="CAMPGROUND_REVIEW">Campground Review</option>
               </select>
             </div>
 
@@ -102,14 +127,17 @@ export default function FeedbackModal({ onClose }: Props) {
               </select>
             </div>
 
-            <div className="flex items-center gap-2">
-              <input type="checkbox" id="isPublic" {...register('isPublic')} className="rounded" />
-              <label htmlFor="isPublic" className="text-sm text-gray-600">Add to public roadmap</label>
-            </div>
+            {error && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2" style={{ borderWidth: '0.5px' }}>
+                {error}
+              </p>
+            )}
 
             <div className="flex gap-2 pt-2">
               <button type="button" onClick={onClose} className="btn-ghost flex-1">Cancel</button>
-              <button type="submit" className="btn-primary flex-1">Submit</button>
+              <button type="submit" disabled={submitting} className="btn-primary flex-1 disabled:opacity-60">
+                {submitting ? 'Sending...' : 'Submit'}
+              </button>
             </div>
           </form>
         )}

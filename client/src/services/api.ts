@@ -278,7 +278,6 @@ export const feedbackApi = {
   getPublic: () => api.get('/feedback/public'),
   vote: (id: string) => api.post(`/feedback/${id}/vote`),
   getAdmin: () => api.get('/feedback/admin'),
-  updateStatus: (id: string, status: string) => api.put(`/feedback/${id}/status`, { status }),
 }
 
 // Subscriptions
@@ -303,6 +302,8 @@ export const adminApi = {
   getSubscribers: () => api.get('/admin/subscribers'),
   getRevenue: () => api.get('/admin/revenue'),
   getFeedback: () => api.get('/admin/feedback'),
+  updateFeedback: (id: string, data: { status?: string; isPublic?: boolean }) =>
+    api.patch(`/admin/feedback/${id}`, data),
   analyzeFeedback: () => api.post('/admin/feedback/analyze'),
   getLinkHealth: () => api.get('/admin/link-health'),
 }

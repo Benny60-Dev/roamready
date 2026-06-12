@@ -13,7 +13,6 @@ function FeedbackCard({ item, onVote }: { item: Feedback; onVote: (id: string) =
     FEATURE_REQUEST: 'badge-blue',
     BUG_REPORT: 'badge-red',
     GENERAL: 'bg-gray-100 text-gray-600',
-    CAMPGROUND_REVIEW: 'badge-green',
   }
   return (
     <div className="card">

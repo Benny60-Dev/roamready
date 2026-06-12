@@ -129,6 +129,23 @@ export async function getAdminFeedback(_req: AuthRequest, res: Response, next: N
   } catch (err) { next(err) }
 }
 
+export async function updateFeedback(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    // Body validated by AdminFeedbackUpdateSchema — status and/or isPublic,
+    // at least one present. Spread-conditionals so an isPublic-only toggle
+    // doesn't touch status and vice versa.
+    const { status, isPublic } = req.body
+    const updated = await prisma.feedback.update({
+      where: { id: req.params.id },
+      data: {
+        ...(status !== undefined && { status }),
+        ...(isPublic !== undefined && { isPublic }),
+      },
+    })
+    res.json(updated)
+  } catch (err) { next(err) }
+}
+
 export async function analyzeFeedback(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const feedbackItems = await prisma.feedback.findMany({
