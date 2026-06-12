@@ -129,6 +129,13 @@ app.use(cookieParser())
 // express.json() would parse it into an object first, breaking Stripe signature verification.
 app.post('/api/v1/subscriptions/webhook', express.raw({ type: 'application/json' }), handleWebhook)
 
+// Feedback gets a bigger JSON limit than the global 10mb: screenshot
+// attachments ride the payload as base64 (≤3 × ≤4MB decoded ≈ 16MB encoded).
+// Mounted BEFORE the global parser — express.json skips bodies already
+// parsed, so this is effectively a per-path limit override (same
+// order-sensitivity trick as the webhook above).
+app.use('/api/v1/feedback', express.json({ limit: '25mb' }))
+
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 
