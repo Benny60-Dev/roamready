@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { DayPicker } from 'react-day-picker'
 import 'react-day-picker/style.css'
-import { formatTripDate, parseTripDate, toYmd } from '../../utils/dates'
+import { formatTripDate, lifecycleDate, parseTripDate, toYmd } from '../../utils/dates'
 import { tripsApi } from '../../services/api'
 import { Trip, Stop, StopWeather, LiveForecast, TripFuelEstimate } from '../../types'
 import { computeTripTotals } from '../../utils/tripTotals'
@@ -1760,6 +1760,15 @@ export default function TripMapPage() {
                           <span className="text-gray-400">
                             To change the end, remove a stop or adjust nights.
                           </span>
+                        </p>
+                      )}
+                      {/* Quiet lifecycle stamp — when this trip plan was first
+                          created (Trip.createdAt), distinct from the travel
+                          dates above. Matches the Dashboard card's "Started
+                          <date>" wording source. */}
+                      {trip.createdAt && (
+                        <p className="text-[11px] text-gray-400 mt-1">
+                          Created {lifecycleDate(trip.createdAt)}
                         </p>
                       )}
                     </>

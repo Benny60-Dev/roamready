@@ -102,6 +102,19 @@ export function formatTripDate(
 }
 
 /**
+ * Short lifecycle date for created/edited timestamps: "Jun 11" within the
+ * current year, "Jun 11, 2025" otherwise. Takes a full ISO timestamp
+ * (Trip.createdAt) — NOT a date-only wire string, so plain `new Date` is
+ * correct here (no parseTripDate local-noon normalization needed).
+ */
+export function lifecycleDate(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const sameYear = d.getFullYear() === new Date().getFullYear()
+  return dfFormat(d, sameYear ? 'MMM d' : 'MMM d, yyyy')
+}
+
+/**
  * Format a Date as a YYYY-MM-DD wire string using LOCAL calendar components.
  * Inverse of parseTripDate for the write path — the date the user sees on
  * screen round-trips to the date that gets stored. Prisma's z.coerce.date()

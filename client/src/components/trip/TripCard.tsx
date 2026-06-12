@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Calendar, Map, Tent, DollarSign, Trash2 } from 'lucide-react'
 import { Trip } from '../../types'
-import { formatTripDate, relativeTime } from '../../utils/dates'
+import { formatTripDate, lifecycleDate, relativeTime } from '../../utils/dates'
 import { computeTripTotals } from '../../utils/tripTotals'
 import { deriveTripStatus } from '../../utils/tripStatus'
 
@@ -241,6 +241,10 @@ export default function TripCard({
   const stopCount = trip.stops?.length ?? 0
   const bookedCount = trip.stops?.filter(s => s.bookingStatus === 'CONFIRMED').length ?? 0
   const showStopsLine = stopCount > 0
+  // Lifecycle line ("Started <createdAt> · Edited <updatedAt rel>") reuses the
+  // showRelative prop that used to gate the bare "1m ago" stamp — same opt-in
+  // surface (the Dashboard grid), richer content.
+  const showLifecycle = showRelative && Boolean(trip.createdAt || trip.updatedAt)
 
   return (
     <Link to={`/trips/${trip.id}/map`} className="card hover:border-[#1F6F8B]/30 transition-all block">
@@ -301,11 +305,6 @@ export default function TripCard({
             {costPrefix}${Math.round(cost).toLocaleString()}
           </span>
         )}
-        {showRelative && trip.updatedAt && (
-          <span className="flex items-center gap-1">
-            {relativeTime(trip.updatedAt, { short: true })}
-          </span>
-        )}
       </div>
       {/* Cost breakdown sub-line — "$X camp · $Y fuel" — only when both
           pieces are positive. Brand-new trips that haven't had their
@@ -317,11 +316,25 @@ export default function TripCard({
           ${Math.round(campPart).toLocaleString()} camp · ${Math.round(fuelPart!).toLocaleString()} fuel
         </div>
       )}
-      {/* Secondary meta line — "N stops · M booked" — only when stops exist;
-          a trip with no stops simply omits the line rather than showing 0/0. */}
-      {showStopsLine && (
-        <div className="text-xs text-gray-400 mt-1">
-          {stopCount} stop{stopCount === 1 ? '' : 's'} · {bookedCount} booked
+      {/* Bottom meta row — "N stops · M booked" on the left (only when stops
+          exist; a trip with no stops omits it rather than showing 0/0), and
+          the lifecycle line "Started <date> · Edited <relative>" right-aligned
+          opposite it (replaces the old standalone relative stamp that used to
+          sit in the stats row above). Both share the row's muted tone. */}
+      {(showStopsLine || showLifecycle) && (
+        <div className="flex items-center justify-between gap-2 text-xs text-gray-400 mt-1">
+          <span>
+            {showStopsLine
+              ? <>{stopCount} stop{stopCount === 1 ? '' : 's'} · {bookedCount} booked</>
+              : null}
+          </span>
+          {showLifecycle && (
+            <span className="text-right flex-shrink-0">
+              {trip.createdAt ? `Started ${lifecycleDate(trip.createdAt)}` : ''}
+              {trip.createdAt && trip.updatedAt ? ' · ' : ''}
+              {trip.updatedAt ? `Edited ${relativeTime(trip.updatedAt, { short: true })}` : ''}
+            </span>
+          )}
         </div>
       )}
     </Link>
