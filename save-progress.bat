@@ -1,10 +1,27 @@
 @echo off
+REM  IMPORTANT: this repo must NEVER run with core.autocrlf=true. Prisma
+REM  migration checksums are byte hashes; CRLF rewrites break them and
+REM  `migrate dev` then offers a destructive DB reset. The repo-local git
+REM  config pins core.autocrlf=false and .gitattributes pins
+REM  prisma/migrations/**/*.sql to eol=lf — do not override either.
 echo.
 echo ============================================
 echo  Saving your RoamReady progress...
 echo ============================================
 echo.
 cd /d C:\Users\aylie\roamready
+
+REM -- EOL preflight: hard-fail before committing if any migration SQL has
+REM    CRLF endings (see scripts/check-migration-eol.js for the full story).
+node scripts\check-migration-eol.js
+if errorlevel 1 (
+    echo.
+    echo  COMMIT ABORTED — fix the CRLF migration files listed above first.
+    echo  Run:  npm run preflight   after fixing to confirm.
+    echo.
+    pause
+    exit /b 1
+)
 
 echo Staging all changes...
 git add -A
