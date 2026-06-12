@@ -6,15 +6,40 @@ import { Feedback } from '../../types'
 
 const STATUS_OPTIONS = ['NEW', 'PLANNED', 'IN_PROGRESS', 'SHIPPED', 'DECLINED']
 
+// Working-view tabs. Active is the default inbox (everything still in
+// flight); Shipped/Declined are the terminal statuses awaiting archive;
+// Archived holds what's been swept out of the way; All shows everything.
+type FeedbackTab = 'ACTIVE' | 'SHIPPED' | 'DECLINED' | 'ARCHIVED' | 'ALL'
+const TABS: { key: FeedbackTab; label: string }[] = [
+  { key: 'ACTIVE', label: 'Active' },
+  { key: 'SHIPPED', label: 'Shipped' },
+  { key: 'DECLINED', label: 'Declined' },
+  { key: 'ARCHIVED', label: 'Archived' },
+  { key: 'ALL', label: 'All' },
+]
+
+function inTab(f: Feedback, tab: FeedbackTab): boolean {
+  const archived = f.archivedAt != null
+  switch (tab) {
+    case 'ACTIVE': return !archived && (f.status === 'NEW' || f.status === 'PLANNED' || f.status === 'IN_PROGRESS')
+    case 'SHIPPED': return !archived && f.status === 'SHIPPED'
+    case 'DECLINED': return !archived && f.status === 'DECLINED'
+    case 'ARCHIVED': return archived
+    case 'ALL': return true
+  }
+}
+
 export default function AdminFeedbackPage() {
   const [feedback, setFeedback] = useState<Feedback[]>([])
   const [analysis, setAnalysis] = useState('')
   const [loading, setLoading] = useState(true)
   const [analyzing, setAnalyzing] = useState(false)
-  const [filter, setFilter] = useState('ALL')
+  const [tab, setTab] = useState<FeedbackTab>('ACTIVE')
 
   useEffect(() => {
-    adminApi.getFeedback().then(res => { setFeedback(res.data); setLoading(false) })
+    // Fetch everything (archived included) once — the tabs and their count
+    // badges filter client-side, so switching tabs costs no round-trips.
+    adminApi.getFeedback({ includeArchived: true }).then(res => { setFeedback(res.data); setLoading(false) })
   }, [])
 
   async function analyze() {
@@ -27,12 +52,21 @@ export default function AdminFeedbackPage() {
     }
   }
 
-  async function updateItem(id: string, patch: { status?: string; isPublic?: boolean }) {
+  async function updateItem(id: string, patch: { status?: string; isPublic?: boolean; archived?: boolean }) {
     await adminApi.updateFeedback(id, patch)
-    setFeedback(prev => prev.map(f => f.id === id ? { ...f, ...patch } as Feedback : f))
+    // Optimistic local merge — `archived` is a wire boolean that maps to the
+    // archivedAt timestamp the tabs filter on.
+    const { archived, ...rest } = patch
+    const localPatch = {
+      ...rest,
+      ...(archived !== undefined ? { archivedAt: archived ? new Date().toISOString() : null } : {}),
+    }
+    setFeedback(prev => prev.map(f => f.id === id ? { ...f, ...localPatch } as Feedback : f))
   }
 
-  const filtered = filter === 'ALL' ? feedback : feedback.filter(f => f.status === filter || f.type === filter)
+  const filtered = feedback
+    .filter(f => inTab(f, tab))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
   return (
     <div className="space-y-4 max-w-4xl">
@@ -56,13 +90,17 @@ export default function AdminFeedbackPage() {
       )}
 
       <div className="flex gap-1 flex-wrap">
-        {['ALL', 'NEW', 'PLANNED', 'IN_PROGRESS', 'SHIPPED', 'FEATURE_REQUEST', 'BUG_REPORT'].map(f => (
-          <button key={f} onClick={() => setFilter(f)}
-            className={`px-3 py-1 rounded-lg text-xs border transition-colors ${filter === f ? 'bg-[#1F6F8B] text-white border-[#1F6F8B]' : 'border-gray-200 text-gray-600'}`}
-            style={{ borderWidth: '0.5px' }}>
-            {f.replace('_', ' ')}
-          </button>
-        ))}
+        {TABS.map(({ key, label }) => {
+          const count = feedback.filter(f => inTab(f, key)).length
+          return (
+            <button key={key} onClick={() => setTab(key)}
+              className={`px-3 py-1 rounded-lg text-xs border transition-colors flex items-center gap-1.5 ${tab === key ? 'bg-[#1F6F8B] text-white border-[#1F6F8B]' : 'border-gray-200 text-gray-600'}`}
+              style={{ borderWidth: '0.5px' }}>
+              {label}
+              <span className={`px-1 rounded ${tab === key ? 'bg-white/20' : 'bg-gray-100 text-gray-500'}`}>{count}</span>
+            </button>
+          )
+        })}
       </div>
 
       {loading ? (
@@ -99,6 +137,23 @@ export default function AdminFeedbackPage() {
                     />
                     Public
                   </label>
+                  {/* Archive only offered once an item is terminal (SHIPPED /
+                      DECLINED); archived items get Unarchive instead. */}
+                  {item.archivedAt != null ? (
+                    <button
+                      onClick={() => updateItem(item.id, { archived: false })}
+                      className="text-xs text-[#1F6F8B] hover:underline"
+                    >
+                      Unarchive
+                    </button>
+                  ) : (item.status === 'SHIPPED' || item.status === 'DECLINED') && (
+                    <button
+                      onClick={() => updateItem(item.id, { archived: true })}
+                      className="text-xs text-gray-400 hover:text-gray-600"
+                    >
+                      Archive
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

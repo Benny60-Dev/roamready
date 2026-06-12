@@ -304,8 +304,9 @@ export const adminApi = {
   getMetrics: () => api.get('/admin/metrics'),
   getSubscribers: () => api.get('/admin/subscribers'),
   getRevenue: () => api.get('/admin/revenue'),
-  getFeedback: () => api.get('/admin/feedback'),
-  updateFeedback: (id: string, data: { status?: string; isPublic?: boolean }) =>
+  getFeedback: (params?: { status?: string; includeArchived?: boolean }) =>
+    api.get('/admin/feedback', { params }),
+  updateFeedback: (id: string, data: { status?: string; isPublic?: boolean; archived?: boolean }) =>
     api.patch(`/admin/feedback/${id}`, data),
   analyzeFeedback: () => api.post('/admin/feedback/analyze'),
   getLinkHealth: () => api.get('/admin/link-health'),
