@@ -125,7 +125,7 @@ export const tripsApi = {
   create: (data: any) => api.post('/trips', data),
   get: (id: string) => api.get(`/trips/${id}`),
   update: (id: string, data: any) => api.put(`/trips/${id}`, data),
-  shiftDates: (id: string, body: { newStartDate: string }) => api.post(`/trips/${id}/shift-dates`, body),
+  shiftDates: (id: string, body: { newStartDate: string; modifyActionId?: string }) => api.post(`/trips/${id}/shift-dates`, body),
   delete: (id: string) => api.delete(`/trips/${id}`),
   getShared: (token: string) => api.get(`/trips/share/${token}`),
   createShare: (id: string) => api.post<{ sharedToken: string; regenerated: boolean }>(`/trips/${id}/share`),
@@ -134,7 +134,10 @@ export const tripsApi = {
   getStops: (id: string) => api.get(`/trips/${id}/stops`),
   createStop: (id: string, data: any) => api.post(`/trips/${id}/stops`, data),
   updateStop: (id: string, stopId: string, data: any) => api.put(`/trips/${id}/stops/${stopId}`, data),
-  deleteStop: (id: string, stopId: string) => api.delete(`/trips/${id}/stops/${stopId}`),
+  // modifyActionId (AI-MESA-10): DELETE has no body, so the apply-stamp id
+  // travels as a query param; the other apply endpoints take it in the body.
+  deleteStop: (id: string, stopId: string, modifyActionId?: string) =>
+    api.delete(`/trips/${id}/stops/${stopId}${modifyActionId ? `?modifyActionId=${encodeURIComponent(modifyActionId)}` : ''}`),
   generatePackingList: (id: string) => api.post(`/trips/${id}/packing-list`),
   exportPdf: (id: string) => api.post(`/trips/${id}/export/pdf`),
   reassignPOIs: (id: string) => api.post(`/trips/${id}/stops/reassign-pois`),
