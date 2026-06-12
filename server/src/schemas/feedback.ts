@@ -17,19 +17,24 @@ import { z } from 'zod'
 
 // The modal's <select>s submit '' for "no choice" on optional fields —
 // normalize to undefined so optional() applies instead of a 400.
+//
+// Zod v4 placement gotcha: a preprocess pipe is non-optional at the
+// object level no matter what its inner schema says, so the OUTER
+// .optional() is what lets the key be absent entirely; the INNER one
+// is what lets the preprocessed ''→undefined pass. Both are required.
 const emptyToUndefined = (v: unknown) => (v === '' ? undefined : v)
 
 export const FeedbackSubmitSchema = z
   .object({
     type: z.enum(['FEATURE_REQUEST', 'BUG_REPORT', 'GENERAL']),
-    title: z.preprocess(emptyToUndefined, z.string().min(1).max(200).optional()),
+    title: z.preprocess(emptyToUndefined, z.string().min(1).max(200).optional()).optional(),
     body: z.string().min(1).max(5000),
     screen: z.string().max(500).optional(),
     rating: z.number().int().min(1).max(5).optional(),
     importance: z.preprocess(
       emptyToUndefined,
       z.enum(['nice_to_have', 'important', 'critical']).optional(),
-    ),
+    ).optional(),
     rigType: z.string().max(200).optional(),
     tripContext: z.string().max(2000).optional(),
   })
