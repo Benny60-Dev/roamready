@@ -126,9 +126,12 @@ export default function AdminFeedbackPage() {
                   {item.user && (
                     <p className="text-xs text-gray-400 mt-0.5">
                       {[item.user.firstName, item.user.lastName].filter(Boolean).join(' ') || 'No name'}
-                      {' · '}{item.user.email}{' · '}
-                      {/* Primary: land in Gmail on a search for this item's ref —
-                          every email about it in one view, reply in-thread. */}
+                      {/* select-all: one click selects the whole address for copying —
+                          deliberately NOT a mailto (Gmail is the reply surface). */}
+                      {' · '}<span className="select-all">{item.user.email}</span>{' · '}
+                      {/* Sole action: land in Gmail on a search for this item's ref —
+                          every email about it in one view (the system emails carry
+                          the [FB-xxxx] ref in their subjects), reply in-thread. */}
                       <a
                         href={`${GMAIL_SEARCH_URL}${encodeURIComponent(fbRef(item.id))}`}
                         target="_blank"
@@ -136,18 +139,6 @@ export default function AdminFeedbackPage() {
                         className="text-[#1F6F8B] hover:underline"
                       >
                         Find in Gmail
-                      </a>
-                      {' · '}
-                      {/* Secondary: fresh pre-addressed compose (mailto) for items
-                          with no existing email to reply to. The [FB-xxxx] ref in
-                          the subject keys future threading + the Gmail search. */}
-                      <a
-                        href={`mailto:${item.user.email}?subject=${encodeURIComponent(
-                          `Re: [${fbRef(item.id)}] ${item.title || item.type.replace('_', ' ')}`
-                        )}`}
-                        className="text-[#1F6F8B] hover:underline"
-                      >
-                        Reply
                       </a>
                     </p>
                   )}
