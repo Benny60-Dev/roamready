@@ -566,7 +566,9 @@ model Feedback {
   screen      String?
   rating      Int?
   importance  String?
-  isPublic    Boolean        @default(true)
+  // Private by default — only an admin's Public toggle (PATCH
+  // /admin/feedback/:id) makes a row eligible for the public roadmap.
+  isPublic    Boolean        @default(false)
   status      FeedbackStatus @default(NEW)
   votes       Int            @default(0)
   voterIds    Json?
