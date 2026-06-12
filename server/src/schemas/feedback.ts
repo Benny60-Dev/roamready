@@ -24,6 +24,50 @@ import { z } from 'zod'
 // is what lets the preprocessed ''→undefined pass. Both are required.
 const emptyToUndefined = (v: unknown) => (v === '' ? undefined : v)
 
+// Screenshot attachments: images only, never persisted — decoded buffers are
+// forwarded to the support notification email and dropped. Validation trusts
+// the bytes, not the filename: base64 must be well-formed, decode to ≤4MB,
+// and start with png/jpeg/webp magic bytes.
+const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024
+// 4MB decoded ≈ 5.6M base64 chars; cap the raw string before decoding so a
+// hostile payload can't make us buffer far more than we'd ever accept.
+const MAX_ATTACHMENT_BASE64_CHARS = 6_000_000
+// Charset class + length%4 instead of the textbook grouped-quantifier
+// regex: V8 compiles repeated groups recursively and stack-overflows on
+// multi-megabyte strings. A bare character class scans linearly.
+const BASE64_CHARS_RE = /^[A-Za-z0-9+/]*={0,2}$/
+
+function isAllowedImage(buf: Buffer): boolean {
+  const png = buf.length > 8 &&
+    buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  const jpeg = buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff
+  const webp = buf.length > 12 &&
+    buf.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buf.subarray(8, 12).toString('ascii') === 'WEBP'
+  return png || jpeg || webp
+}
+
+const AttachmentSchema = z
+  .object({
+    filename: z.string().min(1).max(200),
+    data: z.string().min(1).max(MAX_ATTACHMENT_BASE64_CHARS),
+  })
+  .strict()
+  .superRefine((att, ctx) => {
+    if (att.data.length % 4 !== 0 || !BASE64_CHARS_RE.test(att.data)) {
+      ctx.addIssue({ code: 'custom', path: ['data'], message: 'attachment data is not valid base64' })
+      return
+    }
+    const buf = Buffer.from(att.data, 'base64')
+    if (buf.byteLength > MAX_ATTACHMENT_BYTES) {
+      ctx.addIssue({ code: 'custom', path: ['data'], message: 'attachment exceeds 4MB' })
+      return
+    }
+    if (!isAllowedImage(buf)) {
+      ctx.addIssue({ code: 'custom', path: ['data'], message: 'attachment is not a png, jpeg, or webp image' })
+    }
+  })
+
 export const FeedbackSubmitSchema = z
   .object({
     type: z.enum(['FEATURE_REQUEST', 'BUG_REPORT', 'GENERAL']),
@@ -37,6 +81,9 @@ export const FeedbackSubmitSchema = z
     ).optional(),
     rigType: z.string().max(200).optional(),
     tripContext: z.string().max(2000).optional(),
+    // Plain .optional() — no preprocess pipe, so the Zod v4 outer/inner
+    // placement gotcha (see title/importance above) doesn't apply here.
+    attachments: z.array(AttachmentSchema).max(3).optional(),
   })
   .strict()
 

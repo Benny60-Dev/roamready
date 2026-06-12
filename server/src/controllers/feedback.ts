@@ -7,7 +7,9 @@ import { sendFeedbackNotification, sendFeedbackAcknowledgment } from '../service
 export async function submitFeedback(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     // Body already validated + stripped by validateBody(FeedbackSubmitSchema).
-    const { type, title, body, screen, rating, importance, rigType, tripContext } = req.body
+    // attachments stay out of the create call — images are never persisted,
+    // they only ride the support notification email.
+    const { type, title, body, screen, rating, importance, rigType, tripContext, attachments } = req.body
     const feedback = await prisma.feedback.create({
       data: {
         userId: req.user!.id,
@@ -26,7 +28,17 @@ export async function submitFeedback(req: AuthRequest, res: Response, next: Next
     })
 
     // Fire-and-forget — an email failure must never fail or delay the 201.
-    sendFeedbackNotification(feedback).catch(err =>
+    // Attachment decode is guarded separately: a bad buffer drops the
+    // attachments, never the notification itself.
+    let emailAttachments: { filename: string; content: Buffer }[] = []
+    try {
+      emailAttachments = (attachments ?? []).map(
+        (a: { filename: string; data: string }) => ({ filename: a.filename, content: Buffer.from(a.data, 'base64') })
+      )
+    } catch (err) {
+      console.error('[feedback] attachment decode failed — sending notification without attachments:', err)
+    }
+    sendFeedbackNotification(feedback, emailAttachments).catch(err =>
       console.error('[feedback] support notification failed (submission unaffected):', err)
     )
     sendFeedbackAcknowledgment(feedback).catch(err =>

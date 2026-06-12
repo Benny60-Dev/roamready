@@ -29,7 +29,10 @@ type FeedbackRow = {
 const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-export async function sendFeedbackNotification(feedback: FeedbackRow): Promise<void> {
+export async function sendFeedbackNotification(
+  feedback: FeedbackRow,
+  attachments: { filename: string; content: Buffer }[] = [],
+): Promise<void> {
   // Submitter lookup happens here (not in the controller) so the extra
   // query rides the fire-and-forget path, off the response's critical path.
   const user = feedback.userId
@@ -61,6 +64,7 @@ export async function sendFeedbackNotification(feedback: FeedbackRow): Promise<v
     ['From', `${submitterName} <${submitterEmail}>`],
     ['Feedback ID', feedback.id],
   ]
+  if (attachments.length) lines.push(['Screenshots', String(attachments.length)])
 
   const html = `
     <p><strong>New feedback submission</strong></p>
@@ -76,7 +80,7 @@ export async function sendFeedbackNotification(feedback: FeedbackRow): Promise<v
     lines.map(([k, v]) => `${k}: ${v}`).join('\n') +
     `\n\n${feedback.body}\n\nReply to this email to respond to the submitter directly.`
 
-  await resend.emails.send({
+  const message = {
     from: fromAddress ?? 'RoamReady <onboarding@resend.dev>',
     to: supportEmail,
     // reply_to the submitter so Benny can answer from the support inbox
@@ -86,8 +90,24 @@ export async function sendFeedbackNotification(feedback: FeedbackRow): Promise<v
     subject,
     html,
     text,
-  })
+  }
 
+  // Attachments are best-effort: if Resend rejects the attachment send,
+  // log and fall through to a plain send so the notification itself still
+  // lands. A failure of the plain send throws to the caller's .catch.
+  if (attachments.length) {
+    try {
+      await resend.emails.send({ ...message, attachments })
+      console.log(
+        `[feedbackNotification] support notification sent for feedback ${feedback.id} with ${attachments.length} screenshot(s)`
+      )
+      return
+    } catch (err) {
+      console.error('[feedbackNotification] send with attachments failed — retrying without:', err)
+    }
+  }
+
+  await resend.emails.send(message)
   console.log('[feedbackNotification] support notification sent for feedback', feedback.id)
 }
 
