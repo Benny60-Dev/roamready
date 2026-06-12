@@ -87,6 +87,8 @@ export type TripUpdateInput = z.infer<typeof TripUpdateSchema>
 export const TripShiftDatesSchema = z
   .object({
     newStartDate: z.coerce.date(),
+    // AI-MESA-10 — apply-stamp plumbing; see StopUpdateSchema.modifyActionId.
+    modifyActionId: z.string().max(100).optional(),
   })
   .strict()
 

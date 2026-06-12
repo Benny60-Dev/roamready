@@ -4,6 +4,10 @@ import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
 import { chatWithAI, generatePackingListAI, analyzeFeedbackAI, generatePlanningContextSummary } from '../services/ai'
+import {
+  parseModifyBlocks, stripAppliedClaims, neutralizeLegacyMarkers,
+  annotateForModel, buildAppliedLookup, actionKey,
+} from '../services/modifyActions'
 import { parseTripDate } from '../utils/dates'
 
 // Soft cap: inject a "wrap up" system message and let Claude actually respond
@@ -409,7 +413,9 @@ function buildLiveTripState(trip: any): string {
     'NO change actually happens — the UI has no other way to apply modifications.',
     'Never say "Applied to trip", "Done!", "Added!", or any confirmation phrase without also emitting the <modify> tag.',
     'If you cannot determine all required parameters, ask the user — do not claim to have done it.',
-    'CLARIFYING QUESTIONS: When you need more information from the user before you can propose a change (e.g. they have not said which stop, how many nights, or which destination), DO NOT emit a <modify> tag. Instead, wrap your ENTIRE clarifying reply in a <clarify>…</clarify> tag — e.g. <clarify>Which stop did you mean — Stop 1 or Stop 2?</clarify>. The user sees only the text inside the tag, so write a normal, friendly question there. Emit <modify> ONLY when proposing an actionable change; emit <clarify> ONLY when asking for information you still need. Emit exactly one of the two per reply, never both and never neither.',
+    'MULTI-STEP CHANGES (AI-MESA-10 contract): when the user\'s request requires SEVERAL changes (e.g. adding multiple stops for a return route), emit ONE <modify> block PER change, in execution order, each on its own line. Every block is a SEPARATE PROPOSAL — the user must click Apply on each one individually, in order. NOTHING you emit is ever applied automatically.',
+    'NEVER claim a change has been applied. Changes happen ONLY after the user clicks Apply in the UI. Never write "[✓ change already applied]", "[✓ applied]", "[applied]" or any similar bracketed marker yourself — those markers are added by the SYSTEM to past turns based on verified apply state, and writing one yourself is a serious honesty violation (it will be stripped, and the user will see a claim with no change). If a past turn of yours shows "[proposal — NOT applied…]", that change never happened — do not assume or assert it did.',
+    'CLARIFYING QUESTIONS: When you need more information from the user before you can propose a change (e.g. they have not said which stop, how many nights, or which destination), DO NOT emit a <modify> tag. Instead, wrap your ENTIRE clarifying reply in a <clarify>…</clarify> tag — e.g. <clarify>Which stop did you mean — Stop 1 or Stop 2?</clarify>. The user sees only the text inside the tag, so write a normal, friendly question there. Emit <modify> blocks ONLY when proposing actionable changes; emit <clarify> ONLY when asking for information you still need. Never emit both in the same reply, and never neither — every modify-mode reply is either one-or-more <modify> blocks or exactly one <clarify>.',
     '',
     'USER VOCABULARY — read carefully:',
     'Each line in the stop list below shows a user-facing label ("Starting point" / "Stop N" / "Return home") and the stop NAME, e.g. "Stop 2: [EXAMPLE_STOP_2], [STATE]". Reference stops by NAME — the name is the reliable anchor; the "Stop N" number is only there to match the user\'s own wording:',
@@ -490,6 +496,13 @@ function buildLiveTripState(trip: any): string {
     'EXAMPLE — correct assistant response when user says "Push the trip to start August 9th":',
     'Sure! I\'ll shift the whole trip so it starts August 9th. Your stop count and per-stop nights stay the same.',
     '<modify>{"action":"shift_trip_dates","newStartDate":"2026-08-09"}</modify>',
+    '',
+    'EXAMPLE — correct MULTI-STEP response when user says "Route me home with overnight stops along the way":',
+    'Here\'s a return route home within your drive limit — three stops, each a separate change for you to apply:',
+    '<modify>{"action":"add_stop","locationName":"[EXAMPLE_STOP_1]","locationState":"[STATE]","type":"OVERNIGHT_ONLY","nights":1,"after_stop":"[EXAMPLE_STOP_2]"}</modify>',
+    '<modify>{"action":"add_stop","locationName":"[EXAMPLE_STOP_2]","locationState":"[STATE]","type":"OVERNIGHT_ONLY","nights":1,"after_stop":"[EXAMPLE_STOP_1]"}</modify>',
+    '<modify>{"action":"add_stop","locationName":"[HomeCity]","locationState":"[HomeState]","type":"HOME","nights":0}</modify>',
+    'Apply them in order and your return route is set. (Note: NO claim that anything was applied — the user decides.)',
     '',
     'STOP LIST RULES (GROUND TRUTH):',
     '1. The stop list below is the ONLY authoritative source of what stops currently exist.',
@@ -631,18 +644,19 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       }
     }
 
-    // Annotate each <modify>{…}</modify> block in an assistant turn with the
-    // literal marker "[✓ change already applied]", preserving surrounding
-    // prose. Replaces the previous stripModifyTags helper that DELETED the
-    // tags entirely — that turned every past assistant turn into a tagless
-    // "successful" demonstration, and the model would gradually learn (via
-    // in-context pattern-matching) that tags were optional, then stop
-    // emitting them mid-conversation in long modify sessions. Annotating
-    // instead lets the model see (a) it DID emit tags before in the right
-    // format → keep emitting, and (b) the corresponding action is already
-    // done → don't re-emit. Tagless prose turns are unaffected.
-    const annotateAppliedModify = (content: string) =>
-      content.replace(/<modify>[\s\S]*?<\/modify>/g, '[✓ change already applied]').trim()
+    // AI-MESA-10 — state-aware model-bound annotation. The old blanket
+    // annotateAppliedModify stamped EVERY past <modify> block "[✓ change
+    // already applied]" regardless of whether the user ever clicked Apply —
+    // which (a) lied to the model about unapplied proposals and (b) taught
+    // it the marker as normal assistant text it could emit itself (the
+    // Cindy/Mesa incident). Now each block is annotated from the verified
+    // per-action apply state persisted in modifyConversation: blocks the
+    // user applied read "[✓ applied …]", everything else reads "[proposal —
+    // NOT applied …]". The original rationale for annotating instead of
+    // stripping (keep demonstrating the tag format in-context) still holds.
+    const appliedLookup = buildAppliedLookup(liveTrip?.modifyConversation)
+    const annotateForModelTurn = (content: string) =>
+      annotateForModel(content, action => appliedLookup.has(actionKey(action)))
 
     // Cap history at the last 10 messages before sending to Claude.
     const HISTORY_CAP = 10
@@ -653,14 +667,10 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       ...nonSystemMessages.slice(-HISTORY_CAP),
     ]
 
-    // Annotate <modify> tags in assistant history before sending to Claude.
-    // System prompt (now first in combined prompt per Fix A) teaches the
-    // format; assistant history demonstrates that the model DID emit tags
-    // before AND that those actions are already applied — see the
-    // annotateAppliedModify comment for the rationale on the
-    // strip→annotate change.
+    // Annotate <modify> tags in assistant history before sending to Claude —
+    // state-aware per AI-MESA-10 (see annotateForModelTurn above).
     const cleanedMessages = cappedMessages.map((m: any) =>
-      m.role === 'assistant' ? { ...m, content: annotateAppliedModify(m.content) } : m
+      m.role === 'assistant' ? { ...m, content: annotateForModelTurn(m.content) } : m
     )
 
     const liveStateMsg = liveTrip ? buildLiveTripState(liveTrip) : null
@@ -834,6 +844,9 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     // warns about). null for non-modify chats. This replaces the old binary
     // modifyTagMissing, which conflated clarify questions with failures.
     let modifyOutcome: 'proposal' | 'clarify' | 'failed' | null = null
+    // AI-MESA-10 — server-parsed <modify> actions for this turn (modify mode
+    // only). Returned in the envelope and persisted with applied=false.
+    let parsedActions: ReturnType<typeof parseModifyBlocks> = []
 
     if (liveStateMsg) {
       const hasModify = /<modify>/.test(response)
@@ -849,14 +862,14 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
         console.warn('[AI modify] No <modify>/<clarify> tag detected in modification response — auto-retrying with reminder')
         const retryMessages = [
           ...messagesForAI,
-          { role: 'assistant' as const, content: annotateAppliedModify(response) },
+          { role: 'assistant' as const, content: annotateForModelTurn(response) },
           {
             role: 'user' as const,
             content:
               '[SYSTEM REMINDER: Your previous reply included neither a <modify> nor a <clarify> tag, so NO change was applied and the UI cannot tell what you intended. ' +
-              'If the user\'s request requires a trip modification, repeat your response and include the correct <modify>{...}</modify> block now. ' +
+              'If the user\'s request requires trip modifications, repeat your response and include the correct <modify>{...}</modify> block(s) now — one block per change, in execution order. ' +
               'If you instead need more information from the user before you can propose a change (a question or discussion turn), wrap your reply in a <clarify>...</clarify> tag. ' +
-              'Emit exactly one of <modify> or <clarify>.]',
+              'Emit one-or-more <modify> blocks OR exactly one <clarify> — never neither.]',
           },
         ]
         const retryResponse = await chatWithAI(retryMessages, userProfile, recentSurpriseDestinations, surpriseVibe, aiCtx)
@@ -879,6 +892,27 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       // text, never the raw tag (mirrors how the client strips <modify> from
       // displayed prose). Done before persistence so reloaded history is clean.
       response = response.replace(/<clarify>([\s\S]*?)<\/clarify>/g, '$1').trim()
+
+      // AI-MESA-10 — server is the single parse authority: extract EVERY
+      // <modify> block into structured actions (stable ids, applied=false).
+      // The raw tags stay in `response` so the not-yet-updated client's
+      // first-block parser keeps working through the phase gap; the Phase 2
+      // client drives entirely off actions[].
+      parsedActions = parseModifyBlocks(response)
+
+      // If the tags exist but none parsed (malformed JSON in every block),
+      // 'proposal' would promise the client an applyable change that doesn't
+      // exist — downgrade to 'failed' so the UI warns instead.
+      if (modifyOutcome === 'proposal' && parsedActions.length === 0) {
+        console.warn('[AI modify] <modify> tags present but no block parsed — downgrading outcome to failed')
+        modifyOutcome = 'failed'
+      }
+
+      // AI-MESA-10 deterministic display guard: the model must never be able
+      // to assert an apply. Strips "[✓ change already applied]" and close
+      // bracketed variants from the displayed/persisted text. <modify> tags
+      // are untouched.
+      response = stripAppliedClaims(response)
     }
 
     // AI-MESA-7 — DETERMINISTIC ORIGIN GUARD (no-home users, planning mode only).
@@ -1022,18 +1056,41 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     if (tripId) {
       const tripForPersist = liveTrip ?? await prisma.trip.findFirst({ where: { id: tripId, userId: req.user!.id } })
       if (tripForPersist) {
+        // AI-MESA-10 — persist RAW content (tags intact), never the blanket
+        // "[✓ change already applied]" annotation: persist time knows nothing
+        // about applies, and that marker is what made reloaded history lie.
+        // Assistant turns carry their actions [{id, action, applied,
+        // appliedAt}]; `applied` flips ONLY via stampModifyActionApplied on
+        // the trip-mutation endpoints. Re-posted turns from this session are
+        // matched back to their stored entries by exact content so existing
+        // stamps survive the overwrite-style persist below.
+        const stored = Array.isArray(tripForPersist.modifyConversation)
+          ? (tripForPersist.modifyConversation as any[])
+          : []
+        const usedStored = new Set<number>()
+        const carryActions = (content: string) => {
+          const idx = stored.findIndex(
+            (e, i) => !usedStored.has(i) && e?.role === 'assistant' && Array.isArray(e.actions) && e.content === content,
+          )
+          if (idx < 0) return undefined
+          usedStored.add(idx)
+          return stored[idx].actions
+        }
+
         const persistable = messages
           .filter((m: any) => m.role !== 'system')
-          .map((m: any) => ({
-            role: m.role,
-            // Annotate <modify> tags in stored history so reloaded conversations
-            // see consistent format AND the "already applied" marker — see the
-            // annotateAppliedModify helper for the rationale on the
-            // strip→annotate change.
-            content: m.role === 'assistant' ? annotateAppliedModify(m.content) : m.content,
-          }))
-        // Same annotation for the new assistant response being persisted.
-        persistable.push({ role: 'assistant', content: annotateAppliedModify(response) })
+          .map((m: any) => {
+            if (m.role !== 'assistant') return { role: m.role, content: m.content }
+            const actions = context === 'modify' ? carryActions(m.content) : undefined
+            return { role: 'assistant', content: m.content, ...(actions ? { actions } : {}) }
+          })
+        persistable.push({
+          role: 'assistant',
+          content: response,
+          ...(context === 'modify' && parsedActions.length
+            ? { actions: parsedActions.map(a => ({ ...a, applied: false, appliedAt: null })) }
+            : {}),
+        })
 
         await prisma.trip.update({
           where: { id: tripId },
@@ -1045,10 +1102,17 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     }
 
     // modifyOutcome tells the client how to render a modify-mode turn:
-    // 'proposal' → Apply card, 'clarify' → plain question (no warning),
+    // 'proposal' → Apply card(s), 'clarify' → plain question (no warning),
     // 'failed' → the inline "couldn't apply" notice. null for non-modify
-    // chats. The client (ModifyTripPanel) only warns on 'failed'.
-    res.json({ message: response, modifyOutcome })
+    // chats. actions[] (AI-MESA-10) is the server-parsed list of proposed
+    // changes for this turn — [{id, action, applied:false}] — and is the
+    // client's ONLY sanctioned source of applyable changes; `message` still
+    // contains raw <modify> tags solely for the pre-Phase-2 client.
+    res.json({
+      message: response,
+      modifyOutcome,
+      actions: parsedActions.map(a => ({ ...a, applied: false })),
+    })
   } catch (err: any) {
     console.error('[AI chat error] message:', err?.message)
     console.error('[AI chat error] status:', err?.status)
@@ -1076,7 +1140,17 @@ export async function getModifyHistory(req: AuthRequest, res: Response, next: Ne
       select: { modifyConversation: true },
     })
     if (!trip) throw new AppError('Trip not found', 404)
-    res.json(trip.modifyConversation || [])
+    // AI-MESA-10 — legacy degrade: pre-MESA-10 histories contain the old
+    // blanket "[✓ change already applied]" marker, written with no knowledge
+    // of actual apply state. We can't verify those retroactively, so serve
+    // them as neutral text — never a false checkmark. New-format entries
+    // pass through untouched (content + per-action applied state).
+    const conv = Array.isArray(trip.modifyConversation) ? (trip.modifyConversation as any[]) : []
+    res.json(conv.map(e =>
+      e?.role === 'assistant' && typeof e.content === 'string'
+        ? { ...e, content: neutralizeLegacyMarkers(e.content) }
+        : e,
+    ))
   } catch (err) { next(err) }
 }
 
