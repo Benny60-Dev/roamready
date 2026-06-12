@@ -139,6 +139,7 @@ export const tripsApi = {
   deleteStop: (id: string, stopId: string, modifyActionId?: string) =>
     api.delete(`/trips/${id}/stops/${stopId}${modifyActionId ? `?modifyActionId=${encodeURIComponent(modifyActionId)}` : ''}`),
   generatePackingList: (id: string) => api.post(`/trips/${id}/packing-list`),
+  savePackingList: (id: string, packingList: any[]) => api.put(`/trips/${id}/packing-list`, { packingList }),
   exportPdf: (id: string) => api.post(`/trips/${id}/export/pdf`),
   reassignPOIs: (id: string) => api.post(`/trips/${id}/stops/reassign-pois`),
   expandLongLegs: (id: string) => api.post(`/trips/${id}/expand-long-legs`),
