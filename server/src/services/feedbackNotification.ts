@@ -212,34 +212,61 @@ export async function sendFeedbackShippedNotification(feedback: FeedbackRow): Pr
   const roadmapUrl = `${clientOrigin}/roadmap`
   const ref = fbRef(feedback.id)
   const snippet = feedback.body.length > 200 ? `${feedback.body.slice(0, 200)}…` : feedback.body
+  const quotedHtml =
+    `${feedback.title ? `<p style="font-weight:500">${escapeHtml(feedback.title)}</p>` : ''}
+    <p style="white-space:pre-wrap;border-left:3px solid #1F6F8B;padding-left:12px">${escapeHtml(snippet)}</p>`
+  const quotedText = (feedback.title ? `${feedback.title}\n` : '') + snippet
 
-  const html = `
+  // Plain-language copy — deliberately no "shipped"/dev jargon; the reader
+  // is a camper, not a release manager. Two variants: bug reports hear
+  // "fixed", everything else hears "we built it".
+  const isBug = feedback.type === 'BUG_REPORT'
+
+  const subject = isBug
+    ? `Good news — the issue you reported is fixed [${ref}]`
+    : `Good news — we built what you asked for [${ref}]`
+
+  const html = isBug
+    ? `
     <p>Hi ${escapeHtml(firstName)},</p>
-    <p>Good news — the ${feedback.type === 'BUG_REPORT' ? 'fix' : 'feature'} you asked for has <strong>shipped</strong>! 🎉</p>
-    <p>Here's what you sent us:</p>
-    ${feedback.title ? `<p style="font-weight:500">${escapeHtml(feedback.title)}</p>` : ''}
-    <p style="white-space:pre-wrap;border-left:3px solid #1F6F8B;padding-left:12px">${escapeHtml(snippet)}</p>
-    <p>It's live now — you'll find it in the app, and on our <a href="${roadmapUrl}">public roadmap</a> under Shipped.</p>
-    <p>Hit reply and tell us how it works for you — it goes straight to us.</p>
-    <p>— The RoamReady team</p>
+    <p>You recently reported a problem:</p>
+    ${quotedHtml}
+    <p>We wanted to let you know it's been fixed, and the fix is now live on RoamReady. You don't need to do anything — the next time you use the site, you'll have the corrected version.</p>
+    <p>Thank you for taking the time to report it. Reports like yours genuinely help us make RoamReady better for everyone.</p>
+    <p>If you're still running into the problem, just reply to this email and we'll take another look.</p>
+    <p>Happy travels,<br/>The RoamReady team</p>
+    <p style="color:#9ca3af;font-size:12px">Reference: ${ref}</p>
+  `.trim()
+    : `
+    <p>Hi ${escapeHtml(firstName)},</p>
+    <p>A while back you suggested:</p>
+    ${quotedHtml}
+    <p>We built it, and it's now available on RoamReady. Thank you for the idea — suggestions like yours shape what we work on next.</p>
+    <p>You can see what else we're working on at <a href="${roadmapUrl}">${roadmapUrl}</a>.</p>
+    <p>If you have any questions or more ideas, just reply to this email.</p>
+    <p>Happy travels,<br/>The RoamReady team</p>
     <p style="color:#9ca3af;font-size:12px">Reference: ${ref}</p>
   `.trim()
 
-  const text =
-    `Hi ${firstName},\n\n` +
-    `Good news — the ${feedback.type === 'BUG_REPORT' ? 'fix' : 'feature'} you asked for has shipped!\n\n` +
-    `Here's what you sent us:\n` +
-    (feedback.title ? `${feedback.title}\n` : '') +
-    `${snippet}\n\n` +
-    `It's live now — you'll find it in the app, and on our public roadmap under Shipped: ${roadmapUrl}\n\n` +
-    `Hit reply and tell us how it works for you — it goes straight to us.\n\n` +
-    `— The RoamReady team\n\nReference: ${ref}`
+  const text = isBug
+    ? `Hi ${firstName},\n\n` +
+      `You recently reported a problem:\n\n${quotedText}\n\n` +
+      `We wanted to let you know it's been fixed, and the fix is now live on RoamReady. You don't need to do anything — the next time you use the site, you'll have the corrected version.\n\n` +
+      `Thank you for taking the time to report it. Reports like yours genuinely help us make RoamReady better for everyone.\n\n` +
+      `If you're still running into the problem, just reply to this email and we'll take another look.\n\n` +
+      `Happy travels,\nThe RoamReady team\n\nReference: ${ref}`
+    : `Hi ${firstName},\n\n` +
+      `A while back you suggested:\n\n${quotedText}\n\n` +
+      `We built it, and it's now available on RoamReady. Thank you for the idea — suggestions like yours shape what we work on next.\n\n` +
+      `You can see what else we're working on at ${roadmapUrl}\n\n` +
+      `If you have any questions or more ideas, just reply to this email.\n\n` +
+      `Happy travels,\nThe RoamReady team\n\nReference: ${ref}`
 
   await resend.emails.send({
     from: fromAddress ?? 'RoamReady <onboarding@resend.dev>',
     to: user.email,
     reply_to: supportEmail,
-    subject: `Good news — your request shipped [${ref}] — RoamReady`,
+    subject,
     html,
     text,
   })
