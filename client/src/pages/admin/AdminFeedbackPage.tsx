@@ -117,7 +117,24 @@ export default function AdminFeedbackPage() {
                   </div>
                   <p className="text-sm font-medium text-gray-900">{item.title || item.body.slice(0, 60)}</p>
                   {item.title && <p className="text-xs text-gray-500 mt-0.5">{item.body}</p>}
-                  {item.user && <p className="text-xs text-gray-400 mt-0.5">{item.user.email}</p>}
+                  {item.user && (
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {[item.user.firstName, item.user.lastName].filter(Boolean).join(' ') || 'No name'}
+                      {' · '}{item.user.email}{' · '}
+                      {/* Pre-addressed reply in the admin's own mail client. The
+                          [FB-xxxx] ref (last 4 of the feedback id) keys the
+                          subject so follow-up replies about the same item
+                          thread together. */}
+                      <a
+                        href={`mailto:${item.user.email}?subject=${encodeURIComponent(
+                          `Re: [FB-${item.id.slice(-4).toUpperCase()}] ${item.title || item.type.replace('_', ' ')}`
+                        )}`}
+                        className="text-[#1F6F8B] hover:underline"
+                      >
+                        Reply
+                      </a>
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                   <select
