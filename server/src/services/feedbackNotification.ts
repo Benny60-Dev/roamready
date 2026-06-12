@@ -15,6 +15,12 @@ import { prisma } from '../utils/prisma'
 const resend = new Resend(process.env.RESEND_API_KEY)
 const supportEmail = process.env.SUPPORT_EMAIL ?? 'support@roamready.ai'
 
+/** Short reference code embedded in every email subject about a feedback
+ *  item. MUST stay in sync with fbRef in AdminFeedbackPage.tsx — the admin
+ *  UI's "Find in Gmail" search and mailto Reply subjects are keyed on the
+ *  same [FB-XXXX] token, which is what makes replies thread with these. */
+const fbRef = (id: string) => `FB-${id.slice(-4).toUpperCase()}`
+
 type FeedbackRow = {
   id: string
   type: string
@@ -53,7 +59,7 @@ export async function sendFeedbackNotification(
     )
   }
 
-  const subject = `[Feedback] ${feedback.type.replace(/_/g, ' ')}: ${feedback.title || feedback.body.slice(0, 60)}`
+  const subject = `[Feedback][${fbRef(feedback.id)}] ${feedback.type.replace(/_/g, ' ')}: ${feedback.title || feedback.body.slice(0, 60)}`
 
   const lines: [string, string][] = [
     ['Type', feedback.type],
@@ -170,7 +176,7 @@ export async function sendFeedbackAcknowledgment(feedback: FeedbackRow): Promise
     to: user.email,
     // Replies land in the support inbox, not the no-reply sender.
     reply_to: supportEmail,
-    subject: 'We received your feedback — RoamReady',
+    subject: `We received your feedback [${fbRef(feedback.id)}] — RoamReady`,
     html,
     text,
   })
