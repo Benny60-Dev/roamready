@@ -137,7 +137,15 @@ export async function promoteSession(req: AuthRequest, res: Response, next: Next
       select: { id: true, tripId: true, messages: true },
     })
     if (!session) throw new AppError('Session not found', 404)
-    if (session.tripId) throw new AppError('Session already promoted', 400)
+    // BUILD-DUPE-1 — idempotent re-promote. Back-button + a second Build
+    // click used to 400 here ("Session already promoted") and the client
+    // rendered the raw axios error. The trip already exists and the session
+    // row links it (tripId), so hand back its id with alreadyBuilt so the
+    // client can skip the build pipeline and land on the itinerary. Genuine
+    // validation failures below keep their error statuses.
+    if (session.tripId) {
+      return res.status(200).json({ alreadyBuilt: true, trip: { id: session.tripId } })
+    }
 
     const data: PlanningSessionPromoteInput = req.body
 

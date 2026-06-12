@@ -744,7 +744,10 @@ export default function SessionPage() {
   }
 
   async function buildItinerary(vehicleData: ConfirmVehiclesResult) {
-    if (!itinerary || !sessionId) return
+    // `creating` guard here too (not only in onBuildItineraryClick): the
+    // ConfirmVehiclesModal path calls this directly, so a double-confirm
+    // click could otherwise start two builds.
+    if (!itinerary || !sessionId || creating) return
     setCreating(true)
     setBuildError(null)
     try {
@@ -785,6 +788,17 @@ export default function SessionPage() {
       })
       const tripId = promoted.data.trip.id
       console.timeEnd('[buildItinerary] promoteSession')
+
+      // BUILD-DUPE-1 — the session was already promoted (back-button + Build
+      // again): the trip exists complete with its stops, so re-running the
+      // build pipeline below would duplicate them. Treat it exactly like a
+      // fresh build and land on the itinerary.
+      if (promoted.data.alreadyBuilt) {
+        console.timeEnd('[buildItinerary] total')
+        sessionStorage.removeItem('lastVisitedSessionId')
+        navigate(`/trips/${tripId}/map`)
+        return
+      }
 
       // The planning transcript is NOT copied to Trip.aiConversation. It lives
       // on PlanningSession.messages (autosaved during planning) and the
