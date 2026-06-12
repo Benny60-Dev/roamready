@@ -37,34 +37,46 @@ interface ModifyAction {
   newStartDate?: string
 }
 
+/** AI-MESA-10 — one server-parsed <modify> action. The SERVER is the single
+ *  parse authority: these arrive in the chat envelope's actions[] (emission
+ *  order) and on persisted history entries; the client never re-parses prose.
+ *  `applied` is persisted truth — it flips only when a trip-mutation endpoint
+ *  stamps the action after actually executing it. */
+interface ServerModifyAction {
+  id: string
+  action: ModifyAction
+  applied: boolean
+  appliedAt?: string | null
+}
+
+/** In-session UI overlay for a card that is mid-apply or failed its last
+ *  attempt. Keyed by action id, never persisted — on reload everything
+ *  re-derives from the per-action `applied` flags (server truth). */
+interface ActionUiState {
+  status: 'applying' | 'failed'
+  error?: string
+}
+
 interface ChatMsg {
   role: 'user' | 'assistant'
   content: string
-  modifyAction?: ModifyAction
-  modifyApplied?: boolean
-  modifyCancelled?: boolean
+  /** AI-MESA-10 — the server-parsed proposals for this assistant turn. */
+  actions?: ServerModifyAction[]
   /** Set to true when the server reported modifyOutcome==='failed' — modify
    *  mode was active, the server retried once, and the final response carried
    *  neither a <modify> nor a <clarify> tag (a genuine no-op). The render path
    *  adds a small inline warning under the assistant bubble. NOT set for
    *  'clarify' turns (the AI legitimately asking for more info), which render
-   *  as a plain question with no warning — distinct from the "Apply"
-   *  confirmation card (which renders when modifyAction is present). */
+   *  as a plain question with no warning. */
   modifyFailed?: boolean
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function parseModify(text: string): ModifyAction | null {
-  const match = text.match(/<modify>([\s\S]*?)<\/modify>/)
-  if (!match) return null
-  try {
-    return JSON.parse(match[1].trim()) as ModifyAction
-  } catch {
-    return null
-  }
-}
-
+// Strip raw <modify> tags from displayed prose. The envelope keeps them in
+// `message` only for old-client compat — this client renders actions[] and
+// never re-parses text (the old parseModify took only the FIRST block, which
+// silently dropped stops 2-N of a multi-step plan: the Cindy/Mesa incident).
 function cleanText(text: string): string {
   return text.replace(/<modify>[\s\S]*?<\/modify>/g, '').trim()
 }
@@ -173,6 +185,9 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
   const [input, setInput] = useState('')
   const [typing, setTyping] = useState(false)
   const [applying, setApplying] = useState(false)
+  // Per-action in-session overlay (applying spinner / failed error). Reset on
+  // every history load — persisted `applied` flags are the durable state.
+  const [actionUi, setActionUi] = useState<Record<string, ActionUiState>>({})
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   // MODIFY-RESET-1: number of messages seeded from persisted history when the
@@ -195,20 +210,26 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
   useEffect(() => {
     if (!isOpen) return
     setHistoryLoaded(false)
+    setActionUi({})
     aiApi.getModifyHistory(trip.id)
       .then(res => {
-        const history: Array<{ role: 'user' | 'assistant'; content: string }> = res.data ?? []
+        const history: Array<{ role: 'user' | 'assistant'; content: string; actions?: ServerModifyAction[] }> =
+          res.data ?? []
         if (history.length === 0) {
           setMessages([{ role: 'assistant', content: GREETING(trip.name) }])
           // Only the greeting was seeded → boundary 1, so a first send posts just
           // the user's message.
           sessionStartLenRef.current = 1
         } else {
-          setMessages(history.map(m => {
-            if (m.role !== 'assistant') return m
-            const modifyAction = parseModify(m.content)
-            return modifyAction ? { ...m, modifyAction, modifyApplied: true } : m
-          }))
+          // AI-MESA-10 — apply state comes from the persisted per-action
+          // `applied` flags, stamped server-side at execution time. (The old
+          // path re-parsed the first <modify> tag and marked it applied:true
+          // unconditionally — a reload-time lie.)
+          setMessages(history.map(m =>
+            m.role === 'assistant' && Array.isArray(m.actions) && m.actions.length
+              ? { role: m.role, content: m.content, actions: m.actions }
+              : { role: m.role, content: m.content }
+          ))
           // history.length messages seeded → boundary excludes all loaded history
           // from the posted array (it's displayed as scrollback only).
           sessionStartLenRef.current = history.length
@@ -273,11 +294,13 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
       // See the ChatMsg interface above + the notice block in the render.
       const modifyOutcome: string | undefined = res.data?.modifyOutcome
 
-      const modifyAction = parseModify(aiText)
+      // AI-MESA-10 — the server's parsed actions[] is the only apply source;
+      // the prose is display-only (tags stripped at render by cleanText).
+      const serverActions: ServerModifyAction[] = Array.isArray(res.data?.actions) ? res.data.actions : []
       const aiMsg: ChatMsg = {
         role: 'assistant',
         content: aiText,
-        ...(modifyAction ? { modifyAction } : {}),
+        ...(serverActions.length ? { actions: serverActions } : {}),
         ...(modifyOutcome === 'failed' ? { modifyFailed: true } : {}),
       }
       setMessages(prev => [...prev, aiMsg])
@@ -299,214 +322,187 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
     }
   }
 
-  async function applyModification(msgIndex: number, action: ModifyAction) {
-    console.log('[applyMod] ENTRY — msgIndex:', msgIndex, '| action:', JSON.stringify(action))
-    setApplying(true)
-    try {
-      // Fetch fresh trip data from the DB so position math uses current stop orders,
-      // not the (potentially stale) React prop captured at last render.
-      const freshRes = await tripsApi.get(trip.id)
-      const freshStops = freshRes.data.stops ?? []
-      const sortedStops = [...freshStops].sort((a: any, b: any) => a.order - b.order)
-      console.log('[applyMod] freshStops count:', sortedStops.length, '| stops:', sortedStops.map((s: any) => s.order + ':' + s.locationName))
+  /** Executes one server-parsed action against the trip-mutation endpoints,
+   *  threading the action id so the SERVER stamps applied=true at execution
+   *  time (AI-MESA-10 — the client never self-reports apply success as the
+   *  source of truth). Throws on any failure; callers own the card state. */
+  async function executeAction(action: ModifyAction, modifyActionId: string) {
+    // Fetch fresh trip data from the DB so position math uses current stop orders,
+    // not the (potentially stale) React prop captured at last render.
+    const freshRes = await tripsApi.get(trip.id)
+    const freshStops = freshRes.data.stops ?? []
+    const sortedStops = [...freshStops].sort((a: any, b: any) => a.order - b.order)
+    console.log('[applyMod] action:', JSON.stringify(action), '| freshStops:', sortedStops.map((s: any) => s.order + ':' + s.locationName))
 
-      // Fuzzy match a stop by location name
-      function findStop(name?: string) {
-        if (!name) return undefined
-        const needle = name.toLowerCase()
-        return sortedStops.find(
-          (s: any) =>
-            s.locationName.toLowerCase().includes(needle) ||
-            needle.includes(s.locationName.toLowerCase())
-        )
-      }
-
-      // Resolve location name from either new schema (locationName) or legacy (location)
-      const resolvedName = action.locationName ?? action.location ?? ''
-      const resolvedState = action.locationState ?? (() => {
-        const raw = action.location ?? ''
-        const commaIdx = raw.lastIndexOf(',')
-        return commaIdx >= 0 ? raw.slice(commaIdx + 1).trim() : undefined
-      })()
-      const cleanName = action.locationName
-        ? resolvedName
-        : (() => { const raw = resolvedName; const c = raw.lastIndexOf(','); return c >= 0 ? raw.slice(0, c).trim() : raw.trim() })()
-
-      // Dispatch the action. Converted from an if/else chain to a switch so
-      // the `default:` branch can throw on any unknown action — closing the
-      // silent-success failure mode where a hallucinated action name (e.g.
-      // a date-change variant the AI invents) used to fall through with no
-      // mutation and still render a green "✅ Done!" bubble.
-      switch (action.action) {
-        case 'add_stop': {
-          // Duplicate guard — block if a stop with a matching name already exists
-          const locationNeedle = cleanName.toLowerCase()
-          const duplicate = locationNeedle ? sortedStops.find(
-            (s: any) =>
-              s.locationName.toLowerCase().includes(locationNeedle) ||
-              locationNeedle.includes(s.locationName.toLowerCase())
-          ) : undefined
-          console.log('[applyMod] duplicate check — needle:', locationNeedle, '| duplicate:', duplicate ? duplicate.locationName : 'none')
-
-          // Round-trip exception: a return-home add_stop legitimately re-uses
-          // the home city. Allow when the incoming stop is type=HOME, the matched
-          // duplicate is the trip's STARTING HOME (first HOME in sortedStops),
-          // and there is not already a closing HOME on the trip.
-          const homeStops = sortedStops.filter((s: any) => s.type === 'HOME')
-          const startingHome = homeStops[0]
-          const isReturnHomeAdd =
-            !!duplicate &&
-            action.type === 'HOME' &&
-            duplicate.type === 'HOME' &&
-            duplicate === startingHome &&
-            homeStops.length === 1
-
-          if (duplicate && !isReturnHomeAdd) {
-            setMessages(prev => [
-              ...prev,
-              { role: 'assistant', content: `${duplicate.locationName} is already on your trip (stop #${duplicate.order}). No change was made.` },
-            ])
-            setApplying(false)
-            return
-          }
-
-          // Position resolution:
-          // 1. Return-home adds (type=HOME on a trip that already has a HOME start) ALWAYS land at the end.
-          //    The AI cannot reliably compute "the end" when stop orders are non-contiguous, so the client forces it.
-          // 2. Otherwise, if afterStopOrder is provided, honor it.
-          // 3. Otherwise, if legacy after_stop name is provided, use that.
-          // 4. Otherwise, append after the last stop.
-          const lastStop = sortedStops[sortedStops.length - 1]
-          const forceAppendAsReturnHome =
-            action.type === 'HOME' &&
-            sortedStops.some((s: any) => s.type === 'HOME')
-
-          // MODIFY-ANCHOR-1: resolve the bracket stop by NAME first. The model is
-          // shown one number + the name per stop and anchors on after_stop (the exact
-          // locationName), which matches reliably. The numeric afterStopOrder is a
-          // fragile fallback (the model used to miscount it) — used only when
-          // after_stop is absent or doesn't match any current stop.
-          let afterStop: any
-          let resolvedVia: 'returnHome' | 'name' | 'order' | 'append'
-          if (forceAppendAsReturnHome) {
-            afterStop = lastStop
-            resolvedVia = 'returnHome'
-          } else {
-            const byName = action.after_stop ? findStop(action.after_stop) : undefined
-            const byOrder = action.afterStopOrder != null
-              ? sortedStops.find((s: any) => s.order === action.afterStopOrder)
-              : undefined
-            afterStop = byName ?? byOrder ?? lastStop
-            resolvedVia = byName ? 'name' : byOrder ? 'order' : 'append'
-          }
-
-          const afterOrder = afterStop?.order ?? (lastStop?.order ?? 0)
-          const newOrder = afterOrder + 1
-          console.log('[applyMod] position — forceAppendAsReturnHome:', forceAppendAsReturnHome, '| after_stop:', action.after_stop, '| resolvedVia:', resolvedVia, '| afterStop:', afterStop?.locationName, '| afterOrder:', afterOrder, '| newOrder:', newOrder)
-
-          const payload = {
-            locationName: cleanName,
-            locationState: resolvedState || undefined,
-            nights: action.nights ?? 1,
-            type: action.type ?? 'DESTINATION',
-            order: newOrder,
-            bookingStatus: 'NOT_BOOKED',
-            isCompatible: true,
-          }
-          console.log('[applyMod] calling createStop with payload:', JSON.stringify(payload))
-          const createRes = await tripsApi.createStop(trip.id, payload)
-          console.log('[applyMod] createStop response status:', createRes.status, '| data:', JSON.stringify(createRes.data))
-          break
-        }
-        case 'remove_stop': {
-          const stop = findStop(cleanName)
-          if (stop) await tripsApi.deleteStop(trip.id, stop.id)
-          else throw new Error(`Could not find stop: ${cleanName}`)
-          break
-        }
-        case 'change_nights': {
-          const stop = findStop(cleanName)
-          if (stop && action.nights) await tripsApi.updateStop(trip.id, stop.id, { nights: action.nights })
-          else throw new Error(`Could not find stop or nights missing: ${cleanName}`)
-          break
-        }
-        case 'suggest_campground': {
-          const stop = findStop(cleanName)
-          if (stop && action.campgroundName) {
-            await tripsApi.updateStop(trip.id, stop.id, { campgroundName: action.campgroundName })
-          } else throw new Error(`Could not find stop or campground name missing`)
-          break
-        }
-        case 'shift_trip_dates': {
-          if (!action.newStartDate) throw new Error('shift_trip_dates missing newStartDate')
-          // The shift endpoint returns the full trip (with stops, journal-included)
-          // — same shape as tripsApi.get — so we can skip the trailing refetch
-          // and pass the response straight to onTripUpdated. Saves one round-trip.
-          const shiftRes = await tripsApi.shiftDates(trip.id, { newStartDate: action.newStartDate })
-          onTripUpdated(shiftRes.data)
-          setMessages(prev =>
-            prev.map((m, i) => (i === msgIndex ? { ...m, modifyApplied: true } : m))
-          )
-          setMessages(prev => [
-            ...prev,
-            { role: 'assistant', content: '✅ Trip dates shifted. Would you like to make any other modifications?' },
-          ])
-          setApplying(false)
-          return
-        }
-        default:
-          // Defensive: any action name the AI invents (e.g. a hallucinated
-          // date variant before shift_trip_dates existed) falls through here.
-          // Throwing surfaces a clean error bubble via the existing catch
-          // below instead of the old silent-success "✅ Done!" path.
-          console.error('Unsupported modify action:', action)
-          throw new Error(`Unsupported modify action: ${(action as any).action}`)
-      }
-
-      // Refresh trip data and propagate upward
-      const res = await tripsApi.get(trip.id)
-      onTripUpdated(res.data)
-
-      // Mark this message's confirmation card as applied
-      setMessages(prev =>
-        prev.map((m, i) => (i === msgIndex ? { ...m, modifyApplied: true } : m))
+    // Fuzzy match a stop by location name
+    function findStop(name?: string) {
+      if (!name) return undefined
+      const needle = name.toLowerCase()
+      return sortedStops.find(
+        (s: any) =>
+          s.locationName.toLowerCase().includes(needle) ||
+          needle.includes(s.locationName.toLowerCase())
       )
+    }
 
-      // Follow-up success message
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: '✅ Done! The change has been applied. Would you like to make any other modifications?',
-        },
-      ])
+    // Resolve location name from either new schema (locationName) or legacy (location)
+    const resolvedName = action.locationName ?? action.location ?? ''
+    const resolvedState = action.locationState ?? (() => {
+      const raw = action.location ?? ''
+      const commaIdx = raw.lastIndexOf(',')
+      return commaIdx >= 0 ? raw.slice(commaIdx + 1).trim() : undefined
+    })()
+    const cleanName = action.locationName
+      ? resolvedName
+      : (() => { const raw = resolvedName; const c = raw.lastIndexOf(','); return c >= 0 ? raw.slice(0, c).trim() : raw.trim() })()
+
+    // Dispatch the action. The `default:` branch throws on any unknown action —
+    // a hallucinated action name surfaces as a card error, never silent success.
+    switch (action.action) {
+      case 'add_stop': {
+        // Duplicate guard — block if a stop with a matching name already exists
+        const locationNeedle = cleanName.toLowerCase()
+        const duplicate = locationNeedle ? sortedStops.find(
+          (s: any) =>
+            s.locationName.toLowerCase().includes(locationNeedle) ||
+            locationNeedle.includes(s.locationName.toLowerCase())
+        ) : undefined
+
+        // Round-trip exception: a return-home add_stop legitimately re-uses
+        // the home city. Allow when the incoming stop is type=HOME, the matched
+        // duplicate is the trip's STARTING HOME (first HOME in sortedStops),
+        // and there is not already a closing HOME on the trip.
+        const homeStops = sortedStops.filter((s: any) => s.type === 'HOME')
+        const startingHome = homeStops[0]
+        const isReturnHomeAdd =
+          !!duplicate &&
+          action.type === 'HOME' &&
+          duplicate.type === 'HOME' &&
+          duplicate === startingHome &&
+          homeStops.length === 1
+
+        if (duplicate && !isReturnHomeAdd) {
+          // Throw instead of the old silent no-op bubble: the card shows this
+          // verbatim and stays unapplied — never a false success.
+          throw new Error(`${duplicate.locationName} is already on your trip (stop #${duplicate.order})`)
+        }
+
+        // Position resolution:
+        // 1. Return-home adds (type=HOME on a trip that already has a HOME start) ALWAYS land at the end.
+        //    The AI cannot reliably compute "the end" when stop orders are non-contiguous, so the client forces it.
+        // 2. Otherwise resolve the bracket stop by NAME first (MODIFY-ANCHOR-1) —
+        //    the numeric afterStopOrder is a fragile fallback.
+        // 3. Otherwise, append after the last stop.
+        const lastStop = sortedStops[sortedStops.length - 1]
+        const forceAppendAsReturnHome =
+          action.type === 'HOME' &&
+          sortedStops.some((s: any) => s.type === 'HOME')
+
+        let afterStop: any
+        if (forceAppendAsReturnHome) {
+          afterStop = lastStop
+        } else {
+          const byName = action.after_stop ? findStop(action.after_stop) : undefined
+          const byOrder = action.afterStopOrder != null
+            ? sortedStops.find((s: any) => s.order === action.afterStopOrder)
+            : undefined
+          afterStop = byName ?? byOrder ?? lastStop
+        }
+
+        const afterOrder = afterStop?.order ?? (lastStop?.order ?? 0)
+        const newOrder = afterOrder + 1
+        console.log('[applyMod] add_stop position — after_stop:', action.after_stop, '| afterStop:', afterStop?.locationName, '| newOrder:', newOrder)
+
+        await tripsApi.createStop(trip.id, {
+          locationName: cleanName,
+          locationState: resolvedState || undefined,
+          nights: action.nights ?? 1,
+          type: action.type ?? 'DESTINATION',
+          order: newOrder,
+          bookingStatus: 'NOT_BOOKED',
+          isCompatible: true,
+          modifyActionId, // server stamps the proposal applied=true after the insert
+        })
+        break
+      }
+      case 'remove_stop': {
+        const stop = findStop(cleanName)
+        if (!stop) throw new Error(`Could not find stop: ${cleanName}`)
+        await tripsApi.deleteStop(trip.id, stop.id, modifyActionId)
+        break
+      }
+      case 'change_nights': {
+        const stop = findStop(cleanName)
+        if (!stop || !action.nights) throw new Error(`Could not find stop or nights missing: ${cleanName}`)
+        await tripsApi.updateStop(trip.id, stop.id, { nights: action.nights, modifyActionId })
+        break
+      }
+      case 'suggest_campground': {
+        const stop = findStop(cleanName)
+        if (!stop || !action.campgroundName) throw new Error('Could not find stop or campground name missing')
+        await tripsApi.updateStop(trip.id, stop.id, { campgroundName: action.campgroundName, modifyActionId })
+        break
+      }
+      case 'shift_trip_dates': {
+        if (!action.newStartDate) throw new Error('shift_trip_dates missing newStartDate')
+        // The shift endpoint returns the full trip (with stops, journal-included)
+        // — same shape as tripsApi.get — so we can skip the trailing refetch
+        // and pass the response straight to onTripUpdated. Saves one round-trip.
+        const shiftRes = await tripsApi.shiftDates(trip.id, { newStartDate: action.newStartDate, modifyActionId })
+        onTripUpdated(shiftRes.data)
+        return
+      }
+      default:
+        console.error('Unsupported modify action:', action)
+        throw new Error(`Unsupported modify action: ${(action as any).action}`)
+    }
+
+    // Refresh trip data and propagate upward
+    const res = await tripsApi.get(trip.id)
+    onTripUpdated(res.data)
+  }
+
+  /** Applies one action with per-card state: applying (disabled, spinner
+   *  label) → ✓ applied (mirrors the server's stamp) or failed (server error
+   *  shown verbatim on the card, which stays applicable for retry). Returns
+   *  success so applyAll can stop on the first failure. */
+  async function applyAction(msgIndex: number, sa: ServerModifyAction): Promise<boolean> {
+    setApplying(true)
+    setActionUi(prev => ({ ...prev, [sa.id]: { status: 'applying' } }))
+    try {
+      await executeAction(sa.action, sa.id)
+      // Mirror the server's stamp locally — the mutation endpoint succeeded
+      // and stamped applied=true; a reload renders the same state from
+      // persisted truth.
+      setMessages(prev => prev.map((m, i) =>
+        i === msgIndex && m.actions
+          ? { ...m, actions: m.actions.map(a => (a.id === sa.id ? { ...a, applied: true } : a)) }
+          : m
+      ))
+      setActionUi(prev => { const { [sa.id]: _gone, ...rest } = prev; return rest })
+      return true
     } catch (err: any) {
-      console.error('[applyMod] CAUGHT ERROR:', err?.message, err?.response?.status, err?.response?.data)
-      // Prefer the server's structured error message when present (e.g.
-      // HOME_STOP_PROTECTED / MIN_STOPS_VIOLATION from the deleteStop guards).
-      // Falls back to the axios message for transport-level errors.
-      const serverMsg = err?.response?.data?.error
-      const reason = serverMsg || err?.message || 'unknown error'
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: `Sorry, I couldn't apply that change: ${reason}. Want to try a different approach?`,
-        },
-      ])
+      console.error('[applyMod] FAILED:', err?.message, err?.response?.status, err?.response?.data)
+      // Surface the server's structured error VERBATIM (date conflicts from
+      // out-of-order applies, HOME_STOP_PROTECTED, MIN_STOPS_VIOLATION, …) —
+      // never swallowed. Axios message is the transport-level fallback.
+      const reason = err?.response?.data?.error || err?.message || 'unknown error'
+      setActionUi(prev => ({ ...prev, [sa.id]: { status: 'failed', error: reason } }))
+      return false
     } finally {
       setApplying(false)
     }
   }
 
-  function cancelModification(msgIndex: number) {
-    setMessages(prev =>
-      prev.map((m, i) => (i === msgIndex ? { ...m, modifyCancelled: true } : m))
-    )
-    setMessages(prev => [
-      ...prev,
-      { role: 'assistant', content: 'No problem! What would you like to do instead?' },
-    ])
+  /** "Apply all" — sequential, in emission order (the model emits execution
+   *  order per the AI-MESA-10 contract). Stops on the first failure: that
+   *  card shows its error, the rest stay pending. */
+  async function applyAll(msgIndex: number, actions: ServerModifyAction[]) {
+    for (const sa of actions) {
+      if (sa.applied) continue
+      const ok = await applyAction(msgIndex, sa)
+      if (!ok) break
+    }
   }
 
   return (
@@ -606,49 +602,65 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
                 </div>
               </div>
 
-              {/* Confirmation card */}
-              {msg.role === 'assistant' &&
-                msg.modifyAction &&
-                !msg.modifyApplied &&
-                !msg.modifyCancelled && (
-                  <div className="mt-2 mr-4 bg-white border border-[#1F6F8B]/25 rounded-xl p-3 shadow-sm">
-                    <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Proposed change</p>
-                    <p className="text-sm font-medium text-gray-900 mb-1">
-                      {getConfirmationText(msg.modifyAction)}
-                    </p>
-                    {(() => {
-                      const sub = getConfirmationSubText(msg.modifyAction, trip)
-                      return sub ? <p className="text-[11px] text-gray-500 mb-2">{sub}</p> : <div className="mb-1.5" />
-                    })()}
-                    <div className="flex gap-2">
+              {/* AI-MESA-10 — one card per server-parsed action, rendered in
+                  emission order (= execution order per the prompt contract).
+                  States: pending (Apply) / applying (disabled, spinner label) /
+                  ✓ applied (persisted truth — survives reload) / failed
+                  (server error verbatim, card stays applicable for retry). */}
+              {msg.role === 'assistant' && msg.actions && msg.actions.length > 0 && (() => {
+                const pending = msg.actions.filter(a => !a.applied)
+                return (
+                  <div className="mt-2 mr-4 space-y-1.5">
+                    {msg.actions.map((sa, idx) => {
+                      const ui = actionUi[sa.id]
+                      if (sa.applied) {
+                        return (
+                          <div key={sa.id} className="ml-0.5 text-[11px] text-[#0F766E] font-medium">
+                            ✅ Applied — {getConfirmationText(sa.action)}
+                          </div>
+                        )
+                      }
+                      return (
+                        <div key={sa.id} className="bg-white border border-[#1F6F8B]/25 rounded-xl p-3 shadow-sm">
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">
+                            Proposed change{msg.actions!.length > 1 ? ` ${idx + 1} of ${msg.actions!.length}` : ''}
+                          </p>
+                          <p className="text-sm font-medium text-gray-900 mb-1">
+                            {getConfirmationText(sa.action)}
+                          </p>
+                          {(() => {
+                            const sub = getConfirmationSubText(sa.action, trip)
+                            return sub ? <p className="text-[11px] text-gray-500 mb-2">{sub}</p> : <div className="mb-1.5" />
+                          })()}
+                          {ui?.status === 'failed' && (
+                            <p className="text-[11px] text-red-600 mb-2">⚠️ {ui.error}</p>
+                          )}
+                          <button
+                            onClick={() => applyAction(i, sa)}
+                            disabled={applying}
+                            className="w-full py-1.5 text-xs font-medium rounded-lg bg-[#F7A829] text-white hover:bg-[#C9851A] transition-colors disabled:opacity-50"
+                          >
+                            {ui?.status === 'applying'
+                              ? 'Applying…'
+                              : ui?.status === 'failed'
+                                ? 'Try again'
+                                : getApplyButtonLabel(sa.action)}
+                          </button>
+                        </div>
+                      )
+                    })}
+                    {pending.length >= 2 && (
                       <button
-                        onClick={() => applyModification(i, msg.modifyAction!)}
+                        onClick={() => applyAll(i, msg.actions!)}
                         disabled={applying}
-                        className="flex-1 py-1.5 text-xs font-medium rounded-lg bg-[#F7A829] text-white hover:bg-[#C9851A] transition-colors disabled:opacity-50"
+                        className="w-full py-1.5 text-xs font-medium rounded-lg bg-[#1F6F8B] text-white hover:bg-[#17566C] transition-colors disabled:opacity-50"
                       >
-                        {applying ? 'Applying…' : getApplyButtonLabel(msg.modifyAction)}
+                        {applying ? 'Applying…' : `✓ Apply all ${pending.length} changes in order`}
                       </button>
-                      <button
-                        onClick={() => cancelModification(i)}
-                        disabled={applying}
-                        className="flex-1 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
-                        style={{ borderWidth: '0.5px' }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
+                    )}
                   </div>
-                )}
-
-              {/* Applied / cancelled status */}
-              {msg.role === 'assistant' && msg.modifyAction && msg.modifyApplied && (
-                <div className="mt-1 ml-0.5 text-[11px] text-[#0F766E] font-medium">
-                  ✅ Applied to trip
-                </div>
-              )}
-              {msg.role === 'assistant' && msg.modifyAction && msg.modifyCancelled && (
-                <div className="mt-1 ml-0.5 text-[11px] text-gray-400">Cancelled</div>
-              )}
+                )
+              })()}
               {/* Modify-failed notice — server retried once and still got prose
                   with neither a <modify> nor a <clarify> tag (a genuine no-op).
                   Clarifying questions (modifyOutcome==='clarify') do NOT set
