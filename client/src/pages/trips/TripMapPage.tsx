@@ -2122,8 +2122,15 @@ export default function TripMapPage() {
                         </div>
                         <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
                           {ctaEl}
+                          {/* Weather-alert count — number of distinct active
+                              alert types (wind/rain/freeze/snow) in this stop's
+                              live forecast. Brand purple (tailwind purple =
+                              #7F77DD), not the old off-palette purple-600. */}
                           {hasAlert && (
-                            <span className="flex items-center gap-0.5 text-[9px] font-medium text-purple-600">
+                            <span
+                              className="flex items-center gap-0.5 text-[9px] font-medium text-purple"
+                              title={`${alerts.length} weather alert${alerts.length === 1 ? '' : 's'}: ${alerts.map(a => a.message).join(' · ')}`}
+                            >
                               🟣 {alerts.length}
                             </span>
                           )}

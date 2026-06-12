@@ -35,7 +35,7 @@ const KIND_STYLES: Record<Kind, { borderColor: string; iconBg: string; iconStrok
     iconStroke: '#2F4030',
   },
   brand: {
-    borderColor: '#8458B4', // D1 Purple (mid-stop of sunset gradient)
+    borderColor: '#7F77DD', // brand purple (tailwind purple.DEFAULT)
     iconBg: '#EEEDFE',
     iconStroke: '#3C3489',
   },

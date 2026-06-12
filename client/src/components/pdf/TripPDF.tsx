@@ -568,7 +568,7 @@ function StopEntry({ entry }: { entry: TimelineEntry }) {
 
   const dayBadgeBg = entry.consolidatedStay ? AMBER_700
     : entry.type === 'STAY' ? GREEN
-    : entry.type === 'OVERNIGHT' ? '#7C3AED'
+    : entry.type === 'OVERNIGHT' ? '#7F77DD' // brand purple (tailwind purple.DEFAULT)
     : '#D97706'
 
   return (
