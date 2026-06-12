@@ -93,3 +93,39 @@ export const TripShiftDatesSchema = z
   .strict()
 
 export type TripShiftDatesInput = z.infer<typeof TripShiftDatesSchema>
+
+/**
+ * Packing-list save (PUT /trips/:id/packing-list). TripUpdateSchema
+ * deliberately excludes packingList from the generic update (anti-tamper);
+ * this dedicated schema is the ONE sanctioned client write path — it
+ * validates the full category/item shape with caps, so checked-state and
+ * item curation (remove) persist without opening the generic endpoint.
+ * All fields required booleans/strings — no preprocessed optionals (the
+ * Zod v4 outer/inner placement gotcha doesn't apply here).
+ */
+export const TripPackingListSchema = z
+  .object({
+    packingList: z
+      .array(
+        z
+          .object({
+            category: z.string().min(1).max(100),
+            items: z
+              .array(
+                z
+                  .object({
+                    name: z.string().min(1).max(200),
+                    required: z.boolean(),
+                    checked: z.boolean(),
+                  })
+                  .strict(),
+              )
+              .max(100),
+          })
+          .strict(),
+      )
+      .max(30),
+  })
+  .strict()
+
+export type TripPackingListInput = z.infer<typeof TripPackingListSchema>

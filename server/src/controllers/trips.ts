@@ -1911,8 +1911,46 @@ export async function generatePackingList(req: AuthRequest, res: Response, next:
 
     const packingList = await generatePackingListAI(trip, user, { userId: req.user!.id, tripId: trip.id })
 
-    await prisma.trip.update({ where: { id: trip.id }, data: { packingList } })
+    // Regenerate carry-over: items the user already marked packed stay packed
+    // when the regenerated list contains an item with the same name
+    // (case-insensitive). Without this, every regenerate wiped packed state —
+    // the AI is instructed to emit checked:false on all items.
+    const prevChecked = new Set<string>()
+    if (Array.isArray(trip.packingList)) {
+      for (const cat of trip.packingList as any[]) {
+        for (const item of cat?.items ?? []) {
+          if (item?.checked === true && typeof item?.name === 'string') {
+            prevChecked.add(item.name.toLowerCase().trim())
+          }
+        }
+      }
+    }
+    const merged = prevChecked.size
+      ? (packingList as any[]).map(cat => ({
+          ...cat,
+          items: (cat?.items ?? []).map((item: any) =>
+            typeof item?.name === 'string' && prevChecked.has(item.name.toLowerCase().trim())
+              ? { ...item, checked: true }
+              : item,
+          ),
+        }))
+      : packingList
 
+    await prisma.trip.update({ where: { id: trip.id }, data: { packingList: merged } })
+
+    res.json(merged)
+  } catch (err) { next(err) }
+}
+
+/** Persist the user's curated packing list (checked toggles + item removals).
+ *  Body validated by TripPackingListSchema — the dedicated write path that
+ *  keeps packingList off the generic trip update (anti-tamper). */
+export async function updatePackingList(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const trip = await prisma.trip.findFirst({ where: { id: req.params.id, userId: req.user!.id } })
+    if (!trip) throw new AppError('Trip not found', 404)
+    const { packingList } = req.body
+    await prisma.trip.update({ where: { id: trip.id }, data: { packingList } })
     res.json(packingList)
   } catch (err) { next(err) }
 }

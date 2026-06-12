@@ -2,11 +2,11 @@ import { Router } from 'express'
 import { requireAuth, requireFeature, AuthRequest } from '../middleware/auth'
 import { requireVerifiedEmail } from '../middleware/requireVerifiedEmail'
 import { validateBody } from '../middleware/validate'
-import { StopUpdateSchema, TripUpdateSchema, TripShiftDatesSchema } from '../schemas'
+import { StopUpdateSchema, TripUpdateSchema, TripShiftDatesSchema, TripPackingListSchema } from '../schemas'
 import {
   getTrips, createTrip, getTrip, updateTrip, shiftTripDates, deleteTrip,
   getStops, createStop, updateStop, deleteStop,
-  getSharedTrip, exportPdf, generatePackingList,
+  getSharedTrip, exportPdf, generatePackingList, updatePackingList,
   generateItinerary, saveItinerary, generateRoutes, generateActivities,
   generateRouteHighlights, getTripMapImage, getTripWeather, reassignPOIs,
   createShareToken, regenerateShareToken, revokeShareToken,
@@ -46,6 +46,10 @@ tripsRouter.get('/:id/weather', requireFeature('weatherAlerts'), getTripWeather 
 // can show a live regional estimate. See controllers/trips.ts → getTripFuelEstimate.
 tripsRouter.get('/:id/fuel-estimate', getTripFuelEstimate as any)
 tripsRouter.post('/:id/packing-list', requireFeature('packingListGenerator'), generatePackingList as any)
+// Save the curated list (checked toggles + removals). Deliberately NOT
+// Pro-gated: generation is the gated feature; persisting your own checkmarks
+// on an existing list shouldn't paywall.
+tripsRouter.put('/:id/packing-list', validateBody(TripPackingListSchema), updatePackingList as any)
 tripsRouter.post('/:id/stops/reassign-pois', reassignPOIs as any)
 // Deterministic per-leg max-drive-time guard — breaks over-long legs into
 // OVERNIGHT_ONLY transit stops. Ungated (Google Directions + Geocode, no LLM),
