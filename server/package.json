@@ -20,7 +20,8 @@
     "db:sync-endpoints": "tsx --env-file=../.env src/scripts/syncTripEndpoints.ts",
     "db:reparent-trip": "tsx --env-file=../.env src/scripts/reparentTrip.ts",
     "db:repair-home-coords": "tsx --env-file=../.env src/scripts/repairHomeCoords.ts",
-    "diagnose:area-search": "tsx --env-file=../.env src/scripts/diagnoseAreaSearch.ts"
+    "diagnose:area-search": "tsx --env-file=../.env src/scripts/diagnoseAreaSearch.ts",
+    "check:packing-merge": "tsx scripts/check-packing-merge.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.27.0",

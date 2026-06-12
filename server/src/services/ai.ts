@@ -401,7 +401,10 @@ Return a JSON array of categories with items. Format:
   const model = 'claude-sonnet-4-5'
   const response = await client.messages.create({
     model,
-    max_tokens: 4096,
+    // 8192: a comprehensive list (party rules, pets, accessibility gear) can
+    // exceed the old 4096 cap — truncated JSON parsed to a silent [] and the
+    // controller persisted an empty list (the "near-empty 200" regression).
+    max_tokens: 8192,
     messages: [{ role: 'user', content: prompt }],
   })
 
@@ -417,12 +420,25 @@ Return a JSON array of categories with items. Format:
     }).catch(() => {})
   }
 
+  if (response.stop_reason === 'max_tokens') {
+    // Truncated mid-JSON — the greedy [..] regex below would grab unbalanced
+    // JSON and throw. Log loudly; the [] return is rejected by the
+    // controller's empty-generation guard (502, stored list untouched).
+    console.error('[generatePackingListAI] response truncated at max_tokens — returning empty for the controller guard')
+    return []
+  }
+
   const text = response.content[0].type === 'text' ? response.content[0].text : '[]'
 
   try {
     const jsonMatch = text.match(/\[[\s\S]*\]/)
-    return jsonMatch ? JSON.parse(jsonMatch[0]) : []
-  } catch {
+    const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : []
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      console.error('[generatePackingListAI] parsed empty/non-array list — raw head: %s', text.slice(0, 200))
+    }
+    return parsed
+  } catch (err: any) {
+    console.error('[generatePackingListAI] JSON parse failed (%s) — raw head: %s', err?.message, text.slice(0, 200))
     return []
   }
 }

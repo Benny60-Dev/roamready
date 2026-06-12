@@ -1,0 +1,55 @@
+// Regression check for the packing-list regenerate carry-over
+// (utils/packingMerge.ts). Run: npm run check:packing-merge (server/).
+//
+// Guards the two contract paths:
+//   1. FRESH TRIP — no prior list (null) or nothing checked: the freshly
+//      generated list must come back UNTOUCHED (the "empty 200" regression
+//      suspect: intersecting against an empty prev must never empty next).
+//   2. EXISTING CHECKS — the FULL regenerated list is returned with
+//      previously-checked names re-checked (case-insensitive), new items
+//      unchecked, and nothing filtered out.
+import { mergePackedState } from '../src/utils/packingMerge'
+
+let failed = 0
+const check = (name: string, ok: boolean, detail?: string) => {
+  if (!ok) failed++
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ' — ' + detail : ''}`)
+}
+
+const freshList = [
+  { category: 'Kitchen', items: [
+    { name: 'Plates', required: true, checked: false },
+    { name: 'Camp stove', required: true, checked: false },
+  ]},
+  { category: 'Outdoor', items: [
+    { name: 'Camp chairs', required: false, checked: false },
+  ]},
+]
+
+// 1. Fresh trip — prev null and prev [] both return next untouched (same reference).
+check('fresh trip (prev=null): list untouched', mergePackedState(null, freshList) === freshList)
+check('fresh trip (prev=[]): list untouched', mergePackedState([], freshList) === freshList)
+check('fresh trip: nothing lost', mergePackedState(null, freshList).reduce((n, c) => n + c.items.length, 0) === 3)
+
+// 2. Prior list with NO checks — still untouched.
+const prevUnchecked = [{ category: 'Kitchen', items: [{ name: 'Plates', required: true, checked: false }] }]
+check('prior list, nothing checked: untouched', mergePackedState(prevUnchecked, freshList) === freshList)
+
+// 3. Existing checks — full new list back, matches re-checked, case-insensitive.
+const prevWithChecks = [
+  { category: 'Kitchen', items: [
+    { name: 'PLATES  ', required: true, checked: true },     // case + whitespace
+    { name: 'Old removed thing', required: false, checked: true },
+  ]},
+]
+const merged = mergePackedState(prevWithChecks, freshList)
+check('regenerate: every category survives', merged.length === 2)
+check('regenerate: every item survives', merged.reduce((n, c) => n + c.items.length, 0) === 3)
+check('regenerate: matching name re-checked (case-insensitive)', merged[0].items[0].checked === true)
+check('regenerate: non-matching new items stay unchecked',
+  merged[0].items[1].checked === false && merged[1].items[0].checked === false)
+check('regenerate: previously-checked item ABSENT from new list is not resurrected',
+  !merged.flatMap(c => c.items).some(i => i.name === 'Old removed thing'))
+check('regenerate: input not mutated', freshList[0].items[0].checked === false)
+
+process.exit(failed ? 1 : 0)

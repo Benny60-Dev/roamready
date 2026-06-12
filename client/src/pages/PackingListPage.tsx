@@ -4,6 +4,7 @@ import { Wand2, Check, Loader, X, FileDown } from 'lucide-react'
 import { tripsApi } from '../services/api'
 import { PackingCategory } from '../types'
 import { Breadcrumb } from '../components/ui/Breadcrumb'
+import ConfirmModal from '../components/ui/ConfirmModal'
 import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
 import { formatTripDate } from '../utils/dates'
 
@@ -18,6 +19,10 @@ export default function PackingListPage() {
   const [generating, setGenerating] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [saveError, setSaveError] = useState(false)
+  // Confirm gate for Regenerate (mirrors the trip itinerary's Regenerate
+  // confirm): regenerating REPLACES the list — packed checkmarks carry over
+  // by name, but removed items come back and custom curation is lost.
+  const [showRegenConfirm, setShowRegenConfirm] = useState(false)
 
   // Debounced persistence (PUT /trips/:id/packing-list). Toggles/removals
   // update local state optimistically and schedule a save; latestRef always
@@ -168,18 +173,21 @@ export default function PackingListPage() {
       ]} />
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-medium text-gray-900">Packing List</h1>
-        <div className="flex gap-2">
-          {categories.length > 0 && (
+        {/* One action, one button, per state: with a list, the header owns
+            Regenerate (confirm-gated) + Export; with no list, the empty-state
+            card below owns the only Generate button. */}
+        {categories.length > 0 && (
+          <div className="flex gap-2">
             <button onClick={exportPdf} disabled={exporting} className="btn-outline text-sm flex items-center gap-1.5">
               {exporting ? <Loader size={14} className="animate-spin" /> : <FileDown size={14} />}
               {exporting ? 'Exporting...' : 'Export PDF'}
             </button>
-          )}
-          <button onClick={generate} disabled={generating} className="btn-outline text-sm flex items-center gap-1.5">
-            {generating ? <Loader size={14} className="animate-spin" /> : <Wand2 size={14} />}
-            {generating ? 'Generating...' : categories.length ? 'Regenerate' : 'Generate with AI'}
-          </button>
-        </div>
+            <button onClick={() => setShowRegenConfirm(true)} disabled={generating} className="btn-outline text-sm flex items-center gap-1.5">
+              {generating ? <Loader size={14} className="animate-spin" /> : <Wand2 size={14} />}
+              {generating ? 'Generating...' : 'Regenerate with AI'}
+            </button>
+          </div>
+        )}
       </div>
 
       {saveError && (
@@ -205,6 +213,15 @@ export default function PackingListPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={showRegenConfirm}
+        title="Regenerate packing list?"
+        message="This replaces your current list with a freshly generated one. Items you've checked off stay checked when the new list includes them, but items you removed will come back."
+        confirmLabel="Regenerate"
+        onConfirm={() => { setShowRegenConfirm(false); void generate() }}
+        onCancel={() => setShowRegenConfirm(false)}
+      />
 
       {categories.length === 0 ? (
         <div className="card text-center py-16">
