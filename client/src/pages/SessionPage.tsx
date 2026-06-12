@@ -888,6 +888,39 @@ export default function SessionPage() {
   // an assistant-only message lingers from older builds.
   const isEmptyState = !messages.some(m => m.role === 'user')
 
+  // SESS-LAYOUT-2 — measured chat-column height. The previous hardcoded
+  // h-[calc(100dvh-12.25rem)] subtracted a fixed chrome list (header + main
+  // paddings + bottom nav) that silently went stale whenever anything ELSE
+  // occupied vertical space — the in-flow VerificationBanner (AppLayout)
+  // being the live case: with it mounted, the column over-filled by the
+  // banner height and the composer rendered below the viewport edge.
+  // Measuring the column's real top edge makes the height correct with the
+  // banner present AND absent, and re-measuring on resize + body layout
+  // shifts covers banner dismissal and mobile Safari's URL-bar expand /
+  // collapse (dvh + a live re-measure). Only the BOTTOM reserve stays as a
+  // constant pair (main's pb-32 mobile / pb-6 desktop — the bottom-nav
+  // clearance), matching AppLayout's main padding.
+  const chatColRef = useRef<HTMLDivElement>(null)
+  const [chatColHeight, setChatColHeight] = useState<string | null>(null)
+  useEffect(() => {
+    if (isEmptyState) { setChatColHeight(null); return }
+    const el = chatColRef.current
+    if (!el) return
+    const measure = () => {
+      const top = el.getBoundingClientRect().top + window.scrollY
+      const md = window.matchMedia('(min-width: 768px)').matches
+      const bottomReserve = md ? 24 : 128 // main pb-6 desktop / pb-32 mobile
+      setChatColHeight(`calc(100dvh - ${Math.max(0, Math.round(top))}px - ${bottomReserve}px)`)
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    // Catches in-flow chrome changes above the column (verification banner
+    // mounting/dismissing) without polling.
+    const ro = new ResizeObserver(measure)
+    ro.observe(document.body)
+    return () => { window.removeEventListener('resize', measure); ro.disconnect() }
+  }, [isEmptyState])
+
   // ── Rig context chip strip pieces (only rendered in empty state) ───────────
   // Phase B — the chip reads selectedRig (per-trip override), not the user's
   // global default. selectedRig may be a real Rig or an AdHocRig; both have
@@ -951,8 +984,23 @@ export default function SessionPage() {
         (position:fixed, below) the chat column must give the flex-1 message list
         a bounded box so it scrolls INTERNALLY between the fixed header and the
         fixed input — min-h let the column grow with the conversation and rode the
-        in-flow input off-screen. md keeps its existing definite `h` (input in-flow). */}
-    <div className={`flex flex-col${isEmptyState ? '' : ' h-[calc(100dvh-12.25rem)] md:h-[calc(100dvh-6.5rem)]'}`}>
+        in-flow input off-screen. md keeps its existing definite `h` (input in-flow).
+
+        SESS-LAYOUT-2 (fourth pass on this bug class — see history above:
+        min-h-[calc(100dvh-8rem)] under-subtracted, min-h-full under-filled,
+        then the corrected static calc went stale the moment the in-flow
+        VerificationBanner added chrome the arithmetic didn't know about and
+        the composer clipped below the viewport). The static calc classes
+        below remain ONLY as the first-paint fallback; the measured height
+        from the SESS-LAYOUT-2 effect overrides them via inline style and is
+        the value that actually governs — it derives the top edge from the
+        real layout instead of a hardcoded chrome list, so banner present/
+        absent and Safari URL-bar states all resolve correctly. */}
+    <div
+      ref={chatColRef}
+      className={`flex flex-col${isEmptyState ? '' : ' h-[calc(100dvh-12.25rem)] md:h-[calc(100dvh-6.5rem)]'}`}
+      style={!isEmptyState && chatColHeight ? { height: chatColHeight } : undefined}
+    >
       {/* Header row — title + last-edited timestamp on the left, "New trip" /
           "Cancel this plan" actions on the right. Hidden in the empty state
           because no plan exists yet, so "Cancel this plan" is meaningless and
