@@ -1,0 +1,6 @@
+# Prisma migration SQL must stay LF on disk: `prisma migrate` records a
+# sha256 of the file bytes when a migration is applied, and core.autocrlf
+# rewriting checkouts to CRLF flips those checksums ("migration was modified
+# after it was applied", offering a destructive reset). Pinning eol=lf makes
+# every checkout match the applied-as-LF checksums.
+prisma/migrations/**/*.sql text eol=lf
