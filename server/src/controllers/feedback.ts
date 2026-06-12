@@ -2,13 +2,11 @@ import { Request, Response, NextFunction } from 'express'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
-import { sendFeedbackNotification } from '../services/feedbackNotification'
+import { sendFeedbackNotification, sendFeedbackAcknowledgment } from '../services/feedbackNotification'
 
 export async function submitFeedback(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     // Body already validated + stripped by validateBody(FeedbackSubmitSchema).
-    // isPublic is intentionally absent — Prisma defaults it to true and the
-    // status gate in getPublicRoadmap controls actual public visibility.
     const { type, title, body, screen, rating, importance, rigType, tripContext } = req.body
     const feedback = await prisma.feedback.create({
       data: {
@@ -19,6 +17,9 @@ export async function submitFeedback(req: AuthRequest, res: Response, next: Next
         screen,
         rating,
         importance,
+        // Explicit, not DB-default-dependent: submissions are private until
+        // an admin flips the Public toggle (PATCH /admin/feedback/:id).
+        isPublic: false,
         rigType,
         tripContext,
       },
@@ -27,6 +28,9 @@ export async function submitFeedback(req: AuthRequest, res: Response, next: Next
     // Fire-and-forget — an email failure must never fail or delay the 201.
     sendFeedbackNotification(feedback).catch(err =>
       console.error('[feedback] support notification failed (submission unaffected):', err)
+    )
+    sendFeedbackAcknowledgment(feedback).catch(err =>
+      console.error('[feedback] submitter acknowledgment failed (submission unaffected):', err)
     )
 
     res.status(201).json(feedback)

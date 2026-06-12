@@ -90,3 +90,70 @@ export async function sendFeedbackNotification(feedback: FeedbackRow): Promise<v
 
   console.log('[feedbackNotification] support notification sent for feedback', feedback.id)
 }
+
+/** Acknowledgment email to the submitter. Same fire-and-forget contract as
+ *  sendFeedbackNotification: the controller calls this without awaiting and
+ *  attaches its own .catch — throws here surface only in that log line and
+ *  never affect the 201. Only called after a successful create, so it never
+ *  fires for failed/invalid submissions. */
+export async function sendFeedbackAcknowledgment(feedback: FeedbackRow): Promise<void> {
+  const user = feedback.userId
+    ? await prisma.user.findUnique({
+        where: { id: feedback.userId },
+        select: { email: true, firstName: true },
+      })
+    : null
+  if (!user?.email) {
+    // No recipient — nothing to acknowledge (shouldn't happen; route requires auth).
+    console.warn('[feedbackNotification] no submitter email for feedback', feedback.id, '— skipping acknowledgment')
+    return
+  }
+  const firstName = user.firstName ?? 'there'
+
+  const fromAddress = process.env.FROM_EMAIL
+  if (!fromAddress) {
+    console.warn(
+      '[feedbackNotification] FROM_EMAIL is not set — falling back to Resend sandbox sender. ' +
+      'Set FROM_EMAIL in .env once your domain is verified in the Resend dashboard.'
+    )
+  }
+
+  const typeLabel = feedback.type.replace(/_/g, ' ').toLowerCase()
+
+  const html = `
+    <p>Hi ${escapeHtml(firstName)},</p>
+    <p>Thanks for sharing your feedback — we read every submission, and we'll take a look at yours as soon as possible.</p>
+    <p>Here's what you sent us:</p>
+    <table cellpadding="4" style="border-collapse:collapse;font-size:14px">
+      <tr><td style="color:#6b7280">Type</td><td>${escapeHtml(typeLabel)}</td></tr>
+      ${feedback.title ? `<tr><td style="color:#6b7280">Title</td><td>${escapeHtml(feedback.title)}</td></tr>` : ''}
+    </table>
+    <p style="white-space:pre-wrap;border-left:3px solid #1F6F8B;padding-left:12px">${escapeHtml(feedback.body)}</p>
+    <p>If we plan it, you'll see it appear on our <strong>public roadmap</strong> — that's where ideas graduate to once they're on the way.</p>
+    <p>Hit reply if you want to add anything — it goes straight to us.</p>
+    <p>— The RoamReady team</p>
+  `.trim()
+
+  const text =
+    `Hi ${firstName},\n\n` +
+    `Thanks for sharing your feedback — we read every submission, and we'll take a look at yours as soon as possible.\n\n` +
+    `Here's what you sent us:\n` +
+    `Type: ${typeLabel}\n` +
+    (feedback.title ? `Title: ${feedback.title}\n` : '') +
+    `\n${feedback.body}\n\n` +
+    `If we plan it, you'll see it appear on our public roadmap — that's where ideas graduate to once they're on the way.\n\n` +
+    `Hit reply if you want to add anything — it goes straight to us.\n\n` +
+    `— The RoamReady team`
+
+  await resend.emails.send({
+    from: fromAddress ?? 'RoamReady <onboarding@resend.dev>',
+    to: user.email,
+    // Replies land in the support inbox, not the no-reply sender.
+    reply_to: supportEmail,
+    subject: 'We received your feedback — RoamReady',
+    html,
+    text,
+  })
+
+  console.log('[feedbackNotification] acknowledgment sent to submitter for feedback', feedback.id)
+}
