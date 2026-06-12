@@ -220,7 +220,7 @@ ${originAskBullets}
 
 ⚠ ONE-WAY IS THE UNCONDITIONAL DEFAULT ⚠
 
-The final stop in your JSON MUST be the user's DESTINATION — NEVER the home city — unless the user explicitly used one of these round-trip phrases: "round trip", "round-trip", "coming back home", "returning home", "back home", "end at home", "back to [home city]", "heading home after".
+The final stop in your JSON MUST be the user's DESTINATION — NEVER the home city — unless the user explicitly used one of these round-trip phrases: "round trip", "round-trip", "coming back home", "returning home", "back home", "end at home", "heading home after", "and back", "there and back", "return" / "returning", or "back to [their starting city]" — where the starting city is the trip's origin from ANY source (their typed origin or profile home), not only a saved home. (Keep this list in sync with client/src/utils/roundTripIntent.ts — the client guard strips return legs the user didn't ask for using the same phrases.)
 
 Do NOT append a stop that returns to the home city for a one-way request. A trip to [EXAMPLE_DESTINATION_A] ends in [EXAMPLE_DESTINATION_A]. A trip to [EXAMPLE_DESTINATION_B] ends in [EXAMPLE_DESTINATION_B]. A "you pick" surprise trip ends at whatever destination you chose. When none of the round-trip phrases above appear in the conversation, build a one-way trip — full stop.
 
@@ -322,7 +322,11 @@ Always match transit stops to actual driving distance — add them when a leg wo
   const model = 'claude-sonnet-4-5'
   const response = await client.messages.create({
     model,
-    max_tokens: 4096,
+    // AI-PACK-1 treatment for the planning chat: a long multi-stop itinerary
+    // (prose + full <itinerary> JSON) can exceed 4096 output tokens; the old
+    // cap truncated mid-JSON and the client's tolerant parser used to accept
+    // the fragment silently.
+    max_tokens: 8192,
     system: combinedSystem,
     messages: cleanMessages,
   })
@@ -337,6 +341,16 @@ Always match transit stops to actual driving distance — add them when a leg wo
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
     }).catch(() => {})
+  }
+
+  if (response.stop_reason !== 'end_turn') {
+    // Anything other than a natural finish (max_tokens above all) means the
+    // reply may be cut mid-itinerary — log loudly so truncation incidents are
+    // diagnosable; the client refuses unterminated <itinerary> blocks.
+    console.error(
+      '[chatWithAI] unexpected stop_reason=%s (output may be truncated) user=%s session=%s outputTokens=%d',
+      response.stop_reason, ctx?.userId ?? '?', ctx?.sessionId ?? '?', response.usage.output_tokens,
+    )
   }
 
   return response.content[0].type === 'text' ? response.content[0].text : ''

@@ -8,6 +8,7 @@
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "preflight": "node scripts/check-migration-eol.js",
+    "check:round-trip-intent": "node scripts/check-round-trip-intent.ts",
     "db:migrate": "npm run db:migrate --prefix server",
     "db:seed": "npm run db:seed --prefix server",
     "db:generate": "npm run db:generate --prefix server"

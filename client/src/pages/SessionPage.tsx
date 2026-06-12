@@ -13,6 +13,7 @@ import TripCard from '../components/trip/TripCard'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
 import { useVoiceInput } from '../hooks/useVoiceInput'
 import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
+import { hasRoundTripIntent } from '../utils/roundTripIntent'
 import { ChatInput } from '../components/ChatInput'
 import { selectGreeting } from '../utils/greeting'
 import { relativeTime } from '../utils/dates'
@@ -93,15 +94,25 @@ function TypingIndicator() {
   )
 }
 
-function parseItinerary(text: string) {
-  let inner = text.match(/<itinerary>([\s\S]*?)<\/itinerary>/)?.[1]
-  if (!inner) inner = text.match(/<itinerary>([\s\S]*)/)?.[1]
-  if (!inner) return null
-  inner = inner.trim()
-  try { return JSON.parse(inner) } catch {
+/** AI-PACK-1 treatment for planning chat: an OPENED-but-unterminated
+ *  <itinerary> block means the generation was cut off (max_tokens) — the old
+ *  fallback silently accepted it, which could persist a partial plan. Now it
+ *  parses nothing and reports `truncated` so the UI can say so; a knowingly
+ *  truncated itinerary is never built. */
+function parseItinerary(text: string): { itinerary: any | null; truncated: boolean } {
+  const closed = text.match(/<itinerary>([\s\S]*?)<\/itinerary>/)?.[1]
+  if (closed == null) {
+    if (/<itinerary>/.test(text)) {
+      console.error('[parseItinerary] unterminated <itinerary> block — generation truncated')
+      return { itinerary: null, truncated: true }
+    }
+    return { itinerary: null, truncated: false }
+  }
+  const inner = closed.trim()
+  try { return { itinerary: JSON.parse(inner), truncated: false } } catch {
     const m = inner.match(/\{[\s\S]*\}/)
-    if (m) { try { return JSON.parse(m[0]) } catch { /* fall through */ } }
-    return null
+    if (m) { try { return { itinerary: JSON.parse(m[0]), truncated: false } } catch { /* fall through */ } }
+    return { itinerary: null, truncated: false }
   }
 }
 
@@ -132,32 +143,24 @@ function parseItinerary(text: string) {
 //   • stop.order values: NOT renumbered — remain sequential from the slice,
 //     and the server's createStop resequences on insert anyway.
 
-const ROUND_TRIP_PHRASES = [
-  'round trip', 'round-trip', 'coming back home', 'returning home',
-  'back home', 'end at home', 'heading home after',
-] as const
-
 function stripUnrequestedReturnLeg(
   itinerary: any,
   messages: ChatMessage[],
   homeCity?: string | null,
-): any {
+): { itinerary: any; stripped: boolean } {
   // Guard: malformed or trivially short stop list — nothing to strip
   const stops: any[] = itinerary?.stops
-  if (!Array.isArray(stops) || stops.length < 2) return itinerary
+  if (!Array.isArray(stops) || stops.length < 2) return { itinerary, stripped: false }
 
-  // Scan all user messages for any explicit round-trip phrase
-  const userText = messages
-    .filter(m => m.role === 'user')
-    .map(m => m.content.toLowerCase())
-    .join(' ')
-
-  const hasRoundTripPhrase =
-    ROUND_TRIP_PHRASES.some(p => userText.includes(p)) ||
-    // "back to Mesa" (or whatever homeCity is) also counts
-    (homeCity ? userText.includes('back to ' + homeCity.toLowerCase()) : false)
-
-  if (hasRoundTripPhrase) return itinerary  // genuine round trip — no-op
+  // AI-RT-1 — widened detection lives in utils/roundTripIntent.ts ("and
+  // back", "there and back", "return(ing)", plus "back to <X>" for ANY
+  // user-stated origin or the itinerary's own HOME stop — not just the
+  // profile homeCity, which no-home accounts lack). Regression-checked by
+  // npm run check:round-trip-intent.
+  const userMessages = messages.filter(m => m.role === 'user').map(m => m.content)
+  if (hasRoundTripIntent(userMessages, [homeCity, stops[0]?.locationName])) {
+    return { itinerary, stripped: false }  // genuine round trip — no-op
+  }
 
   // Find turnaround: last DESTINATION-typed stop with nights > 0 that isn't
   // the home city. Requiring type='DESTINATION' is critical: transit stops
@@ -188,7 +191,7 @@ function stripUnrequestedReturnLeg(
   }
 
   // No-op: no turnaround found, or it's already the final stop (one-way)
-  if (turnaroundIdx === -1 || turnaroundIdx === stops.length - 1) return itinerary
+  if (turnaroundIdx === -1 || turnaroundIdx === stops.length - 1) return { itinerary, stripped: false }
 
   const slicedStops = stops.slice(0, turnaroundIdx + 1)
   const totalNights = slicedStops.reduce((n: number, s: any) => n + ((s.nights as number) ?? 0), 0)
@@ -199,8 +202,29 @@ function stripUnrequestedReturnLeg(
     `destination="${(stops[turnaroundIdx] as any)?.locationName}"`,
   )
 
-  return { ...itinerary, stops: slicedStops, totalNights, totalMiles: null, estimatedFuel: null }
+  return {
+    itinerary: { ...itinerary, stops: slicedStops, totalNights, totalMiles: null, estimatedFuel: null },
+    stripped: true,
+  }
 }
+
+/** Single source of truth for the nights shown to the user: ALWAYS derived
+ *  from the (post-guard) stop list, never the model's own totalNights claim —
+ *  prose and persisted plan can no longer disagree on the count. */
+function nightsFromStops(itinerary: any): number {
+  return Array.isArray(itinerary?.stops)
+    ? itinerary.stops.reduce((n: number, s: any) => n + (Number(s?.nights) || 0), 0)
+    : Number(itinerary?.totalNights) || 0
+}
+
+// Client-generated deterministic notice (never model text) shown when the
+// return-leg guard strips anything — the plan and the narration can no
+// longer silently diverge. Tagged _local so it renders as a bubble but is
+// NEVER posted back to the AI or persisted.
+const ONE_WAY_NOTICE =
+  "I planned this one-way. Say 'round trip' if you want the return leg included."
+const TRUNCATED_NOTICE =
+  'That plan got cut off mid-generation, so I didn\'t keep a partial version — please try again.'
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -375,9 +399,11 @@ export default function SessionPage() {
           for (let i = persistedMessages.length - 1; i >= 0; i--) {
             const m = persistedMessages[i]
             if (m.role !== 'assistant') continue
-            const parsed = parseItinerary(m.content)
-            if (parsed) {
-              setItinerary(stripUnrequestedReturnLeg(parsed, persistedMessages, user?.homeCity))
+            const { itinerary: parsedItin } = parseItinerary(m.content)
+            if (parsedItin) {
+              // Hydration replays the guard silently (no notice) — the notice
+              // belongs to the live generation turn, not every reload.
+              setItinerary(stripUnrequestedReturnLeg(parsedItin, persistedMessages, user?.homeCity).itinerary)
               break
             }
           }
@@ -617,7 +643,9 @@ export default function SessionPage() {
     const text = (safeOverride ?? input).trim()
     if (!text || typing) return
     const userMsg: ChatMessage = { role: 'user', content: text }
-    const next = [...messages, userMsg]
+    // _local messages are client-generated notices (one-way strip, truncation)
+    // — display-only, never posted to the AI or persisted as conversation.
+    const next = [...messages.filter(m => !(m as any)._local), userMsg]
     setMessages(next)
     setInput('')
     setTyping(true)
@@ -642,12 +670,21 @@ export default function SessionPage() {
         : undefined
       const res = await aiApi.chat(next, undefined, undefined, sessionId, rigArg)
       const aiText = res.data.message
-      setMessages([...next, { role: 'assistant', content: aiText }])
-      const parsed = parseItinerary(aiText)
+      const { itinerary: parsedItin, truncated } = parseItinerary(aiText)
+      const shown: ChatMessage[] = [...next, { role: 'assistant', content: aiText }]
+      // AI-PACK-1: a truncated <itinerary> is never kept — say so visibly.
+      if (truncated) shown.push({ role: 'assistant', content: TRUNCATED_NOTICE, _local: true } as any)
       // `next` holds all messages up to and including the current user message —
-      // the correct slice to scan for round-trip phrases (the AI reply isn't a
-      // user message, so it doesn't affect the phrase check).
-      if (parsed) setItinerary(stripUnrequestedReturnLeg(parsed, next, user?.homeCity))
+      // the correct slice to scan for round-trip intent (the AI reply isn't a
+      // user message, so it doesn't affect the check).
+      if (parsedItin) {
+        const { itinerary: kept, stripped } = stripUnrequestedReturnLeg(parsedItin, next, user?.homeCity)
+        setItinerary(kept)
+        // No more silent surgery: deterministic client notice whenever the
+        // guard removed a return leg.
+        if (stripped) shown.push({ role: 'assistant', content: ONE_WAY_NOTICE, _local: true } as any)
+      }
+      setMessages(shown)
     } catch (err: any) {
       // FEATURE_GATED 403 — paywall modal already opened by the central
       // axios interceptor. Skip the generic assistant-bubble error so the
@@ -728,7 +765,7 @@ export default function SessionPage() {
         startLocation: homeStopName,
         endLocation: itinerary.stops?.[itinerary.stops.length - 1]?.locationName || 'End',
         totalMiles: itinerary.totalMiles,
-        totalNights: itinerary.totalNights,
+        totalNights: nightsFromStops(itinerary),
         estimatedFuel: itinerary.estimatedFuel,
         estimatedCamp: itinerary.estimatedCamp,
         // Block 8 — wire the rig + vehicle decisions into the promote payload.
@@ -1654,7 +1691,7 @@ export default function SessionPage() {
                     <span className="text-base flex-shrink-0">🗺️</span>
                     <span className="font-medium text-[#1F6F8B] truncate">{itinerary.name}</span>
                     <span className="text-xs text-[#134756] flex-shrink-0">
-                      · {itinerary.totalNights}n · ${Math.round(computeTripTotals(itinerary).campEst).toLocaleString()} camp
+                      · {nightsFromStops(itinerary)}n · ${Math.round(computeTripTotals(itinerary).campEst).toLocaleString()} camp
                     </span>
                   </div>
                   {/* Full-width gold CTA — reuses .btn-primary (white text on
@@ -1747,7 +1784,7 @@ export default function SessionPage() {
             <div className="card-lg flex flex-col min-h-0 flex-1">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-medium text-gray-900 text-sm">{itinerary.name}</h3>
-                <span className="badge-green text-xs">{itinerary.totalNights}n</span>
+                <span className="badge-green text-xs">{nightsFromStops(itinerary)}n</span>
               </div>
               <div className="grid grid-cols-2 gap-2 mb-4 text-xs text-gray-500">
                 <div>~{itinerary.totalMiles?.toLocaleString()} mi</div>
