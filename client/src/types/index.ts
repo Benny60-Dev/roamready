@@ -393,6 +393,9 @@ export interface Feedback {
   votes: number
   rigType?: string
   tripContext?: string
+  /** Admin archive timestamp — null/absent = active. Admin-only concern;
+   *  never affects public roadmap visibility. */
+  archivedAt?: string | null
   createdAt: string
   user?: { email: string; firstName: string; lastName: string }
 }

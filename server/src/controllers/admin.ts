@@ -119,9 +119,23 @@ export async function getRevenue(_req: AuthRequest, res: Response, next: NextFun
   } catch (err) { next(err) }
 }
 
-export async function getAdminFeedback(_req: AuthRequest, res: Response, next: NextFunction) {
+const FEEDBACK_STATUSES = ['NEW', 'PLANNED', 'IN_PROGRESS', 'SHIPPED', 'DECLINED']
+
+export async function getAdminFeedback(req: AuthRequest, res: Response, next: NextFunction) {
   try {
+    // ?status=<FeedbackStatus> narrows to one status; ?includeArchived=true
+    // includes archived rows (default EXCLUDES them so the working view stays
+    // clean). Public roadmap visibility is untouched — getPublicRoadmap never
+    // consults archivedAt.
+    const { status, includeArchived } = req.query
+    const where: any = {}
+    if (typeof status === 'string' && FEEDBACK_STATUSES.includes(status)) where.status = status
+    // archivedAt cast through the untyped where: the locally-generated Prisma
+    // client may predate the archive migration; the column is real at runtime
+    // (same pattern as auth.ts emailVerified).
+    if (includeArchived !== 'true') where.archivedAt = null
     const feedback = await prisma.feedback.findMany({
+      where,
       include: { user: { select: { email: true, firstName: true, lastName: true } } },
       orderBy: [{ votes: 'desc' }, { createdAt: 'desc' }],
     })
@@ -131,16 +145,18 @@ export async function getAdminFeedback(_req: AuthRequest, res: Response, next: N
 
 export async function updateFeedback(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    // Body validated by AdminFeedbackUpdateSchema — status and/or isPublic,
-    // at least one present. Spread-conditionals so an isPublic-only toggle
-    // doesn't touch status and vice versa.
-    const { status, isPublic } = req.body
+    // Body validated by AdminFeedbackUpdateSchema — status, isPublic, and/or
+    // archived; at least one present. Spread-conditionals so a single-field
+    // patch never touches the others. `archived` is a wire boolean that maps
+    // to the archivedAt timestamp (true → now, false → null).
+    const { status, isPublic, archived } = req.body
     const updated = await prisma.feedback.update({
       where: { id: req.params.id },
       data: {
         ...(status !== undefined && { status }),
         ...(isPublic !== undefined && { isPublic }),
-      },
+        ...(archived !== undefined && { archivedAt: archived ? new Date() : null }),
+      } as any, // archivedAt may predate the locally-generated Prisma client types
     })
     res.json(updated)
   } catch (err) { next(err) }

@@ -91,10 +91,13 @@ export const AdminFeedbackUpdateSchema = z
   .object({
     status: z.enum(['NEW', 'PLANNED', 'IN_PROGRESS', 'SHIPPED', 'DECLINED']).optional(),
     isPublic: z.boolean().optional(),
+    // true → controller stamps archivedAt = now(); false → clears it.
+    // Boolean on the wire, timestamp in the DB.
+    archived: z.boolean().optional(),
   })
   .strict()
-  .refine(d => d.status !== undefined || d.isPublic !== undefined, {
-    message: 'Provide status and/or isPublic',
+  .refine(d => d.status !== undefined || d.isPublic !== undefined || d.archived !== undefined, {
+    message: 'Provide status, isPublic, and/or archived',
   })
 
 export type FeedbackSubmitInput = z.infer<typeof FeedbackSubmitSchema>

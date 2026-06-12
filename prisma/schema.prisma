@@ -574,6 +574,10 @@ model Feedback {
   voterIds    Json?
   rigType     String?
   tripContext String?
+  // Admin-only archive timestamp (null = active). Set/cleared via the admin
+  // PATCH's `archived` boolean; never affects public roadmap visibility —
+  // getPublicRoadmap filters on isPublic + status only, by design.
+  archivedAt  DateTime?
   createdAt   DateTime       @default(now())
 }
 
