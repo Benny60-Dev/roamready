@@ -864,28 +864,10 @@ export default function SessionPage() {
     .replace(/<itinerary>[\s\S]*/g, '')
     .trim()
 
-  if (hydrationError) {
-    return (
-      <div className="max-w-md mx-auto mt-12 text-center">
-        <p className="text-sm text-gray-700 mb-4">{hydrationError}</p>
-        <button onClick={() => navigate('/sessions/new')} className="btn-primary">
-          Plan a new trip
-        </button>
-      </div>
-    )
-  }
-
-  if (hydrating) {
-    return (
-      <div className="flex items-center justify-center py-20 text-gray-400">
-        <Loader size={20} className="animate-spin" />
-      </div>
-    )
-  }
-
   // Pre-conversation = the user hasn't sent anything yet. Using "no user
   // message" (rather than messages.length===0) also covers any edge case where
-  // an assistant-only message lingers from older builds.
+  // an assistant-only message lingers from older builds. Derived here, ABOVE
+  // the early returns, because the SESS-LAYOUT-2 hooks below depend on it.
   const isEmptyState = !messages.some(m => m.role === 'user')
 
   // SESS-LAYOUT-2 — measured chat-column height. The previous hardcoded
@@ -900,6 +882,14 @@ export default function SessionPage() {
   // collapse (dvh + a live re-measure). Only the BOTTOM reserve stays as a
   // constant pair (main's pb-32 mobile / pb-6 desktop — the bottom-nav
   // clearance), matching AppLayout's main padding.
+  //
+  // RULES-OF-HOOKS: this cluster MUST live above the hydrationError /
+  // hydrating early returns below — it originally sat after them and crashed
+  // every load with "Rendered more hooks than during the previous render"
+  // (hooks ran on post-hydration renders only). tsc and vite CANNOT catch
+  // this; it only surfaces at runtime. New hooks on this page always go in
+  // this unconditional top section. The effect no-ops safely while the ref
+  // is unattached (early-return renders never mount the chat column).
   const chatColRef = useRef<HTMLDivElement>(null)
   const [chatColHeight, setChatColHeight] = useState<string | null>(null)
   useEffect(() => {
@@ -919,7 +909,26 @@ export default function SessionPage() {
     const ro = new ResizeObserver(measure)
     ro.observe(document.body)
     return () => { window.removeEventListener('resize', measure); ro.disconnect() }
-  }, [isEmptyState])
+  }, [isEmptyState, hydrating])
+
+  if (hydrationError) {
+    return (
+      <div className="max-w-md mx-auto mt-12 text-center">
+        <p className="text-sm text-gray-700 mb-4">{hydrationError}</p>
+        <button onClick={() => navigate('/sessions/new')} className="btn-primary">
+          Plan a new trip
+        </button>
+      </div>
+    )
+  }
+
+  if (hydrating) {
+    return (
+      <div className="flex items-center justify-center py-20 text-gray-400">
+        <Loader size={20} className="animate-spin" />
+      </div>
+    )
+  }
 
   // ── Rig context chip strip pieces (only rendered in empty state) ───────────
   // Phase B — the chip reads selectedRig (per-trip override), not the user's
