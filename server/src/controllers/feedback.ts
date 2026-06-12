@@ -2,10 +2,14 @@ import { Request, Response, NextFunction } from 'express'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
+import { sendFeedbackNotification } from '../services/feedbackNotification'
 
 export async function submitFeedback(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { type, title, body, screen, rating, importance, isPublic, rigType, tripContext } = req.body
+    // Body already validated + stripped by validateBody(FeedbackSubmitSchema).
+    // isPublic is intentionally absent — Prisma defaults it to true and the
+    // status gate in getPublicRoadmap controls actual public visibility.
+    const { type, title, body, screen, rating, importance, rigType, tripContext } = req.body
     const feedback = await prisma.feedback.create({
       data: {
         userId: req.user!.id,
@@ -15,11 +19,16 @@ export async function submitFeedback(req: AuthRequest, res: Response, next: Next
         screen,
         rating,
         importance,
-        isPublic: isPublic !== false,
         rigType,
         tripContext,
       },
     })
+
+    // Fire-and-forget — an email failure must never fail or delay the 201.
+    sendFeedbackNotification(feedback).catch(err =>
+      console.error('[feedback] support notification failed (submission unaffected):', err)
+    )
+
     res.status(201).json(feedback)
   } catch (err) { next(err) }
 }
@@ -77,16 +86,5 @@ export async function getAdminFeedback(_req: AuthRequest, res: Response, next: N
       orderBy: { createdAt: 'desc' },
     })
     res.json(feedback)
-  } catch (err) { next(err) }
-}
-
-export async function updateStatus(req: AuthRequest, res: Response, next: NextFunction) {
-  try {
-    const { status } = req.body
-    const updated = await prisma.feedback.update({
-      where: { id: req.params.id },
-      data: { status },
-    })
-    res.json(updated)
   } catch (err) { next(err) }
 }

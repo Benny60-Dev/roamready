@@ -1,7 +1,9 @@
 import { Router } from 'express'
 import { requireAuth, requireOwner } from '../middleware/auth'
 import { requireVerifiedEmail } from '../middleware/requireVerifiedEmail'
-import { getMetrics, getSubscribers, getRevenue, getAdminFeedback, analyzeFeedback, getLinkHealth } from '../controllers/admin'
+import { validateBody } from '../middleware/validate'
+import { AdminFeedbackUpdateSchema } from '../schemas/feedback'
+import { getMetrics, getSubscribers, getRevenue, getAdminFeedback, updateFeedback, analyzeFeedback, getLinkHealth } from '../controllers/admin'
 
 export const adminRouter = Router()
 // requireVerifiedEmail before requireOwner — owners always bypass the
@@ -14,5 +16,6 @@ adminRouter.get('/metrics', getMetrics as any)
 adminRouter.get('/subscribers', getSubscribers as any)
 adminRouter.get('/revenue', getRevenue as any)
 adminRouter.get('/feedback', getAdminFeedback as any)
+adminRouter.patch('/feedback/:id', validateBody(AdminFeedbackUpdateSchema), updateFeedback as any)
 adminRouter.post('/feedback/analyze', analyzeFeedback as any)
 adminRouter.get('/link-health', getLinkHealth as any)
