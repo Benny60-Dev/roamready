@@ -202,7 +202,9 @@ export const sessionsApi = {
   update: (id: string, data: UpdateSessionPayload) =>
     api.put<PlanningSession>(`/sessions/${id}`, data),
   promote: (id: string, data: PromoteSessionPayload) =>
-    api.post<{ session: PlanningSession; trip: any }>(`/sessions/${id}/promote`, data),
+    // alreadyBuilt (BUILD-DUPE-1): 200 + existing trip id when the session
+    // was promoted earlier — `session` is absent on that idempotent path.
+    api.post<{ session?: PlanningSession; trip: { id: string } & Record<string, any>; alreadyBuilt?: boolean }>(`/sessions/${id}/promote`, data),
   delete: (id: string) => api.delete<PlanningSession>(`/sessions/${id}`),
 }
 
