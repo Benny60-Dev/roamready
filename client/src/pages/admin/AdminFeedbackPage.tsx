@@ -6,6 +6,14 @@ import { Feedback } from '../../types'
 
 const STATUS_OPTIONS = ['NEW', 'PLANNED', 'IN_PROGRESS', 'SHIPPED', 'DECLINED']
 
+// Gmail search deep-link base. /u/0/ = the browser's first signed-in account —
+// bump the index (or swap the host) if the support inbox lives elsewhere.
+const GMAIL_SEARCH_URL = 'https://mail.google.com/mail/u/0/#search/'
+
+/** Short reference code shared by the Gmail search and the mailto subject —
+ *  matches the [FB-XXXX] ref embedded in reply subjects. */
+const fbRef = (id: string) => `FB-${id.slice(-4).toUpperCase()}`
+
 // Working-view tabs. Active is the default inbox (everything still in
 // flight); Shipped/Declined are the terminal statuses awaiting archive;
 // Archived holds what's been swept out of the way; All shows everything.
@@ -121,13 +129,23 @@ export default function AdminFeedbackPage() {
                     <p className="text-xs text-gray-400 mt-0.5">
                       {[item.user.firstName, item.user.lastName].filter(Boolean).join(' ') || 'No name'}
                       {' · '}{item.user.email}{' · '}
-                      {/* Pre-addressed reply in the admin's own mail client. The
-                          [FB-xxxx] ref (last 4 of the feedback id) keys the
-                          subject so follow-up replies about the same item
-                          thread together. */}
+                      {/* Primary: land in Gmail on a search for this item's ref —
+                          every email about it in one view, reply in-thread. */}
+                      <a
+                        href={`${GMAIL_SEARCH_URL}${encodeURIComponent(fbRef(item.id))}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#1F6F8B] hover:underline"
+                      >
+                        Find in Gmail
+                      </a>
+                      {' · '}
+                      {/* Secondary: fresh pre-addressed compose (mailto) for items
+                          with no existing email to reply to. The [FB-xxxx] ref in
+                          the subject keys future threading + the Gmail search. */}
                       <a
                         href={`mailto:${item.user.email}?subject=${encodeURIComponent(
-                          `Re: [FB-${item.id.slice(-4).toUpperCase()}] ${item.title || item.type.replace('_', ' ')}`
+                          `Re: [${fbRef(item.id)}] ${item.title || item.type.replace('_', ' ')}`
                         )}`}
                         className="text-[#1F6F8B] hover:underline"
                       >
