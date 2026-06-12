@@ -11,6 +11,7 @@ import { generatePackingListAI, generateTripItineraryAI, generateStopActivitiesA
 import { fetchLiveForecast, fetchHistoricalWeather, isoDate } from '../services/weatherFetch'
 import { computeFuelEstimate } from '../services/fuelPrice'
 import { stampModifyActionApplied } from '../services/modifyActions'
+import { mergePackedState } from '../utils/packingMerge'
 import { parseTripDate } from '../utils/dates'
 
 // ─── City name normalization ─────────────────────────────────────────────────
@@ -1911,30 +1912,21 @@ export async function generatePackingList(req: AuthRequest, res: Response, next:
 
     const packingList = await generatePackingListAI(trip, user, { userId: req.user!.id, tripId: trip.id })
 
-    // Regenerate carry-over: items the user already marked packed stay packed
-    // when the regenerated list contains an item with the same name
-    // (case-insensitive). Without this, every regenerate wiped packed state —
-    // the AI is instructed to emit checked:false on all items.
-    const prevChecked = new Set<string>()
-    if (Array.isArray(trip.packingList)) {
-      for (const cat of trip.packingList as any[]) {
-        for (const item of cat?.items ?? []) {
-          if (item?.checked === true && typeof item?.name === 'string') {
-            prevChecked.add(item.name.toLowerCase().trim())
-          }
-        }
-      }
+    // EMPTY-GENERATION GUARD — generatePackingListAI returns [] when the
+    // model's output fails to parse (e.g. truncated JSON at the token cap).
+    // Persisting that would blank a fresh trip's first list or WIPE an
+    // existing one, while still 200ing. Fail loudly instead and leave the
+    // stored list untouched.
+    if (!Array.isArray(packingList) || packingList.length === 0) {
+      throw new AppError('Packing list generation came back empty — please try again.', 502)
     }
-    const merged = prevChecked.size
-      ? (packingList as any[]).map(cat => ({
-          ...cat,
-          items: (cat?.items ?? []).map((item: any) =>
-            typeof item?.name === 'string' && prevChecked.has(item.name.toLowerCase().trim())
-              ? { ...item, checked: true }
-              : item,
-          ),
-        }))
-      : packingList
+
+    // Regenerate carry-over: maps over the NEW list and re-checks items whose
+    // names match a previously-checked item (case-insensitive). Fresh trips
+    // (nothing previously checked) get the generated list back untouched.
+    // Pure logic in utils/packingMerge.ts; regression-checked by
+    // server/scripts/check-packing-merge.ts.
+    const merged = mergePackedState(trip.packingList, packingList as any[])
 
     await prisma.trip.update({ where: { id: trip.id }, data: { packingList: merged } })
 
