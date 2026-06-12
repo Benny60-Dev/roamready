@@ -102,9 +102,9 @@ export async function chatWithAI(
   } else if (!capturedOrigin && !hasHomeOnFile && userProfile?.isFullTimeRVer) {
     // Full-timer with no fixed home: ask the origin WITHOUT any mention of home
     // or saving an address (a "home" framing is meaningless to them).
-    originDirective = '\n\n⚠ This user is a FULL-TIME RVer with no fixed home. Ask simply: "Where are you starting this trip from?" — do NOT mention home, a saved address, or saving an address. Never invent a city; do not emit an <itinerary> until they provide a starting location.'
+    originDirective = '\n\n⚠ This user is a FULL-TIME RVer with no fixed home. FIRST check whether their message already names a starting point ("from Mesa", "leaving from Phoenix", "starting in Denver") — if it does, that IS the origin: emit the <origin> tag with it and proceed with planning; do NOT ask. Only when no origin has been stated anywhere in the conversation, ask simply: "Where are you starting this trip from?" — do NOT mention home, a saved address, or saving an address. Never invent a city; do not emit an <itinerary> until you have a user-stated starting location.'
   } else if (!capturedOrigin && !hasHomeOnFile) {
-    originDirective = '\n\n⚠ NO HOME ON FILE for this user. Follow the NO-HOME path in the ORIGIN RESOLUTION rule: ask the no-home starting-location question, never name or invent a starting city, and do not emit an <itinerary> until the user provides their starting location.'
+    originDirective = '\n\n⚠ NO HOME ON FILE for this user. FIRST check whether the user\'s message already names a starting point ("from Mesa", "leaving from Phoenix", "starting in Denver") — if it does, that IS the origin: emit the <origin> tag with it and proceed with planning; do NOT ask the starting-location question. Only when no origin has been stated anywhere in the conversation, follow the NO-HOME path in the ORIGIN RESOLUTION rule: ask the no-home starting-location question. Never name or invent a starting city, and do not emit an <itinerary> until the user has provided a starting location.'
   }
   // else: home on file, no captured origin → '' (unchanged existing behavior)
 
