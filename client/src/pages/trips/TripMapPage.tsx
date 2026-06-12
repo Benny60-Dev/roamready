@@ -2095,10 +2095,17 @@ export default function TripMapPage() {
                         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); focusStop(stop) } }}
                         className="w-full text-left flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1F6F8B]/30"
                       >
-                        {/* 8px booking-state dot */}
+                        {/* 8px booking-state dot — title'd so the color code
+                            is hover-explained like the row's other glyphs. */}
                         <span
                           className="flex-shrink-0 rounded-full"
                           style={{ width: 8, height: 8, background: dotColor }}
+                          title={isEndpoint ? undefined
+                            : stop.bookingStatus === 'CONFIRMED' ? 'Booking confirmed'
+                            : stop.bookingStatus === 'PENDING' ? 'Booking pending'
+                            : stop.bookingStatus === 'WAITLISTED' ? 'Waitlisted'
+                            : stop.bookingStatus === 'CANCELLED' ? 'Booking cancelled'
+                            : 'Not booked yet'}
                         />
                         {/* Marker circle — pale RV-blue/gold palette */}
                         <div
@@ -2107,11 +2114,16 @@ export default function TripMapPage() {
                         >
                           {formatStopBadgeMarker(badge)}
                         </div>
-                        {/* Bed/Tent type icon — skipped for endpoints */}
+                        {/* Bed/Tent type icon — skipped for endpoints. Wrapped
+                            in title'd spans so hover explains the glyph. */}
                         {!isEndpoint && (
                           showTent
-                            ? <Tent size={14} className="flex-shrink-0" style={{ color: '#BA7517' }} />
-                            : <Bed size={14} className="flex-shrink-0" style={{ color: '#5F5E5A' }} />
+                            ? <span title="Destination stay (multi-night)" className="flex-shrink-0 flex items-center">
+                                <Tent size={14} style={{ color: '#BA7517' }} />
+                              </span>
+                            : <span title="Overnight stop (one night)" className="flex-shrink-0 flex items-center">
+                                <Bed size={14} style={{ color: '#5F5E5A' }} />
+                              </span>
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium text-gray-900 truncate">{stop.locationName}</p>
@@ -2122,19 +2134,32 @@ export default function TripMapPage() {
                         </div>
                         <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
                           {ctaEl}
-                          {/* Weather-alert count — number of distinct active
+                          {/* Weather-alert pill — count of distinct active
                               alert types (wind/rain/freeze/snow) in this stop's
-                              live forecast. Brand purple (tailwind purple =
-                              #7F77DD), not the old off-palette purple-600. */}
+                              live forecast. Labeled (never a bare number);
+                              "weather" drops out below sm so narrow rows get
+                              the compact "N alerts" form. Brand purple tint
+                              (tailwind purple = #7F77DD) with a darker shade
+                              of the same hue for text; the title lists the
+                              specific alert messages as the detail layer. */}
                           {hasAlert && (
                             <span
-                              className="flex items-center gap-0.5 text-[9px] font-medium text-purple"
+                              className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-purple/10 text-[#5B53B8]"
                               title={`${alerts.length} weather alert${alerts.length === 1 ? '' : 's'}: ${alerts.map(a => a.message).join(' · ')}`}
                             >
-                              🟣 {alerts.length}
+                              <CloudRain size={10} className="flex-shrink-0" />
+                              <span className="whitespace-nowrap">
+                                {alerts.length}{' '}
+                                <span className="hidden sm:inline">weather </span>
+                                alert{alerts.length === 1 ? '' : 's'}
+                              </span>
                             </span>
                           )}
-                          {!stop.isCompatible && <AlertTriangle size={11} className="text-red-400" />}
+                          {!stop.isCompatible && (
+                            <span title="Potential rig compatibility issue — check this stop's details" className="flex items-center">
+                              <AlertTriangle size={11} className="text-red-400" />
+                            </span>
+                          )}
                         </div>
                         {/* Delete affordance. stopPropagation prevents the
                             row's popup-open click from firing when the user
