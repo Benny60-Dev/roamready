@@ -64,6 +64,11 @@ export const StopUpdateSchema = z
     driveDistanceMiles: z.number().min(0).nullable().optional(),
     routeHighlights: z.string().nullable().optional(),
     pointsOfInterest: z.array(z.any()).optional(),
+    // AI-MESA-10 — when the Modify panel applies an AI-proposed action via
+    // this endpoint, it threads the action's id so the server can stamp the
+    // persisted proposal applied=true after the mutation succeeds (see
+    // services/modifyActions.ts). Never written to the Stop row.
+    modifyActionId: z.string().max(100).optional(),
     // Block 15 — the shared "things to do during your stay" list. See the
     // Stop model in prisma/schema.prisma and the Stop interface in
     // client/src/types/index.ts. Validated as z.array(z.any()) matching the

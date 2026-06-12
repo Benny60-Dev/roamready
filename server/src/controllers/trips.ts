@@ -10,6 +10,7 @@ import type { StopUpdateInput, TripUpdateInput, TripShiftDatesInput } from '../s
 import { generatePackingListAI, generateTripItineraryAI, generateStopActivitiesAI, generateRouteHighlightsAI } from '../services/ai'
 import { fetchLiveForecast, fetchHistoricalWeather, isoDate } from '../services/weatherFetch'
 import { computeFuelEstimate } from '../services/fuelPrice'
+import { stampModifyActionApplied } from '../services/modifyActions'
 import { parseTripDate } from '../utils/dates'
 
 // ─── City name normalization ─────────────────────────────────────────────────
@@ -957,15 +958,18 @@ export async function shiftTripDates(req: AuthRequest, res: Response, next: Next
       )
     }
 
-    const { newStartDate }: TripShiftDatesInput = req.body
+    const { newStartDate, modifyActionId }: TripShiftDatesInput = req.body
     // .find() above asserts arrivalDate is non-null, but TS doesn't narrow
     // through .find predicates — the ! is the minimal cast.
     const currentStartMs = anchorStop.arrivalDate!.getTime()
     const deltaMs = newStartDate.getTime() - currentStartMs
 
     // No-op shortcut: same date in, same trip out. Mirror getTrip's return
-    // shape so the client can hot-swap state either way.
+    // shape so the client can hot-swap state either way. Still counts as an
+    // executed apply for AI-MESA-10 stamping — the user clicked Apply and the
+    // trip now (trivially) matches the proposal.
     if (deltaMs === 0) {
+      await stampModifyActionApplied(trip.id, modifyActionId)
       return res.json(trip)
     }
 
@@ -1011,6 +1015,8 @@ export async function shiftTripDates(req: AuthRequest, res: Response, next: Next
       trip.stops.filter(s => s.arrivalDate != null || s.departureDate != null).length,
     )
 
+    // AI-MESA-10 — verified apply stamp (transaction committed above). Never throws.
+    await stampModifyActionApplied(trip.id, modifyActionId)
     res.json(updated ? { ...updated, stops: updated.stops.map(collapseJournal) } : updated)
   } catch (err) { next(err) }
 }
@@ -1224,6 +1230,14 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
     // own GET-trip refetch afterward, but returning fresh dates here
     // keeps the contract honest for any future caller that consumes
     // the create response directly.
+    // AI-MESA-10 — verified apply stamp: when the Modify panel applied an
+    // AI-proposed action via this endpoint, mark the persisted proposal
+    // applied=true now that the mutation actually executed. (createStop has
+    // no Zod schema; the field-whitelist destructure above keeps the id off
+    // the Stop row.) Never throws.
+    if (typeof req.body.modifyActionId === 'string') {
+      await stampModifyActionApplied(req.params.id, req.body.modifyActionId)
+    }
     const finalStop = await prisma.stop.findUnique({ where: { id: stop.id } })
     res.status(201).json(finalStop ?? stop)
   } catch (err: any) {
@@ -1243,7 +1257,9 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
     // so unknown keys (incl. id, tripId, type, createdAt, updatedAt) cannot reach Prisma.
     // Pull routeHighlights out of the data object — it goes through a raw-SQL fallback below.
     const body: StopUpdateInput = req.body
-    const { routeHighlights, ...data } = body
+    // modifyActionId is AI-MESA-10 apply-stamp plumbing, not a Stop column —
+    // pulled out alongside routeHighlights so it never reaches prisma.update.
+    const { routeHighlights, modifyActionId, ...data } = body
 
     // Reservation Honesty: when a stop is being unbooked, force-clear the user-entered
     // reservation detail fields so stale data can't leak across rebook cycles. Overrides
@@ -1287,6 +1303,8 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
         console.warn('[recomputeStopDates] updateStop tripId=%s failed: %s', req.params.id, e?.message)
       }
     }
+    // AI-MESA-10 — verified apply stamp (mutation succeeded above). Never throws.
+    await stampModifyActionApplied(req.params.id, modifyActionId)
     res.json(updated)
   } catch (err) { next(err) }
 }
@@ -1343,6 +1361,11 @@ export async function deleteStop(req: AuthRequest, res: Response, next: NextFunc
       await recomputeStopDates(req.params.id)
     } catch (e: any) {
       console.warn('[recomputeStopDates] deleteStop tripId=%s failed: %s', req.params.id, e?.message)
+    }
+    // AI-MESA-10 — verified apply stamp. DELETE has no body, so the Modify
+    // panel threads the action id as a query param. Never throws.
+    if (typeof req.query.modifyActionId === 'string') {
+      await stampModifyActionApplied(req.params.id, req.query.modifyActionId)
     }
     res.json({ message: 'Stop deleted' })
   } catch (err) { next(err) }
