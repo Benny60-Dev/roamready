@@ -3,16 +3,14 @@ import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { Wand2, Loader } from 'lucide-react'
 import { adminApi } from '../../services/api'
 import { Feedback } from '../../types'
+import { fbRef } from '../../utils/fbRef'
+import { lifecycleDate } from '../../utils/dates'
 
 const STATUS_OPTIONS = ['NEW', 'PLANNED', 'IN_PROGRESS', 'SHIPPED', 'DECLINED']
 
 // Gmail search deep-link base. /u/0/ = the browser's first signed-in account —
 // bump the index (or swap the host) if the support inbox lives elsewhere.
 const GMAIL_SEARCH_URL = 'https://mail.google.com/mail/u/0/#search/'
-
-/** Short reference code shared by the Gmail search and the mailto subject —
- *  matches the [FB-XXXX] ref embedded in reply subjects. */
-const fbRef = (id: string) => `FB-${id.slice(-4).toUpperCase()}`
 
 // Working-view tabs. Active is the default inbox (everything still in
 // flight); Shipped/Declined are the terminal statuses awaiting archive;
@@ -172,6 +170,14 @@ export default function AdminFeedbackPage() {
                     />
                     Public
                   </label>
+                  {/* Shipped-notice receipt — server stamps this only after the
+                      "your request shipped" email actually sent. Display-only;
+                      the notification itself is automatic on the status change. */}
+                  {item.status === 'SHIPPED' && item.shippedNotifiedAt && (
+                    <span className="text-xs text-[#0F766E]">
+                      ✓ Notified {lifecycleDate(item.shippedNotifiedAt)}
+                    </span>
+                  )}
                   {/* Archive only offered once an item is terminal (SHIPPED /
                       DECLINED); archived items get Unarchive instead. */}
                   {item.archivedAt != null ? (

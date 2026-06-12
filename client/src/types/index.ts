@@ -396,6 +396,9 @@ export interface Feedback {
   /** Admin archive timestamp — null/absent = active. Admin-only concern;
    *  never affects public roadmap visibility. */
   archivedAt?: string | null
+  /** When the submitter was emailed that this item shipped (null = never).
+   *  Server-stamped after a successful send only. */
+  shippedNotifiedAt?: string | null
   createdAt: string
   user?: { email: string; firstName: string; lastName: string }
 }

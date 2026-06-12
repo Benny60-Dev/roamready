@@ -578,6 +578,10 @@ model Feedback {
   // PATCH's `archived` boolean; never affects public roadmap visibility —
   // getPublicRoadmap filters on isPublic + status only, by design.
   archivedAt  DateTime?
+  // When the submitter was emailed that their item shipped (null = never).
+  // Stamped ONLY after a successful Resend send on the NEW→SHIPPED
+  // transition; the stamp is the idempotency guard against re-sends.
+  shippedNotifiedAt DateTime?
   createdAt   DateTime       @default(now())
 }
 

@@ -3,6 +3,7 @@ import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { stripe } from '../services/stripe'
 import { analyzeFeedbackAI } from '../services/ai'
+import { sendFeedbackShippedNotification } from '../services/feedbackNotification'
 
 // ── Date-derived trip completion ─────────────────────────────────────────────
 // The stored Trip.status enum is vestigial — nothing sets COMPLETED anymore
@@ -150,14 +151,45 @@ export async function updateFeedback(req: AuthRequest, res: Response, next: Next
     // patch never touches the others. `archived` is a wire boolean that maps
     // to the archivedAt timestamp (true → now, false → null).
     const { status, isPublic, archived } = req.body
+
+    // Pre-update snapshot for the shipped-notification transition check —
+    // we need the PREVIOUS status (and the notify stamp) to fire only on a
+    // genuine →SHIPPED edge, never on SHIPPED→SHIPPED no-ops or re-entries
+    // after the stamp.
+    const before = await prisma.feedback.findUnique({ where: { id: req.params.id } })
+    if (!before) return res.status(404).json({ error: 'Feedback not found' })
+
     const updated = await prisma.feedback.update({
       where: { id: req.params.id },
       data: {
         ...(status !== undefined && { status }),
         ...(isPublic !== undefined && { isPublic }),
         ...(archived !== undefined && { archivedAt: archived ? new Date() : null }),
-      } as any, // archivedAt may predate the locally-generated Prisma client types
+      } as any, // archivedAt/shippedNotifiedAt may predate the local Prisma client types
     })
+
+    // Shipped notice — automatic, fire-and-forget relative to this response.
+    // shippedNotifiedAt is stamped ONLY after the service reports a real send
+    // (false = skipped, e.g. no submitter email → stays null), and the stamp
+    // is what makes future →SHIPPED transitions no-ops.
+    if (
+      status === 'SHIPPED' &&
+      before.status !== 'SHIPPED' &&
+      (before as any).shippedNotifiedAt == null
+    ) {
+      sendFeedbackShippedNotification(updated as any)
+        .then(sent => {
+          if (!sent) return
+          return prisma.feedback.update({
+            where: { id: updated.id },
+            data: { shippedNotifiedAt: new Date() } as any,
+          }).then(() => undefined)
+        })
+        .catch(err =>
+          console.error('[adminFeedback] shipped notification failed (status change unaffected):', err)
+        )
+    }
+
     res.json(updated)
   } catch (err) { next(err) }
 }
