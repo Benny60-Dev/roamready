@@ -9,6 +9,9 @@ import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
 import { formatTripDate } from '../utils/dates'
 
 const SAVE_DEBOUNCE_MS = 500
+// After this long still generating, the progress notice flips to its
+// "hang tight" second stage so a long AI authoring wait feels acknowledged.
+const BUILD_STAGE2_MS = 8000
 
 function pluralize(n: number, singular: string, plural?: string): string {
   return `${n} ${n === 1 ? singular : plural ?? `${singular}s`}`
@@ -62,6 +65,10 @@ export default function PackingListPage() {
   // banner stays hidden for THAT snapshot but re-shows when a newer one arrives.
   const [packingContext, setPackingContext] = useState<PackingContext | null>(null)
   const [dismissedSnapshot, setDismissedSnapshot] = useState<string | null>(null)
+  // Two-stage progress notice during the ~10-15s AI authoring. Stage 1 is the
+  // "no small job" line; stage 2 ("hang tight") flips in after BUILD_STAGE2_MS
+  // if still generating. New top-section hook (above the loading early return).
+  const [buildStage, setBuildStage] = useState<1 | 2>(1)
 
   // Debounced persistence (PUT /trips/:id/packing-list). Toggles/removals
   // update local state optimistically and schedule a save; latestRef always
@@ -74,6 +81,9 @@ export default function PackingListPage() {
   // Set when Escape cancels an inline rename, so the input's onBlur (which fires
   // on the programmatic blur) skips the save instead of committing.
   const escapeRename = useRef(false)
+  // Timer that flips the progress notice to stage 2; cleared on completion and
+  // on unmount so it never fires after generation ends or the page is gone.
+  const buildStageTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => { latestRef.current = categories }, [categories])
 
   // Close the export-format menu on any outside click.
@@ -107,9 +117,11 @@ export default function PackingListPage() {
     saveTimer.current = setTimeout(() => void persist(), SAVE_DEBOUNCE_MS)
   }
 
-  // Flush a pending save when the user navigates away inside the SPA.
+  // Flush a pending save when the user navigates away inside the SPA, and clear
+  // the build-stage timer so it can't fire on an unmounted component.
   useEffect(() => () => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
+    if (buildStageTimer.current) clearTimeout(buildStageTimer.current)
     if (dirtyRef.current) void persist()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -134,6 +146,10 @@ export default function PackingListPage() {
   async function generate() {
     if (!tripId) return
     setGenerating(true)
+    // Re-stage from 1 each run; flip to stage 2 if we're still going at 8s.
+    setBuildStage(1)
+    if (buildStageTimer.current) clearTimeout(buildStageTimer.current)
+    buildStageTimer.current = setTimeout(() => setBuildStage(2), BUILD_STAGE2_MS)
     try {
       // Server-side carry-over keeps already-packed items checked when the
       // regenerated list contains a same-named item.
@@ -153,6 +169,7 @@ export default function PackingListPage() {
       }
       console.error('[PackingListPage] generate failed:', err)
     } finally {
+      if (buildStageTimer.current) { clearTimeout(buildStageTimer.current); buildStageTimer.current = null }
       setGenerating(false)
     }
   }
@@ -280,6 +297,19 @@ export default function PackingListPage() {
         }
       })()
     : null
+
+  // Honest progress notice during the ~10-15s AI authoring. Stage 1 sets
+  // expectations; stage 2 reassures on a long wait. Clears with `generating`.
+  const buildingNotice = (
+    <div className="card flex items-center gap-3">
+      <Loader size={18} className="animate-spin text-[#1F6F8B] flex-shrink-0" />
+      <span className="text-sm text-gray-600">
+        {buildStage === 2
+          ? 'Hang tight, just a few more seconds…'
+          : `Packing for a trip is no small job — ${categories.length === 0 ? 'building' : 'rebuilding'} your list…`}
+      </span>
+    </div>
+  )
 
   return (
     <div className="space-y-4 max-w-2xl">
@@ -425,17 +455,20 @@ export default function PackingListPage() {
       />
 
       {categories.length === 0 ? (
-        <div className="card text-center py-16">
-          <div className="text-4xl mb-3">🎒</div>
-          <p className="font-medium text-gray-700 mb-1">No packing list yet</p>
-          <p className="text-sm text-gray-500 mb-4">Generate one with AI based on your trip details</p>
-          <button onClick={generate} disabled={generating} className="btn-primary inline-flex items-center gap-2">
-            {generating ? <Loader size={15} className="animate-spin" /> : <Wand2 size={15} />}
-            Generate packing list
-          </button>
-        </div>
+        generating ? buildingNotice : (
+          <div className="card text-center py-16">
+            <div className="text-4xl mb-3">🎒</div>
+            <p className="font-medium text-gray-700 mb-1">No packing list yet</p>
+            <p className="text-sm text-gray-500 mb-4">Generate one with AI based on your trip details</p>
+            <button onClick={generate} disabled={generating} className="btn-primary inline-flex items-center gap-2">
+              {generating ? <Loader size={15} className="animate-spin" /> : <Wand2 size={15} />}
+              Generate packing list
+            </button>
+          </div>
+        )
       ) : (
         <div className="space-y-4">
+          {generating && buildingNotice}
           {categories.map((cat, ci) => (
             <div key={ci} className="card-lg">
               <h3 className="text-[13px] font-semibold text-gray-900 mb-2">{cat.category}</h3>
