@@ -2,13 +2,37 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Wand2, Check, Loader, X, FileDown, Undo2, Plus, Pencil, ChevronDown } from 'lucide-react'
 import { tripsApi } from '../services/api'
-import { PackingCategory } from '../types'
+import { PackingCategory, PackingContext, PackingCounts } from '../types'
 import { Breadcrumb } from '../components/ui/Breadcrumb'
 import ConfirmModal from '../components/ui/ConfirmModal'
 import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
 import { formatTripDate } from '../utils/dates'
 
 const SAVE_DEBOUNCE_MS = 500
+
+function pluralize(n: number, singular: string, plural?: string): string {
+  return `${n} ${n === 1 ? singular : plural ?? `${singular}s`}`
+}
+
+// "1 dog" / "2 cats" when one known type; otherwise "N pets". null when no pets.
+function petsDesc(petTypes: string[] | undefined, count: number): string | null {
+  if (count === 0) return null
+  const distinct = Array.from(new Set(petTypes ?? []))
+  if (distinct.length === 1 && (distinct[0] === 'DOG' || distinct[0] === 'CAT')) {
+    return pluralize(count, distinct[0] === 'DOG' ? 'dog' : 'cat')
+  }
+  return pluralize(count, 'pet')
+}
+
+// "2 adults · 1 dog · 6 nights". Children only when > 0; nights optional.
+function formatPackingShape(c: PackingCounts, opts?: { nights?: boolean }): string {
+  const parts = [pluralize(c.adults, 'adult')]
+  if (c.children > 0) parts.push(pluralize(c.children, 'child', 'children'))
+  const pets = petsDesc(c.petTypes, c.pets)
+  if (pets) parts.push(pets)
+  if (opts?.nights !== false) parts.push(pluralize(c.nights, 'night'))
+  return parts.join(' · ')
+}
 
 export default function PackingListPage() {
   const { tripId } = useParams<{ tripId: string }>()
@@ -33,6 +57,11 @@ export default function PackingListPage() {
   // a ref for the click-away handler — both top-section hooks.
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
   const exportMenuRef = useRef<HTMLDivElement>(null)
+  // Staleness: server-computed context (snapshot + current counts + stale flag).
+  // dismissedSnapshot holds the snapshot generatedAt the user dismissed, so the
+  // banner stays hidden for THAT snapshot but re-shows when a newer one arrives.
+  const [packingContext, setPackingContext] = useState<PackingContext | null>(null)
+  const [dismissedSnapshot, setDismissedSnapshot] = useState<string | null>(null)
 
   // Debounced persistence (PUT /trips/:id/packing-list). Toggles/removals
   // update local state optimistically and schedule a save; latestRef always
@@ -93,6 +122,7 @@ export default function PackingListPage() {
       const end = res.data.endDate ? formatTripDate(res.data.endDate, 'MMM d, yyyy') : ''
       setDateRange(start && end ? `${start} – ${end}` : start || end)
       if (res.data.packingList) setCategories(res.data.packingList)
+      setPackingContext(res.data.packingContext ?? null)
       setLoading(false)
     })
   }, [tripId])
@@ -109,6 +139,9 @@ export default function PackingListPage() {
       // regenerated list contains a same-named item.
       const res = await tripsApi.generatePackingList(tripId)
       setCategories(res.data)
+      // Re-pull the trip so the subtitle + staleness reflect the fresh snapshot
+      // (generate persists a new packingListMeta; this read returns stale=false).
+      tripsApi.get(tripId).then(r => setPackingContext(r.data.packingContext ?? null)).catch(() => {})
     } catch (err: any) {
       // FEATURE_GATED 403 → paywall opened by the central axios interceptor
       // (services/api.ts). This endpoint can 403 with feature
@@ -221,6 +254,33 @@ export default function PackingListPage() {
 
   if (loading) return <div className="flex justify-center py-20"><div className="w-6 h-6 border-2 border-[#1F6F8B] border-t-transparent rounded-full animate-spin" /></div>
 
+  // Subtitle reflects what the list was BUILT for (the snapshot); hidden for
+  // legacy lists with no snapshot. Banner shows only when server flagged drift
+  // and this snapshot hasn't been dismissed this session.
+  const snapshot = packingContext?.packingListMeta ?? null
+  const showBanner = !!packingContext?.stale && !!snapshot && dismissedSnapshot !== snapshot.generatedAt
+
+  // Banner copy adapts to which dimensions drifted. Nights shown in the
+  // built-for/now lines only when nights actually changed (party-only changes
+  // read cleaner without it).
+  const banner = showBanner && snapshot && packingContext
+    ? (() => {
+        const { current, changed } = packingContext
+        const partyChanged = changed.includes('people') || changed.includes('pets')
+        const nightsChanged = changed.includes('nights')
+        const lead = partyChanged && nightsChanged
+          ? 'Your travel party and trip length changed'
+          : partyChanged
+            ? 'Your travel party changed'
+            : 'Your trip length changed'
+        return {
+          lead,
+          built: formatPackingShape(snapshot, { nights: nightsChanged }),
+          now: formatPackingShape(current, { nights: nightsChanged }),
+        }
+      })()
+    : null
+
   return (
     <div className="space-y-4 max-w-2xl">
       <Breadcrumb items={[
@@ -228,10 +288,17 @@ export default function PackingListPage() {
         { label: tripName || 'Trip', href: `/trips/${tripId}/map` },
         { label: 'Packing List' },
       ]} />
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-medium text-gray-900">Packing List</h1>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-xl font-medium text-gray-900">Packing List</h1>
+          {/* "Made for X" — from the generation snapshot, so it describes what
+              the list was built for. Hidden for legacy lists (no snapshot). */}
+          {snapshot && (
+            <p className="text-[13px] text-gray-500 mt-0.5">Made for {formatPackingShape(snapshot)}</p>
+          )}
+        </div>
         {/* One action, one button, per state: with a list, the header owns
-            Regenerate (confirm-gated) + Export; with no list, the empty-state
+            Refresh (confirm-gated) + Export; with no list, the empty-state
             card below owns the only Generate button. */}
         {categories.length > 0 && (
           <div className="flex gap-2">
@@ -272,7 +339,7 @@ export default function PackingListPage() {
             </div>
             <button onClick={() => setShowRegenConfirm(true)} disabled={generating} className="btn-outline text-sm flex items-center gap-1.5">
               {generating ? <Loader size={14} className="animate-spin" /> : <Wand2 size={14} />}
-              {generating ? 'Generating...' : 'Regenerate with AI'}
+              {generating ? 'Generating...' : 'Refresh suggestions'}
             </button>
           </div>
         )}
@@ -287,6 +354,36 @@ export default function PackingListPage() {
           >
             Retry
           </button>
+        </div>
+      )}
+
+      {banner && snapshot && (
+        <div
+          className="rounded-lg border p-4"
+          style={{ backgroundColor: '#FDEFD9', borderColor: '#F0D9A8', borderWidth: '0.5px' }}
+        >
+          <p className="text-sm" style={{ color: '#8A5A0E' }}>
+            {banner.lead} since this list was made — it was built for {banner.built}, but your trip
+            now has {banner.now}. Refresh to update your packing list.
+          </p>
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={() => setShowRegenConfirm(true)}
+              disabled={generating}
+              className="px-3 py-1.5 rounded-md text-sm font-medium text-white flex items-center gap-1.5 disabled:opacity-50"
+              style={{ backgroundColor: '#8A5A0E' }}
+            >
+              {generating ? <Loader size={14} className="animate-spin" /> : <Wand2 size={14} />}
+              {generating ? 'Generating...' : 'Refresh suggestions'}
+            </button>
+            <button
+              onClick={() => setDismissedSnapshot(snapshot.generatedAt)}
+              className="px-3 py-1.5 rounded-md text-sm font-medium border bg-white"
+              style={{ color: '#8A5A0E', borderColor: '#F0D9A8' }}
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
 

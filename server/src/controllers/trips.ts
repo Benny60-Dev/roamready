@@ -12,6 +12,7 @@ import { fetchLiveForecast, fetchHistoricalWeather, isoDate } from '../services/
 import { computeFuelEstimate } from '../services/fuelPrice'
 import { stampModifyActionApplied } from '../services/modifyActions'
 import { mergePackedState } from '../utils/packingMerge'
+import { resolvePackingCounts, computeStaleness } from '../utils/packingMeta'
 import { parseTripDate } from '../utils/dates'
 
 // ─── City name normalization ─────────────────────────────────────────────────
@@ -877,10 +878,34 @@ export async function getTrip(req: AuthRequest, res: Response, next: NextFunctio
   try {
     const trip = await prisma.trip.findFirst({
       where: { id: req.params.id, userId: req.user!.id },
-      include: { stops: { orderBy: { order: 'asc' }, include: { journalEntries: { orderBy: { createdAt: 'asc' } } } } },
+      include: {
+        stops: { orderBy: { order: 'asc' }, include: { journalEntries: { orderBy: { createdAt: 'asc' } } } },
+        // Trip-scoped party for the packing "Made for X" subtitle + staleness.
+        party: { include: { people: true, pets: true } },
+      },
     })
     if (!trip) throw new AppError('Trip not found', 404)
-    res.json({ ...trip, stops: trip.stops.map(collapseJournal) })
+
+    // Packing staleness context — only when a list exists (skips the extra
+    // default-party lookup for trips without one). Resolution mirrors the
+    // generator exactly: trip.party ?? user-default. Legacy lists (meta null)
+    // come back stale=false via computeStaleness — no false alarm.
+    let packingContext = null
+    if (trip.packingList) {
+      let party: any = trip.party
+      if (!party) {
+        const user = await prisma.user.findUnique({
+          where: { id: req.user!.id },
+          include: { parties: { where: { isDefault: true }, include: { people: true, pets: true }, take: 1 } },
+        })
+        party = user?.parties?.[0] ?? null
+      }
+      const current = resolvePackingCounts(party, trip)
+      const meta = (trip.packingListMeta as any) ?? null
+      packingContext = { packingListMeta: meta, current, ...computeStaleness(meta, current) }
+    }
+
+    res.json({ ...trip, stops: trip.stops.map(collapseJournal), packingContext })
   } catch (err) { next(err) }
 }
 
@@ -1928,7 +1953,19 @@ export async function generatePackingList(req: AuthRequest, res: Response, next:
     // server/scripts/check-packing-merge.ts.
     const merged = mergePackedState(trip.packingList, packingList as any[])
 
-    await prisma.trip.update({ where: { id: trip.id }, data: { packingList: merged } })
+    // Snapshot what this list was generated FOR, using the SAME resolved party
+    // the prompt used (trip.party ?? user-default) and the same nights source.
+    // Powers the "Made for X" subtitle and the staleness banner on next load.
+    const resolvedParty = trip.party ?? user?.parties?.[0] ?? null
+    const packingListMeta = {
+      ...resolvePackingCounts(resolvedParty, trip),
+      generatedAt: new Date().toISOString(),
+    }
+
+    await prisma.trip.update({
+      where: { id: trip.id },
+      data: { packingList: merged, packingListMeta: packingListMeta as any },
+    })
 
     res.json(merged)
   } catch (err) { next(err) }
