@@ -155,6 +155,12 @@ export default function ResourcesPage() {
                   <p className="text-sm font-medium text-gray-900">{r.name}</p>
                   {r.address && <p className="text-xs text-gray-500 mt-0.5">{r.address}</p>}
                   <div className="flex items-center gap-3 mt-1">
+                    {/* Distance from the user's GPS (server-computed). Quiet
+                        neutral text, matching OhvDestinationsPage's badge.
+                        Omitted when the place has no coordinates. */}
+                    {typeof r.distanceMiles === 'number' && (
+                      <span className="text-xs text-gray-500">{r.distanceMiles} mi away</span>
+                    )}
                     {r.rating && (
                       <span className="flex items-center gap-0.5 text-xs text-amber-500">
                         <Star size={11} fill="currentColor" /> {r.rating}
