@@ -341,12 +341,12 @@ export default function PackingListPage() {
         <div className="space-y-4">
           {categories.map((cat, ci) => (
             <div key={ci} className="card-lg">
-              <h3 className="font-medium text-gray-900 mb-3">{cat.category}</h3>
-              <div className="space-y-2">
+              <h3 className="text-[13px] font-semibold text-gray-900 mb-2">{cat.category}</h3>
+              <div className="divide-y divide-gray-100">
                 {cat.items.map((item, ii) => (
-                  <div key={ii} className="flex items-center gap-3 group">
+                  <div key={ii} className="flex items-center gap-3 group py-2.5">
                     <div
-                      className={`w-5 h-5 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors ${
+                      className={`w-5 h-5 rounded-[5px] border flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors ${
                         item.checked ? 'bg-[#1F6F8B] border-[#1F6F8B]' : 'border-gray-300 group-hover:border-[#1F6F8B]'
                       }`} style={{ borderWidth: '0.5px' }}
                       onClick={() => toggleItem(ci, ii)}
@@ -376,12 +376,12 @@ export default function PackingListPage() {
                     ) : (
                       <>
                         <span
-                          className={`text-sm cursor-pointer transition-colors ${item.checked ? 'line-through text-gray-400' : 'text-gray-700'}`}
+                          className={`text-[15px] cursor-pointer transition-colors ${item.checked ? 'line-through text-gray-400' : 'text-gray-700'}`}
                           onClick={() => toggleItem(ci, ii)}
                         >
                           {item.name}
                           {item.required && <span className="text-red-400 ml-1">*</span>}
-                          {item.custom && <span className="text-gray-400 text-xs ml-2">added</span>}
+                          {item.custom && <span className="text-[11px] text-gray-400 ml-2">added</span>}
                         </span>
                         <div className="ml-auto flex items-center flex-shrink-0">
                           <button
@@ -389,7 +389,7 @@ export default function PackingListPage() {
                             onClick={() => startRename(ci, ii, item.name)}
                             aria-label={`Rename ${item.name}`}
                             title="Rename"
-                            className="p-1 text-gray-300 hover:text-[#1F6F8B] opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                            className="p-1 text-gray-300 hover:text-[#1F6F8B] opacity-40 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-opacity"
                           >
                             <Pencil size={14} />
                           </button>
@@ -398,7 +398,7 @@ export default function PackingListPage() {
                             onClick={() => removeItem(ci, ii)}
                             aria-label={`Remove ${item.name}`}
                             title="Remove from list"
-                            className="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                            className="p-1 text-gray-300 hover:text-red-500 opacity-40 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-opacity"
                           >
                             <X size={14} />
                           </button>
@@ -409,14 +409,15 @@ export default function PackingListPage() {
                 ))}
                 {/* Per-category add. Adds a custom item; persistence rides the
                     same debounced scheduleSave as toggle/remove. */}
-                <div className="flex items-center gap-2 pt-1">
+                <div className="flex items-center gap-3 pt-2.5">
+                  <Plus size={18} className="text-gray-300 flex-shrink-0" />
                   <input
                     type="text"
                     value={addText[ci] ?? ''}
                     onChange={e => setAddText(prev => ({ ...prev, [ci]: e.target.value }))}
                     onKeyDown={e => { if (e.key === 'Enter') addItem(ci) }}
                     placeholder="Add item…"
-                    className="flex-1 text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-[#1F6F8B] bg-white"
+                    className="flex-1 text-[15px] bg-transparent placeholder:text-gray-400 focus:outline-none"
                   />
                   <button
                     type="button"
