@@ -321,6 +321,12 @@ model Trip {
   fuelPrice      Float?
   sharedToken    String?    @unique
   packingList    Json?
+  /// Snapshot of what the packing list was generated FOR — { adults, children,
+  /// pets, petTypes, nights, generatedAt }. Written by generatePackingList using
+  /// the same trip.party ?? user-default resolution as the prompt; read back to
+  /// power the "Made for X" subtitle and the staleness banner. Null for lists
+  /// generated before this shipped (legacy → never flagged stale).
+  packingListMeta Json?
   aiConversation     Json?
   modifyConversation Json?
   itinerary          Json?

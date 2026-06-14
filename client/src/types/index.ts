@@ -526,6 +526,31 @@ export interface PackingItem {
   custom?: boolean
 }
 
+/** Counts a packing list was generated for / currently resolves to. */
+export interface PackingCounts {
+  adults: number
+  children: number
+  pets: number
+  petTypes: PetType[]
+  nights: number
+}
+
+/** Snapshot stored at generation time (Trip.packingListMeta). */
+export interface PackingListMeta extends PackingCounts {
+  generatedAt: string
+}
+
+/** Returned by GET /trips/:id (as `packingContext`) when a packing list exists.
+ *  `packingListMeta` is null for legacy lists generated before snapshots; in
+ *  that case `stale` is always false. */
+export interface PackingContext {
+  packingListMeta: PackingListMeta | null
+  current: PackingCounts
+  stale: boolean
+  /** Which dimensions drifted: any of 'people' | 'pets' | 'nights'. */
+  changed: string[]
+}
+
 export interface Campground {
   id: string
   name: string
