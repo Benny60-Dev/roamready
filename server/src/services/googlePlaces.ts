@@ -346,6 +346,10 @@ export interface ResourceResult {
   phone: string | null
   website: string | null
   googleMapsUrl: string | null
+  // Straight-line distance from the user's GPS to this resource, in miles.
+  // null when the place has no coordinates. Derived from the same haversine
+  // used to rank results nearest-first — see searchResourcesNearby.
+  distanceMiles?: number | null
 }
 
 // Great-circle distance between two lat/lng points. Only the RELATIVE order
@@ -367,6 +371,14 @@ function haversineKm(
     Math.sin(dLat / 2) ** 2 +
     Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2
   return 2 * R * Math.asin(Math.sqrt(s))
+}
+
+const KM_TO_MILES = 0.621371
+
+// One decimal under 10 mi ("0.4", "4.2"), whole number at/above ("12") — the
+// precision a roadside user actually reads.
+function roundMiles(mi: number): number {
+  return mi < 10 ? Math.round(mi * 10) / 10 : Math.round(mi)
 }
 
 export async function searchResourcesNearby(
@@ -394,31 +406,37 @@ export async function searchResourcesNearby(
   // empty list — the controller decides not to cache an empty result.
   if (places === null || places.length === 0) return []
 
-  const mapped: ResourceResult[] = places.map((place: any) => ({
-    id: place.id,
-    name: place.displayName?.text ?? '',
-    address: place.formattedAddress ?? null,
-    latitude: place.location?.latitude ?? null,
-    longitude: place.location?.longitude ?? null,
-    rating: typeof place.rating === 'number' ? place.rating : null,
-    // currentOpeningHours is omitted by Google for places with no hours data;
-    // leave isOpen undefined so the client hides the Open/Closed pill rather
-    // than asserting "Closed".
-    isOpen: place.currentOpeningHours?.openNow,
-    phone: place.internationalPhoneNumber ?? null,
-    website: place.websiteUri ?? null,
-    googleMapsUrl: place.googleMapsUri ?? null,
-  }))
+  // Compute the haversine distance ONCE per place (km), used both to surface
+  // distanceMiles and to rank — no second pass in the sort comparator.
+  const withDist = places.map((place: any) => {
+    const latitude = place.location?.latitude ?? null
+    const longitude = place.location?.longitude ?? null
+    const km = haversineKm(lat, lng, latitude, longitude)
+    const result: ResourceResult = {
+      id: place.id,
+      name: place.displayName?.text ?? '',
+      address: place.formattedAddress ?? null,
+      latitude,
+      longitude,
+      rating: typeof place.rating === 'number' ? place.rating : null,
+      // currentOpeningHours is omitted by Google for places with no hours data;
+      // leave isOpen undefined so the client hides the Open/Closed pill rather
+      // than asserting "Closed".
+      isOpen: place.currentOpeningHours?.openNow,
+      phone: place.internationalPhoneNumber ?? null,
+      website: place.websiteUri ?? null,
+      googleMapsUrl: place.googleMapsUri ?? null,
+      // Infinity (missing coords) → null so the client omits the badge.
+      distanceMiles: Number.isFinite(km) ? roundMiles(km * KM_TO_MILES) : null,
+    }
+    return { result, km }
+  })
 
   // Rank closest-first like Google Maps "near me". searchText returns relevance
-  // order, so a 2mi result can sit below a 25mi one — sort by haversine distance
-  // to the user's GPS. Results with no coordinate sort last (haversineKm →
-  // Infinity). Then trim to the closest 10.
-  mapped.sort(
-    (a, b) =>
-      haversineKm(lat, lng, a.latitude, a.longitude) -
-      haversineKm(lat, lng, b.latitude, b.longitude),
-  )
+  // order, so a 2mi result can sit below a 25mi one — sort by the raw km already
+  // computed above (NOT the rounded miles, so ties keep exact order). Results
+  // with no coordinate sort last (km → Infinity). Then trim to the closest 10.
+  withDist.sort((a, b) => a.km - b.km)
 
-  return mapped.slice(0, 10)
+  return withDist.slice(0, 10).map(x => x.result)
 }
