@@ -44,6 +44,9 @@ Audit basis: every item below was verified against `main` on 2026-06-05 at commi
 | MIC-SEND-1 | **Send/Enter while mic listening** — mic stops cleanly on submit | **DONE** | Shared `handleSubmit` in [client/src/components/ChatInput.tsx](client/src/components/ChatInput.tsx) stops the mic then submits; `sendDisabled` un-gated; both Send buttons + the Enter key route through it. Commit `6d70718` (2026-06-05). |
 | RESET-1 | **Reopening "Modify with AI" starts a fresh session** — fixed permanent hard-cap lockout | **DONE** | `sessionStartLenRef` boundary in [client/src/components/trip/ModifyTripPanel.tsx](client/src/components/trip/ModifyTripPanel.tsx); reopen still displays history but POSTs only current-session messages (`.slice(sessionStartLenRef.current)`), so the cap never re-fires on reopen. Commit `d135be4` (2026-06-05). |
 | CAP-2 | **Conversation caps raised to SOFT 600 / HARD 1000** | **DONE** | `SOFT_CAP = 600`, `HARD_CAP = 1000` at [server/src/controllers/ai.ts:12-13](server/src/controllers/ai.ts); per-call cost flat (only the last 10 messages are sent to the model). Commit `31edef4` (2026-06-05). |
+| RR38-1 | **Feedback pipeline** — user feedback capture + analysis | **DONE** | Shipped (RR38). |
+| RR38-2 | **FROM_EMAIL display name** — transactional sender shows a friendly name | **DONE** | Set to `RoamReady <noreply@send.roamready.ai>` (RR38). |
+| RR38-3 | **PDF export gate** — packing/trip PDF export is Pro-gated | **DONE** | Server `FEATURE_GATED` gate on export; free users hit the paywall, Pro exports (RR38). |
 
 ## Post-launch (deferred)
 
@@ -56,6 +59,16 @@ Audit basis: every item below was verified against `main` on 2026-06-05 at commi
 | 15 | **OHV Destinations — code-split the page with `lazy()`** | DEFERRED — low priority | [client/src/App.tsx:48](client/src/App.tsx) imports `OhvDestinationsPage` statically, so it ships inside the ~1MB main `index` bundle; sibling pages like `TripMapPage`/`TripSummaryPage` already use `lazy(() => import(...))` ([App.tsx:71-73](client/src/App.tsx)). First-app-load improvement only — does NOT affect per-visit load, which was fixed separately (GPS `maximumAge` + coarse OHV cache key). | Wrap the route's import in `lazy()` + `Suspense` like the trip pages. |
 | 16 | **OHV Destinations — optional client-side result retention** | DEFERRED — nice-to-have | The page keeps `location` / `userState` / `destinations` in component state ([client/src/pages/OhvDestinationsPage.tsx:41-48](client/src/pages/OhvDestinationsPage.tsx)), reset on unmount, so navigating away and back re-runs GPS → reverse-geocode → API every time. Nice-to-have, not a bug. | Cache last GPS position + last destinations result (store or `sessionStorage`) so return visits render instantly instead of re-fetching. |
 | 17 | **OHV link-checker — activation** | DEFERRED — post-launch | Three-state checker logic is BUILT and merged to local main: OK/DEAD/REVIEW classification in [server/src/services/ohvLinkCheck.ts](server/src/services/ohvLinkCheck.ts) (browser UA, follow-redirects, off-domain-redirect → DEAD, 404/410/DNS/timeout → DEAD, 403/401/429/5xx → REVIEW) with a known-WAF allowlist (`mass.gov`, `tn.gov`, `wildlife.nh.gov`) downgrading their 403 → OK; alert in [server/src/controllers/cron.ts](server/src/controllers/cron.ts) emails `ADMIN_EMAIL` on any DEAD or REVIEW (silent only when both are zero); DEAD/REVIEW split rendered in [client/src/pages/admin/AdminLinkHealthPage.tsx](client/src/pages/admin/AdminLinkHealthPage.tsx). Three-state result stored in the existing `OhvLinkCheck.dead` Json column (tagged with `state`) — no migration needed for the three-state change. | (1) Confirm the `OhvLinkCheck` table is migrated — `npx prisma migrate status` from `server/`, run `npx prisma migrate dev` if pending (dev server stopped first). (2) Wire the monthly trigger using the same mechanism as the existing trial-end email cron. (3) Smoke-test: point one link at a known 404, confirm the alert email lands at `ADMIN_EMAIL`, then revert. NOTE: the first real run will likely email a REVIEW list (WAF'd hosts beyond the 3 seeded + transient 5xx/429) — expected; tune the allowlist from what it surfaces. |
+
+---
+
+## Infrastructure
+
+### Render cold-start mitigation — RESOLVED 2026-06-14
+- Issue: roamready-api on Starter tier spun down after ~15 min idle; cold wake ~50.88s.
+- Fix: Upgraded roamready-api Starter -> Standard always-on tier. No spin-down, no cold starts for any visitor.
+- Verified 2026-06-14: warm ~0.12-0.50s; idle-resistance 0.29s after >20 min untouched (vs ~50s cold on Starter).
+- roamready-client (static) unaffected; redis/db on their own tiers.
 
 ---
 
