@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Wand2, Check, Loader, X, FileDown, Undo2 } from 'lucide-react'
+import { Wand2, Check, Loader, X, FileDown, Undo2, Plus, Pencil } from 'lucide-react'
 import { tripsApi } from '../services/api'
 import { PackingCategory } from '../types'
 import { Breadcrumb } from '../components/ui/Breadcrumb'
@@ -23,6 +23,12 @@ export default function PackingListPage() {
   // confirm): regenerating REPLACES the list — packed checkmarks carry over
   // by name, but removed items come back and custom curation is lost.
   const [showRegenConfirm, setShowRegenConfirm] = useState(false)
+  // Step 2 add/rename state. Kept here in the unconditional top hook section —
+  // the loading early-return lives below (Rules of Hooks). addText is keyed by
+  // category index; editing pins the row being renamed inline.
+  const [addText, setAddText] = useState<Record<number, string>>({})
+  const [editing, setEditing] = useState<{ ci: number; ii: number } | null>(null)
+  const [editText, setEditText] = useState('')
 
   // Debounced persistence (PUT /trips/:id/packing-list). Toggles/removals
   // update local state optimistically and schedule a save; latestRef always
@@ -32,6 +38,9 @@ export default function PackingListPage() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const latestRef = useRef<PackingCategory[]>([])
   const dirtyRef = useRef(false)
+  // Set when Escape cancels an inline rename, so the input's onBlur (which fires
+  // on the programmatic blur) skips the save instead of committing.
+  const escapeRename = useRef(false)
   useEffect(() => { latestRef.current = categories }, [categories])
 
   async function persist() {
@@ -158,6 +167,38 @@ export default function PackingListPage() {
     scheduleSave()
   }
 
+  // Add a user item to a category. Always custom: true so it survives Regenerate
+  // (mergePackedState appends custom items) and shows the "added" cue.
+  function addItem(catIdx: number) {
+    const name = (addText[catIdx] ?? '').trim()
+    if (!name) return
+    setCategories(prev => prev.map((cat, ci) => ci === catIdx
+      ? { ...cat, items: [...cat.items, { name, required: false, checked: false, custom: true }] }
+      : cat))
+    setAddText(prev => ({ ...prev, [catIdx]: '' }))
+    scheduleSave()
+  }
+
+  function startRename(catIdx: number, itemIdx: number, current: string) {
+    setEditing({ ci: catIdx, ii: itemIdx })
+    setEditText(current)
+  }
+
+  // Commit an inline rename. A rename promotes the item to custom: true — the
+  // user has made it theirs, and the regenerate merge matches by NAME, so a
+  // renamed AI item would otherwise be dropped on Rebuild. Empty input cancels.
+  function commitRename() {
+    if (!editing) return
+    const name = editText.trim()
+    const { ci, ii } = editing
+    setEditing(null)
+    if (!name) return
+    setCategories(prev => prev.map((cat, c) => c === ci
+      ? { ...cat, items: cat.items.map((item, i) => i === ii ? { ...item, name, custom: true } : item) }
+      : cat))
+    scheduleSave()
+  }
+
   const totalItems = categories.reduce((sum, cat) => sum + cat.items.length, 0)
   const checkedItems = categories.reduce((sum, cat) => sum + cat.items.filter(i => i.checked).length, 0)
   const progress = totalItems > 0 ? Math.round((checkedItems / totalItems) * 100) : 0
@@ -265,24 +306,80 @@ export default function PackingListPage() {
                     >
                       {item.checked && <Check size={12} className="text-white" />}
                     </div>
-                    <span
-                      className={`text-sm cursor-pointer transition-colors ${item.checked ? 'line-through text-gray-400' : 'text-gray-700'}`}
-                      onClick={() => toggleItem(ci, ii)}
-                    >
-                      {item.name}
-                      {item.required && <span className="text-red-400 ml-1">*</span>}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => removeItem(ci, ii)}
-                      aria-label={`Remove ${item.name}`}
-                      title="Remove from list"
-                      className="ml-auto p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex-shrink-0"
-                    >
-                      <X size={14} />
-                    </button>
+                    {editing && editing.ci === ci && editing.ii === ii ? (
+                      <input
+                        type="text"
+                        autoFocus
+                        value={editText}
+                        onChange={e => setEditText(e.target.value)}
+                        onFocus={e => e.target.select()}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') e.currentTarget.blur()
+                          else if (e.key === 'Escape') { escapeRename.current = true; e.currentTarget.blur() }
+                        }}
+                        onBlur={() => {
+                          // Escape sets the guard so this programmatic blur cancels
+                          // instead of saving; Enter and click-away fall through to save.
+                          if (escapeRename.current) { escapeRename.current = false; setEditing(null); return }
+                          commitRename()
+                        }}
+                        aria-label={`Rename ${item.name}`}
+                        className="flex-1 text-sm border border-gray-200 rounded px-2 py-0.5 focus:outline-none focus:border-[#1F6F8B] bg-white"
+                      />
+                    ) : (
+                      <>
+                        <span
+                          className={`text-sm cursor-pointer transition-colors ${item.checked ? 'line-through text-gray-400' : 'text-gray-700'}`}
+                          onClick={() => toggleItem(ci, ii)}
+                        >
+                          {item.name}
+                          {item.required && <span className="text-red-400 ml-1">*</span>}
+                          {item.custom && <span className="text-gray-400 text-xs ml-2">added</span>}
+                        </span>
+                        <div className="ml-auto flex items-center flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => startRename(ci, ii, item.name)}
+                            aria-label={`Rename ${item.name}`}
+                            title="Rename"
+                            className="p-1 text-gray-300 hover:text-[#1F6F8B] opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeItem(ci, ii)}
+                            aria-label={`Remove ${item.name}`}
+                            title="Remove from list"
+                            className="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
+                {/* Per-category add. Adds a custom item; persistence rides the
+                    same debounced scheduleSave as toggle/remove. */}
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="text"
+                    value={addText[ci] ?? ''}
+                    onChange={e => setAddText(prev => ({ ...prev, [ci]: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter') addItem(ci) }}
+                    placeholder="Add item…"
+                    className="flex-1 text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-[#1F6F8B] bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => addItem(ci)}
+                    disabled={!(addText[ci] ?? '').trim()}
+                    className="flex items-center gap-1 text-sm text-[#1F6F8B] hover:text-[#175866] disabled:opacity-40 flex-shrink-0"
+                  >
+                    <Plus size={14} /> Add
+                  </button>
+                </div>
               </div>
             </div>
           ))}
