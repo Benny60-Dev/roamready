@@ -1,1 +1,0 @@
-UPDATE _prisma_migrations SET checksum = 'd66de08a807de82f243f470b2b154439dc3d5b8e916c1ebba60795bc3391a689' WHERE migration_name = '20260610074659_add_founder_rate_forfeited_at';
