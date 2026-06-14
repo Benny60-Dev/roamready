@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Wand2, Check, Loader, X, FileDown } from 'lucide-react'
+import { Wand2, Check, Loader, X, FileDown, Undo2 } from 'lucide-react'
 import { tripsApi } from '../services/api'
 import { PackingCategory } from '../types'
 import { Breadcrumb } from '../components/ui/Breadcrumb'
@@ -216,9 +216,25 @@ export default function PackingListPage() {
 
       <ConfirmModal
         isOpen={showRegenConfirm}
-        title="Regenerate packing list?"
-        message="This replaces your current list with a freshly generated one. Items you've checked off stay checked when the new list includes them, but items you removed will come back."
-        confirmLabel="Regenerate"
+        title="Rebuild suggestions with AI?"
+        message={
+          <>
+            <p className="mb-3">
+              This refreshes the AI's suggestions for your current travel party and trip — useful if you've added people, pets, or stops since this list was made.
+            </p>
+            <ul className="space-y-1.5">
+              <li className="flex items-start gap-2">
+                <Check size={14} className="text-[#1F6F8B] mt-0.5 flex-shrink-0" />
+                <span>Your checked-off items and your own added items are kept</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <Undo2 size={14} className="text-gray-400 mt-0.5 flex-shrink-0" />
+                <span>AI items you removed may come back</span>
+              </li>
+            </ul>
+          </>
+        }
+        confirmLabel="Rebuild list"
         onConfirm={() => { setShowRegenConfirm(false); void generate() }}
         onCancel={() => setShowRegenConfirm(false)}
       />
