@@ -210,8 +210,11 @@ export default function TravelPartyPage() {
             <div key={p.id} className="card">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="font-medium text-gray-900">
+                  <p className="font-medium text-gray-900 flex items-center gap-2">
                     {p.name?.trim() || <span className="text-gray-400">Unnamed</span>}
+                    {p.isSelf && (
+                      <span className="text-[11px] font-medium text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">You</span>
+                    )}
                   </p>
                   <p className="text-xs text-gray-500">{ROLE_LABELS[p.role]}</p>
                 </div>
@@ -224,13 +227,18 @@ export default function TravelPartyPage() {
                   >
                     <Pencil size={14} className="text-gray-400" />
                   </button>
-                  <button
-                    onClick={() => deletePerson(p.id)}
-                    title="Remove"
-                    className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {/* The self-person can't be removed — it represents the account
+                      holder and is the planner's source of truth (server also
+                      rejects deleting it). Edit stays so "Me" can be renamed. */}
+                  {!p.isSelf && (
+                    <button
+                      onClick={() => deletePerson(p.id)}
+                      title="Remove"
+                      className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
