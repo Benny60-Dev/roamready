@@ -415,8 +415,6 @@ Return a JSON array of categories with items. Format:
 ]`
 
   const model = 'claude-sonnet-4-5'
-  // TEMP timing probe — remove after measuring
-  const t0 = Date.now()
   const response = await client.messages.create({
     model,
     // 5120: the prompt now caps the list at ~120 items (~3-4k output tokens),
@@ -426,8 +424,6 @@ Return a JSON array of categories with items. Format:
     max_tokens: 5120,
     messages: [{ role: 'user', content: prompt }],
   })
-  // TEMP timing probe — remove after measuring
-  console.log('[packing] ai_ms=%d out_tok=%d stop=%s', Date.now() - t0, response.usage?.output_tokens, response.stop_reason)
 
   if (ctx?.userId) {
     logAIUsage({
