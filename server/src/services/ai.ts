@@ -384,7 +384,7 @@ export async function generatePackingListAI(trip: any, user: any, ctx?: AICallCt
       }
     : null
 
-  const prompt = `Generate a comprehensive packing list for this trip:
+  const prompt = `Generate a focused packing list of the most important items for this trip — aim for about 120 items total, organized into roughly 8–14 categories, with no more than ~15 items per category. Prioritize essentials and trip-specific gear over exhaustive long-tail items; the traveler can add their own.
 
 Trip: ${trip.name}
 Nights: ${trip.totalNights || trip.stops?.reduce((sum: number, s: any) => sum + (s.nights || 1), 0) || 'Unknown'}
@@ -415,14 +415,19 @@ Return a JSON array of categories with items. Format:
 ]`
 
   const model = 'claude-sonnet-4-5'
+  // TEMP timing probe — remove after measuring
+  const t0 = Date.now()
   const response = await client.messages.create({
     model,
-    // 8192: a comprehensive list (party rules, pets, accessibility gear) can
-    // exceed the old 4096 cap — truncated JSON parsed to a silent [] and the
-    // controller persisted an empty list (the "near-empty 200" regression).
-    max_tokens: 8192,
+    // 5120: the prompt now caps the list at ~120 items (~3-4k output tokens),
+    // so 8192 was unused ceiling. 5120 keeps comfortable headroom above a
+    // ~120-item JSON payload so stop_reason stays end_turn, never max_tokens
+    // (truncation → silent [] → 502, the "near-empty 200" regression).
+    max_tokens: 5120,
     messages: [{ role: 'user', content: prompt }],
   })
+  // TEMP timing probe — remove after measuring
+  console.log('[packing] ai_ms=%d out_tok=%d stop=%s', Date.now() - t0, response.usage?.output_tokens, response.stop_reason)
 
   if (ctx?.userId) {
     logAIUsage({
