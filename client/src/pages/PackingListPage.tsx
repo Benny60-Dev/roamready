@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Wand2, Check, Loader, X, FileDown, Undo2, Plus, Pencil } from 'lucide-react'
+import { Wand2, Check, Loader, X, FileDown, Undo2, Plus, Pencil, ChevronDown } from 'lucide-react'
 import { tripsApi } from '../services/api'
 import { PackingCategory } from '../types'
 import { Breadcrumb } from '../components/ui/Breadcrumb'
@@ -29,6 +29,10 @@ export default function PackingListPage() {
   const [addText, setAddText] = useState<Record<number, string>>({})
   const [editing, setEditing] = useState<{ ci: number; ii: number } | null>(null)
   const [editText, setEditText] = useState('')
+  // Step 3: export-format dropdown (blank vs current-state PDF). Open state +
+  // a ref for the click-away handler — both top-section hooks.
+  const [exportMenuOpen, setExportMenuOpen] = useState(false)
+  const exportMenuRef = useRef<HTMLDivElement>(null)
 
   // Debounced persistence (PUT /trips/:id/packing-list). Toggles/removals
   // update local state optimistically and schedule a save; latestRef always
@@ -42,6 +46,18 @@ export default function PackingListPage() {
   // on the programmatic blur) skips the save instead of committing.
   const escapeRename = useRef(false)
   useEffect(() => { latestRef.current = categories }, [categories])
+
+  // Close the export-format menu on any outside click.
+  useEffect(() => {
+    if (!exportMenuOpen) return
+    const onDocClick = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setExportMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [exportMenuOpen])
 
   async function persist() {
     if (!tripId) return
@@ -108,7 +124,7 @@ export default function PackingListPage() {
     }
   }
 
-  async function exportPdf() {
+  async function exportPdf(mode: 'blank' | 'current') {
     if (!tripId || categories.length === 0) return
     setExporting(true)
     try {
@@ -123,12 +139,12 @@ export default function PackingListPage() {
         import('../components/pdf/PackingListPDF'),
       ])
       const blob = await pdf(
-        <PackingListPDF tripName={tripName} dateRange={dateRange} categories={categories} />
+        <PackingListPDF tripName={tripName} dateRange={dateRange} categories={categories} mode={mode} />
       ).toBlob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `RoamReady-${(tripName || 'Trip').replace(/[^a-zA-Z0-9]+/g, '-')}-Packing-List.pdf`
+      a.download = `RoamReady-${(tripName || 'Trip').replace(/[^a-zA-Z0-9]+/g, '-')}-Packing-List-${mode}.pdf`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -219,10 +235,41 @@ export default function PackingListPage() {
             card below owns the only Generate button. */}
         {categories.length > 0 && (
           <div className="flex gap-2">
-            <button onClick={exportPdf} disabled={exporting} className="btn-outline text-sm flex items-center gap-1.5">
-              {exporting ? <Loader size={14} className="animate-spin" /> : <FileDown size={14} />}
-              {exporting ? 'Exporting...' : 'Export PDF'}
-            </button>
+            {/* Export PDF ▾ — choose blank (pen-and-paper) or a current-state
+                snapshot at print time. Menu closes on select or outside click. */}
+            <div className="relative" ref={exportMenuRef}>
+              <button
+                onClick={() => setExportMenuOpen(o => !o)}
+                disabled={exporting}
+                aria-haspopup="menu"
+                aria-expanded={exportMenuOpen}
+                className="btn-outline text-sm flex items-center gap-1.5"
+              >
+                {exporting ? <Loader size={14} className="animate-spin" /> : <FileDown size={14} />}
+                {exporting ? 'Exporting...' : 'Export PDF'}
+                {!exporting && <ChevronDown size={14} className="-mr-0.5" />}
+              </button>
+              {exportMenuOpen && !exporting && (
+                <div role="menu" className="absolute right-0 mt-1 w-60 bg-white border border-gray-200 rounded-md shadow-lg z-10 py-1">
+                  <button
+                    role="menuitem"
+                    onClick={() => { setExportMenuOpen(false); void exportPdf('current') }}
+                    className="w-full text-left px-3 py-2 hover:bg-gray-50 flex flex-col"
+                  >
+                    <span className="text-sm text-gray-800">Current state</span>
+                    <span className="text-xs text-gray-500">Packed items ticked, includes added items</span>
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => { setExportMenuOpen(false); void exportPdf('blank') }}
+                    className="w-full text-left px-3 py-2 hover:bg-gray-50 flex flex-col"
+                  >
+                    <span className="text-sm text-gray-800">Blank checklist</span>
+                    <span className="text-xs text-gray-500">Empty boxes for pen and paper</span>
+                  </button>
+                </div>
+              )}
+            </div>
             <button onClick={() => setShowRegenConfirm(true)} disabled={generating} className="btn-outline text-sm flex items-center gap-1.5">
               {generating ? <Loader size={14} className="animate-spin" /> : <Wand2 size={14} />}
               {generating ? 'Generating...' : 'Regenerate with AI'}

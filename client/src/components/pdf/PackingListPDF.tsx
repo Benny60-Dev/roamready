@@ -2,11 +2,14 @@ import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer'
 import { PackingCategory } from '../../types'
 
 /**
- * Printable packing checklist — a PAPER checklist for pen use. Every checkbox
- * renders EMPTY by design: on-screen packed state is deliberately ignored so
- * the printout works for the next pack-up regardless of what's been ticked in
- * the app. Follows TripPDF's conventions (Helvetica, 9pt base, RV Blue
- * accents, dynamic-import-on-click at the call site).
+ * Printable packing checklist. Two modes, chosen at export time:
+ *   - 'blank'   — every checkbox empty, a PAPER checklist for pen use (works for
+ *                 the next pack-up regardless of what's ticked in the app).
+ *   - 'current' — a snapshot of the list as it stands now: packed items get a
+ *                 solid filled box; unpacked items keep the empty outline.
+ * Either way ALL items print (including user-added custom items). Follows
+ * TripPDF's conventions (Helvetica, 9pt base, RV Blue accents,
+ * dynamic-import-on-click at the call site).
  */
 
 const GREEN  = '#1F6F8B'
@@ -52,6 +55,17 @@ const s = StyleSheet.create({
     borderRadius: 1.5,
     marginRight: 7,
   },
+  // 'current' mode, packed item: same 10×10 footprint as the outline (border kept
+  // so the box size is identical), filled solid Pine — the only "packed" signal.
+  checkboxFilled: {
+    width: 10,
+    height: 10,
+    borderWidth: 1,
+    borderColor: GREEN,
+    borderRadius: 1.5,
+    marginRight: 7,
+    backgroundColor: GREEN,
+  },
   itemName: { fontSize: 9.5, color: GRAY_7 },
   required: { color: '#DC2626' },
   footer: {
@@ -71,9 +85,11 @@ export interface PackingListPDFProps {
    *  Empty string hides the line. */
   dateRange: string
   categories: PackingCategory[]
+  /** 'blank' = empty boxes (pen-and-paper); 'current' = fill packed items' boxes. */
+  mode: 'blank' | 'current'
 }
 
-export function PackingListPDF({ tripName, dateRange, categories }: PackingListPDFProps) {
+export function PackingListPDF({ tripName, dateRange, categories, mode }: PackingListPDFProps) {
   const totalItems = categories.reduce((sum, c) => sum + c.items.length, 0)
   return (
     <Document>
@@ -90,8 +106,9 @@ export function PackingListPDF({ tripName, dateRange, categories }: PackingListP
             <Text style={s.categoryName}>{cat.category}</Text>
             {cat.items.map((item, ii) => (
               <View key={ii} style={s.itemRow}>
-                {/* Always empty — pen goes here. */}
-                <View style={s.checkbox} />
+                {/* 'current' + packed → solid fill; otherwise the empty outline
+                    ('blank' mode, or an unpacked item) — pen goes here. */}
+                <View style={mode === 'current' && item.checked ? s.checkboxFilled : s.checkbox} />
                 <Text style={s.itemName}>
                   {item.name}
                   {item.required ? <Text style={s.required}> *</Text> : null}
