@@ -1,0 +1,1 @@
+SELECT migration_name, LEFT(checksum,16) AS checksum_start, finished_at, rolled_back_at FROM _prisma_migrations WHERE migration_name = '20260610074659_add_founder_rate_forfeited_at';
