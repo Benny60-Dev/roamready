@@ -65,6 +65,15 @@ export async function createParty(req: AuthRequest, res: Response, next: NextFun
     const count = await prisma.travelParty.count({ where: { userId } })
     const isDefault = body.isDefault ?? (count === 0)
 
+    // Seed a self-person (Person.isSelf) into the DEFAULT party so the account
+    // holder is counted by every party-aware feature without the user having to
+    // add themselves. Only the default party gets one; a fresh party has no
+    // people, so this is inherently idempotent (the backfill repairs existing
+    // parties). Name from the user's first name, falling back to "Me".
+    const user = isDefault
+      ? await prisma.user.findUnique({ where: { id: userId }, select: { firstName: true } })
+      : null
+
     // If the client is creating a non-first party AND explicitly setting
     // isDefault: true, we must demote the existing default first to satisfy
     // the @@unique([userId, isDefault]) constraint. Same tx pattern as
@@ -81,6 +90,18 @@ export async function createParty(req: AuthRequest, res: Response, next: NextFun
           userId,
           isDefault,
           notes: body.notes ?? null,
+          ...(isDefault
+            ? {
+                people: {
+                  create: {
+                    role: 'ADULT',
+                    name: user?.firstName?.trim() || 'Me',
+                    isTraveling: true,
+                    isSelf: true,
+                  },
+                },
+              }
+            : {}),
         },
         include: PARTY_INCLUDE,
       })
@@ -218,9 +239,13 @@ export async function deletePerson(req: AuthRequest, res: Response, next: NextFu
 
     const existing = await prisma.person.findFirst({
       where: { id: personId, partyId },
-      select: { id: true },
+      select: { id: true, isSelf: true },
     })
     if (!existing) throw new AppError('Person not found', 404)
+    // The self-person represents the account holder and is the planner's source
+    // of truth for adult count + the user's own needs. Block deletion server-side
+    // so the protection can't be bypassed by a direct API call.
+    if (existing.isSelf) throw new AppError("Can't remove yourself from your travel party", 400)
 
     await prisma.person.delete({ where: { id: personId } })
     res.json({ message: 'Person deleted' })
