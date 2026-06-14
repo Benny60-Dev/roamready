@@ -1,9 +1,11 @@
-import { useEffect, useRef } from 'react'
+import { ReactNode, useEffect, useRef } from 'react'
 
 export interface ConfirmModalProps {
   isOpen: boolean
   title: string
-  message: string
+  /** Plain string for simple confirms, or JSX for structured bodies
+   *  (e.g. a kept/caveat list). Rendered inside the modal body wrapper. */
+  message: ReactNode
   confirmLabel: string
   cancelLabel?: string
   onConfirm: () => void
@@ -57,7 +59,7 @@ export default function ConfirmModal({
         onClick={e => e.stopPropagation()}
       >
         <h2 className="font-semibold text-lg text-gray-900 mb-2">{title}</h2>
-        <p className="text-sm text-gray-600 mb-6 leading-relaxed">{message}</p>
+        <div className="text-sm text-gray-600 mb-6 leading-relaxed">{message}</div>
         <div className="flex justify-end gap-2">
           <button
             ref={cancelButtonRef}

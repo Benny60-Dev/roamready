@@ -520,6 +520,10 @@ export interface PackingItem {
   name: string
   required: boolean
   checked: boolean
+  /** True only for items the user added by hand. AI-generated and legacy items
+   *  leave this unset (falsy). Custom items survive a Regenerate (they won't
+   *  appear in the freshly generated list) — see server/src/utils/packingMerge.ts. */
+  custom?: boolean
 }
 
 export interface Campground {

@@ -100,8 +100,9 @@ export type TripShiftDatesInput = z.infer<typeof TripShiftDatesSchema>
  * this dedicated schema is the ONE sanctioned client write path — it
  * validates the full category/item shape with caps, so checked-state and
  * item curation (remove) persist without opening the generic endpoint.
- * All fields required booleans/strings — no preprocessed optionals (the
- * Zod v4 outer/inner placement gotcha doesn't apply here).
+ * Fields are plain required booleans/strings plus one plain optional boolean
+ * (`custom`) — no preprocessed optionals, so the Zod v4 outer/inner placement
+ * gotcha doesn't apply here.
  */
 export const TripPackingListSchema = z
   .object({
@@ -117,6 +118,10 @@ export const TripPackingListSchema = z
                     name: z.string().min(1).max(200),
                     required: z.boolean(),
                     checked: z.boolean(),
+                    // User-added items flag themselves so a Regenerate preserves
+                    // them. Plain optional boolean (no preprocess — the Zod v4
+                    // outer/inner gotcha in the docstring doesn't apply).
+                    custom: z.boolean().optional(),
                   })
                   .strict(),
               )

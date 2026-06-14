@@ -52,4 +52,35 @@ check('regenerate: previously-checked item ABSENT from new list is not resurrect
   !merged.flatMap(c => c.items).some(i => i.name === 'Old removed thing'))
 check('regenerate: input not mutated', freshList[0].items[0].checked === false)
 
+// 4. Custom items — user-added items survive regenerate (they don't appear in
+//    the freshly generated list), keeping their own checked state and category.
+const prevWithCustom = [
+  { category: 'Kitchen', items: [
+    { name: 'Plates', required: true, checked: true },           // AI item, checked
+    { name: 'Cast iron skillet', required: false, checked: true, custom: true },
+  ]},
+  { category: 'Dog', items: [
+    { name: 'Tie-out stake', required: false, checked: false, custom: true },
+  ]},
+]
+const mergedCustom = mergePackedState(prevWithCustom, freshList)
+const allCustom = mergedCustom.flatMap((c: any) => c.items)
+check('custom: user item appended into existing new-list category',
+  mergedCustom.find((c: any) => c.category === 'Kitchen')?.items.some((i: any) => i.name === 'Cast iron skillet'))
+check('custom: keeps its own checked state',
+  allCustom.find((i: any) => i.name === 'Cast iron skillet')?.checked === true)
+check('custom: category absent from new list is re-created',
+  mergedCustom.find((c: any) => c.category === 'Dog')?.items.some((i: any) => i.name === 'Tie-out stake'))
+check('custom: AI checked carry-over still applies alongside custom',
+  mergedCustom.find((c: any) => c.category === 'Kitchen')?.items.find((i: any) => i.name === 'Plates')?.checked === true)
+check('custom: input not mutated', freshList.length === 2)
+
+// 5. DECISION 2 — nothing checked but a custom item exists: must NOT short-circuit.
+const prevCustomNoChecks = [
+  { category: 'Outdoor', items: [{ name: 'Hammock', required: false, checked: false, custom: true }] },
+]
+const mergedNoChecks = mergePackedState(prevCustomNoChecks, freshList)
+check('custom-only (no checks): custom item preserved (no early-return drop)',
+  mergedNoChecks.flatMap((c: any) => c.items).some((i: any) => i.name === 'Hammock'))
+
 process.exit(failed ? 1 : 0)
