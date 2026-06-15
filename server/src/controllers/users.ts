@@ -1,9 +1,9 @@
 import { Response, NextFunction } from 'express'
-import axios from 'axios'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
 import type { MembershipCreateInput, MembershipUpdateInput } from '../schemas'
+import { geocodeHomeAddress } from '../utils/geocodeHome'
 
 const DEFAULT_RV_MAINTENANCE = [
   { name: 'Engine oil & filter', intervalMiles: 5000 },
@@ -33,46 +33,28 @@ export async function getMe(req: AuthRequest, res: Response, next: NextFunction)
       include: { rigs: { orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }] }, travelProfile: true, memberships: true, parties: { include: { people: true, pets: true } } },
     })
 
-    console.log('[getMe] backfill check — homeLat is', user?.homeLat, 'homeLocation is', user?.homeLocation)
+    console.log('[getMe] backfill check — homeLat is', user?.homeLat, 'homeLocation is', user?.homeLocation, 'homeAddress is', user?.homeAddress)
 
-    // One-time backfill: if the user has a legacy homeLocation string but no structured
-    // lat/lng yet, geocode it now and persist the result so downstream features work correctly.
-    if (user && user.homeLocation && user.homeLat == null) {
-      const apiKey = process.env.GOOGLE_MAPS_API_KEY
-      console.log('[getMe] backfill running — calling geocoder for', user.homeLocation, '| apiKey present:', !!apiKey)
-      if (apiKey) {
-        try {
-          const geoRes = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
-            params: { address: user.homeLocation, key: apiKey },
-          })
-          const result = geoRes.data?.results?.[0]
-          console.log('[getMe] geocoder returned status=%s result=%s', geoRes.data?.status, result ? result.formatted_address : 'null')
-          if (result) {
-            const { lat, lng } = result.geometry.location
-            const components: any[] = result.address_components || []
-            const get = (type: string, short = false) =>
-              components.find((c: any) => c.types.includes(type))?.[short ? 'short_name' : 'long_name'] ?? null
-            const homeCity    = get('locality') || get('sublocality') || null
-            const homeState   = get('administrative_area_level_1', true)
-            const homeZip     = get('postal_code')
-            const homeStreet  = [get('street_number'), get('route')].filter(Boolean).join(' ') || null
-            const homeAddress = result.formatted_address || user.homeLocation
-
-            user = await prisma.user.update({
-              where: { id: req.user!.id },
-              data: { homeLat: lat, homeLng: lng, homeCity, homeState, homeZip, homeStreet, homeAddress },
-              // Order rigs by isDefault desc then createdAt asc — mirrors getRigs
-      // at line 131-134 so [0] is reliably the user's default rig for
-      // every consumer of /users/me. Previously unordered, which let
-      // Postgres heap order drift the default off index 0 after row
-      // updates and broke the SessionPage chip.
-      include: { rigs: { orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }] }, travelProfile: true, memberships: true, parties: { include: { people: true, pets: true } } },
-            }) as typeof user
-            console.log('[getMe] backfill complete — saved', { homeLat: lat, homeLng: lng, homeCity, homeState, homeZip, homeStreet, homeAddress })
-          }
-        } catch (geoErr) {
-          console.warn('[getMe:backfill] geocode failed for user %s:', req.user!.id, geoErr)
-        }
+    // One-time lazy auto-heal: a user with saved home TEXT but no structured
+    // lat/lng yet gets geocoded now and persisted, so downstream features
+    // (hasHomeOnFile, createStop coords) work. Trigger broadened to also cover
+    // homeAddress (HOME-ADDRESS rung 1): a free-typed / browser-autofilled
+    // address lands only in homeAddress (homeLocation null), so the old
+    // homeLocation-only trigger never healed it. Skip full-timers (no home).
+    if (user && !user.isFullTimeRVer && (user.homeLocation || user.homeAddress) && user.homeLat == null) {
+      const geo = await geocodeHomeAddress(user.homeLocation || user.homeAddress || '')
+      if (geo) {
+        user = await prisma.user.update({
+          where: { id: req.user!.id },
+          data: geo,
+          // Order rigs by isDefault desc then createdAt asc — mirrors getRigs
+          // at line 131-134 so [0] is reliably the user's default rig for
+          // every consumer of /users/me. Previously unordered, which let
+          // Postgres heap order drift the default off index 0 after row
+          // updates and broke the SessionPage chip.
+          include: { rigs: { orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }] }, travelProfile: true, memberships: true, parties: { include: { people: true, pets: true } } },
+        }) as typeof user
+        console.log('[getMe] backfill complete — healed', { homeCity: geo.homeCity, homeLat: geo.homeLat, homeLng: geo.homeLng })
       }
     }
 
@@ -103,11 +85,28 @@ export async function updateMe(req: AuthRequest, res: Response, next: NextFuncti
       homeLocation, homeAddress, homeStreet, homeCity, homeState, homeZip, homeLat, homeLng,
       isFullTimeRVer, dismissedHomePrompt,
     } = req.body
+
+    // HOME-ADDRESS rung 1 — geocode-on-save. A free-typed / browser-autofilled
+    // address arrives with text in homeAddress (or homeLocation) but no
+    // structured data (homeLat null, no homeCity), so hasHomeOnFile would wrongly
+    // report "no home". Backfill the structured fields server-side here, making
+    // the free-type path identical to the dropdown-select path. Skips full-timers
+    // (no home to resolve) and short-circuits when structured data is already
+    // present (dropdown-select). Geocode failure leaves the text as-is — never
+    // blocks the save (rung 2's pin-drop handles failures later).
+    let homeFields = { homeLocation, homeAddress, homeStreet, homeCity, homeState, homeZip, homeLat, homeLng }
+    const hasText = !!(homeAddress || homeLocation)
+    const missingStructured = homeLat == null || !homeCity
+    if (!isFullTimeRVer && hasText && missingStructured) {
+      const geo = await geocodeHomeAddress(homeAddress || homeLocation)
+      if (geo) homeFields = { ...homeFields, ...geo }
+    }
+
     const user = await prisma.user.update({
       where: { id: req.user!.id },
       data: {
         firstName, lastName, phone, avatarUrl,
-        homeLocation, homeAddress, homeStreet, homeCity, homeState, homeZip, homeLat, homeLng,
+        ...homeFields,
         isFullTimeRVer, dismissedHomePrompt,
       },
     })
