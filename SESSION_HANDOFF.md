@@ -49,13 +49,19 @@
 <!-- SESSION NARRATIVE — fill this in at wrap time; the generator never touches below this line -->
 
 ## Working rules
-<!-- hint: standing rules for how to work this session — env safety, git flow, what not to touch -->
+- Beginner-level git/CLI: over-explain every command, name the exact directory, one thing at a time. Recommendation-first, no menus.
+- Worktree workflow: all file work in a worktree on a feature branch; merge --no-ff to local main; NEVER push (Benny pushes via save-progress.bat). Never kill processes — Benny restarts the backend himself.
+- Phase 0 scout before building anything non-trivial; STOP and report before code.
+- PowerShell runs .bat with .\name.bat, not bare name.
 
 ## What shipped this session (prose)
-<!-- hint: narrative of what changed this session and why, in your own words -->
+RR40 was a tooling session, not a feature session. Built the consistency tooling that ends hand-authored handoffs. launch-status.json is now the single source of truth; LAUNCH_STATUS.md and SESSION_HANDOFF.md are generated from it by scripts/gen-status.mjs and scripts/gen-handoff.mjs (status:gen runs both). gen-status.mjs migration was proven byte-lossless (regenerated LAUNCH_STATUS.md byte-identical to the original, 24,609 bytes). Hybrid handoff: generated half (open/deferred/done item lists from JSON) refreshes on every regen; narrative half is hand-filled and preserved across regens by a splice on the narrative banner. save-progress.bat runs status:gen fail-safe before commit (warns but never blocks if regen fails). Merged Pass 1+2 to main as one unit; live push confirmed regen leaves docs byte-identical. statusRaw kept in the JSON by design.
 
 ## Watch / lessons logged
-<!-- hint: gotchas, near-misses, and lessons to carry into next session -->
+- The "??? em-dash" scare: SESSION_HANDOFF.md is correct UTF-8 (em-dash = bytes E2 80 94). Windows PowerShell 5.1 pipes (git show ... | Format-Hex, or type) re-encode through a non-UTF-8 codepage and render em-dashes as ??? / 3F 3F 3F. Viewer artifact, not a file bug. To byte-check, pass the file as a direct arg: Format-Hex .\file.md — never via a pipe. A real file bug would leave 3F in the committed blob; it never did.
+- Don't "fix" healthy code: adding a BOM or re-encoding would have broken byte-parity with gen-status.mjs. The byte-level scout was the right call.
 
 ## First actions next session
-<!-- hint: the first concrete steps to take when you resume -->
+- Confirm prod clean: from C:\Users\aylie\roamready run git log origin/main..main (should be empty).
+- FIRST session using the generated handoff. Open by pointing Claude at SESSION_HANDOFF.md (generated half is current) + launch-status.json for full item detail. No hand-made handoff upload.
+- Headline: saved/reusable packing lists. Start fresh — Phase 0 scout of how packing lists, the PackingItem.custom flag, and the packingListMeta staleness snapshot are wired today; then a schema decision (save-as-template vs copy-from-previous-trip vs AI-seed-from-base); then a mockup before any build.
