@@ -13,6 +13,7 @@ import TripCard from '../components/trip/TripCard'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
 import { useVoiceInput } from '../hooks/useVoiceInput'
 import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 import { hasRoundTripIntent } from '../utils/roundTripIntent'
 import { ChatInput } from '../components/ChatInput'
 import { selectGreeting } from '../utils/greeting'
@@ -284,6 +285,13 @@ export default function SessionPage() {
     onTranscript: (text) => setInput(text),
     onStart: () => input,
   })
+
+  // BUG-1: the compact ChatInput placeholder clips on narrow screens (field-
+  // sizing collapses the empty textarea to one line; a wrapped placeholder's
+  // 2nd line is hidden). Show a shorter placeholder below the sm breakpoint
+  // (640px) so it fits one line; full text at sm and up. Declared here in the
+  // top hook section (above any early return) to keep hook order stable.
+  const isSmAndUp = useMediaQuery('(min-width: 640px)')
 
   // Keep the cursor in the chat box: focus on load AND after each send completes
   // (so the user can keep typing without clicking back into the field).
@@ -1815,7 +1823,7 @@ export default function SessionPage() {
                   value={input}
                   onChange={setInput}
                   onSubmit={sendMessage}
-                  placeholder="Message RoamReady AI..."
+                  placeholder={isSmAndUp ? 'Message RoamReady AI...' : 'Message RoamReady…'}
                   disabled={typing}
                   loading={typing}
                   speechSupported={speechSupported}
