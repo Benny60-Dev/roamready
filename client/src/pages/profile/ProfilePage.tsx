@@ -5,6 +5,7 @@ import { Autocomplete, useJsApiLoader } from '@react-google-maps/api'
 import { Truck, Map, CreditCard, Shield, ChevronRight, ChevronDown, Save, MapPin, Accessibility, User, Users } from 'lucide-react'
 import { usersApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
+import HomePinDropModal from '../../components/profile/HomePinDropModal'
 
 const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 'geometry', 'places']
 
@@ -16,6 +17,9 @@ export default function ProfilePage() {
   // Personal Information is an expand-in-place row (toggles the form below it
   // on /profile — it does NOT navigate, unlike the profileLinks rows).
   const [personalOpen, setPersonalOpen] = useState(false)
+  // HOME-ADDRESS rung 2 — pin-drop fallback shown when geocode-on-save fails.
+  const [pinDropOpen, setPinDropOpen] = useState(false)
+  const [pinDropAddress, setPinDropAddress] = useState<string | null>(null)
   const { register, handleSubmit, reset, setValue, watch } = useForm({ defaultValues: user || {} })
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null)
 
@@ -70,6 +74,15 @@ export default function ProfilePage() {
       setUser({ ...user!, ...res.data })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
+      // HOME-ADDRESS rung 2 — geocode-on-save failed (option-b signal): the saved
+      // user has address text but no coords, and isn't a full-timer. Offer the
+      // pin-drop fallback so the user can place their home on a map. Dismissing it
+      // is fine — they just stay in the no-home state, which the AI handles.
+      const u = res.data
+      if ((u?.homeAddress || u?.homeLocation) && u?.homeLat == null && !u?.isFullTimeRVer) {
+        setPinDropAddress(u.homeAddress || u.homeLocation || null)
+        setPinDropOpen(true)
+      }
     } catch (e: any) {
       console.error('[ProfilePage] save failed:', e?.response?.data || e?.message)
       setSaveError("Couldn't save changes. Please try again.")
@@ -254,6 +267,13 @@ export default function ProfilePage() {
           </Link>
         ))}
       </div>
+
+      <HomePinDropModal
+        open={pinDropOpen}
+        onClose={() => setPinDropOpen(false)}
+        addressText={pinDropAddress}
+        onSaved={updated => setUser({ ...user!, ...updated })}
+      />
     </div>
   )
 }
