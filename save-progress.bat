@@ -23,6 +23,19 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM -- Regenerate the launch docs (LAUNCH_STATUS.md + SESSION_HANDOFF.md) from
+REM    launch-status.json BEFORE `git add -A`, so any refreshed output is staged
+REM    naturally by the add below — no separate re-stage needed.
+REM    FAIL-SAFE: unlike the EOL preflight above (which MUST hard-abort), a doc
+REM    regen failure is not worth blocking a code save. If status:gen exits
+REM    non-zero, warn and commit anyway. `call` is required so the .bat resumes
+REM    after npm returns instead of terminating.
+echo Regenerating launch docs (status:gen)...
+call npm run status:gen
+if errorlevel 1 (
+    echo WARNING: status:gen failed — committing without regenerating docs
+)
+
 echo Staging all changes...
 git add -A
 
