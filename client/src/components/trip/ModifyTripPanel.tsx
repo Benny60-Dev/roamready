@@ -6,6 +6,7 @@ import { Trip, StopType } from '../../types'
 import { useVoiceInput } from '../../hooks/useVoiceInput'
 import { ChatInput } from '../ChatInput'
 import { parseTripDate } from '../../utils/dates'
+import { userFacingStopCount } from '../../utils/userFacingStopCount'
 
 // ─── Quick suggestion chips ───────────────────────────────────────────────────
 
@@ -147,7 +148,9 @@ function getConfirmationSubText(action: ModifyAction, trip: Trip): string | null
   if (!newStart || !oldStart) return null
   const dayDelta = Math.round((newStart.getTime() - oldStart.getTime()) / 86400000)
   if (dayDelta === 0) return 'No change — trip already starts on that date.'
-  const stopCount = trip.stops?.length ?? 0
+  // User-facing count (excludes HOME origin + return-home stop) so the message
+  // matches what the user sees on the trip — see userFacingStopCount.
+  const stopCount = userFacingStopCount(trip.stops)
   const direction = dayDelta > 0 ? 'later' : 'earlier'
   const absDelta = Math.abs(dayDelta)
   return `All ${stopCount} stop${stopCount === 1 ? '' : 's'} will move ${absDelta} day${absDelta === 1 ? '' : 's'} ${direction}. Trip length stays the same.`

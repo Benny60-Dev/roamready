@@ -20,6 +20,7 @@ import ShareModal from '../../components/trip/ShareModal'
 import { useAuthStore } from '../../store/authStore'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge } from '../../utils/stopBadge'
 import { deriveTripStatus } from '../../utils/tripStatus'
+import { userFacingStopCount } from '../../utils/userFacingStopCount'
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' }
 const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 'geometry', 'places']
@@ -694,6 +695,8 @@ export default function TripMapPage() {
     tripsApi.get(id).then(res => {
       const data = res.data
       console.log('[TripMapPage] trip loaded:', {
+        // Deliberately RAW length (not user-facing count): analytics/telemetry
+        // semantics stay stable for comparability with historical data.
         tripId: data.id, tripName: data.name, stopCount: data.stops?.length ?? 0,
         stops: data.stops?.map((s: Stop) => ({
           id: s.id, order: s.order, type: s.type,
@@ -1626,7 +1629,9 @@ export default function TripMapPage() {
                   const hasDates = !!anchor
                   const todayYmd = toYmd(new Date())
                   const isPastDate = !!startDateInput && startDateInput < todayYmd
-                  const stopCount = trip.stops?.length ?? 0
+                  // User-facing count (excludes HOME origin + return-home stop)
+                  // — see userFacingStopCount.
+                  const stopCount = userFacingStopCount(trip.stops)
                   const nightsLabel = trip.totalNights
                     ? `${trip.totalNights} night${trip.totalNights !== 1 ? 's' : ''}`
                     : null

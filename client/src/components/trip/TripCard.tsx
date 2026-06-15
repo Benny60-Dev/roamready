@@ -4,6 +4,7 @@ import { Trip } from '../../types'
 import { formatTripDate, lifecycleDate, relativeTime } from '../../utils/dates'
 import { computeTripTotals } from '../../utils/tripTotals'
 import { deriveTripStatus } from '../../utils/tripStatus'
+import { userFacingStopCount } from '../../utils/userFacingStopCount'
 
 /**
  * Shared trip card. Replaces three previously-divergent inline copies:
@@ -238,7 +239,10 @@ export default function TripCard({
   //          onDelete is wired — the compact variant never gets one);
   //      (b) a secondary "N stops · M booked" meta line below the existing
   //          dates/nights/miles/cost row, gated on stops actually existing.
-  const stopCount = trip.stops?.length ?? 0
+  // User-facing count: excludes the HOME origin and the return-home closing
+  // stop (mirrors buildLiveTripState). Raw stops.length would read one high on
+  // one-way trips and two high on round trips.
+  const stopCount = userFacingStopCount(trip.stops)
   const bookedCount = trip.stops?.filter(s => s.bookingStatus === 'CONFIRMED').length ?? 0
   const showStopsLine = stopCount > 0
   // Lifecycle line ("Started <createdAt> · Edited <updatedAt rel>") reuses the
