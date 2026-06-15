@@ -839,7 +839,11 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     }
 
     const aiCtx = { userId, sessionId: sessionId ?? null, tripId: tripId ?? null }
-    let response = await chatWithAI(messagesForAI, userProfile, recentSurpriseDestinations, surpriseVibe, aiCtx)
+    // SCOPE-GUARD-2 — opening turn of a NEW planning session: not modify, and no
+    // assistant reply exists yet in the history. Biases the scope-guard toward
+    // trip-intent so a terse opener ("[Place] and back") is planned, not refused.
+    const isOpeningTurn = context !== 'modify' && !messages.some((m: any) => m.role === 'assistant')
+    let response = await chatWithAI(messagesForAI, userProfile, recentSurpriseDestinations, surpriseVibe, aiCtx, isOpeningTurn)
 
     // Three-state modify-mode outcome, surfaced to the client in the response
     // envelope. 'proposal' = actionable change (<modify> tag); 'clarify' = the
@@ -876,7 +880,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
               'Emit one-or-more <modify> blocks OR exactly one <clarify> — never neither.]',
           },
         ]
-        const retryResponse = await chatWithAI(retryMessages, userProfile, recentSurpriseDestinations, surpriseVibe, aiCtx)
+        const retryResponse = await chatWithAI(retryMessages, userProfile, recentSurpriseDestinations, surpriseVibe, aiCtx, isOpeningTurn)
         const retryHasModify = /<modify>/.test(retryResponse)
         const retryHasClarify = /<clarify>/.test(retryResponse)
         console.log('[AI modify] retry hasModify=%s hasClarify=%s preview=%s', retryHasModify, retryHasClarify, retryResponse.slice(0, 200))
