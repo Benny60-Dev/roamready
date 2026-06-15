@@ -1,0 +1,419 @@
+{
+  "meta": {
+    "verifiedAgainstCommit": "7d5578d",
+    "verifiedDate": "2026-06-05",
+    "generatedNote": "LAUNCH_STATUS.md is generated from this file by scripts/gen-status.mjs. Edit this JSON, not the .md."
+  },
+  "items": [
+    {
+      "id": "1",
+      "title": "**PDF lazy-loading** — `@react-pdf/renderer` (~1.5MB) code-split out of the main bundle",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "launch-blocking",
+      "commits": [],
+      "evidence": "Dynamic `import('@react-pdf/renderer')` at [client/src/pages/trips/TripMapPage.tsx:1316](client/src/pages/trips/TripMapPage.tsx) and [client/src/pages/trips/TripSummaryPage.tsx:764](client/src/pages/trips/TripSummaryPage.tsx); the static import inside [TripPDF.tsx:3](client/src/components/pdf/TripPDF.tsx) is fine because `TripPDF` itself is dynamically imported alongside `@react-pdf/renderer`. Confirmed end-to-end via build chunk inspection in a prior audit run: `react-pdf.browser-*.js` (~1.7MB) lands in its own chunk, NOT in `index-*.js` (~1.5MB main bundle).",
+      "whatRemains": null
+    },
+    {
+      "id": "2",
+      "title": "**updateTrip footgun** — `TripUpdateSchema` permits `startDate`/`endDate`/`totalNights` raw write",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "launch-blocking",
+      "commits": [],
+      "evidence": "[server/src/schemas/trip.ts:47-65](server/src/schemas/trip.ts) — the three fields are absent from `TripUpdateSchema.object` and explicitly listed in the docstring's OMITTED section at L35-44 with the rationale (\"date and duration totals are owned exclusively by the server cascade\"). `.strict()` mode at L65 rejects any payload containing them. The redundant client write at `TripSummaryPage.cascadeAndSaveDates` was removed in the same change; the only remaining `tripsApi.update` callers send `{ totalMiles }` or `{ name }`.",
+      "whatRemains": null
+    },
+    {
+      "id": "3",
+      "title": "**Modify-AI long-conversation tag-loss** — model stops emitting `<modify>` tags as conversation grows",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "launch-blocking",
+      "commits": [
+        "b3994ff"
+      ],
+      "evidence": "[server/src/controllers/ai.ts:425-455](server/src/controllers/ai.ts): `annotateAppliedModify` replaces destructive `stripModifyTags`, preserving \"tag-was-emitted\" demonstrations in history. Auto-retry on any tagless modify-mode response at [L546-585](server/src/controllers/ai.ts). `modifyTagMissing` flag surfaced to client at [L619](server/src/controllers/ai.ts) and rendered as amber notice at [client/src/components/trip/ModifyTripPanel.tsx:625-626](client/src/components/trip/ModifyTripPanel.tsx). Commit [`b3994ff`](.) 2026-05-23 \"Fix Modify-AI tag-loss in long conversations.\"",
+      "whatRemains": null
+    },
+    {
+      "id": "4",
+      "title": "**Weather Tab live forecast** — `forecast_days` param + `.split()` date bug + canonical anchor probe",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "launch-blocking",
+      "commits": [],
+      "evidence": "(a) `forecast_days` only appears in *comments* in [server/src/services/weatherFetch.ts](server/src/services/weatherFetch.ts) (lines 69, 71, 76); the param is gone from the request body. (b) `.split('T')[0]` removed from live branch at [server/src/controllers/trips.ts:1456-1458](server/src/controllers/trips.ts) — uses `new Date(stop.arrivalDate)` directly. (c) Canonical anchor probe at [trips.ts:1420-1425](server/src/controllers/trips.ts): `firstDatedStop?.arrivalDate` fallback when `trip.startDate` is null, matching `recomputeStopDates`/`shiftTripDates` convention.",
+      "whatRemains": null
+    },
+    {
+      "id": "5",
+      "title": "**Weather per-stop live→historical fallback** — late stops in long live trips fall back instead of blanking",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "launch-blocking",
+      "commits": [],
+      "evidence": "`LIVE_WINDOW_END_DAYS = 15` constant at [trips.ts:1401](server/src/controllers/trips.ts). Per-stop fitness check at [trips.ts:1466-1469](server/src/controllers/trips.ts): both `base` and `endBase` must be inside today+15. Per-stop modeMatch at [L1479-1482](server/src/controllers/trips.ts) prevents cache-thrash on mixed-mode trips. `StopWeatherCard` already discriminates on `weather.mode` so mixed-mode trips render correctly without client changes.",
+      "whatRemains": null
+    },
+    {
+      "id": "6",
+      "title": "**aiConversation silent 400** — dead client write + downstream surprise-trip exclusion query that depended on the same dead column",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "launch-blocking",
+      "commits": [],
+      "evidence": "Two-part fix. (a) Dead client write removed from [client/src/pages/SessionPage.tsx](client/src/pages/SessionPage.tsx) `buildItinerary` (the `tripsApi.update(tripId, { aiConversation: messages })` block that 400'd against `.strict()` schema). No data lost — the planning transcript lives on `PlanningSession.messages` (autosaved via [useSessionAutosave.ts](client/src/hooks/useSessionAutosave.ts)), the new trip is linked to its session via `Trip.planningSession` ([prisma/schema.prisma:348](prisma/schema.prisma)), and the Modify-AI continuity bridge uses `Trip.planningContextSummary` (a ~250-word distillation written at promote time, [sessions.ts:183-203](server/src/controllers/sessions.ts)). No client surface reads `Trip.aiConversation`. (b) Surprise-trip variety exclusion query at [server/src/controllers/ai.ts](server/src/controllers/ai.ts) ~L510 rewired to read `PlanningSession.messages` via `Trip.planningSession` relation, since `Trip.aiConversation` was effectively always-null and the prior query returned an empty exclusion list in production.",
+      "whatRemains": null
+    },
+    {
+      "id": "11",
+      "title": "**UTC-midnight arrival timezone artifact** in server-side weather path",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "launch-blocking",
+      "commits": [],
+      "evidence": "Server-side `parseTripDate` helper added at [server/src/utils/dates.ts](server/src/utils/dates.ts), mirroring [client/src/utils/dates.ts:56-84](client/src/utils/dates.ts) verbatim (extract UTC y/m/d, rebuild as local noon on the same calendar day — local accessors then read the stored UTC day regardless of process TZ). Used at the two construction sites in `getTripWeather`: trip-anchor derivation and per-stop `base` derivation in [server/src/controllers/trips.ts](server/src/controllers/trips.ts). `isoDate` and downstream `setDate(.getDate()+nights)` math are unchanged — once `base` is correctly anchored, every read of it (`isoDate(base)`, `isoDate(endBase)`, `base.getMonth()+1`/`base.getDate()` in the historical branch) returns the right day. Verified pre/post in three timezones (host Mexican Pacific UTC-7, forced `TZ=America/Phoenix`, forced `TZ=UTC`): negative-offset zones now emit `2026-05-30` instead of `2026-05-29` for a stop arriving May 30; UTC is unchanged (no regression in already-correct deploys); `stopFitsLive` epoch comparisons unaffected. **Cache self-heals within 6h** as stale pre-fix blobs age past TTL and refetch through corrected code; no SQL clear required for launch. **Cousin bug `fmtDate` in the AI modify-mode prompt's `Dates:` line** (same artifact) is now FIXED — see #11b in \"Done — keep verified\" below.",
+      "whatRemains": null
+    },
+    {
+      "id": "BUG-1",
+      "title": "**Mobile placeholder truncation** — chat input placeholder text is cut off at mobile widths",
+      "status": "OPEN",
+      "statusRaw": "**OPEN — P1**",
+      "severity": "P1",
+      "category": "open-bug",
+      "commits": [],
+      "evidence": "Road-logged 2026-06-05; not yet scouted.",
+      "whatRemains": "Scout the chat input / placeholder rendering at mobile widths; fix the truncation."
+    },
+    {
+      "id": "BUG-2",
+      "title": "**Trip-summary pill CTA** — the booking pill call-to-action wording/affordance needs work",
+      "status": "OPEN",
+      "statusRaw": "**OPEN — P2**",
+      "severity": "P2",
+      "category": "open-bug",
+      "commits": [],
+      "evidence": "Road-logged 2026-06-05; not yet scouted.",
+      "whatRemains": "Scout the trip-summary booking pill CTA copy/affordance and refine."
+    },
+    {
+      "id": "BUG-3",
+      "title": "**Stop count accuracy** — displayed stop count does not match the actual stops",
+      "status": "OPEN",
+      "statusRaw": "**OPEN — P1**",
+      "severity": "P1",
+      "category": "open-bug",
+      "commits": [],
+      "evidence": "Road-logged 2026-06-05; not yet scouted.",
+      "whatRemains": "Scout where the stop count is derived/displayed; reconcile with the real stop list."
+    },
+    {
+      "id": "BUG-4",
+      "title": "**Round-trip vs one-way prompt** — AI prompt mishandles round-trip vs one-way intent",
+      "status": "OPEN",
+      "statusRaw": "**OPEN — P2**",
+      "severity": "P2",
+      "category": "open-bug",
+      "commits": [],
+      "evidence": "Road-logged 2026-06-05; not yet scouted.",
+      "whatRemains": "Scout the round-trip / one-way prompt logic and correct the misclassification."
+    },
+    {
+      "id": "7",
+      "title": "**Regenerate ConfirmModal gates** — destructive regenerate flows require confirmation",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": [],
+      "evidence": "Two regenerate paths, both gated. (a) Itinerary regenerate at [client/src/pages/trips/TripSummaryPage.tsx:470-476](client/src/pages/trips/TripSummaryPage.tsx) — `showRegenerateConfirm` state with comment \"Block 15 — confirmation gate for the destructive Regenerate path. … wipes checked states, custom user-added activities, and curated edits.\" First-time generate and post-error Retry skip the modal intentionally. (b) Share-link regenerate at [client/src/components/trip/ShareModal.tsx:184-188](client/src/components/trip/ShareModal.tsx) — `ConfirmModal` with title \"Regenerate share link?\" and `confirmLabel=\"Regenerate\"`.",
+      "whatRemains": null
+    },
+    {
+      "id": "8",
+      "title": "**Share Trip** — end to end",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": [],
+      "evidence": "API client at [client/src/services/api.ts:131-132](client/src/services/api.ts): `createShare` POST `/trips/:id/share`, `regenerateShare` POST `/trips/:id/share/regenerate`. UI [client/src/components/trip/ShareModal.tsx](client/src/components/trip/ShareModal.tsx) handles create/regenerate/revoke with confirm gates. Public view [client/src/pages/SharedTripPage.tsx](client/src/pages/SharedTripPage.tsx) and route in `App.tsx`. `Trip.sharedToken` column on prisma `@unique` (per the schema's TripUpdateSchema docstring guarding mass-assignment).",
+      "whatRemains": null
+    },
+    {
+      "id": "9",
+      "title": "**Reservation Honesty Pass** — Book buttons open real `reservationUrl`, record confirmation #",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": [],
+      "evidence": "(a) `reservationUrl` external opens at [TripBookingPage.tsx:743/745, 938/955](client/src/pages/trips/TripBookingPage.tsx). (b) Confirmation number captured in `Stop.confirmationNum` ([prisma/schema.prisma:375](prisma/schema.prisma)), accepted by [server/src/schemas/stop.ts:35](server/src/schemas/stop.ts), edited in the booking form at [TripBookingPage.tsx:66-162](client/src/pages/trips/TripBookingPage.tsx), shown on the dashboard reservations tab ([ReservationsTabContent.tsx:189-190](client/src/components/dashboard/ReservationsTabContent.tsx)) and rendered into the PDF ([TripPDF.tsx:428-431](client/src/components/pdf/TripPDF.tsx)). (c) Draft → CONFIRMED commit flow with `actualRate`/`actualFees` at [TripBookingPage.tsx:1225-1228](client/src/pages/trips/TripBookingPage.tsx).",
+      "whatRemains": null
+    },
+    {
+      "id": "10",
+      "title": "**Travel Party v1** — unified People + Pets at `/profile/party`",
+      "status": "DONE",
+      "statusRaw": "**DONE (Phase A); Phase B / C deferred — see below**",
+      "severity": null,
+      "category": "done",
+      "commits": [],
+      "evidence": "Route [client/src/App.tsx:164](client/src/App.tsx) → [TravelPartyPage.tsx](client/src/pages/profile/TravelPartyPage.tsx). UI v1 surfaces `name + role` for Person, `type + name` for Pet ([L20-36](client/src/pages/profile/TravelPartyPage.tsx)). DB models `Person` + `Pet` ([prisma/schema.prisma:236-258](prisma/schema.prisma)) include dormant fields for Phase B: `accessibilityNeeds`, `dietaryNotes`, `militaryStatus`, `firstResponder` on Person; `breed`, `weightLbs`, `leashTrained`, `comfortableInCrowds`, `comfortableAtNight`, `notes` on Pet. AI prompts already read these read-only ([server/src/services/ai.ts:294-386](server/src/services/ai.ts), [server/src/controllers/ai.ts:233-253](server/src/controllers/ai.ts)). Schema schema label \"Travel Party Phase B\" at [server/src/schemas/travelParty.ts:4](server/src/schemas/travelParty.ts).",
+      "whatRemains": null
+    },
+    {
+      "id": "11b",
+      "title": "**fmtDate cousin bug** — AI modify-mode prompt's `Dates:` line shifted UTC-midnight stop dates back a day in negative-offset deploy zones (documented cousin of #11)",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": [],
+      "evidence": "`fmtDate` at [server/src/controllers/ai.ts:88-93](server/src/controllers/ai.ts) now routes through `parseTripDate` (local-noon anchor on the UTC calendar day) before `toLocaleDateString`, instead of `new Date(d).toLocaleDateString(...)` on the raw UTC-midnight Prisma `DateTime`; consumed at the `Dates:` line [ai.ts:311](server/src/controllers/ai.ts). The `Today:` line [ai.ts:319](server/src/controllers/ai.ts) deliberately keeps a live-instant local formatter (NOT `parseTripDate`), since `new Date()` must read the *local* calendar day, not the UTC one. Output string format unchanged (\"Jul 10, 2026\") — only the date value is corrected. Import mirrors `getTripWeather`'s `import { parseTripDate } from '../utils/dates'`.",
+      "whatRemains": null
+    },
+    {
+      "id": "MESA-6b",
+      "title": "**Modify-mode prompt example-city sweep** — swept hardcoded example cities from the modify-mode prompt",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": [
+        "e52c7f7"
+      ],
+      "evidence": "Replaced real city names with bracketed placeholders in the modify-mode prompt in [server/src/controllers/ai.ts](server/src/controllers/ai.ts). Commit `e52c7f7` (2026-06-05).",
+      "whatRemains": null
+    },
+    {
+      "id": "MODIFY-UX-1",
+      "title": "**Three-state modify outcome** — distinguish clarify vs proposal vs failure",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": [
+        "c96f339"
+      ],
+      "evidence": "`modifyOutcome` (proposal / clarify / failed) set in [server/src/controllers/ai.ts](server/src/controllers/ai.ts) (~L709, L747-749; returned at ~L871/875); the client error banner fires only on a real `failed` outcome, not on clarify questions. Commit `c96f339` (2026-06-05).",
+      "whatRemains": null
+    },
+    {
+      "id": "GEO-1",
+      "title": "**Add-stop geographic bracketing** — an added stop must fall geographically between its bracketing stops (no overshoot)",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": [
+        "6715744"
+      ],
+      "evidence": "add_stop position rule in the modify prompt [server/src/controllers/ai.ts](server/src/controllers/ai.ts): inserting \"after [stop A]\" places the new stop BETWEEN A and the stop that currently follows it. Commit `6715744` (2026-06-05).",
+      "whatRemains": null
+    },
+    {
+      "id": "ANCHOR-1",
+      "title": "**Modify stop refs resolved by NAME** — not stop number; killed off-by-one inserts",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": [
+        "b023efe"
+      ],
+      "evidence": "`<modify>` actions anchor on `after_stop` = exact locationName; client `findStop`/`resolvedVia` (name→order→append) in [client/src/components/trip/ModifyTripPanel.tsx](client/src/components/trip/ModifyTripPanel.tsx); dropped the dual stop-number data line. Commit `b023efe` (2026-06-05).",
+      "whatRemains": null
+    },
+    {
+      "id": "CAP-1 / 1b",
+      "title": "**Honest context-aware hard-cap messages** — planning vs modify; removed false carryover promise",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": [
+        "308ad81",
+        "b6eb8ac"
+      ],
+      "evidence": "Context-aware hard-cap copy (AI stopped; reopen to continue); planning string honest pre- and post-promote. Commits `308ad81` + `b6eb8ac` (2026-06-05).",
+      "whatRemains": null
+    },
+    {
+      "id": "MIC-SEND-1",
+      "title": "**Send/Enter while mic listening** — mic stops cleanly on submit",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": [
+        "6d70718"
+      ],
+      "evidence": "Shared `handleSubmit` in [client/src/components/ChatInput.tsx](client/src/components/ChatInput.tsx) stops the mic then submits; `sendDisabled` un-gated; both Send buttons + the Enter key route through it. Commit `6d70718` (2026-06-05).",
+      "whatRemains": null
+    },
+    {
+      "id": "RESET-1",
+      "title": "**Reopening \"Modify with AI\" starts a fresh session** — fixed permanent hard-cap lockout",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": [
+        "d135be4"
+      ],
+      "evidence": "`sessionStartLenRef` boundary in [client/src/components/trip/ModifyTripPanel.tsx](client/src/components/trip/ModifyTripPanel.tsx); reopen still displays history but POSTs only current-session messages (`.slice(sessionStartLenRef.current)`), so the cap never re-fires on reopen. Commit `d135be4` (2026-06-05).",
+      "whatRemains": null
+    },
+    {
+      "id": "CAP-2",
+      "title": "**Conversation caps raised to SOFT 600 / HARD 1000**",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": [
+        "31edef4"
+      ],
+      "evidence": "`SOFT_CAP = 600`, `HARD_CAP = 1000` at [server/src/controllers/ai.ts:12-13](server/src/controllers/ai.ts); per-call cost flat (only the last 10 messages are sent to the model). Commit `31edef4` (2026-06-05).",
+      "whatRemains": null
+    },
+    {
+      "id": "RR38-1",
+      "title": "**Feedback pipeline** — user feedback capture + analysis",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": [],
+      "evidence": "Shipped (RR38).",
+      "whatRemains": null
+    },
+    {
+      "id": "RR38-2",
+      "title": "**FROM_EMAIL display name** — transactional sender shows a friendly name",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": [],
+      "evidence": "Set to `RoamReady <noreply@send.roamready.ai>` (RR38).",
+      "whatRemains": null
+    },
+    {
+      "id": "RR38-3",
+      "title": "**PDF export gate** — packing/trip PDF export is Pro-gated",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": [],
+      "evidence": "Server `FEATURE_GATED` gate on export; free users hit the paywall, Pro exports (RR38).",
+      "whatRemains": null
+    },
+    {
+      "id": "10b",
+      "title": "**Travel Party Phase B / C**",
+      "status": "DEFERRED",
+      "statusRaw": "DEFERRED",
+      "severity": null,
+      "category": "post-launch",
+      "commits": [],
+      "evidence": "The dormant Person/Pet fields above. Phase B = surface them in the UI. Phase C = retire the legacy `TravelProfile.adults / children / hasPets / petDetails` columns once Phase B is fully migrated. References at [server/src/services/ai.ts:118](server/src/services/ai.ts) (\"transition state until Phase C removes the legacy fields\").",
+      "whatRemains": "Phase B UI work; phase C migration to drop legacy columns."
+    },
+    {
+      "id": "12",
+      "title": "**iOS Safari zoom-stuck bug**",
+      "status": "PARTIAL",
+      "statusRaw": "PARTIAL — multiple mitigations shipped; specific bug-reproduction not in evidence",
+      "severity": null,
+      "category": "post-launch",
+      "commits": [],
+      "evidence": "Mitigations present: input/textarea/select font-size 16px at [client/src/index.css:55-60](client/src/index.css) (prevents tap-to-zoom on input focus); `overflow-x: hidden / clip` on `html` and `body` at [index.css:11-22](client/src/index.css); `min-h-[100dvh]` not `100vh` documented as the canonical pattern at [client/src/components/auth/EmailVerificationGate.tsx:8-9](client/src/components/auth/EmailVerificationGate.tsx) for any full-viewport mobile screen; viewport meta at [client/index.html:6](client/index.html) does NOT lock zoom (allows pinch). No `maximum-scale=1` or `user-scalable=no` anywhere.",
+      "whatRemains": "If the original bug was tap-zoom-no-zoom-out: covered. If it was a different specific reproduction (pinch-stuck, scroll-zoom layout artifact, header-hover overlap), needs a targeted reproduction + fix. Audit alone cannot determine which bug was meant without a reproduction; pin a real device test before launch."
+    },
+    {
+      "id": "13",
+      "title": "**Map click-to-popup centering** — pan camera so clicked stop's popup is fully visible",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "post-launch",
+      "commits": [],
+      "evidence": "`focusStop` useCallback in [client/src/pages/trips/TripMapPage.tsx](client/src/pages/trips/TripMapPage.tsx) wraps `setSelectedStop` + `mapInstance.panTo({ lat, lng })` + `mapInstance.panBy(0, -offset)`. Wired at the three click sites: marker `addListener('click', …)`, sidebar row `onClick`, and sidebar row `onKeyDown` (Enter/Space). The `setSelectedStop` calls in `handleUpdateNights` (nights stepper) and the popup close button are deliberately left as raw state updates — they don't need a camera move. The popup is an `<OverlayViewF>` geographically anchored to the stop, so without a camera move sidebar-list clicks on off-screen stops produced no visible feedback (popup rendered outside the viewport) and clicks on markers near map edges clipped the ~260px popup card above the marker. **History — sign and magnitude correction:** the initial fix passed `panBy(0, +offset)` with `offset = clamp(80, mapH/3.5, 160)`. The sign was inverted (Google's `panBy` +y moves the map *center* south, which makes markers appear to move *north* on screen — the previous fix was nudging clicked markers into the upper third instead of the lower third, so the Crested Butte case clipped the popup off the top edge instead of fixing it). Tightened to: `NEEDED_CLEARANCE_PX = 296 (full-variant card) + 36 (triangle gap) + 24 (breathing) = 356`; `offset = min(max(NEEDED_CLEARANCE_PX - mapH/2, 80), mapH * 0.3)`; `panBy(0, -offset)`. On a 550px desktop map: offset=81, marker lands at y=356, clearance above ≈ 356 (fits full-variant popup with 24px breathing). On a 340px mobile map: offset caps at 102, marker lands at y=272, full-variant popup clips by ~60px at top in worst case (mathematically unavoidable on small mobile + maximum content) but marker stays visible — typical content fits cleanly. Already-centered clicks get a modest ~80px downward nudge that keeps the popup top unclipped. First-load races (mapInstance null) safely no-op via the `if (mapInstance && …)` guard.",
+      "whatRemains": null
+    },
+    {
+      "id": "14",
+      "title": "**OHV/off-road destinations: own data source**",
+      "status": "DEFERRED",
+      "statusRaw": "DEFERRED — post-launch",
+      "severity": null,
+      "category": "post-launch",
+      "commits": [],
+      "evidence": "Data-source ceiling, not a bug. The OHV Destinations page uses Rec.gov/RIDB, which does NOT index most Forest Service / BLM OHV areas. Live probe near Tonto NF (Phoenix area, ~33.8/-111.4) confirmed the real riding areas — Bulldog Canyon, St. Clair, Sycamore — are absent from RIDB entirely (0 hits each); only 1 OHV-tagged facility (Desert Vista OHV Area) was within range, so users in prime OHV country get a near-empty page. NOT fixable by widening the radius (RIDB caps `radius` ~50mi and `TOTAL_COUNT` did not grow across 25/50/100/150mi in the probe) or by filter changes (the areas simply aren't in the dataset).",
+      "whatRemains": "**Fix (real one):** build our own OHV dataset by ingesting authoritative FREE/public-domain government GIS feeds into our own DB on a scheduled refresh — (a) USFS MVUM (Motor Vehicle Use Map): queryable ArcGIS feature service, GeoJSON/CSV/Shapefile, carries vehicle-type + season-of-use; covers the Forest Service areas Rec.gov misses; (b) BLM OHV data (GIS feature services; BLM/NOHVCC national OHV mapping series w/ amenities, season, camping availability); (c) AZ state OHV program data (other states later). **Hard part:** geospatial normalization — MVUM/BLM data is trails/routes (lines) and areas (polygons), not tidy lat/lng points, so deriving a representative point + name + distance for our destination-card model is the real work (the scheduled-refresh job is the easy part). **Freshness caveat:** sources update ~annually (not weekly) and don't capture temporary fire/seasonal closures, so framing stays \"designated OHV areas,\" not \"open today.\" **First step when picked up:** a single-source POC (USFS MVUM or BLM) for the Phoenix/Tonto region — prove the geometry→card normalization yields useful cards before building the full multi-source pipeline. **Priority:** post-launch — high value (fixes the feature for the core off-road audience) but a substantial standalone project (geospatial ingestion + multi-source normalization + new DB layer)."
+    },
+    {
+      "id": "15",
+      "title": "**OHV Destinations — code-split the page with `lazy()`**",
+      "status": "DEFERRED",
+      "statusRaw": "DEFERRED — low priority",
+      "severity": null,
+      "category": "post-launch",
+      "commits": [],
+      "evidence": "[client/src/App.tsx:48](client/src/App.tsx) imports `OhvDestinationsPage` statically, so it ships inside the ~1MB main `index` bundle; sibling pages like `TripMapPage`/`TripSummaryPage` already use `lazy(() => import(...))` ([App.tsx:71-73](client/src/App.tsx)). First-app-load improvement only — does NOT affect per-visit load, which was fixed separately (GPS `maximumAge` + coarse OHV cache key).",
+      "whatRemains": "Wrap the route's import in `lazy()` + `Suspense` like the trip pages."
+    },
+    {
+      "id": "16",
+      "title": "**OHV Destinations — optional client-side result retention**",
+      "status": "DEFERRED",
+      "statusRaw": "DEFERRED — nice-to-have",
+      "severity": null,
+      "category": "post-launch",
+      "commits": [],
+      "evidence": "The page keeps `location` / `userState` / `destinations` in component state ([client/src/pages/OhvDestinationsPage.tsx:41-48](client/src/pages/OhvDestinationsPage.tsx)), reset on unmount, so navigating away and back re-runs GPS → reverse-geocode → API every time. Nice-to-have, not a bug.",
+      "whatRemains": "Cache last GPS position + last destinations result (store or `sessionStorage`) so return visits render instantly instead of re-fetching."
+    },
+    {
+      "id": "17",
+      "title": "**OHV link-checker — activation**",
+      "status": "DEFERRED",
+      "statusRaw": "DEFERRED — post-launch",
+      "severity": null,
+      "category": "post-launch",
+      "commits": [],
+      "evidence": "Three-state checker logic is BUILT and merged to local main: OK/DEAD/REVIEW classification in [server/src/services/ohvLinkCheck.ts](server/src/services/ohvLinkCheck.ts) (browser UA, follow-redirects, off-domain-redirect → DEAD, 404/410/DNS/timeout → DEAD, 403/401/429/5xx → REVIEW) with a known-WAF allowlist (`mass.gov`, `tn.gov`, `wildlife.nh.gov`) downgrading their 403 → OK; alert in [server/src/controllers/cron.ts](server/src/controllers/cron.ts) emails `ADMIN_EMAIL` on any DEAD or REVIEW (silent only when both are zero); DEAD/REVIEW split rendered in [client/src/pages/admin/AdminLinkHealthPage.tsx](client/src/pages/admin/AdminLinkHealthPage.tsx). Three-state result stored in the existing `OhvLinkCheck.dead` Json column (tagged with `state`) — no migration needed for the three-state change.",
+      "whatRemains": "(1) Confirm the `OhvLinkCheck` table is migrated — `npx prisma migrate status` from `server/`, run `npx prisma migrate dev` if pending (dev server stopped first). (2) Wire the monthly trigger using the same mechanism as the existing trial-end email cron. (3) Smoke-test: point one link at a known 404, confirm the alert email lands at `ADMIN_EMAIL`, then revert. NOTE: the first real run will likely email a REVIEW list (WAF'd hosts beyond the 3 seeded + transient 5xx/429) — expected; tune the allowlist from what it surfaces."
+    },
+    {
+      "id": null,
+      "title": "Render cold-start mitigation — RESOLVED 2026-06-14",
+      "status": "RESOLVED",
+      "statusRaw": null,
+      "severity": null,
+      "category": "infrastructure",
+      "commits": [],
+      "evidence": "- Issue: roamready-api on Starter tier spun down after ~15 min idle; cold wake ~50.88s.\n- Fix: Upgraded roamready-api Starter -> Standard always-on tier. No spin-down, no cold starts for any visitor.\n- Verified 2026-06-14: warm ~0.12-0.50s; idle-resistance 0.29s after >20 min untouched (vs ~50s cold on Starter).\n- roamready-client (static) unaffected; redis/db on their own tiers.",
+      "whatRemains": null
+    }
+  ],
+  "maintainRules": [
+    "When you ship a fix that changes an item's status here, edit this file in the **same commit** so reviewers can't merge a status drift.",
+    "When you discover a new launch-blocking item, add it to the top table.",
+    "When you close one, leave it in the \"Done\" section with the commit hash that closed it — don't delete entries; history matters for the audit cycle.",
+    "Don't trust this file blindly either: if a status feels stale, run the same evidence query against current code before acting on it. The point of this doc is to *replace* memory and chat recap, not to be a new memory to trust."
+  ]
+}
