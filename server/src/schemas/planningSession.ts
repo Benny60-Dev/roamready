@@ -76,6 +76,11 @@ export const PlanningSessionPromoteSchema = z
     //     small bag of fields, server stores as JSON, never normalised.
     bringingTowed: z.boolean().nullable().optional(),
     adHocVehicle: z.record(z.string(), z.unknown()).nullable().optional(),
+    // BUG-4 Phase 2 — persisted trip shape. The client computes this from the
+    // final (post-strip) itinerary: ROUND_TRIP when the last stop returns to
+    // the origin city, else ONE_WAY. Nullable/optional so older clients (and
+    // the generic createTrip path) that don't send it leave the column null.
+    tripType: z.enum(['ROUND_TRIP', 'ONE_WAY']).nullable().optional(),
   })
   .strict()
 

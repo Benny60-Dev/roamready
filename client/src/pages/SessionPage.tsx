@@ -755,6 +755,21 @@ export default function SessionPage() {
         ? itinerary.stops[0].locationName
         : user?.homeLocation || itinerary.stops?.[0]?.locationName || 'Start'
 
+      // BUG-4 Phase 2 — persist the trip shape so consumers stop re-inferring it.
+      // `itinerary` here is already POST-strip (stripUnrequestedReturnLeg ran in
+      // setItinerary), so the built stops are the ground truth: it's a ROUND_TRIP
+      // exactly when the last stop returns to the origin city (matches the
+      // isReturnHome shape used by buildLiveTripState / userFacingStopCount),
+      // otherwise ONE_WAY.
+      const promoteStops = itinerary.stops ?? []
+      const firstStop = promoteStops[0]
+      const lastStop = promoteStops[promoteStops.length - 1]
+      const isRoundTrip =
+        promoteStops.length > 1 &&
+        !!firstStop && !!lastStop && lastStop !== firstStop &&
+        lastStop.locationName?.toLowerCase().trim() === firstStop.locationName?.toLowerCase().trim()
+      const tripType: 'ROUND_TRIP' | 'ONE_WAY' = isRoundTrip ? 'ROUND_TRIP' : 'ONE_WAY'
+
       console.time('[buildItinerary] total')
 
       console.time('[buildItinerary] promoteSession')
@@ -785,6 +800,8 @@ export default function SessionPage() {
         rigId: selectedRig && !isAdHocRig(selectedRig) ? selectedRig.id : null,
         bringingTowed: vehicleData.bringingTowed,
         adHocVehicle: vehicleData.adHocVehicle,
+        // BUG-4 Phase 2 — forward-only: written now, read in Phase 3.
+        tripType,
       })
       const tripId = promoted.data.trip.id
       console.timeEnd('[buildItinerary] promoteSession')

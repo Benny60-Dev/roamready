@@ -15,9 +15,14 @@
  * failure mode of a false positive is an unstripped round trip the user can
  * see and fix, vs. the silent surgery this guard caused before.
  *
- * NOTE: the model-side prompt carries the same list (services/ai.ts,
- * "ONE-WAY IS THE UNCONDITIONAL DEFAULT") — keep the two in sync or the
- * model will one-way a trip this guard would have kept.
+ * SINGLE SOURCE OF TRUTH for the round-trip trigger phrases. The model-side
+ * prompt mirrors this list in TWO places — both must stay textually identical
+ * to ROUND_TRIP_RES below, or the model will one-way a trip this guard would
+ * have kept (or vice-versa):
+ *   • server/src/services/ai.ts "ROUND TRIP / RETURN HOME RULE" (~:198)
+ *   • server/src/services/ai.ts "ONE-WAY IS THE UNCONDITIONAL DEFAULT" (~:225)
+ * If you add/remove a phrase here, update BOTH prompt locations in the same
+ * change. Regression-checked by scripts/check-round-trip-intent.ts.
  */
 
 const ROUND_TRIP_RES: RegExp[] = [
