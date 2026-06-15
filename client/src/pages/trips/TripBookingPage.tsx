@@ -11,6 +11,7 @@ import { formatTripDate } from '../../utils/dates'
 import { useAuthStore } from '../../store/authStore'
 import { MEMBERSHIP_TYPES } from '../../constants/memberships'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge } from '../../utils/stopBadge'
+import { userFacingStopCount } from '../../utils/userFacingStopCount'
 import { useUIStore } from '../../store/uiStore'
 import ConfirmModal from '../../components/ui/ConfirmModal'
 import RigInfoModal from '../../components/trip/RigInfoModal'
@@ -1680,7 +1681,7 @@ export default function TripBookingPage() {
               className="text-[11px] font-semibold uppercase text-gray-400"
               style={{ letterSpacing: '0.04em' }}
             >
-              {sortedStops.length} stops
+              {userFacingStopCount(sortedStops)} stops
             </p>
           </div>
           {/* Stop nav list */}

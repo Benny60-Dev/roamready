@@ -6,6 +6,7 @@ import { Trip } from '../types'
 import { formatTripDate } from '../utils/dates'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge } from '../utils/stopBadge'
 import { computeTripTotals } from '../utils/tripTotals'
+import { userFacingStopCount } from '../utils/userFacingStopCount'
 import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
 
 export default function SharedTripPage() {
@@ -74,7 +75,7 @@ export default function SharedTripPage() {
           {[
             { icon: MapPin, label: 'Miles', value: trip.totalMiles?.toLocaleString() || '–' },
             { icon: Tent, label: 'Nights', value: trip.totalNights || '–' },
-            { icon: MapPin, label: 'Stops', value: sortedStops.filter(s => s.type !== 'HOME').length },
+            { icon: MapPin, label: 'Stops', value: userFacingStopCount(sortedStops) },
             { icon: DollarSign, label: 'Est. cost', value: costTotal > 0 ? `$${Math.round(costTotal).toLocaleString()}` : '–' },
           ].map(({ icon: Icon, label, value }) => (
             <div key={label} className="card text-center">

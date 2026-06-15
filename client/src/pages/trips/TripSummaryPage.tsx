@@ -16,6 +16,7 @@ import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBad
 import { format, addDays } from 'date-fns'
 import { parseTripDate, toYmd } from '../../utils/dates'
 import { computeTripTotals } from '../../utils/tripTotals'
+import { userFacingStopCount } from '../../utils/userFacingStopCount'
 import { StopWeatherCard } from '../../components/weather/StopWeatherCard'
 import { useScrollResetOnReady } from '../../hooks/useScrollResetOnReady'
 
@@ -1350,7 +1351,7 @@ export default function TripSummaryPage() {
             <StatCell value={String(trip.totalNights || sortedStops.reduce((s, st) => s + st.nights, 0))} label="Nights" shortLabel="nights" />
           </div>
           <div className="flex-1 flex justify-center">
-            <StatCell value={String(sortedStops.length)} label="Stops" shortLabel="stops" />
+            <StatCell value={String(userFacingStopCount(sortedStops))} label="Stops" shortLabel="stops" />
           </div>
           <div className="flex-1 flex justify-center">
             <StatCell
