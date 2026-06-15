@@ -163,6 +163,11 @@ export async function promoteSession(req: AuthRequest, res: Response, next: Next
           // — literal null still flows through to Prisma's runtime as a
           // null write; undefined still means "don't set the column."
           adHocVehicle: data.adHocVehicle as Prisma.InputJsonValue | undefined,
+          // BUG-4 Phase 2 — persist the trip shape the client computed from the
+          // final itinerary (already carried by ...data; restated explicitly so
+          // the write intent is visible). null only if an older client omits it,
+          // in which case Phase 3's stop-shape fallback still applies.
+          tripType: data.tripType ?? null,
         },
       })
       // Mirror trip.name onto session.title so the SessionsPanel reads

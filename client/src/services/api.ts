@@ -176,6 +176,9 @@ export interface PromoteSessionPayload {
   // and prisma/schema.prisma Trip model for the full semantics.
   bringingTowed?: boolean | null
   adHocVehicle?: { year?: number; make?: string; model?: string; length?: number } | null
+  // BUG-4 Phase 2 — persisted trip shape, computed from the final (post-strip)
+  // itinerary at build time. See SessionPage.buildItinerary.
+  tripType?: 'ROUND_TRIP' | 'ONE_WAY' | null
 }
 
 export interface UpdateSessionPayload {
