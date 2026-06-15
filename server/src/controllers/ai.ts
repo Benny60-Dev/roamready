@@ -9,6 +9,7 @@ import {
   annotateForModel, buildAppliedLookup, actionKey,
 } from '../services/modifyActions'
 import { parseTripDate } from '../utils/dates'
+import { computeTripShape } from '../utils/tripShape'
 
 // Soft cap: inject a "wrap up" system message and let Claude actually respond
 // (so it has a chance to emit the <itinerary> JSON block).
@@ -349,7 +350,13 @@ function buildLiveTripState(trip: any): string {
   // block at all — unchanged, and it keeps the homeName/lastStop refs in the
   // block below from dereferencing null even when tripType is set.
   const hasShapeableStops = !!(homeStop && lastStop && lastStop !== homeStop)
-  const isLoopByShape = hasShapeableStops && isReturnHome(lastStop)
+  // Shape fallback uses the shared computeTripShape helper (single source of
+  // truth, also used by the modify-path write in trips.ts syncTripEndpoints).
+  // Gated by hasShapeableStops so behavior is unchanged: when a HOME stop +
+  // distinct last stop exist, computeTripShape's home anchor IS that HOME stop,
+  // so this equals the prior isReturnHome(lastStop) check. (isReturnHome is
+  // kept below for the per-stop "Return home" labeling.)
+  const isLoopByShape = hasShapeableStops && computeTripShape(stops) === 'ROUND_TRIP'
   const loopFromTripType =
     trip.tripType === 'ROUND_TRIP' ? true :
     trip.tripType === 'ONE_WAY'   ? false :

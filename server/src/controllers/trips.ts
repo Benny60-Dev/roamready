@@ -14,6 +14,7 @@ import { stampModifyActionApplied } from '../services/modifyActions'
 import { mergePackedState } from '../utils/packingMerge'
 import { resolvePackingCounts, computeStaleness } from '../utils/packingMeta'
 import { parseTripDate } from '../utils/dates'
+import { computeTripShape } from '../utils/tripShape'
 
 // ─── City name normalization ─────────────────────────────────────────────────
 // Strip ZIP, country, full state name, and trailing 2-letter state code so a
@@ -48,12 +49,22 @@ async function resequenceStops(tripId: string): Promise<void> {
  *  Trip endpoints were originally set at creation time and not refreshed on stop
  *  mutations, so removing a return-home (round trip → one-way) used to leave
  *  endLocation pointing at the old return city. Modify-mode prompts that surface
- *  Route then misframe the trip shape for the AI. */
+ *  Route then misframe the trip shape for the AI.
+ *
+ *  BUG-4 Phase 4 (MODIFY-TRIPTYPE-1): also recompute Trip.tripType here, in the
+ *  SAME stop fetch + trip update. Trip.tripType is written at creation, but
+ *  modify-mode createStop/deleteStop can change the round-trip/one-way shape
+ *  (add/remove a return-home leg) and used to leave the stored value stale.
+ *  computeTripShape is the shared source of truth (mirrors buildLiveTripState's
+ *  read fallback). Safe per-call: it derives from the freshly-persisted stops
+ *  and self-corrects across a multi-action batch (nothing reads tripType
+ *  mid-batch). On the initial-build createStop loop it converges to the same
+ *  value Phase 2 wrote at promote time — no conflict. */
 async function syncTripEndpoints(tripId: string): Promise<void> {
   const stops = await prisma.stop.findMany({
     where: { tripId },
     orderBy: { order: 'asc' },
-    select: { locationName: true },
+    select: { locationName: true, type: true },
   })
   if (stops.length === 0) return
   await prisma.trip.update({
@@ -61,6 +72,7 @@ async function syncTripEndpoints(tripId: string): Promise<void> {
     data: {
       startLocation: stops[0].locationName,
       endLocation: stops[stops.length - 1].locationName,
+      tripType: computeTripShape(stops),
     },
   })
 }
