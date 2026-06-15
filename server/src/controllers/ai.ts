@@ -340,18 +340,22 @@ function buildLiveTripState(trip: any): string {
   // return-to-home leg that does not exist in the data. Loop = closing return-
   // home stop present; one-way = no return-home; neither = no home stop at all
   // or the trip has only the home entry.
-  const isLoopTrip = !!(
-    homeStop &&
-    lastStop &&
-    lastStop !== homeStop &&
-    isReturnHome(lastStop)
-  )
-  const isOneWayTrip = !!(
-    homeStop &&
-    lastStop &&
-    lastStop !== homeStop &&
-    !isReturnHome(lastStop)
-  )
+  //
+  // BUG-4 Phase 3 — prefer the persisted Trip.tripType (written at creation)
+  // over re-inferring shape from stops. Legacy trips have tripType == null and
+  // fall back to the original stop-shape inference (isReturnHome on the last
+  // stop), reproducing the prior behavior EXACTLY. The structural guard
+  // (a HOME stop + a distinct last stop) still gates whether we emit a shape
+  // block at all — unchanged, and it keeps the homeName/lastStop refs in the
+  // block below from dereferencing null even when tripType is set.
+  const hasShapeableStops = !!(homeStop && lastStop && lastStop !== homeStop)
+  const isLoopByShape = hasShapeableStops && isReturnHome(lastStop)
+  const loopFromTripType =
+    trip.tripType === 'ROUND_TRIP' ? true :
+    trip.tripType === 'ONE_WAY'   ? false :
+    isLoopByShape // null (legacy) → original stop-shape inference
+  const isLoopTrip = !!(hasShapeableStops && loopFromTripType)
+  const isOneWayTrip = !!(hasShapeableStops && !loopFromTripType)
 
   let tripShapeBlock: string | null = null
   if (isLoopTrip) {
