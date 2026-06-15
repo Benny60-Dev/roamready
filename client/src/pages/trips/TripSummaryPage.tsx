@@ -380,9 +380,19 @@ function buildGroups(
   // loops type the final stop as DESTINATION (not HOME), so the standalone HOME
   // group above only fires for the departure side. The badge helper is the
   // reliable signal for "is this a home stop" — 'H' means last-stop-matches-home.
+  //
+  // DEDUP: a return-home leg ADDED via Modify-with-AI is type=HOME, so the main
+  // loop above already emitted a standalone HOME group for it — appending here
+  // too rendered the one DB stop as TWO identical "FINISH" cards. Skip the append
+  // when the last group is already that stop's HOME group. The generation
+  // convention (DESTINATION nights-0 at home) makes the loop emit a TRAVEL_DAY,
+  // not a HOME group, so the append still fires there and the Finish renders once.
   const lastEntry = entries[entries.length - 1]
   const lastStopId = lastEntry?.stop?.id
-  if (badges && lastStopId && badges[lastStopId] === 'H') {
+  const lastGroup = groups[groups.length - 1]
+  const alreadyEmittedAsHome =
+    !!lastGroup && lastGroup.type === 'HOME' && lastGroup.stopId === lastStopId
+  if (badges && lastStopId && badges[lastStopId] === 'H' && !alreadyEmittedAsHome) {
     groups.push({
       type: 'HOME',
       entries: [lastEntry],
