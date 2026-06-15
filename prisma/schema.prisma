@@ -308,6 +308,11 @@ model Trip {
   rigId          String?
   name           String
   status         TripStatus @default(PLANNING)
+  // Persisted trip shape (BUG-4). Nullable on purpose: existing rows are
+  // "legacy/unknown" and consumers fall back to today's stop-shape inference
+  // when null. No default, no backfill — the column starts empty and is wired
+  // up in a later phase.
+  tripType       TripType?
   startLocation  String
   endLocation    String
   startDate      DateTime?
@@ -370,6 +375,11 @@ enum TripStatus {
   ACTIVE
   COMPLETED
   DRAFT
+}
+
+enum TripType {
+  ROUND_TRIP
+  ONE_WAY
 }
 
 model Stop {
