@@ -5,6 +5,7 @@ import { Trip, Stop, ItineraryDay, ItineraryActivity, POI, TripFuelEstimate } fr
 import { format, addDays } from 'date-fns'
 import { parseTripDate } from '../../utils/dates'
 import { computeTripTotals } from '../../utils/tripTotals'
+import { userFacingStopCount } from '../../utils/userFacingStopCount'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -861,7 +862,7 @@ export function TripPDF({ trip, mapImageBase64, fuelEstimate }: Props) {
             </View>
             <View style={s.statsStripVDiv} />
             <View style={s.statsStripCell}>
-              <Text style={s.statsStripVal}>{sortedStops.length}</Text>
+              <Text style={s.statsStripVal}>{userFacingStopCount(sortedStops)}</Text>
               <Text style={s.statsStripLabel}>STOPS</Text>
             </View>
             <View style={s.statsStripVDiv} />

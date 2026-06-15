@@ -1945,7 +1945,7 @@ export default function TripMapPage() {
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
-                Stops ({nonHomeStops.length})
+                Stops ({userFacingStopCount(trip?.stops)})
               </button>
               <button
                 onClick={() => setSidebarTab('weather')}
