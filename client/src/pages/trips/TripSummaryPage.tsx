@@ -316,7 +316,14 @@ function buildGroups(
     const stopId = e.stop?.id ?? null
     const stopOrder = e.stop?.order ?? 0
 
-    if (e.stop?.type === 'HOME') {
+    // `e.type !== 'DRIVE'` guard: a DRIVE entry's `.stop` is its DESTINATION, so
+    // the drive arriving at a return-home stop (modify-added type=HOME leg) would
+    // otherwise enter this HOME branch too — and with the home STAY entry also
+    // hitting it, the one return stop rendered as TWO "FINISH" cards. A drive into
+    // home is a normal arrival leg: let it fall through to the DRIVE branch below
+    // (TRAVEL_DAY), matching the generation DESTINATION-close behavior. The
+    // departure HOME entry is a STAY (type !== 'DRIVE'), so it still enters here.
+    if (e.type !== 'DRIVE' && e.stop?.type === 'HOME') {
       const next = entries[i + 1]
       if (next?.type === 'DRIVE') {
         // Merge HOME departure into the first travel day card
