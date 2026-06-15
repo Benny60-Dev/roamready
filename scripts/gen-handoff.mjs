@@ -33,14 +33,16 @@ const items = data.items;
 // Open = anything OPEN, plus any launch-blocking item that isn't DONE (a live blocker).
 const isOpen = (it) => it.status === 'OPEN' || (it.category === 'launch-blocking' && it.status !== 'DONE');
 const isDeferred = (it) => it.status === 'DEFERRED' || it.status === 'PARTIAL';
-const isDone = (it) => it.status === 'DONE';
+// A RESOLVED infra item is settled, so it reads alongside DONE rather than vanishing.
+const isDone = (it) => it.status === 'DONE' || it.status === 'RESOLVED';
 
 const openItems = items.filter(isOpen);
 const deferredItems = items.filter(isDeferred);
 const doneItems = items.filter(isDone);
 
 function bullet(it, withStatus) {
-  let line = `- ${it.id} — ${it.title}`;
+  // Items without an id (e.g. infrastructure) render title-only — never "null — ".
+  let line = it.id ? `- ${it.id} — ${it.title}` : `- ${it.title}`;
   if (withStatus) line += ` (${it.statusRaw})`;
   if (it.commits && it.commits.length) line += ` — commits: ${it.commits.join(', ')}`;
   return line;

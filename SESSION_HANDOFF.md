@@ -42,6 +42,7 @@
 - RR38-2 — **FROM_EMAIL display name** — transactional sender shows a friendly name
 - RR38-3 — **PDF export gate** — packing/trip PDF export is Pro-gated
 - 13 — **Map click-to-popup centering** — pan camera so clicked stop's popup is fully visible
+- Render cold-start mitigation — RESOLVED 2026-06-14
 
 <!-- END GENERATED -->
 
