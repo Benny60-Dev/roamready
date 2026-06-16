@@ -42,21 +42,53 @@ function normalizeLocation(s: string): string {
 export type StopBadge = 'S' | 'H' | 'F' | number
 
 /**
+ * FINISH-ORIGIN-1 — does the trip loop back to its OWN origin? The closing
+ * "Finish" / home-endpoint decision must be based on the trip's first stop, NOT
+ * the user's profile home: a trip can loop to an origin that isn't the saved
+ * home (e.g. Phoenix → Sedona → Phoenix while the profile home is Mesa).
+ *
+ * Rule (origin-based, stops-only): true iff the LAST stop is a distinct stop
+ * whose city AND state match the trip's first/HOME stop. homeStop = first
+ * `type === 'HOME'` stop, else stops[0]. The state guard (only enforced when
+ * BOTH sides supply a state) keeps "Springfield, IL → … → Springfield, MO" from
+ * counting as a loop.
+ *
+ * RULE TRIO — keep these mirrors in sync:
+ *   • server/src/utils/tripShape.ts  computeTripShape   (server source of truth)
+ *   • this helper                                        (client source of truth)
+ *   • getStopBadge / userFacingStopCount                (consumers — must call this)
+ */
+export function tripLoopsToOrigin(stops?: Stop[] | null): boolean {
+  if (!Array.isArray(stops) || stops.length < 2) return false
+  const homeStop = stops.find(s => s.type === 'HOME') ?? stops[0]
+  const lastStop = stops[stops.length - 1]
+  if (lastStop === homeStop) return false
+
+  const cityMatch = normalizeLocation(lastStop.locationName) === normalizeLocation(homeStop.locationName)
+  const lastState = lastStop.locationState ? normalizeLocation(lastStop.locationState) : undefined
+  const homeState = homeStop.locationState ? normalizeLocation(homeStop.locationState) : undefined
+  const stateMatch = !lastState || !homeState || lastState === homeState
+  return cityMatch && stateMatch
+}
+
+/**
  * Returns the display badge value for a single stop:
  *   'S'      — first stop (departure point)
- *   'H'      — last stop whose city matches the user's homeLocation
- *   'F'      — last stop that is NOT the user's home (finish elsewhere)
+ *   'H'      — last stop that returns to the trip's OWN origin (loop trip)
+ *   'F'      — last stop that is somewhere else (one-way finish)
  *   number   — sequential 1-based index for every middle stop
  *
  * sortedStops must already be sorted by stop.order ascending.
- * Pass the full user object so structured homeCity/homeState fields are preferred
- * over the legacy homeLocation free-text string.  Pass undefined (public/shared
- * views) and the last stop defaults to 'F'.
+ *
+ * FINISH-ORIGIN-1: the 'H'/'F' decision is now ORIGIN-based (via
+ * tripLoopsToOrigin) — it no longer reads the user's profile home. The `user`
+ * param is retained for call-site compatibility but no longer affects the badge,
+ * so shared/public views (no user) now detect loops correctly too.
  */
 export function getStopBadge(
   stop: Stop,
   sortedStops: Stop[],
-  user?: Pick<User, 'homeCity' | 'homeState' | 'homeLocation'> | null,
+  _user?: Pick<User, 'homeCity' | 'homeState' | 'homeLocation'> | null,
 ): StopBadge {
   if (sortedStops.length === 0) return 1
   const firstId = sortedStops[0].id
@@ -65,24 +97,8 @@ export function getStopBadge(
   if (stop.id === firstId) return 'S'
 
   if (stop.id === lastId) {
-    if (!user) return 'F'
-
-    // Prefer structured homeCity when available — direct city (+ optional state) comparison
-    if (user.homeCity) {
-      const homeCity  = user.homeCity.toLowerCase().trim()
-      const homeState = user.homeState?.toLowerCase().trim()
-      const stopCity  = normalizeLocation(stop.locationName)
-      const stopState = stop.locationState ? normalizeLocation(stop.locationState) : undefined
-      // City must match; state is a secondary guard only when both sides supply it
-      const cityMatch  = stopCity === homeCity
-      const stateMatch = !homeState || !stopState || stopState === homeState
-      return cityMatch && stateMatch ? 'H' : 'F'
-    }
-
-    // Fall back to legacy free-text comparison for users who haven't re-entered their address
-    if (!user.homeLocation) return 'F'
-    const stopStr = stop.locationName + (stop.locationState ? `, ${stop.locationState}` : '')
-    return normalizeLocation(stopStr) === normalizeLocation(user.homeLocation) ? 'H' : 'F'
+    // Origin-based: 'H' iff the trip loops back to its own first/HOME stop.
+    return tripLoopsToOrigin(sortedStops) ? 'H' : 'F'
   }
 
   // Middle stop: count position among non-endpoint stops (1-indexed)

@@ -383,20 +383,19 @@ function buildGroups(
     i++
   }
 
-  // Append a closing "Finish" group when the trip ends back at its origin. The
-  // closing leg now renders as a normal drive-home TRAVEL_DAY (the line-326
+  // Append a closing "Finish" group when the trip loops back to its origin. The
+  // closing leg renders as a normal drive-home TRAVEL_DAY (the line-326
   // `type !== 'DRIVE'` guard routes the drive-home entry there and merges the
-  // 0-night home STAY), so this append is what surfaces the single Finish card.
+  // 0-night home STAY), so this append surfaces the single Finish card.
   //
-  // TRIGGER — two conventions for the return-home stop, both must yield one Finish:
-  //   • badge 'H' — last stop's city matches the user's PROFILE home (covers
-  //     generation round trips that close on a DESTINATION nights-0 home stop).
-  //   • type === 'HOME' — a return leg ADDED via Modify-with-AI types the closing
-  //     stop HOME. Critically, a trip can loop back to its ORIGIN city that ISN'T
-  //     the profile home (e.g. a Phoenix→Sedona→Phoenix trip owned by a Mesa user)
-  //     — that gets badge 'F', so the 'H'-only check missed it and rendered ZERO
-  //     finishes. The type check catches it. (One-way trips end on a DESTINATION
-  //     that's neither 'H' nor HOME-typed, so neither condition fires — correct.)
+  // TRIGGER: badge 'H'. FINISH-ORIGIN-1 made the badge ORIGIN-based (last stop
+  // returns to the trip's own first/HOME stop), so 'H' now fires for BOTH
+  // generation closes (DESTINATION nights-0 at origin) AND modify-added closes
+  // (type=HOME at origin), INCLUDING loops whose origin isn't the profile home
+  // (Phoenix→…→Phoenix for a Mesa user). The earlier `|| type==='HOME'` patch —
+  // which existed only because the old profile-home badge mislabeled those as
+  // 'F' — is now redundant and retired. One-way trips end on a non-origin
+  // DESTINATION → badge 'F' → no append (correct).
   //
   // DEDUP: if the main loop already emitted a standalone HOME group for the last
   // stop (the non-merge edge), `alreadyEmittedAsHome` skips this append so the one
@@ -406,8 +405,7 @@ function buildGroups(
   const lastGroup = groups[groups.length - 1]
   const alreadyEmittedAsHome =
     !!lastGroup && lastGroup.type === 'HOME' && lastGroup.stopId === lastStopId
-  const isClosingHome = badges?.[lastStopId ?? ''] === 'H' || lastEntry?.stop?.type === 'HOME'
-  if (lastStopId && isClosingHome && !alreadyEmittedAsHome) {
+  if (lastStopId && badges?.[lastStopId] === 'H' && !alreadyEmittedAsHome) {
     groups.push({
       type: 'HOME',
       entries: [lastEntry],
