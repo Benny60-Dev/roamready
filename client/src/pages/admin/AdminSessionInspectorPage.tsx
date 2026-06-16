@@ -17,7 +17,7 @@ interface Session {
   createdAt: string
   updatedAt: string
 }
-interface TripLite { id: string; name: string; stops: Stop[] }
+interface TripLite { id: string; name: string; status: string; stops: Stop[] }
 interface UsageRow {
   callType: string
   model: string
@@ -69,6 +69,31 @@ function lastEmittedItinerary(messages: unknown): any | null {
 
 const norm = (s: unknown) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 const fmtDate = (iso: string) => { try { return new Date(iso).toLocaleString() } catch { return iso } }
+const titleCase = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s)
+
+// CONVERSATION (PlanningSession) status — explicitly labeled so it never reads
+// as the trip's status. Pine (#3E5540) is reserved for booked/confirmed only,
+// so a finished CONVERSATION uses neutral slate, never pine.
+const convLabel = (s: string) => `Conversation: ${titleCase(s)}`
+const convClass = (s: string) => {
+  switch ((s || '').toUpperCase()) {
+    case 'PLANNING':  return 'bg-sky-50 text-sky-700'
+    case 'COMPLETED': return 'bg-slate-100 text-slate-600'
+    case 'ARCHIVED':  return 'bg-amber-50 text-amber-700'
+    default:          return 'bg-gray-100 text-gray-600'
+  }
+}
+// TRIP (Trip) status — a DIFFERENT object than the conversation. Indigo family
+// + inset ring keeps it visually distinct from the conversation pill. Pine stays
+// reserved (no trip.status value is "booked" — booking lives per-stop).
+const tripClass = (s: string) => {
+  switch ((s || '').toUpperCase()) {
+    case 'PLANNING':  return 'bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200'
+    case 'ACTIVE':    return 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200'
+    case 'COMPLETED': return 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'
+    default:          return 'bg-gray-100 text-gray-500 ring-1 ring-inset ring-gray-200'
+  }
+}
 
 export default function AdminSessionInspectorPage() {
   const [query, setQuery] = useState('')
@@ -176,32 +201,77 @@ export default function AdminSessionInspectorPage() {
             {data.sessions.length === 0 ? (
               <p className="text-sm text-gray-500">No planning sessions found.</p>
             ) : (
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <p className="text-xs text-gray-500">{data.sessions.length} session{data.sessions.length === 1 ? '' : 's'} — select one:</p>
-                <div className="space-y-1">
-                  {data.sessions.map(s => {
-                    const count = Array.isArray(s.messages) ? s.messages.length : 0
-                    const isSel = s.id === selectedId
-                    return (
-                      <button
-                        key={s.id}
-                        onClick={() => setSelectedId(s.id)}
-                        className={`w-full text-left px-3 py-2 rounded border text-sm flex items-center justify-between gap-2 ${isSel ? 'border-[#1F6F8B] bg-[#1F6F8B]/5' : 'border-gray-200 hover:border-gray-300'}`}
-                      >
-                        <span className="min-w-0 truncate">
-                          <span className="font-medium text-gray-900">{s.title || '(untitled session)'}</span>
-                          <span className="text-gray-400"> · {count} msg{count === 1 ? '' : 's'}</span>
-                        </span>
-                        <span className="flex items-center gap-2 flex-shrink-0">
-                          <span className={`badge text-xs ${s.tripId ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
-                            {s.tripId ? 'built trip' : 'no trip'}
-                          </span>
-                          <span className="badge bg-gray-100 text-gray-600 text-xs">{s.status}</span>
-                          <span className="text-xs text-gray-400">{fmtDate(s.createdAt)}</span>
-                        </span>
-                      </button>
-                    )
-                  })}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-[10px] uppercase tracking-wide text-gray-400 border-b border-gray-100">
+                        <th className="px-2 py-1 font-medium">Title</th>
+                        <th className="px-2 py-1 font-medium">Msgs</th>
+                        <th className="px-2 py-1 font-medium">Trip built?</th>
+                        <th className="px-2 py-1 font-medium">Conversation status</th>
+                        <th className="px-2 py-1 font-medium">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.sessions.map(s => {
+                        const count = Array.isArray(s.messages) ? s.messages.length : 0
+                        const isSel = s.id === selectedId
+                        const trip = s.tripId ? data.trips.find(t => t.id === s.tripId) ?? null : null
+                        return (
+                          <tr
+                            key={s.id}
+                            onClick={() => setSelectedId(s.id)}
+                            className={`cursor-pointer border-b border-gray-50 last:border-0 ${isSel ? 'bg-[#1F6F8B]/5' : 'hover:bg-gray-50'}`}
+                          >
+                            <td className="px-2 py-2 font-medium text-gray-900 max-w-[14rem] truncate">{s.title || '(untitled session)'}</td>
+                            <td className="px-2 py-2 text-gray-500">{count}</td>
+                            <td className="px-2 py-2">
+                              {/* Two SEPARATE facts about the trip object live here:
+                                  whether a trip was built, and (if so) that trip's
+                                  own status — distinct from the conversation status. */}
+                              <div className="flex flex-col items-start gap-1">
+                                <span className={`badge text-xs ${s.tripId ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                                  {s.tripId ? 'built trip' : 'no trip'}
+                                </span>
+                                {trip && (
+                                  <span className={`badge text-xs ${tripClass(trip.status)}`}>
+                                    Trip: {titleCase(trip.status)}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-2 py-2">
+                              <span className={`badge text-xs ${convClass(s.status)}`}>{convLabel(s.status)}</span>
+                            </td>
+                            <td className="px-2 py-2 text-xs text-gray-400 whitespace-nowrap">{fmtDate(s.createdAt)}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Legend — explains every term so the two status families aren't conflated. */}
+                <div className="text-[11px] text-gray-500 leading-relaxed border-t border-gray-100 pt-2 space-y-1">
+                  <p className="font-medium text-gray-600">Key</p>
+                  <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                    <span className="badge bg-gray-100 text-gray-500 text-[10px]">no trip</span> this chat never built a trip
+                    <span className="text-gray-300">·</span>
+                    <span className="badge bg-emerald-50 text-emerald-700 text-[10px]">built trip</span> this chat produced a trip
+                  </p>
+                  <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                    <span className="badge bg-sky-50 text-sky-700 text-[10px]">Conversation: Planning</span> chat still open / in progress
+                    <span className="text-gray-300">·</span>
+                    <span className="badge bg-slate-100 text-slate-600 text-[10px]">Conversation: Completed</span> chat finished
+                    <span className="text-gray-300">·</span>
+                    <span className="badge bg-amber-50 text-amber-700 text-[10px]">Conversation: Archived</span> chat abandoned
+                  </p>
+                  <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                    <span className="badge bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200 text-[10px]">Trip: …</span>
+                    the built trip's OWN status (e.g. Planning) — a separate fact from the conversation status above
+                  </p>
                 </div>
               </div>
             )}
