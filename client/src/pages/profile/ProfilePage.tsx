@@ -29,7 +29,16 @@ export default function ProfilePage() {
   })
 
   useEffect(() => {
-    if (user) reset(user)
+    if (!user) return
+    reset(user)
+    // HOME-ADDRESS defect A — seed the address field from homeLocation ONCE on
+    // hydrate when homeAddress is empty, so the saved address still shows when
+    // the section opens. The input then binds to homeAddress ALONE (no
+    // `|| homeLocation` fallback), so deleting to empty now sticks instead of
+    // snapping back to the stored address. Not marked dirty (it's hydration).
+    if (!user.homeAddress && user.homeLocation) {
+      setValue('homeAddress', user.homeLocation)
+    }
   }, [user])
 
   const watchedCity  = watch('homeCity')  as string | undefined
@@ -183,8 +192,23 @@ export default function ProfilePage() {
                 <input
                   className="input"
                   placeholder="Start typing your address…"
-                  value={(watch('homeAddress') as string | undefined) || (watch('homeLocation') as string | undefined) || ''}
-                  onChange={e => setValue('homeAddress', e.target.value, { shouldDirty: true })}
+                  // Defect A: bind to homeAddress ALONE (no `|| homeLocation`
+                  // fallback) so deletion to empty sticks. The field is seeded
+                  // from homeLocation on hydrate (see the reset effect above).
+                  value={(watch('homeAddress') as string | undefined) ?? ''}
+                  onChange={e => {
+                    const text = e.target.value
+                    setValue('homeAddress', text, { shouldDirty: true })
+                    // Defect B: free-typing diverges the text from the stored
+                    // structured data (city/coords), so invalidate those fields —
+                    // the server re-geocodes the new text on save. A dropdown pick
+                    // goes through onPlaceChanged, which re-sets all 8 afterward.
+                    const stored = (user?.homeAddress || user?.homeLocation || '').trim()
+                    if (text.trim() !== stored) {
+                      (['homeStreet', 'homeCity', 'homeState', 'homeZip', 'homeLat', 'homeLng', 'homeLocation'] as const)
+                        .forEach(f => setValue(f as any, null as any, { shouldDirty: true }))
+                    }
+                  }}
                   disabled={!!watchedFullTimer}
                 />
               </Autocomplete>
