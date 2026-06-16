@@ -1,13 +1,11 @@
 # Session Handoff
 <!-- GENERATED FROM launch-status.json — do not hand-edit this section; it is overwritten on every regen -->
 
-**Status as of 2026-06-05** — verified against `main` @ `7d5578d`.
+**Status as of 2026-06-15** — verified against `main` @ `fe6817f`.
 
 ## Open items
-- BUG-1 — **Mobile placeholder truncation** — chat input placeholder text is cut off at mobile widths (**OPEN — P1**)
-- BUG-2 — **Trip-summary pill CTA** — the booking pill call-to-action wording/affordance needs work (**OPEN — P2**)
-- BUG-3 — **Stop count accuracy** — displayed stop count does not match the actual stops (**OPEN — P1**)
-- BUG-4 — **Round-trip vs one-way prompt** — AI prompt mishandles round-trip vs one-way intent (**OPEN — P2**)
+- KBD-1 — **Mobile chat input pushed off-screen on keyboard open** (OPEN — deferred (launch risk))
+- BOOKING-PILLS-INV — **Booking-pill CTA inventory** — wording/affordance refinement of the booking pills/CTAs (OPEN — backlog (scouted, not built))
 
 ## Deferred / post-launch
 - 10b — **Travel Party Phase B / C** (DEFERRED)
@@ -16,6 +14,9 @@
 - 15 — **OHV Destinations — code-split the page with `lazy()`** (DEFERRED — low priority)
 - 16 — **OHV Destinations — optional client-side result retention** (DEFERRED — nice-to-have)
 - 17 — **OHV link-checker — activation** (DEFERRED — post-launch)
+- MODIFY-RELIABILITY — **Modify-AI long-conversation reliability** — residual tag-emission reliability beyond item #3's mitigations (DEFERRED)
+- REGEN-NONDESTRUCTIVE — **Non-destructive Regenerate** — preserve custom / checked activity states across an itinerary regenerate (DEFERRED — post-launch)
+- FINISH-ORIGIN-PARITY — **Finish-origin server state-parity** — server computeTripShape compares city only (DEFERRED — minor backlog)
 
 ## Done — verified
 - 1 — **PDF lazy-loading** — `@react-pdf/renderer` (~1.5MB) code-split out of the main bundle
@@ -25,6 +26,10 @@
 - 5 — **Weather per-stop live→historical fallback** — late stops in long live trips fall back instead of blanking
 - 6 — **aiConversation silent 400** — dead client write + downstream surprise-trip exclusion query that depended on the same dead column
 - 11 — **UTC-midnight arrival timezone artifact** in server-side weather path
+- BUG-1 — **Mobile placeholder truncation** — chat input placeholder text is cut off at mobile widths — commits: 1f36e00, 6461acc
+- BUG-2 — **Trip-summary pill CTA** — the preview/booking pill call-to-action wording/affordance
+- BUG-3 — **Stop count accuracy** — displayed stop count does not match the actual stops — commits: 9691bf1, 0718899
+- BUG-4 — **Round-trip vs one-way prompt** — AI prompt mishandles round-trip vs one-way intent — commits: 1424435, 064b999, 26448ee, 611b958
 - 7 — **Regenerate ConfirmModal gates** — destructive regenerate flows require confirmation
 - 8 — **Share Trip** — end to end
 - 9 — **Reservation Honesty Pass** — Book buttons open real `reservationUrl`, record confirmation #
@@ -42,6 +47,16 @@
 - RR38-2 — **FROM_EMAIL display name** — transactional sender shows a friendly name
 - RR38-3 — **PDF export gate** — packing/trip PDF export is Pro-gated
 - 13 — **Map click-to-popup centering** — pan camera so clicked stop's popup is fully visible
+- SCOPE-GUARD-2 — **Terse-opener scope-guard** — a first message that names a place but lacks 'plan a trip' wording was refused as off-topic — commits: 66b3718, dd511c8
+- MODIFY-TRIPTYPE-1 — **Modify-mode keeps Trip.tripType accurate** — add/remove of a return-home leg updates the stored shape — commits: 53b3fa6, 611b958
+- DOUBLE-FINISH — **Double closing FINISH row** — modify-added round trips rendered two 'FINISH {city}' rows in the itinerary — commits: de64dc0, 920feeb, d42b848
+- HOME-ADDR-RUNG1 — **Home address geocode-on-save + auto-heal** — free-typed/autofilled address (no city/coords) wrongly read as 'no home' — commits: 088083f, a9c96c3
+- HOME-ADDR-RUNG2 — **Home address pin-drop fallback** — when geocode-on-save fails, let the user place their home on a map — commits: 8c068fe, bb82b06
+- HOME-ADDR-RUNG3 — **Pin-drop report link prefills feedback type** — 'Report this to us' opens the feedback modal as a bug report — commits: d6c004e, 5052b81
+- HOME-ADDR-CHANGE-FLOW — **Change-my-address flow** — deletion didn't stick + stale coords saved next to new text — commits: fa5ad85, d09c2cf
+- FINISH-ORIGIN-1 — **Origin-based finish/badge** — closing finish + map S/F pin matched the profile home instead of the trip's own origin — commits: 5f0e37c, 1c8ea84
+- STOPS-PLURALIZATION — **Count pluralization** — '1 stops' (and '1 nights' / '1 days') read ungrammatically — commits: a2cc439, fe6817f
+- IMP-MAPPIN-1 — **Overlapping Start/Finish pins + '1 stops'** — origin-loop trips stacked two pins at the origin and showed '1 stops' — commits: 1c8ea84, fe6817f
 - Render cold-start mitigation — RESOLVED 2026-06-14
 
 <!-- END GENERATED -->
