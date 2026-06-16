@@ -161,7 +161,7 @@ export default function HelpPage() {
                 standalone route too). Styled btn-outline, not a gold CTA. */}
             <button
               type="button"
-              onClick={openFeedbackModal}
+              onClick={() => openFeedbackModal()}
               className="btn-outline text-sm inline-flex items-center gap-1.5"
             >
               <MessageSquare size={14} /> Submit feedback

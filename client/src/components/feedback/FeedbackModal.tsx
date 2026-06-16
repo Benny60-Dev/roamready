@@ -3,6 +3,7 @@ import { X, Star, ImagePlus } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { feedbackApi } from '../../services/api'
 import { FeedbackType } from '../../types'
+import { useUIStore } from '../../store/uiStore'
 
 interface Props {
   onClose: () => void
@@ -50,8 +51,14 @@ export default function FeedbackModal({ onClose }: Props) {
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [attachError, setAttachError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Preselect the category when a caller passed one (e.g. the pin-drop "Report
+  // this bug" link → 'BUG_REPORT'). The modal mounts fresh on each open (App.tsx
+  // gates it on feedbackModalOpen), so reading the prefill here sets the right
+  // default per-open; a plain no-arg open leaves prefill undefined → the
+  // FEATURE_REQUEST fallback below.
+  const prefillType = useUIStore(s => s.feedbackPrefillType)
   const { register, handleSubmit } = useForm<FormData>({
-    defaultValues: { type: 'FEATURE_REQUEST' }
+    defaultValues: { type: prefillType ?? 'FEATURE_REQUEST' }
   })
 
   async function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {

@@ -203,7 +203,7 @@ export default function HomePinDropModal({ open, onClose, addressText, onSaved }
         <div className="flex items-center justify-between gap-2 mt-5">
           <button
             type="button"
-            onClick={() => openFeedbackModal()}
+            onClick={() => openFeedbackModal('BUG_REPORT')}
             className="text-xs text-[#1F6F8B] hover:text-[#134756] underline underline-offset-2"
           >
             Couldn't find your address? Report this to us

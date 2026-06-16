@@ -78,7 +78,7 @@ export default function RoadmapPage() {
             <h1 className="text-2xl font-medium text-gray-900">Product Roadmap</h1>
             <p className="text-sm text-gray-500 mt-1">See what we're working on and vote on what matters to you.</p>
           </div>
-          <button onClick={openFeedbackModal} className="btn-primary flex items-center gap-1.5">
+          <button onClick={() => openFeedbackModal()} className="btn-primary flex items-center gap-1.5">
             <MessageSquare size={15} /> Submit feedback
           </button>
         </div>
