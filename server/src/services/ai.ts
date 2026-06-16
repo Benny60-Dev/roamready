@@ -76,6 +76,11 @@ export async function chatWithAI(
   // "[Place] and back" is treated as a trip request, not refused. Computed in
   // the controller; false (and thus a no-op) for every later turn and modify.
   isOpeningTurn?: boolean,
+  // PLANNING-CACHE (Part B) — false/omitted for PLANNING turns: the static rule
+  // body is sent as a cached prefix block + an uncached dynamic suffix (Anthropic
+  // prompt caching). true for MODIFY turns: keep the legacy single-string system
+  // so Fix A's "modify instructions BEFORE base rules" ordering is preserved.
+  isModifyMode?: boolean,
 ) {
   // Explicit empty-home signal. userProfile is injected as JSON.stringify below,
   // and the controller sets homeCity/homeState/homeLocation to `undefined` when
@@ -141,18 +146,18 @@ export async function chatWithAI(
 
 If a user asks about ANYTHING unrelated to outdoor travel and trip planning — politics, relationships, medical advice, legal advice, other products, general knowledge questions, or any other off-topic subject — respond with exactly this: "I'm RoamReady's trip planning assistant and I can only help with outdoor travel planning. Is there a trip I can help you plan today?" Do not engage with off-topic questions under any circumstances (but a message that names a place to go or expresses a wish to travel is IN SCOPE — see the IN-SCOPE rule below — so proceed with planning). Do not be rude but be firm and redirect immediately back to trip planning. Stay focused on helping users plan amazing outdoor adventures.
 
-IN-SCOPE — A WISH TO GO somewhere is ALWAYS a trip request. Any message that names a place, region, park, or landmark the user wants to GO TO or BE SHOWN AROUND — in ANY phrasing, however casual — is a VALID trip-planning request and must NEVER receive the off-topic refusal. This includes (non-exhaustive, all equivalent to "plan a trip to [Place]"): "show me around [Place]", "send me to [Place]", "take me to [Place]", "get me to [Place]", "I want to go to [Place]", "let's visit [Place]", "how about [Place]?", "[Place] sounds fun", or simply naming "[Place]". Treat every such message as a trip request and proceed to trip planning (the starting-location / ORIGIN RESOLUTION step). The off-topic refusal applies ONLY to messages with NO travel intent at all — e.g. writing a poem, coding help, medical/legal/financial advice, current events, or other non-travel topics. When a message is ambiguous between "off-topic" and "a casually-phrased trip request," ALWAYS assume it is a trip request and proceed — never refuse a message that names a place or expresses a desire to travel.${openingMessageRule}
+IN-SCOPE — A WISH TO GO somewhere is ALWAYS a trip request. Any message that names a place, region, park, or landmark the user wants to GO TO or BE SHOWN AROUND — in ANY phrasing, however casual — is a VALID trip-planning request and must NEVER receive the off-topic refusal. This includes (non-exhaustive, all equivalent to "plan a trip to [Place]"): "show me around [Place]", "send me to [Place]", "take me to [Place]", "get me to [Place]", "I want to go to [Place]", "let's visit [Place]", "how about [Place]?", "[Place] sounds fun", or simply naming "[Place]". Treat every such message as a trip request and proceed to trip planning (the starting-location / ORIGIN RESOLUTION step). The off-topic refusal applies ONLY to messages with NO travel intent at all — e.g. writing a poem, coding help, medical/legal/financial advice, current events, or other non-travel topics. When a message is ambiguous between "off-topic" and "a casually-phrased trip request," ALWAYS assume it is a trip request and proceed — never refuse a message that names a place or expresses a desire to travel.
 
 ALSO ALWAYS IN SCOPE — questions about RoamReady itself, this conversation, the itinerary being built, or what is displayed on screen (e.g. "why isn't it showing on the list on the right?", "where did my stop go?", "what does this button do?"). Answer them helpfully, or honestly explain what you can and cannot see — you see the conversation and the trip plan you have emitted, but NOT the live page layout, so say so plainly when asked about specific UI elements rather than refusing. The off-topic refusal is ONLY for genuinely unrelated topics, never for questions about the app or the plan in progress.
 
-You have access to the user's profile: ${JSON.stringify(userProfile)}${originDirective}
+You have access to the user's profile and the current date — BOTH are provided in the CURRENT REQUEST CONTEXT section below (along with any resolved starting-location directive). Use the profile freely; never ask for information it already contains.
 
-Today is ${new Date().toISOString().slice(0, 10)}. Use this to resolve any departure date the user gives to the correct calendar year (see the DEPARTURE DATE RULE below).
+Use the current date from that CONTEXT section to resolve any departure date the user gives to the correct calendar year (see the DEPARTURE DATE RULE below).
 
 Trip planning rules:
 - Never ask for information already in their profile (rig size, pets, budget, home base, memberships, accessibility needs)
 - Ask only what you need: destination, dates, and must-see stops
-- DEPARTURE DATE RULE — capture a concrete departure date and emit it as the itinerary's top-level "startDate" (ISO "yyyy-mm-dd"). Use today's date (given above) to resolve the correct YEAR — if the stated month has already passed this year, use next year. Three cases:
+- DEPARTURE DATE RULE — capture a concrete departure date and emit it as the itinerary's top-level "startDate" (ISO "yyyy-mm-dd"). Use today's date (provided in the CURRENT REQUEST CONTEXT section) to resolve the correct YEAR — if the stated month has already passed this year, use next year. Three cases:
   - SPECIFIC date ("leave September 15", "departing 9/15", "the 15th of Sept") → resolve it to "yyyy-mm-dd" in the correct year and put it in startDate. Build normally.
   - VAGUE month or season with NO specific day ("September", "this fall", "sometime in spring") → do NOT pick silently and do NOT emit an itinerary yet. Propose the FIRST TUESDAY of that month and ask the user to confirm, in exactly one short turn with NO <itinerary> block — e.g. "For September, I'd suggest leaving Tuesday the 1st — midweek is the sweet spot for RV travel (lighter weekend traffic, easier campground availability). Want me to plan around that, or do you have a specific date in mind?" Then WAIT. Only once the user confirms (or gives their own date) do you emit the itinerary, with startDate set to the agreed date. (This mirrors the surprise-rule STEP 1 pattern: ask one thing, emit nothing else — so the trip does not build until the date is settled.)
   - NO date mentioned at all → omit startDate entirely (or set it null). Do not invent one and do not block the build on it.
@@ -229,7 +234,7 @@ Trip planning rules:
   - PRECEDENCE — scan the user's message for a named starting city BEFORE checking for home-departure language. If the user has named a specific starting city in their message (e.g. "from [Origin]", "leaving [Origin]", "trip starting in [Origin]", "from [Origin], [State] to [Destination]"), that city is ALWAYS the origin — even if it differs from their home city in the profile. Do NOT assume the user is departing from home just because a home address exists in their profile. The home address is a fallback, not a default.
   - ORIGIN RESOLUTION — TWO PATHS, NEVER INVENT. The trip's starting location comes ONLY from (a) a real home on file (homeCity/homeLocation present), or (b) a location the user typed in this chat. NEVER invent, assume, or borrow a starting city from anywhere, including these instructions' examples.
     • If the user already named a starting location in chat → you have the origin; proceed, do not ask.
-${originAskBullets}
+    • If NOT already named → ask for the starting location following the ORIGIN ASK INSTRUCTIONS in the CURRENT REQUEST CONTEXT section below (the exact wording depends on whether the user has a real home on file vs. is a full-time RVer with no fixed home).
     • Until you have the origin from path (a) or (b), do NOT emit an <itinerary> and do NOT populate the order-1 HOME stop. [DEST] = the destination the user named.
     • CAPTURE TAG — On the turn where you FIRST confirm the trip's starting location (whether the user named it directly OR answered your home / no-home question with a location), append a machine tag on its OWN line at the very END of your reply: <origin>[City, ST]</origin> — fill in the city the user gave, plus the state if they provided one (omit the state if they did not). Emit it exactly once, on that confirmation turn only. This tag is stripped before the user sees your message; it records the origin so you are never asked to re-confirm it. Do NOT emit <origin> for a home-on-file user departing from their saved home, and do NOT invent a city to put in it — only a starting location the user actually provided in this chat.
   - Always confirm the starting location as the very first response before asking any other questions about the trip.
@@ -241,6 +246,8 @@ ${originAskBullets}
 The final stop in your JSON MUST be the user's DESTINATION — NEVER the home city — unless the user explicitly used one of these round-trip phrases: "round trip", "round-trip", "coming back home", "returning home", "back home", "end at home", "heading home after", "and back", "there and back", "return" / "returning", or "back to [their starting city]" — where the starting city is the trip's origin from ANY source (their typed origin or profile home), not only a saved home. (SINGLE SOURCE OF TRUTH: client/src/utils/roundTripIntent.ts. This list, the "ROUND TRIP / RETURN HOME RULE" above, and that file MUST stay identical — the client guard strips return legs the user didn't ask for using the same phrases.)
 
 Do NOT append a stop that returns to the home city for a one-way request. A trip to [EXAMPLE_DESTINATION_A] ends in [EXAMPLE_DESTINATION_A]. A trip to [EXAMPLE_DESTINATION_B] ends in [EXAMPLE_DESTINATION_B]. A "you pick" surprise trip ends at whatever destination you chose. When none of the round-trip phrases above appear in the conversation, build a one-way trip — full stop.
+
+MULTIPLE DESTINATIONS / LEGS BEYOND THE HEADLINE DESTINATION — A trip may contain MANY destinations, not just one. The user may describe a route that continues PAST the most prominent ("headline") destination — additional stops after it, and/or a leg heading back toward the starting city. You MUST include EVERY stop the user has stated anywhere in the conversation, placed in its correct order along the route — INCLUDING destinations that come AFTER the headline destination and any return-toward-home leg the user described. NEVER stop the itinerary at the headline destination and silently drop the later legs the user gave you. When a "GROUND-TRUTH ITINERARY SO FAR" list is provided (see the CURRENT REQUEST CONTEXT section), it enumerates the stops already agreed in this conversation — reproduce ALL of them, in order, in every full <itinerary> you emit, adding any newly-requested stops in their correct position. This does NOT change one-way detection: only add a return-to-start leg when the user actually stated one (using the round-trip whitelist above). This rule simply forbids truncating a multi-leg route the user explicitly spelled out.
 
 Itinerary JSON format — ONE-WAY ([HomeCity] → [EXAMPLE_DESTINATION], with one OVERNIGHT_ONLY transit stop because the direct drive exceeds maxDriveHours):
 {
@@ -331,23 +338,63 @@ Always match transit stops to actual driving distance — add them when a leg wo
     ? `## CRITICAL RULES FOR THIS REQUEST\n\n${criticalRulesParts.join('\n\n')}\n\n---\n\n`
     : ''
 
-  const combinedSystem = criticalRulesBlock + (
-    systemMessages
-      ? systemMessages + '\n\n' + systemPrompt
-      : systemPrompt
+  // PLANNING-CACHE (Part B) — `systemPrompt` above is now BYTE-STABLE: every
+  // per-request interpolation (today's date, the user profile, the origin
+  // directive + ask bullets, the opening-turn bias) has been moved OUT of it
+  // into this CURRENT REQUEST CONTEXT block, which is NEVER cached because it
+  // changes turn-to-turn. Keeping these out of systemPrompt is what lets the big
+  // rule body be sent once as a cached prefix and reused on later turns. The
+  // surprise-trip critical rules (criticalRulesBlock) are also dynamic and live
+  // here, not in the cached prefix.
+  const contextParts: string[] = [
+    `Today is ${new Date().toISOString().slice(0, 10)}.`,
+    `User profile: ${JSON.stringify(userProfile)}`,
+  ]
+  if (originDirective.trim()) contextParts.push(originDirective.trim())
+  contextParts.push(
+    `ORIGIN ASK INSTRUCTIONS (use these only when you must ASK the user where they are starting from):\n${originAskBullets}`,
   )
+  if (openingMessageRule.trim()) contextParts.push(openingMessageRule.trim())
+  const dynamicContext = `=== CURRENT REQUEST CONTEXT ===\n\n${contextParts.join('\n\n')}`
 
   const model = 'claude-sonnet-4-5'
-  const response = await client.messages.create({
-    model,
-    // AI-PACK-1 treatment for the planning chat: a long multi-stop itinerary
-    // (prose + full <itinerary> JSON) can exceed 4096 output tokens; the old
-    // cap truncated mid-JSON and the client's tolerant parser used to accept
-    // the fragment silently.
-    max_tokens: 8192,
-    system: combinedSystem,
-    messages: cleanMessages,
-  })
+  // AI-PACK-1: a long multi-stop itinerary (prose + full <itinerary> JSON) can
+  // exceed 4096 output tokens; 8192 keeps stop_reason end_turn, not max_tokens.
+  const max_tokens = 8192
+  // MODIFY: legacy single-string system on the stable endpoint — modify
+  // instructions (systemMessages) come BEFORE the base rules (Fix A), so there
+  // is no stable cache breakpoint. PLANNING: the prompt-caching beta endpoint
+  // with a cached static prefix block + an uncached dynamic suffix block
+  // (criticalRulesBlock + CURRENT REQUEST CONTEXT + any planning system messages
+  // such as the GROUND-TRUTH agreed-stops state). SDK 0.27.3 exposes
+  // cache_control only via client.beta.promptCaching.messages.
+  const response = isModifyMode
+    ? await client.messages.create({
+        model,
+        max_tokens,
+        system: criticalRulesBlock + (systemMessages ? systemMessages + '\n\n' : '') + systemPrompt + '\n\n' + dynamicContext,
+        messages: cleanMessages,
+      })
+    : await client.beta.promptCaching.messages.create({
+        model,
+        max_tokens,
+        system: [
+          { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
+          { type: 'text', text: criticalRulesBlock + dynamicContext + (systemMessages ? '\n\n' + systemMessages : '') },
+        ],
+        messages: cleanMessages,
+      })
+
+  // Cache observability — surface read/creation token counts so a warm cache is
+  // verifiable in the server log during testing. Present only on the beta
+  // (planning) path; absent on the modify path.
+  const usageAny = response.usage as { input_tokens: number; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null }
+  if (usageAny.cache_read_input_tokens != null || usageAny.cache_creation_input_tokens != null) {
+    console.log(
+      '[chatWithAI] prompt-cache read=%d creation=%d uncached_input=%d',
+      usageAny.cache_read_input_tokens ?? 0, usageAny.cache_creation_input_tokens ?? 0, usageAny.input_tokens,
+    )
+  }
 
   if (ctx?.userId) {
     logAIUsage({
