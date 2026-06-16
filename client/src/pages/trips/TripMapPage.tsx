@@ -1771,7 +1771,7 @@ export default function TripMapPage() {
                         <p className="text-[11px] text-gray-500 mt-2">
                           Ends {formatTripDate(trip.endDate, 'MMM d')}
                           {nightsLabel ? ` · ${nightsLabel}` : ''}
-                          {stopCount ? `, ${stopCount} stops` : ''}.
+                          {stopCount ? `, ${stopCount} stop${stopCount === 1 ? '' : 's'}` : ''}.
                           {' '}
                           <span className="text-gray-400">
                             To change the end, remove a stop or adjust nights.

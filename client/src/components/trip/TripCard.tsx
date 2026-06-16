@@ -126,7 +126,7 @@ export default function TripCard({
             {trip.totalNights && (
               <span className="flex items-center gap-1 font-semibold text-gray-900">
                 <Tent size={11} />
-                {trip.totalNights} nights
+                {trip.totalNights} night{trip.totalNights === 1 ? '' : 's'}
               </span>
             )}
             {trip.totalMiles && (

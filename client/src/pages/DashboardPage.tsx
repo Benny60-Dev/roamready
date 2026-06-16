@@ -191,7 +191,7 @@ export default function DashboardPage() {
       {isTrial && user?.subscriptionTier === 'FREE' && (
         <div className="bg-[#E0F0F4] border border-[#1F6F8B]/20 rounded-xl p-4 flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-[#134756]">🎉 Pro trial active — {trialDaysLeft} days left</p>
+            <p className="text-sm font-medium text-[#134756]">🎉 Pro trial active — {trialDaysLeft} day{trialDaysLeft === 1 ? '' : 's'} left</p>
             <p className="text-xs text-[#1F6F8B] mt-0.5">All Pro features unlocked. Upgrade to keep them.</p>
           </div>
           <Link to="/profile/billing/upgrade" className="btn-primary text-sm">Upgrade</Link>
