@@ -1,7 +1,7 @@
 {
   "meta": {
-    "verifiedAgainstCommit": "7d5578d",
-    "verifiedDate": "2026-06-05",
+    "verifiedAgainstCommit": "fe6817f",
+    "verifiedDate": "2026-06-15",
     "generatedNote": "LAUNCH_STATUS.md is generated from this file by scripts/gen-status.mjs. Edit this JSON, not the .md."
   },
   "items": [
@@ -87,46 +87,46 @@
     {
       "id": "BUG-1",
       "title": "**Mobile placeholder truncation** — chat input placeholder text is cut off at mobile widths",
-      "status": "OPEN",
-      "statusRaw": "**OPEN — P1**",
-      "severity": "P1",
-      "category": "open-bug",
-      "commits": [],
-      "evidence": "Road-logged 2026-06-05; not yet scouted.",
-      "whatRemains": "Scout the chat input / placeholder rendering at mobile widths; fix the truncation."
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": ["1f36e00", "6461acc"],
+      "evidence": "Fixed — responsive placeholder. New `client/src/hooks/useMediaQuery.ts`; SessionPage's compact ChatInput shows a short string below the `sm` (640px) breakpoint, full text at/above: `isSmAndUp ? 'Message RoamReady AI...' : 'Message RoamReady…'`. No min-height/field-sizing change; cause was `field-sizing:content` collapsing the empty box so the wrapped placeholder clipped. Commit `1f36e00`, merged `6461acc` (2026-06-15). (Note: task referenced `66b3718` for this item; that hash is SCOPE-GUARD-2 — corrected here to the actual placeholder commit.)",
+      "whatRemains": null
     },
     {
       "id": "BUG-2",
-      "title": "**Trip-summary pill CTA** — the booking pill call-to-action wording/affordance needs work",
-      "status": "OPEN",
-      "statusRaw": "**OPEN — P2**",
-      "severity": "P2",
-      "category": "open-bug",
+      "title": "**Trip-summary pill CTA** — the preview/booking pill call-to-action wording/affordance",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
       "commits": [],
-      "evidence": "Road-logged 2026-06-05; not yet scouted.",
-      "whatRemains": "Scout the trip-summary booking pill CTA copy/affordance and refine."
+      "evidence": "Closed — verified clear on device this session; no code change needed. (The separate booking-pill CTA inventory CC scouted later is a distinct backlog item — see `BOOKING-PILLS-INV` under Post-launch; do not conflate.)",
+      "whatRemains": null
     },
     {
       "id": "BUG-3",
       "title": "**Stop count accuracy** — displayed stop count does not match the actual stops",
-      "status": "OPEN",
-      "statusRaw": "**OPEN — P1**",
-      "severity": "P1",
-      "category": "open-bug",
-      "commits": [],
-      "evidence": "Road-logged 2026-06-05; not yet scouted.",
-      "whatRemains": "Scout where the stop count is derived/displayed; reconcile with the real stop list."
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": ["9691bf1", "0718899"],
+      "evidence": "Fixed — new `client/src/utils/userFacingStopCount.ts` excludes the HOME origin and the return-to-origin closing stop (raw `stops.length` read one high on one-way, two high on round trips). Applied to every count display: TripCard, ModifyTripPanel, TripMapPage caption + 'Stops' tab, TripSummaryPage/SharedTripPage/TripBookingPage/PDF stats. Commits `9691bf1` + `0718899` (merges `caa2420`, `2ca9125`); later refined by `1c8ea84` (origin-based finish/badge) and `fe6817f` (pluralization).",
+      "whatRemains": null
     },
     {
       "id": "BUG-4",
       "title": "**Round-trip vs one-way prompt** — AI prompt mishandles round-trip vs one-way intent",
-      "status": "OPEN",
-      "statusRaw": "**OPEN — P2**",
-      "severity": "P2",
-      "category": "open-bug",
-      "commits": [],
-      "evidence": "Road-logged 2026-06-05; not yet scouted.",
-      "whatRemains": "Scout the round-trip / one-way prompt logic and correct the misclassification."
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": ["1424435", "064b999", "26448ee", "611b958"],
+      "evidence": "Fixed — a persisted `Trip.tripType` (enum ROUND_TRIP|ONE_WAY) replaces ad-hoc re-inference. 4 phases: P1 additive nullable migration `1424435`; P2 write-at-creation from the post-strip itinerary + reconciled the three drifted round-trip phrase lists into one `064b999`; P3 buildLiveTripState reads it with a null→stop-shape fallback `26448ee`; P4 modify-mode keeps it accurate (= MODIFY-TRIPTYPE-1) `53b3fa6`, merged `611b958`. Requires backend restart + a NEW planning session to verify.",
+      "whatRemains": null
     },
     {
       "id": "7",
@@ -397,6 +397,171 @@
       "commits": [],
       "evidence": "Three-state checker logic is BUILT and merged to local main: OK/DEAD/REVIEW classification in [server/src/services/ohvLinkCheck.ts](server/src/services/ohvLinkCheck.ts) (browser UA, follow-redirects, off-domain-redirect → DEAD, 404/410/DNS/timeout → DEAD, 403/401/429/5xx → REVIEW) with a known-WAF allowlist (`mass.gov`, `tn.gov`, `wildlife.nh.gov`) downgrading their 403 → OK; alert in [server/src/controllers/cron.ts](server/src/controllers/cron.ts) emails `ADMIN_EMAIL` on any DEAD or REVIEW (silent only when both are zero); DEAD/REVIEW split rendered in [client/src/pages/admin/AdminLinkHealthPage.tsx](client/src/pages/admin/AdminLinkHealthPage.tsx). Three-state result stored in the existing `OhvLinkCheck.dead` Json column (tagged with `state`) — no migration needed for the three-state change.",
       "whatRemains": "(1) Confirm the `OhvLinkCheck` table is migrated — `npx prisma migrate status` from `server/`, run `npx prisma migrate dev` if pending (dev server stopped first). (2) Wire the monthly trigger using the same mechanism as the existing trial-end email cron. (3) Smoke-test: point one link at a known 404, confirm the alert email lands at `ADMIN_EMAIL`, then revert. NOTE: the first real run will likely email a REVIEW list (WAF'd hosts beyond the 3 seeded + transient 5xx/429) — expected; tune the allowlist from what it surfaces."
+    },
+    {
+      "id": "SCOPE-GUARD-2",
+      "title": "**Terse-opener scope-guard** — a first message that names a place but lacks 'plan a trip' wording was refused as off-topic",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": ["66b3718", "dd511c8"],
+      "evidence": "Fixed — added a turn-1 OPENING MESSAGE RULE to the planner system prompt ([server/src/services/ai.ts]), emitted ONLY when `isOpeningTurn` (planning context AND no assistant message in history yet; computed in controllers/ai.ts and passed to chatWithAI). A terse opener like 'Sedona and back home' is now treated as a trip request; the mid-conversation off-topic guard is unchanged. Commit `66b3718`, merged `dd511c8`. Requires backend restart; verify in a NEW planning session.",
+      "whatRemains": null
+    },
+    {
+      "id": "MODIFY-TRIPTYPE-1",
+      "title": "**Modify-mode keeps Trip.tripType accurate** — add/remove of a return-home leg updates the stored shape",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": ["53b3fa6", "611b958"],
+      "evidence": "Fixed (= BUG-4 Phase 4) — `syncTripEndpoints` (called by createStop/deleteStop) now also recomputes `Trip.tripType` via the shared server `computeTripShape` ([server/src/utils/tripShape.ts]), so converting one-way↔round-trip in modify-mode keeps the persisted shape correct; buildLiveTripState's read fallback shares the same rule. Commit `53b3fa6`, merged `611b958`. Requires backend restart.",
+      "whatRemains": null
+    },
+    {
+      "id": "DOUBLE-FINISH",
+      "title": "**Double closing FINISH row** — modify-added round trips rendered two 'FINISH {city}' rows in the itinerary",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": ["de64dc0", "920feeb", "d42b848"],
+      "evidence": "Fixed — one DB stop was rendered twice by buildGroups (TripSummaryPage). Resolved across v1 dedup `63ef156`, v2 exclude DRIVE entries from the HOME render branch `de64dc0`, v3 origin-loop closing-FINISH append `920feeb` (merge `d42b848`). The append patch was later simplified/retired by FINISH-ORIGIN-1 (`1c8ea84`), which made the badge origin-based so 'H' fires correctly. Client-only.",
+      "whatRemains": null
+    },
+    {
+      "id": "HOME-ADDR-RUNG1",
+      "title": "**Home address geocode-on-save + auto-heal** — free-typed/autofilled address (no city/coords) wrongly read as 'no home'",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": ["088083f", "a9c96c3"],
+      "evidence": "Fixed — `hasHomeOnFile` reads homeCity||homeLocation, which a free-typed address (text only in homeAddress) never set. New shared `server/src/utils/geocodeHome.ts geocodeHomeAddress(text)`; updateMe geocodes on save and getMe's trigger broadened to auto-heal already-saved text on next /users/me. Commit `088083f`, merged `a9c96c3`. Requires backend restart.",
+      "whatRemains": null
+    },
+    {
+      "id": "HOME-ADDR-RUNG2",
+      "title": "**Home address pin-drop fallback** — when geocode-on-save fails, let the user place their home on a map",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": ["8c068fe", "bb82b06"],
+      "evidence": "Done — new `client/src/components/profile/HomePinDropModal.tsx` opens when the saved user comes back with address text but no coords: GoogleMap + draggable MarkerF, client reverse-geocode to a city, save coords as home (rung-1 short-circuits). Dismiss falls through to no-home (never blocks). Commit `8c068fe`, merged `bb82b06`. Client-only.",
+      "whatRemains": null
+    },
+    {
+      "id": "HOME-ADDR-RUNG3",
+      "title": "**Pin-drop report link prefills feedback type** — 'Report this to us' opens the feedback modal as a bug report",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": ["d6c004e", "5052b81"],
+      "evidence": "Done — uiStore `openFeedbackModal(prefillType?)` stores an optional category (cleared on close / no-arg open); the pin-drop modal's report link passes 'BUG_REPORT'; FeedbackModal uses it as the default type. Other call sites unchanged (FEATURE_REQUEST). Commit `d6c004e`, merged `5052b81`. Client-only.",
+      "whatRemains": null
+    },
+    {
+      "id": "HOME-ADDR-CHANGE-FLOW",
+      "title": "**Change-my-address flow** — deletion didn't stick + stale coords saved next to new text",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": ["fa5ad85", "d09c2cf"],
+      "evidence": "Fixed four compounding defects: (A) the input value `homeAddress||homeLocation` re-filled on empty — now binds to homeAddress alone, seeded from homeLocation on hydrate; (B) free-typing invalidates stale structured fields client-side; (C) geocodeHome rejects low-confidence/partial_match junk; (D) updateMe re-geocodes when the text changed vs the stored value (ignoring stale incoming structured). Commit `fa5ad85`, merged `d09c2cf`. Requires backend restart.",
+      "whatRemains": null
+    },
+    {
+      "id": "FINISH-ORIGIN-1",
+      "title": "**Origin-based finish/badge** — closing finish + map S/F pin matched the profile home instead of the trip's own origin",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": ["5f0e37c", "1c8ea84"],
+      "evidence": "Done — getStopBadge's 'H'/'F' decision is now ORIGIN-based (last stop returns to the trip's own first/HOME stop, city+state guard) via shared `tripLoopsToOrigin` (mirrors server computeTripShape), not the user's profile home. Fixes the map combined S·F pin merge and excludes the return-to-origin stop from booking (X/N). userFacingStopCount routed through the same helper — outputs verified unchanged across 30 real trips; the double-finish append patch retired. Commit `5f0e37c`, merged `1c8ea84`. Client-only.",
+      "whatRemains": null
+    },
+    {
+      "id": "STOPS-PLURALIZATION",
+      "title": "**Count pluralization** — '1 stops' (and '1 nights' / '1 days') read ungrammatically",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": ["a2cc439", "fe6817f"],
+      "evidence": "Done — three hardcoded plurals fixed to singular at count 1: TripMapPage trip-summary 'N stop(s)', TripCard 'N night(s)', Dashboard trial 'N day(s) left'. Other count strings already pluralized. Commit `a2cc439`, merged `fe6817f`. Client-only display strings.",
+      "whatRemains": null
+    },
+    {
+      "id": "IMP-MAPPIN-1",
+      "title": "**Overlapping Start/Finish pins + '1 stops'** — origin-loop trips stacked two pins at the origin and showed '1 stops'",
+      "status": "DONE",
+      "statusRaw": "**DONE**",
+      "severity": null,
+      "category": "done",
+      "commits": ["1c8ea84", "fe6817f"],
+      "evidence": "Done — pin overlap resolved by FINISH-ORIGIN-1 (`1c8ea84`): the return-to-origin stop now badges 'H', so the map merges Start+Finish into one combined S·F marker instead of stacking two. The '1 stops' grammar resolved by STOPS-PLURALIZATION (`fe6817f`). Client-only.",
+      "whatRemains": null
+    },
+    {
+      "id": "KBD-1",
+      "title": "**Mobile chat input pushed off-screen on keyboard open**",
+      "status": "OPEN",
+      "statusRaw": "OPEN — deferred (launch risk)",
+      "severity": null,
+      "category": "post-launch",
+      "commits": [],
+      "evidence": "Known mobile bug: when the on-screen keyboard opens, the SessionPage fixed-position chat composer is pushed off-screen. Explicitly scoped OUT of the BUG-1 placeholder fix (different bug, own plan).",
+      "whatRemains": "Investigate the fixed-position composer + visual-viewport behavior on iOS/Android keyboard open. Deferred but flagged a launch risk — pin a real-device test."
+    },
+    {
+      "id": "MODIFY-RELIABILITY",
+      "title": "**Modify-AI long-conversation reliability** — residual tag-emission reliability beyond item #3's mitigations",
+      "status": "DEFERRED",
+      "statusRaw": "DEFERRED",
+      "severity": null,
+      "category": "post-launch",
+      "commits": [],
+      "evidence": "Item #3 shipped the mitigations (annotate-history instead of strip, auto-retry on tagless modify response, amber notice). Ongoing reliability monitoring/hardening beyond that is deferred.",
+      "whatRemains": "Watch for tag-emission failures in long modify conversations; harden further if they recur."
+    },
+    {
+      "id": "REGEN-NONDESTRUCTIVE",
+      "title": "**Non-destructive Regenerate** — preserve custom / checked activity states across an itinerary regenerate",
+      "status": "DEFERRED",
+      "statusRaw": "DEFERRED — post-launch",
+      "severity": null,
+      "category": "post-launch",
+      "commits": [],
+      "evidence": "Today Regenerate is gated by a confirm modal (item #7) but still wipes checked states + user-added/curated activities. Making it merge-preserve user edits is deferred.",
+      "whatRemains": "Make Regenerate merge-preserve isCustom / checked activity states instead of wiping them."
+    },
+    {
+      "id": "BOOKING-PILLS-INV",
+      "title": "**Booking-pill CTA inventory** — wording/affordance refinement of the booking pills/CTAs",
+      "status": "OPEN",
+      "statusRaw": "OPEN — backlog (scouted, not built)",
+      "severity": null,
+      "category": "post-launch",
+      "commits": [],
+      "evidence": "Inventory scouted (not built): the gold-outline 'Book campgrounds (X/N)' CTA, per-stop 'Let's book it!', the static 'Confirmed/Booked' chip that looks tappable but isn't, and the card '{n} booked' text. Distinct from BUG-2 (preview pill, closed).",
+      "whatRemains": "Pick the target element(s) and refine wording/affordance."
+    },
+    {
+      "id": "FINISH-ORIGIN-PARITY",
+      "title": "**Finish-origin server state-parity** — server computeTripShape compares city only",
+      "status": "DEFERRED",
+      "statusRaw": "DEFERRED — minor backlog",
+      "severity": null,
+      "category": "post-launch",
+      "commits": [],
+      "evidence": "The client `tripLoopsToOrigin` (FINISH-ORIGIN-1) carries a city+state guard; the server `computeTripShape` ([server/src/utils/tripShape.ts]) still compares city name only. Low risk (same-city-different-state loops are rare).",
+      "whatRemains": "Optionally add the same state guard to server computeTripShape for full client/server parity."
     },
     {
       "id": null,
