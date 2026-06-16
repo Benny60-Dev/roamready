@@ -3,7 +3,7 @@ import { requireAuth, requireOwner } from '../middleware/auth'
 import { requireVerifiedEmail } from '../middleware/requireVerifiedEmail'
 import { validateBody } from '../middleware/validate'
 import { AdminFeedbackUpdateSchema } from '../schemas/feedback'
-import { getMetrics, getSubscribers, getRevenue, getAdminFeedback, updateFeedback, analyzeFeedback, getLinkHealth } from '../controllers/admin'
+import { getMetrics, getSubscribers, getRevenue, getAdminFeedback, updateFeedback, analyzeFeedback, getLinkHealth, inspectSession } from '../controllers/admin'
 
 export const adminRouter = Router()
 // requireVerifiedEmail before requireOwner — owners always bypass the
@@ -19,3 +19,6 @@ adminRouter.get('/feedback', getAdminFeedback as any)
 adminRouter.patch('/feedback/:id', validateBody(AdminFeedbackUpdateSchema), updateFeedback as any)
 adminRouter.post('/feedback/analyze', analyzeFeedback as any)
 adminRouter.get('/link-health', getLinkHealth as any)
+// Read-only session inspector — ?tripId= or ?email=. Owner-gated by the
+// adminRouter.use mount above (requireAuth + requireVerifiedEmail + requireOwner).
+adminRouter.get('/session-inspector', inspectSession as any)

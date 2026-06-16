@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
+import { AppError } from '../middleware/errorHandler'
 import { stripe } from '../services/stripe'
 import { analyzeFeedbackAI } from '../services/ai'
 import { sendFeedbackShippedNotification } from '../services/feedbackNotification'
@@ -214,5 +215,144 @@ export async function getLinkHealth(_req: AuthRequest, res: Response, next: Next
       orderBy: { createdAt: 'desc' },
     })
     res.json(latest ?? null)
+  } catch (err) { next(err) }
+}
+
+// ── Admin Session Inspector (READ-ONLY) ──────────────────────────────────────
+// Owner-only diagnostic: look up any customer's planning conversation + the trip
+// it built (the Cindy/Austin debugging workflow), without manual prod DB
+// spelunking. STRICTLY READ-ONLY — findUnique/findMany only, no writes anywhere.
+// Mounted on adminRouter, so requireAuth + requireVerifiedEmail + requireOwner
+// already gate it. EXPLICIT selects only — a full User row (passwordHash,
+// verification tokens, Stripe ids) is NEVER put on the wire. The session field
+// allowlist mirrors controllers/sessions.ts SESSION_SELECT.
+const INSPECTOR_SESSION_SELECT = {
+  id: true,
+  userId: true,
+  title: true,
+  messages: true,
+  partialTripData: true,
+  tripId: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true,
+} as const
+
+const INSPECTOR_STOP_SELECT = {
+  order: true,
+  type: true,
+  locationName: true,
+  locationState: true,
+  nights: true,
+} as const
+
+// Deliberately minimal — id/email/name only. Never expand this to the whole User.
+const INSPECTOR_USER_SELECT = {
+  id: true,
+  email: true,
+  firstName: true,
+  lastName: true,
+} as const
+
+const INSPECTOR_USAGE_SELECT = {
+  callType: true,
+  model: true,
+  inputTokens: true,
+  outputTokens: true,
+  estimatedCostUsd: true,
+  createdAt: true,
+  sessionId: true,
+  tripId: true,
+} as const
+
+export async function inspectSession(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const tripId = typeof req.query.tripId === 'string' ? req.query.tripId.trim() : ''
+    const email = typeof req.query.email === 'string' ? req.query.email.trim() : ''
+    if (!tripId && !email) {
+      throw new AppError('Provide a tripId or email to look up', 400)
+    }
+
+    // Audit trail — who inspected which customer. Only the lookup key is logged.
+    console.info('[admin-inspect] owner=%s lookup=%s', req.user!.email, tripId || email)
+
+    // ── Lookup by trip id ────────────────────────────────────────────────────
+    if (tripId) {
+      const trip = await prisma.trip.findUnique({
+        where: { id: tripId },
+        select: {
+          id: true,
+          name: true,
+          stops: { orderBy: { order: 'asc' }, select: INSPECTOR_STOP_SELECT },
+          user: { select: INSPECTOR_USER_SELECT },
+          planningSession: { select: INSPECTOR_SESSION_SELECT },
+        },
+      })
+      if (!trip) throw new AppError('No trip found for that id', 404)
+
+      const sessions = trip.planningSession ? [trip.planningSession] : []
+      const sessionId = trip.planningSession?.id ?? null
+
+      const aiUsageLogs = await prisma.aIUsageLog.findMany({
+        where: { OR: [...(sessionId ? [{ sessionId }] : []), { tripId }] },
+        orderBy: { createdAt: 'asc' },
+        select: INSPECTOR_USAGE_SELECT,
+      })
+
+      const tripOut = { id: trip.id, name: trip.name, stops: trip.stops }
+      return res.json({
+        user: trip.user
+          ? { email: trip.user.email, firstName: trip.user.firstName, lastName: trip.user.lastName }
+          : null,
+        sessions,
+        trip: tripOut,
+        trips: [tripOut],
+        aiUsageLogs,
+      })
+    }
+
+    // ── Lookup by email (CASE-INSENSITIVE — the Cindy footgun) ────────────────
+    const user = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select: INSPECTOR_USER_SELECT,
+    })
+    if (!user) throw new AppError('No user found for that email', 404)
+
+    const sessions = await prisma.planningSession.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      select: INSPECTOR_SESSION_SELECT,
+    })
+
+    const builtTripIds = sessions
+      .map(s => s.tripId)
+      .filter((x): x is string => typeof x === 'string' && x.length > 0)
+
+    const trips = builtTripIds.length
+      ? await prisma.trip.findMany({
+          where: { id: { in: builtTripIds } },
+          select: { id: true, name: true, stops: { orderBy: { order: 'asc' }, select: INSPECTOR_STOP_SELECT } },
+        })
+      : []
+
+    const sessionIds = sessions.map(s => s.id)
+    const aiUsageLogs = await prisma.aIUsageLog.findMany({
+      where: {
+        OR: [
+          { sessionId: { in: sessionIds } },
+          ...(builtTripIds.length ? [{ tripId: { in: builtTripIds } }] : []),
+        ],
+      },
+      orderBy: { createdAt: 'asc' },
+      select: INSPECTOR_USAGE_SELECT,
+    })
+
+    return res.json({
+      user: { email: user.email, firstName: user.firstName, lastName: user.lastName },
+      sessions,
+      trip: null,
+      trips,
+      aiUsageLogs,
+    })
   } catch (err) { next(err) }
 }
