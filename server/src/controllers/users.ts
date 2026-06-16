@@ -94,12 +94,41 @@ export async function updateMe(req: AuthRequest, res: Response, next: NextFuncti
     // (no home to resolve) and short-circuits when structured data is already
     // present (dropdown-select). Geocode failure leaves the text as-is — never
     // blocks the save (rung 2's pin-drop handles failures later).
+    // HOME-ADDRESS defect D — also re-geocode when the address TEXT changed but
+    // the incoming structured fields are stale (belt-and-suspenders for any
+    // client that sends new text next to old coords). We read the stored text
+    // and compare. "Stale structured" = text changed AND the incoming homeCity
+    // does NOT appear in the new text — so a dropdown-pick (whose city matches
+    // its own formatted address) still skips the redundant re-geocode.
+    const existing = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { homeAddress: true, homeLocation: true },
+    })
+    const storedText = (existing?.homeAddress || existing?.homeLocation || '').trim().toLowerCase()
+    const incomingText = (homeAddress || homeLocation || '').trim()
+    const textChanged = !!incomingText && incomingText.toLowerCase() !== storedText
+    const cityInText = !!homeCity && incomingText.toLowerCase().includes(String(homeCity).toLowerCase())
+    const staleStructured = textChanged && !cityInText
+
     let homeFields = { homeLocation, homeAddress, homeStreet, homeCity, homeState, homeZip, homeLat, homeLng }
     const hasText = !!(homeAddress || homeLocation)
     const missingStructured = homeLat == null || !homeCity
-    if (!isFullTimeRVer && hasText && missingStructured) {
+    if (!isFullTimeRVer && hasText && (missingStructured || staleStructured)) {
       const geo = await geocodeHomeAddress(homeAddress || homeLocation)
-      if (geo) homeFields = { ...homeFields, ...geo }
+      if (geo) {
+        // Text changed → the incoming structured fields are ignored in favor of
+        // the freshly-geocoded ones (geo overrides the stale values).
+        homeFields = { ...homeFields, ...geo }
+      } else if (staleStructured) {
+        // Text changed to something we can't confidently resolve, and the
+        // incoming coords belong to the OLD address — drop them so homeLat is
+        // null and the client's rung-2 pin-drop fires (keep the typed text).
+        homeFields = {
+          ...homeFields,
+          homeLocation: null, homeStreet: null, homeCity: null,
+          homeState: null, homeZip: null, homeLat: null, homeLng: null,
+        }
+      }
     }
 
     const user = await prisma.user.update({

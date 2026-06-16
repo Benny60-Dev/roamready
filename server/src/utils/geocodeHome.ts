@@ -48,6 +48,33 @@ export async function geocodeHomeAddress(addressText: string): Promise<GeocodedH
       return null
     }
 
+    // QUALITY GATE — reject low-confidence "guesses" so gibberish doesn't earn
+    // bogus coords (which would silently suppress the rung-2 pin-drop fallback).
+    // Accept only when BOTH hold:
+    //   • partial_match !== true  — Google flags inexact/typo matches as partial.
+    //   • the result is a real address or place, judged by its `types`: a street
+    //     address (street_address / premise / subpremise) OR a real locality /
+    //     postal place (locality / sublocality / postal_town / postal_code).
+    // This passes a full street address ("582 Continental Dr, San Jose, CA")
+    // AND a bare city ("Mesa, AZ" → types includes `locality`), but rejects
+    // junk that either returns ZERO_RESULTS (already null above), comes back
+    // partial_match, or resolves only to a coarse region (country /
+    // administrative_area_level_1) — none of which carry an accepted type.
+    const ACCEPTED_TYPES = [
+      'street_address', 'premise', 'subpremise',
+      'locality', 'sublocality', 'postal_town', 'postal_code',
+    ]
+    const resultTypes: string[] = result.types || []
+    const isConfident =
+      result.partial_match !== true && resultTypes.some(t => ACCEPTED_TYPES.includes(t))
+    if (!isConfident) {
+      console.warn(
+        '[geocodeHomeAddress] low-confidence rejected for "%s" (partial_match=%s types=%j)',
+        text, result.partial_match, resultTypes,
+      )
+      return null
+    }
+
     const { lat, lng } = result.geometry.location
     const components: any[] = result.address_components || []
     const get = (type: string, short = false) =>
