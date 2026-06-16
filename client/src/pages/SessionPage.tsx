@@ -389,6 +389,10 @@ export default function SessionPage() {
         const s = res.data
         setSessionTitle(s.title)
         setSessionUpdatedAt(s.updatedAt)
+        // FR-RIG-MISMATCH — seed the advisory banner from the server-owned
+        // partialTripData, and re-sync this session's dismissal flag.
+        setStatedRig(((s as any).partialTripData?.statedRig as string | undefined) ?? null)
+        try { setRigBannerDismissed(sessionStorage.getItem(`rig-mismatch-dismissed:${sessionId}`) === '1') } catch { /* ignore */ }
         const raw = Array.isArray(s.messages) ? (s.messages as ChatMessage[]) : []
         // Legacy sessions persisted a seeded assistant "Fill out the form below…"
         // welcome as messages[0]. The chat-first refactor doesn't seed anymore;
@@ -573,6 +577,35 @@ export default function SessionPage() {
     }
   }, [user?.rigs, defaultRig, selectedRig])
 
+  // ── FR-RIG-MISMATCH — advisory chat-rig vs profile-rig banner ───────────────
+  // statedRig = the rig the user stated in chat (a VehicleType enum), captured by
+  // the AI into partialTripData.statedRig (already context-filtered server-side:
+  // no friend's/hypothetical rigs). Read on hydration and refreshed after each
+  // turn. Compared against the rig that GOVERNS this trip's math — the selected
+  // rig, else the profile default. This banner is ADVISORY ONLY: it changes no
+  // calc/fuel/rigId/planner behavior (those still use the profile rig).
+  const [statedRig, setStatedRig] = useState<string | null>(null)
+  const [rigBannerDismissed, setRigBannerDismissed] = useState<boolean>(() => {
+    try { return sessionStorage.getItem(`rig-mismatch-dismissed:${sessionId}`) === '1' } catch { return false }
+  })
+  const dismissRigBanner = () => {
+    setRigBannerDismissed(true)
+    try { sessionStorage.setItem(`rig-mismatch-dismissed:${sessionId}`, '1') } catch { /* private mode — fine */ }
+  }
+  // The rig whose vehicleType governs this trip's estimates. Ad-hoc one-off rigs
+  // carry no vehicleType, so fall back to the profile default for the comparison.
+  const governingRigType: string | null =
+    selectedRig && !isAdHocRig(selectedRig) ? selectedRig.vehicleType
+      : defaultRig?.vehicleType ?? null
+  // Show ONLY on a real mismatch: a rig was stated AND a governing rig exists
+  // (skip none / CAR_CAMPING-only) AND they differ AND not dismissed this session.
+  const showRigMismatch =
+    !!statedRig &&
+    !!governingRigType &&
+    governingRigType !== 'CAR_CAMPING' &&
+    statedRig !== governingRigType &&
+    !rigBannerDismissed
+
   // Rig chip dropdown state — open flag plus the inline ad-hoc-rig form draft.
   const [rigDropdownOpen, setRigDropdownOpen] = useState(false)
   const [adHocFormOpen, setAdHocFormOpen] = useState(false)
@@ -693,6 +726,14 @@ export default function SessionPage() {
         if (stripped) shown.push({ role: 'assistant', content: ONE_WAY_NOTICE, _local: true } as any)
       }
       setMessages(shown)
+      // FR-RIG-MISMATCH — re-read the server-owned partialTripData so a rig the
+      // user just stated this turn surfaces the advisory banner without a reload.
+      // Best-effort, non-fatal; never affects the chat turn itself.
+      if (sessionId) {
+        sessionsApi.get(sessionId)
+          .then(r => setStatedRig(((r.data as any).partialTripData?.statedRig as string | undefined) ?? null))
+          .catch(() => { /* non-fatal */ })
+      }
     } catch (err: any) {
       // FEATURE_GATED 403 — paywall modal already opened by the central
       // axios interceptor. Skip the generic assistant-bubble error so the
@@ -1727,6 +1768,24 @@ export default function SessionPage() {
           ) : (
             // ── Active conversation: history + bottom-pinned input ────────────
             <>
+              {/* FR-RIG-MISMATCH — advisory banner ABOVE the chat. Shows only when
+                  the AI captured a chat-stated rig that differs from the profile/
+                  selected rig that governs this trip's estimates. Display-only:
+                  changes no calc. Dismissable; dismissal persists per session. */}
+              {showRigMismatch && (
+                <div className="mx-3 mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800" role="status">
+                  <Info size={16} className="mt-0.5 flex-shrink-0 text-amber-500" aria-hidden="true" />
+                  <div className="flex-1">
+                    Heads up — your trip's mileage and cost estimates use the rig in your profile
+                    {' '}(<span className="font-medium">{VEHICLE_LABELS[governingRigType as keyof typeof VEHICLE_LABELS] ?? governingRigType}</span>),
+                    but you mentioned a <span className="font-medium">{VEHICLE_LABELS[statedRig as keyof typeof VEHICLE_LABELS] ?? statedRig}</span>.{' '}
+                    <Link to="/profile/rig" className="font-medium underline hover:text-amber-900">Update rig profile</Link> so estimates match.
+                  </div>
+                  <button type="button" onClick={dismissRigBanner} aria-label="Dismiss" className="flex-shrink-0 text-amber-500 hover:text-amber-700">
+                    <X size={15} />
+                  </button>
+                </div>
+              )}
               {/* Mobile bottom padding so the last message scrolls clear of the
                   fixed input; the input's opaque bg masks any overlap. The wrapper's
                   definite height already subtracts main's pb-32 (8rem), so the list
