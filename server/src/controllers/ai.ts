@@ -148,10 +148,18 @@ function parseItineraryBlock(text: string): any | null {
   }
 }
 
+// The 9 VehicleType enum values (prisma schema). Used ONLY to validate the
+// captured <rig> tag before persisting partialTripData.statedRig — advisory
+// metadata, never a calc input.
+const VEHICLE_TYPES = [
+  'RV_CLASS_A', 'RV_CLASS_B', 'RV_CLASS_C', 'FIFTH_WHEEL', 'TRAVEL_TRAILER',
+  'TOY_HAULER', 'POP_UP', 'VAN', 'CAR_CAMPING',
+] as const
+
 // PLANNING-RETENTION (A1) — partialTripData is a shared JSON bag on the session
-// (today: { origin?, agreedStops? }). ALWAYS read-modify-write so a write to one
-// key never clobbers the others — persisting agreedStops must preserve a
-// previously-captured origin, and an origin write must preserve agreedStops.
+// (today: { origin?, agreedStops?, statedRig? }). ALWAYS read-modify-write so a
+// write to one key never clobbers the others — persisting agreedStops must
+// preserve a previously-captured origin/statedRig, and vice-versa.
 async function mergePartialTripData(sessionId: string, patch: Record<string, unknown>): Promise<void> {
   const cur = await prisma.planningSession.findUnique({
     where: { id: sessionId },
@@ -1109,6 +1117,29 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
         } catch (e: any) {
           console.error('[AI origin-capture] persist failed for sessionId=%s: %s', sessionId, e?.message)
         }
+      }
+    }
+
+    // RIG-CAPTURE (FR-RIG-MISMATCH, Approach B) — capture the AI's structured <rig>
+    // tag, emitted only when the user states THEIR OWN current rig in chat (the model
+    // applies the friend's-rig / hypothetical / shopping exclusions). Strip it from
+    // the displayed message (mirrors <origin>), validate against the 9 VehicleType
+    // enum values, and persist to partialTripData.statedRig for a later mismatch
+    // banner (Phase 2). ADVISORY METADATA ONLY — statedRig never feeds any calc/fuel/
+    // planner-rig path; trip math still runs off the profile rig. Merge so origin and
+    // agreedStops are never clobbered.
+    const rigMatch = response.match(/<rig>([\s\S]*?)<\/rig>/)
+    if (rigMatch) {
+      response = response.replace(/<rig>[\s\S]*?<\/rig>/g, '').trim()
+      const rawRig = rigMatch[1].trim().toUpperCase()
+      if (sessionId && (VEHICLE_TYPES as readonly string[]).includes(rawRig)) {
+        try {
+          await mergePartialTripData(sessionId, { statedRig: rawRig })
+        } catch (e: any) {
+          console.error('[AI rig-capture] persist failed for sessionId=%s: %s', sessionId, e?.message)
+        }
+      } else if (rawRig) {
+        console.warn('[AI rig-capture] ignored non-enum <rig> value "%s" sessionId=%s', rawRig, sessionId ?? '(none)')
       }
     }
 
