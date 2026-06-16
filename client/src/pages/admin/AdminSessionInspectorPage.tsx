@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
-import { Search, AlertTriangle, User as UserIcon } from 'lucide-react'
+import { Search, AlertTriangle, User as UserIcon, ChevronLeft } from 'lucide-react'
 import { adminApi } from '../../services/api'
 
 // ── Types (loose — mirrors the read-only admin envelope) ─────────────────────
@@ -17,7 +17,7 @@ interface Session {
   createdAt: string
   updatedAt: string
 }
-interface TripLite { id: string; name: string; status: string; stops: Stop[] }
+interface TripLite { id: string; name: string; status: string; startDate: string | null; stops: Stop[] }
 interface UsageRow {
   callType: string
   model: string
@@ -69,6 +69,18 @@ function lastEmittedItinerary(messages: unknown): any | null {
 
 const norm = (s: unknown) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 const fmtDate = (iso: string) => { try { return new Date(iso).toLocaleString() } catch { return iso } }
+// Human-readable date+time, e.g. "Jun 12, 2026, 10:48 AM". 'not set' for null.
+const fmtDateTime = (iso?: string | null) => {
+  if (!iso) return 'not set'
+  try { return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) }
+  catch { return String(iso) }
+}
+// Date-only, e.g. "Sep 1, 2026". Used for the trip's intended travel date.
+const fmtDateOnly = (iso?: string | null) => {
+  if (!iso) return 'not set'
+  try { return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
+  catch { return String(iso) }
+}
 const titleCase = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s)
 
 // CONVERSATION (PlanningSession) status — explicitly labeled so it never reads
@@ -187,7 +199,8 @@ export default function AdminSessionInspectorPage() {
         </div>
       )}
 
-      {data && (
+      {/* ── RESULTS LIST (shown until a session is selected) ─────────────── */}
+      {data && !selected && (
         <>
           {/* Customer + session picker */}
           <div className="card space-y-3">
@@ -276,142 +289,218 @@ export default function AdminSessionInspectorPage() {
               </div>
             )}
           </div>
-
-          {selected && (
-            <>
-              {/* (a) CONVERSATION */}
-              <section className="space-y-2">
-                <h2 className="text-sm font-medium text-gray-700">Conversation</h2>
-                <div className="card space-y-2 max-h-[28rem] overflow-y-auto">
-                  {(Array.isArray(selected.messages) ? selected.messages : []).map((m, i) => (
-                    <div key={i} className={`rounded p-2 text-sm ${m.role === 'assistant' ? 'bg-[#1F6F8B]/5' : m.role === 'user' ? 'bg-gray-50' : 'bg-amber-50'}`}>
-                      <div className="text-[10px] uppercase tracking-wide text-gray-400 mb-0.5">{m.role}</div>
-                      <div className="whitespace-pre-wrap break-words font-mono text-xs text-gray-800">{m.content}</div>
-                    </div>
-                  ))}
-                  {(!Array.isArray(selected.messages) || selected.messages.length === 0) && (
-                    <p className="text-sm text-gray-400">No messages.</p>
-                  )}
-                </div>
-              </section>
-
-              {/* (b) PERSISTED STOPS */}
-              <section className="space-y-2">
-                <h2 className="text-sm font-medium text-gray-700">
-                  Persisted stops {selectedTrip ? `— ${selectedTrip.name}` : ''}
-                </h2>
-                {!selectedTrip ? (
-                  <div className="card text-sm text-gray-500">This session did not build a trip.</div>
-                ) : (
-                  <div className="card overflow-x-auto p-0">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-xs text-gray-500 border-b border-gray-100">
-                          <th className="px-3 py-2">#</th><th className="px-3 py-2">Type</th><th className="px-3 py-2">Location</th><th className="px-3 py-2">Nights</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedTrip.stops.map(s => (
-                          <tr key={s.order} className="border-b border-gray-50 last:border-0">
-                            <td className="px-3 py-1.5 text-gray-500">{s.order}</td>
-                            <td className="px-3 py-1.5"><span className="badge bg-gray-100 text-gray-600 text-xs">{s.type}</span></td>
-                            <td className="px-3 py-1.5 text-gray-900">{s.locationName}{s.locationState ? `, ${s.locationState}` : ''}</td>
-                            <td className="px-3 py-1.5 text-gray-700">{s.nights}</td>
-                          </tr>
-                        ))}
-                        {selectedTrip.stops.length === 0 && (
-                          <tr><td colSpan={4} className="px-3 py-2 text-gray-400">No stops.</td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </section>
-
-              {/* (c) EMITTED vs PERSISTED */}
-              <section className="space-y-2">
-                <h2 className="text-sm font-medium text-gray-700">Emitted vs persisted</h2>
-                <div className="card space-y-3">
-                  {!emitted ? (
-                    <p className="text-sm text-gray-500">No parseable &lt;itinerary&gt; block found in the assistant messages.</p>
-                  ) : (
-                    <>
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Last emitted itinerary — {diff.emittedStops.length} stop{diff.emittedStops.length === 1 ? '' : 's'}:</p>
-                        <ol className="text-sm text-gray-800 list-decimal list-inside space-y-0.5">
-                          {diff.emittedStops.map((s, i) => (
-                            <li key={i}>{s.locationName}{s.locationState ? `, ${s.locationState}` : ''} <span className="text-gray-400">— {s.type}, {s.nights ?? 0}n</span></li>
-                          ))}
-                        </ol>
-                      </div>
-                      <div className="grid sm:grid-cols-2 gap-3">
-                        <div className={`rounded p-2 text-sm ${diff.missingFromDb.length ? 'bg-red-50 border border-red-200' : 'bg-emerald-50 border border-emerald-200'}`}>
-                          <p className="text-xs font-medium mb-1">{diff.missingFromDb.length ? '⚠ Emitted but NOT persisted (data loss)' : '✓ All emitted stops persisted'}</p>
-                          {diff.missingFromDb.map((s, i) => <div key={i} className="text-red-700">{s.locationName}{s.locationState ? `, ${s.locationState}` : ''}</div>)}
-                        </div>
-                        <div className="rounded p-2 text-sm bg-gray-50 border border-gray-200">
-                          <p className="text-xs font-medium mb-1 text-gray-600">{diff.notEmitted.length ? 'Persisted but not in last emit (e.g. transit-expander)' : 'No persisted-only stops'}</p>
-                          {diff.notEmitted.map((s, i) => <div key={i} className="text-gray-700">{s.locationName}{s.locationState ? `, ${s.locationState}` : ''}</div>)}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">partialTripData.agreedStops (ground-truth cross-check) — {agreedStops.length}:</p>
-                    {agreedStops.length === 0 ? (
-                      <p className="text-sm text-gray-400">none stored</p>
-                    ) : (
-                      <ol className="text-sm text-gray-700 list-decimal list-inside space-y-0.5">
-                        {agreedStops.map((s, i) => (
-                          <li key={i}>{s.name}{s.state ? `, ${s.state}` : ''} <span className="text-gray-400">— {s.type}, {s.nights ?? 0}n</span></li>
-                        ))}
-                      </ol>
-                    )}
-                  </div>
-                </div>
-              </section>
-
-              {/* (d) AI USAGE */}
-              <section className="space-y-2">
-                <h2 className="text-sm font-medium text-gray-700">AI usage</h2>
-                <div className="card overflow-x-auto p-0">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-xs text-gray-500 border-b border-gray-100">
-                        <th className="px-3 py-2">When</th><th className="px-3 py-2">Call</th><th className="px-3 py-2">Model</th>
-                        <th className="px-3 py-2">In</th><th className="px-3 py-2">Out</th><th className="px-3 py-2">Cost</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {usageForSelected.map((l, i) => {
-                        const nearCap = l.callType === 'CHAT' && l.outputTokens >= CHAT_NEAR_CAP
-                        return (
-                          <tr key={i} className="border-b border-gray-50 last:border-0">
-                            <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{fmtDate(l.createdAt)}</td>
-                            <td className="px-3 py-1.5"><span className="badge bg-gray-100 text-gray-600 text-xs">{l.callType}</span></td>
-                            <td className="px-3 py-1.5 text-gray-700">{l.model}</td>
-                            <td className="px-3 py-1.5 text-gray-700">{l.inputTokens.toLocaleString()}</td>
-                            <td className={`px-3 py-1.5 ${nearCap ? 'text-red-600 font-medium' : 'text-gray-700'}`}>
-                              {l.outputTokens.toLocaleString()}{nearCap ? ' ⚠' : ''}
-                            </td>
-                            <td className="px-3 py-1.5 text-gray-700">${Number(l.estimatedCostUsd).toFixed(4)}</td>
-                          </tr>
-                        )
-                      })}
-                      {usageForSelected.length === 0 && (
-                        <tr><td colSpan={6} className="px-3 py-2 text-gray-400">No usage rows for this session.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-                <p className="text-xs text-gray-400">
-                  ⚠ flags a CHAT call within {CHAT_CAP - CHAT_NEAR_CAP} tokens of the {CHAT_CAP.toLocaleString()} output cap — possible truncation.
-                  stop_reason is not stored, so this is a heuristic, not a confirmation.
-                </p>
-              </section>
-            </>
-          )}
         </>
+      )}
+
+      {/* ── DETAIL VIEW (replaces the list once a session is selected) ────── */}
+      {data && selected && (
+        <div className="space-y-4">
+          <button
+            onClick={() => setSelectedId(null)}
+            className="text-sm text-[#1F6F8B] inline-flex items-center gap-1 hover:underline"
+          >
+            <ChevronLeft size={15} aria-hidden="true" /> Back to results
+          </button>
+
+          {/* Conversation (main column, left) + summary panel (sticky, right) */}
+          <div className="grid lg:grid-cols-[1fr_18rem] gap-4 items-start">
+            {/* LEFT — Conversation */}
+            <section className="space-y-2 min-w-0">
+              <h2 className="text-sm font-medium text-gray-700">Conversation</h2>
+              <div className="card space-y-2 max-h-[34rem] overflow-y-auto">
+                {(Array.isArray(selected.messages) ? selected.messages : []).map((m, i) => (
+                  <div key={i} className={`rounded p-2 text-sm ${m.role === 'assistant' ? 'bg-[#1F6F8B]/5' : m.role === 'user' ? 'bg-gray-50' : 'bg-amber-50'}`}>
+                    <div className="text-[10px] uppercase tracking-wide text-gray-400 mb-0.5">{m.role}</div>
+                    <div className="whitespace-pre-wrap break-words font-mono text-xs text-gray-800">{m.content}</div>
+                  </div>
+                ))}
+                {(!Array.isArray(selected.messages) || selected.messages.length === 0) && (
+                  <p className="text-sm text-gray-400">No messages.</p>
+                )}
+              </div>
+            </section>
+
+            {/* RIGHT — Summary panel (sticky) */}
+            <aside className="space-y-2 lg:sticky lg:top-4 self-start">
+              <div className="card space-y-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <UserIcon size={14} className="text-[#1F6F8B] flex-shrink-0" aria-hidden="true" />
+                    <span className="text-sm font-medium text-gray-900">{data.user ? `${data.user.firstName} ${data.user.lastName}` : 'Unknown user'}</span>
+                  </div>
+                  {data.user && <p className="text-xs text-gray-500 ml-6 break-all">{data.user.email}</p>}
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-gray-400">Title</p>
+                  <p className="text-sm text-gray-900">{selected.title || '(untitled session)'}</p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <span className={`badge text-xs ${selected.tripId ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{selected.tripId ? 'built trip' : 'no trip'}</span>
+                  <span className={`badge text-xs ${convClass(selected.status)}`}>{convLabel(selected.status)}</span>
+                  {selectedTrip && <span className={`badge text-xs ${tripClass(selectedTrip.status)}`}>Trip: {titleCase(selectedTrip.status)}</span>}
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-gray-400">Messages</p>
+                  <p className="text-sm text-gray-900">{Array.isArray(selected.messages) ? selected.messages.length : 0}</p>
+                </div>
+                <div className="border-t border-gray-100 pt-2 space-y-2">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-gray-400">Planning started</p>
+                    <p className="text-sm text-gray-900">{fmtDateTime(selected.createdAt)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-gray-400">Last edited</p>
+                    <p className="text-sm text-gray-900">{fmtDateTime(selected.updatedAt)}</p>
+                  </div>
+                  {selectedTrip && (
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-gray-400">Travel date</p>
+                      <p className="text-sm text-gray-900">{fmtDateOnly(selectedTrip.startDate)}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </aside>
+          </div>
+
+          {/* Captured planning data (partialTripData) */}
+          <section className="space-y-2">
+            <h2 className="text-sm font-medium text-gray-700">Captured planning data <span className="font-normal text-gray-400">(partialTripData)</span></h2>
+            <div className="card space-y-2 text-sm">
+              {selected.partialTripData?.origin && (
+                <div className="flex gap-2"><span className="text-gray-500 w-28 flex-shrink-0">Origin</span><span className="text-gray-900">{String(selected.partialTripData.origin)}</span></div>
+              )}
+              <div className="flex gap-2 items-center">
+                <span className="text-gray-500 w-28 flex-shrink-0">Stated rig</span>
+                {selected.partialTripData?.statedRig
+                  ? <span className="badge bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200 text-xs">{String(selected.partialTripData.statedRig)}</span>
+                  : <span className="text-gray-400">none captured</span>}
+              </div>
+              {Array.isArray(selected.partialTripData?.agreedStops) && (
+                <div className="flex gap-2"><span className="text-gray-500 w-28 flex-shrink-0">Agreed stops</span><span className="text-gray-900">{selected.partialTripData.agreedStops.length}</span></div>
+              )}
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-1">Raw partialTripData</p>
+                <pre className="bg-gray-50 border border-gray-100 rounded p-2 text-[11px] text-gray-700 overflow-x-auto whitespace-pre-wrap break-words">{JSON.stringify(selected.partialTripData ?? null, null, 2)}</pre>
+              </div>
+            </div>
+          </section>
+
+          {/* Persisted stops */}
+          <section className="space-y-2">
+            <h2 className="text-sm font-medium text-gray-700">
+              Persisted stops {selectedTrip ? `— ${selectedTrip.name}` : ''}
+            </h2>
+            {!selectedTrip ? (
+              <div className="card text-sm text-gray-500">This session did not build a trip.</div>
+            ) : (
+              <div className="card overflow-x-auto p-0">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-gray-500 border-b border-gray-100">
+                      <th className="px-3 py-2">#</th><th className="px-3 py-2">Type</th><th className="px-3 py-2">Location</th><th className="px-3 py-2">Nights</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedTrip.stops.map(s => (
+                      <tr key={s.order} className="border-b border-gray-50 last:border-0">
+                        <td className="px-3 py-1.5 text-gray-500">{s.order}</td>
+                        <td className="px-3 py-1.5"><span className="badge bg-gray-100 text-gray-600 text-xs">{s.type}</span></td>
+                        <td className="px-3 py-1.5 text-gray-900">{s.locationName}{s.locationState ? `, ${s.locationState}` : ''}</td>
+                        <td className="px-3 py-1.5 text-gray-700">{s.nights}</td>
+                      </tr>
+                    ))}
+                    {selectedTrip.stops.length === 0 && (
+                      <tr><td colSpan={4} className="px-3 py-2 text-gray-400">No stops.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          {/* Emitted vs persisted */}
+          <section className="space-y-2">
+            <h2 className="text-sm font-medium text-gray-700">Emitted vs persisted</h2>
+            <div className="card space-y-3">
+              {!emitted ? (
+                <p className="text-sm text-gray-500">No parseable &lt;itinerary&gt; block found in the assistant messages.</p>
+              ) : (
+                <>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Last emitted itinerary — {diff.emittedStops.length} stop{diff.emittedStops.length === 1 ? '' : 's'}:</p>
+                    <ol className="text-sm text-gray-800 list-decimal list-inside space-y-0.5">
+                      {diff.emittedStops.map((s, i) => (
+                        <li key={i}>{s.locationName}{s.locationState ? `, ${s.locationState}` : ''} <span className="text-gray-400">— {s.type}, {s.nights ?? 0}n</span></li>
+                      ))}
+                    </ol>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <div className={`rounded p-2 text-sm ${diff.missingFromDb.length ? 'bg-red-50 border border-red-200' : 'bg-emerald-50 border border-emerald-200'}`}>
+                      <p className="text-xs font-medium mb-1">{diff.missingFromDb.length ? '⚠ Emitted but NOT persisted (data loss)' : '✓ All emitted stops persisted'}</p>
+                      {diff.missingFromDb.map((s, i) => <div key={i} className="text-red-700">{s.locationName}{s.locationState ? `, ${s.locationState}` : ''}</div>)}
+                    </div>
+                    <div className="rounded p-2 text-sm bg-gray-50 border border-gray-200">
+                      <p className="text-xs font-medium mb-1 text-gray-600">{diff.notEmitted.length ? 'Persisted but not in last emit (e.g. transit-expander)' : 'No persisted-only stops'}</p>
+                      {diff.notEmitted.map((s, i) => <div key={i} className="text-gray-700">{s.locationName}{s.locationState ? `, ${s.locationState}` : ''}</div>)}
+                    </div>
+                  </div>
+                </>
+              )}
+              <div>
+                <p className="text-xs text-gray-500 mb-1">partialTripData.agreedStops (ground-truth cross-check) — {agreedStops.length}:</p>
+                {agreedStops.length === 0 ? (
+                  <p className="text-sm text-gray-400">none stored</p>
+                ) : (
+                  <ol className="text-sm text-gray-700 list-decimal list-inside space-y-0.5">
+                    {agreedStops.map((s, i) => (
+                      <li key={i}>{s.name}{s.state ? `, ${s.state}` : ''} <span className="text-gray-400">— {s.type}, {s.nights ?? 0}n</span></li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* AI usage */}
+          <section className="space-y-2">
+            <h2 className="text-sm font-medium text-gray-700">AI usage</h2>
+            <div className="card overflow-x-auto p-0">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-gray-500 border-b border-gray-100">
+                    <th className="px-3 py-2">When</th><th className="px-3 py-2">Call</th><th className="px-3 py-2">Model</th>
+                    <th className="px-3 py-2">In</th><th className="px-3 py-2">Out</th><th className="px-3 py-2">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usageForSelected.map((l, i) => {
+                    const nearCap = l.callType === 'CHAT' && l.outputTokens >= CHAT_NEAR_CAP
+                    return (
+                      <tr key={i} className="border-b border-gray-50 last:border-0">
+                        <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{fmtDate(l.createdAt)}</td>
+                        <td className="px-3 py-1.5"><span className="badge bg-gray-100 text-gray-600 text-xs">{l.callType}</span></td>
+                        <td className="px-3 py-1.5 text-gray-700">{l.model}</td>
+                        <td className="px-3 py-1.5 text-gray-700">{l.inputTokens.toLocaleString()}</td>
+                        <td className={`px-3 py-1.5 ${nearCap ? 'text-red-600 font-medium' : 'text-gray-700'}`}>
+                          {l.outputTokens.toLocaleString()}{nearCap ? ' ⚠' : ''}
+                        </td>
+                        <td className="px-3 py-1.5 text-gray-700">${Number(l.estimatedCostUsd).toFixed(4)}</td>
+                      </tr>
+                    )
+                  })}
+                  {usageForSelected.length === 0 && (
+                    <tr><td colSpan={6} className="px-3 py-2 text-gray-400">No usage rows for this session.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-gray-400">
+              ⚠ flags a CHAT call within {CHAT_CAP - CHAT_NEAR_CAP} tokens of the {CHAT_CAP.toLocaleString()} output cap — possible truncation.
+              stop_reason is not stored, so this is a heuristic, not a confirmation.
+            </p>
+          </section>
+        </div>
       )}
     </div>
   )

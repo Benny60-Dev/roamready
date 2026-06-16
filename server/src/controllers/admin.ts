@@ -284,6 +284,9 @@ export async function inspectSession(req: AuthRequest, res: Response, next: Next
           id: true,
           name: true,
           status: true,
+          // startDate = the user-set intended TRAVEL/departure date shown on the
+          // trip map (NOT createdAt). Nullable on promoted-then-shifted trips.
+          startDate: true,
           stops: { orderBy: { order: 'asc' }, select: INSPECTOR_STOP_SELECT },
           user: { select: INSPECTOR_USER_SELECT },
           planningSession: { select: INSPECTOR_SESSION_SELECT },
@@ -300,7 +303,7 @@ export async function inspectSession(req: AuthRequest, res: Response, next: Next
         select: INSPECTOR_USAGE_SELECT,
       })
 
-      const tripOut = { id: trip.id, name: trip.name, status: trip.status, stops: trip.stops }
+      const tripOut = { id: trip.id, name: trip.name, status: trip.status, startDate: trip.startDate, stops: trip.stops }
       return res.json({
         user: trip.user
           ? { email: trip.user.email, firstName: trip.user.firstName, lastName: trip.user.lastName }
@@ -332,7 +335,7 @@ export async function inspectSession(req: AuthRequest, res: Response, next: Next
     const trips = builtTripIds.length
       ? await prisma.trip.findMany({
           where: { id: { in: builtTripIds } },
-          select: { id: true, name: true, status: true, stops: { orderBy: { order: 'asc' }, select: INSPECTOR_STOP_SELECT } },
+          select: { id: true, name: true, status: true, startDate: true, stops: { orderBy: { order: 'asc' }, select: INSPECTOR_STOP_SELECT } },
         })
       : []
 
