@@ -148,6 +148,45 @@ function parseItineraryBlock(text: string): any | null {
   }
 }
 
+// PLANNING-RETENTION (A1) — partialTripData is a shared JSON bag on the session
+// (today: { origin?, agreedStops? }). ALWAYS read-modify-write so a write to one
+// key never clobbers the others — persisting agreedStops must preserve a
+// previously-captured origin, and an origin write must preserve agreedStops.
+async function mergePartialTripData(sessionId: string, patch: Record<string, unknown>): Promise<void> {
+  const cur = await prisma.planningSession.findUnique({
+    where: { id: sessionId },
+    select: { partialTripData: true },
+  })
+  const base =
+    cur?.partialTripData && typeof cur.partialTripData === 'object' && !Array.isArray(cur.partialTripData)
+      ? (cur.partialTripData as Record<string, unknown>)
+      : {}
+  await prisma.planningSession.update({
+    where: { id: sessionId },
+    data: { partialTripData: { ...base, ...patch } as any },
+  })
+}
+
+// PLANNING-RETENTION (A1) — render the agreed stop-set as a grounding system
+// message (the planning analog of modify mode's buildLiveTripState). Injected on
+// every planning turn so early-stated stops survive HISTORY_CAP and the model
+// re-includes them when it regenerates a full <itinerary>.
+function buildAgreedStopsState(
+  stops: Array<{ name?: string | null; state?: string | null; type?: string | null; nights?: number | null }>,
+): string {
+  const lines = stops.map((s, i) => {
+    const loc = [s.name, s.state].filter(Boolean).join(', ') || '(unnamed stop)'
+    const type = s.type || 'DESTINATION'
+    const nights = typeof s.nights === 'number' ? s.nights : 0
+    return `  ${i + 1}. ${loc} — ${type}, ${nights} night${nights === 1 ? '' : 's'}`
+  })
+  return [
+    'GROUND-TRUTH ITINERARY SO FAR — these stops were already agreed earlier in THIS planning conversation:',
+    ...lines,
+    'When you emit a full <itinerary>, you MUST include EVERY one of these stops, in this order, unless the user has EXPLICITLY asked in a later message to remove, replace, or reorder one. Do NOT silently drop, rename, or reorder them. Add any newly-requested stops in their correct route position, and keep all legs the user stated — including destinations AFTER the headline destination and any return-toward-home leg.',
+  ].join('\n')
+}
+
 // AI-MESA-9 — prose origin-assertion extractor. The AI-MESA-7 guard only inspects
 // the <itinerary> JSON, so a fabricated origin stated in PRE-ITINERARY PROSE (e.g.
 // the scripted "Got it — starting from <City>" / "I'll use your home address in
@@ -693,7 +732,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     // The wrap-up nudge is sent as a system message; chatWithAI prepends all
     // system messages to its base system prompt (see services/ai.ts).
     const softCapMsg = softCapHit ? [{ role: 'system' as const, content: SOFT_CAP_NUDGE }] : []
-    const messagesForAI = liveStateMsg
+    let messagesForAI = liveStateMsg
       ? [{ role: 'system' as const, content: liveStateMsg }, ...softCapMsg, ...cleanedMessages]
       : [...softCapMsg, ...cleanedMessages]
 
@@ -821,7 +860,19 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
         where: { id: sessionId },
         select: { partialTripData: true },
       })
-      ;(userProfile as any).capturedOrigin = (sess?.partialTripData as any)?.origin ?? null
+      const ptd = (sess?.partialTripData as any) ?? null
+      ;(userProfile as any).capturedOrigin = ptd?.origin ?? null
+      // PLANNING-RETENTION (A1) — inject the agreed stop-set as a grounding
+      // system message so it survives HISTORY_CAP and re-grounds the model every
+      // turn. Planning only (modify mode uses buildLiveTripState/liveStateMsg).
+      // This message is DYNAMIC — in services/ai.ts it lands in the uncached
+      // suffix, never the cached static prefix (Part B / B3).
+      if (context !== 'modify' && Array.isArray(ptd?.agreedStops) && ptd.agreedStops.length > 0) {
+        messagesForAI = [
+          { role: 'system' as const, content: buildAgreedStopsState(ptd.agreedStops) },
+          ...messagesForAI,
+        ]
+      }
     }
 
     // ORIGIN-CAPTURE (deterministic) — if no origin is captured yet, scan THIS
@@ -838,8 +889,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       if (detected) {
         ;(userProfile as any).capturedOrigin = detected
         if (sessionId) {
-          await prisma.planningSession
-            .update({ where: { id: sessionId }, data: { partialTripData: { origin: detected } } })
+          await mergePartialTripData(sessionId, { origin: detected })
             .catch((e: any) => console.error('[AI origin-capture:from-x-to-y] persist failed for sessionId=%s: %s', sessionId, e?.message))
         }
       }
@@ -850,7 +900,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     // assistant reply exists yet in the history. Biases the scope-guard toward
     // trip-intent so a terse opener ("[Place] and back") is planned, not refused.
     const isOpeningTurn = context !== 'modify' && !messages.some((m: any) => m.role === 'assistant')
-    let response = await chatWithAI(messagesForAI, userProfile, recentSurpriseDestinations, surpriseVibe, aiCtx, isOpeningTurn)
+    let response = await chatWithAI(messagesForAI, userProfile, recentSurpriseDestinations, surpriseVibe, aiCtx, isOpeningTurn, context === 'modify')
 
     // Three-state modify-mode outcome, surfaced to the client in the response
     // envelope. 'proposal' = actionable change (<modify> tag); 'clarify' = the
@@ -887,7 +937,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
               'Emit one-or-more <modify> blocks OR exactly one <clarify> — never neither.]',
           },
         ]
-        const retryResponse = await chatWithAI(retryMessages, userProfile, recentSurpriseDestinations, surpriseVibe, aiCtx, isOpeningTurn)
+        const retryResponse = await chatWithAI(retryMessages, userProfile, recentSurpriseDestinations, surpriseVibe, aiCtx, isOpeningTurn, context === 'modify')
         const retryHasModify = /<modify>/.test(retryResponse)
         const retryHasClarify = /<clarify>/.test(retryResponse)
         console.log('[AI modify] retry hasModify=%s hasClarify=%s preview=%s', retryHasModify, retryHasClarify, retryResponse.slice(0, 200))
@@ -1055,12 +1105,33 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       const captured = originMatch[1].trim()
       if (sessionId && captured) {
         try {
-          await prisma.planningSession.update({
-            where: { id: sessionId },
-            data: { partialTripData: { origin: captured } },
-          })
+          await mergePartialTripData(sessionId, { origin: captured })
         } catch (e: any) {
           console.error('[AI origin-capture] persist failed for sessionId=%s: %s', sessionId, e?.message)
+        }
+      }
+    }
+
+    // PLANNING-RETENTION (A1) — after any planning turn whose final reply carries
+    // a parseable <itinerary>, snapshot the agreed stop-set onto the session so
+    // the NEXT turn can re-ground the model even once the early turns scroll out
+    // of the HISTORY_CAP window (the root cause of the dropped-stops bug). Merge,
+    // never overwrite, so the captured origin is preserved. Planning only; modify
+    // mode edits a persisted trip and uses buildLiveTripState instead.
+    if (sessionId && context !== 'modify') {
+      const builtItin = parseItineraryBlock(response)
+      const builtStops = Array.isArray(builtItin?.stops) ? builtItin.stops : null
+      if (builtStops && builtStops.length > 0) {
+        const agreedStops = builtStops.map((s: any) => ({
+          name: s.locationName ?? null,
+          state: s.locationState ?? null,
+          type: s.type ?? 'DESTINATION',
+          nights: typeof s.nights === 'number' ? s.nights : 0,
+        }))
+        try {
+          await mergePartialTripData(sessionId, { agreedStops })
+        } catch (e: any) {
+          console.error('[AI planning-retention] agreedStops persist failed for sessionId=%s: %s', sessionId, e?.message)
         }
       }
     }
