@@ -1,7 +1,13 @@
 import { create } from 'zustand'
+import type { FeedbackType } from '../types'
 
 interface UIState {
   feedbackModalOpen: boolean
+  /** Optional category to preselect when the feedback modal opens (e.g. a
+   *  "Report this bug" link passes 'BUG_REPORT'). Cleared on close and on any
+   *  no-arg open, so a plain openFeedbackModal() always falls back to the
+   *  FeedbackModal default (FEATURE_REQUEST). */
+  feedbackPrefillType?: FeedbackType
   /** Paywall state.
    *  - open:               whether the modal is currently mounted
    *  - feature:            the FEATURE_GATES key that triggered the modal
@@ -19,7 +25,7 @@ interface UIState {
    *                        consumes this flag and calls navigate(); the
    *                        store stays router-agnostic. */
   paywallModal: { open: boolean; feature?: string; redirectOnDismiss?: string }
-  openFeedbackModal: () => void
+  openFeedbackModal: (prefillType?: FeedbackType) => void
   closeFeedbackModal: () => void
   openPaywall: (feature?: string, opts?: { redirectOnDismiss?: string }) => void
   closePaywall: () => void
@@ -27,9 +33,12 @@ interface UIState {
 
 export const useUIStore = create<UIState>((set) => ({
   feedbackModalOpen: false,
+  feedbackPrefillType: undefined,
   paywallModal: { open: false },
-  openFeedbackModal: () => set({ feedbackModalOpen: true }),
-  closeFeedbackModal: () => set({ feedbackModalOpen: false }),
+  // prefillType is set to undefined on a no-arg call, so a plain open never
+  // inherits a stale category from a prior "report bug" open.
+  openFeedbackModal: (prefillType) => set({ feedbackModalOpen: true, feedbackPrefillType: prefillType }),
+  closeFeedbackModal: () => set({ feedbackModalOpen: false, feedbackPrefillType: undefined }),
   openPaywall: (feature, opts) =>
     set({
       paywallModal: {
