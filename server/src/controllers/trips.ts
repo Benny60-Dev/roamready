@@ -1563,13 +1563,10 @@ export async function exportPdf(req: AuthRequest, res: Response, next: NextFunct
 
 export async function getTripMapImage(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const [trip, user] = await Promise.all([
-      prisma.trip.findFirst({
-        where: { id: req.params.id, userId: req.user!.id },
-        include: { stops: { orderBy: { order: 'asc' } } },
-      }),
-      prisma.user.findUnique({ where: { id: req.user!.id }, select: { homeCity: true, homeState: true, homeLocation: true } }),
-    ])
+    const trip = await prisma.trip.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+      include: { stops: { orderBy: { order: 'asc' } } },
+    })
     if (!trip) throw new AppError('Trip not found', 404)
 
     const apiKey = process.env.GOOGLE_MAPS_API_KEY
@@ -1590,7 +1587,27 @@ export async function getTripMapImage(req: AuthRequest, res: Response, next: Nex
     params.set('maptype', 'roadmap')
     params.set('key', apiKey)
 
-    // Build markers and path using S / H / F / number badge logic
+    // Build markers and path.
+    //
+    // BUG-MAP-PDF — on a ROUND_TRIP the origin and the final stop share the same
+    // coordinates, so emitting both a Start and a Finish marker stacks two pins
+    // at one point and the printed map misreads as one-way (the on-screen map
+    // already solved this with the combinedSH merge + FINISH-ORIGIN-1). When
+    // computeTripShape says ROUND_TRIP we emit ONE combined start/finish pin at
+    // the origin — in the home/origin color #F97316 (matching the on-screen
+    // combinedSH marker, MC.home; deliberately NOT the green used for the stop
+    // pins) — and SKIP the final stop's marker. The path still includes the
+    // closing leg back to the origin, so the loop itself is drawn (no hosted
+    // arrow asset: Static Maps has no arrowhead and marker labels are a single
+    // alphanumeric char, so the combined pin + closed-loop path is the signal).
+    //
+    // ONE-WAY is unchanged: separate green S and F pins, no combined marker.
+    // FINISH-ORIGIN-1 alignment: round trips now collapse to the combined pin,
+    // so the only remaining last-stop case is a one-way finish → 'F'. That makes
+    // the endpoint rule origin-based (via computeTripShape) and retires the old
+    // profile-home 'H'/'F' match that predated FINISH-ORIGIN-1.
+    const isRoundTrip = computeTripShape(stops) === 'ROUND_TRIP'
+    const firstStop = stops[0]
     const pathPoints: string[] = []
     const lastStop = stops[stops.length - 1]
     let stopNum = 1
@@ -1599,26 +1616,24 @@ export async function getTripMapImage(req: AuthRequest, res: Response, next: Nex
       if (!stop.latitude || !stop.longitude) continue
       const coord = `${stop.latitude},${stop.longitude}`
       pathPoints.push(coord)
+
+      // Round-trip closing stop coincides with the origin — skip its marker so
+      // it doesn't stack under the combined origin pin (which carries S/F duty).
+      if (isRoundTrip && stop.id === lastStop.id && stop.id !== firstStop.id) continue
+
       let label: string
-      if (stop.order === stops[0].order) {
+      let markerColor = 'green'
+      if (stop.id === firstStop.id) {
         label = 'S'
+        // Combined start+finish on a round trip → home/origin color. One-way
+        // start keeps the standard green (one-way rendering is unchanged).
+        if (isRoundTrip) markerColor = '0xF97316'
       } else if (stop.id === lastStop.id) {
-        let isHome = false
-        if (user?.homeCity) {
-          const stopCity  = normalizeCity(stop.locationName)
-          const hCity     = user.homeCity.toLowerCase().trim()
-          const hState    = user.homeState?.toLowerCase().trim()
-          const stopState = stop.locationState ? normalizeCity(stop.locationState) : undefined
-          isHome = stopCity === hCity && (!hState || !stopState || stopState === hState)
-        } else if (user?.homeLocation) {
-          const stopCity = normalizeCity(stop.locationName + (stop.locationState ? `, ${stop.locationState}` : ''))
-          isHome = stopCity === normalizeCity(user.homeLocation)
-        }
-        label = isHome ? 'H' : 'F'
+        label = 'F' // one-way finish (round trips skip this stop above)
       } else {
         label = String(stopNum++)
       }
-      params.append('markers', `color:green|label:${label}|${coord}`)
+      params.append('markers', `color:${markerColor}|label:${label}|${coord}`)
     }
 
     if (pathPoints.length > 1) {
