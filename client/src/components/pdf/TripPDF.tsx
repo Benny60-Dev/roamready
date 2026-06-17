@@ -6,6 +6,7 @@ import { format, addDays } from 'date-fns'
 import { parseTripDate } from '../../utils/dates'
 import { computeTripTotals } from '../../utils/tripTotals'
 import { userFacingStopCount } from '../../utils/userFacingStopCount'
+import { tripLoopsToOrigin } from '../../utils/stopBadge'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -223,8 +224,20 @@ const s = StyleSheet.create({
   //   Fixed height (−24.5pt safety margin)                            = 485pt
   //   2-line title gap below map                                      ≈  24.5pt
   //   1-line title gap below map                                      ≈  45.5pt
-  mapCoverWrap: { height: 485, borderRadius: 6, overflow: 'hidden' },
-  mapCoverImg:  { width: '100%', height: '100%', objectFit: 'contain' },
+  mapCoverWrap: { height: 485, borderRadius: 6, overflow: 'hidden', flexDirection: 'column' },
+  // flex:1 (not height:100%) so the optional round-trip legend below shares the
+  // SAME 485pt budget — the image shrinks ~16pt to make room rather than the
+  // block growing and risking a cover-page overflow.
+  mapCoverImg:  { width: '100%', flex: 1, objectFit: 'contain' },
+
+  // Round-trip map legend — names the single combined origin pin (#F97316),
+  // which would otherwise read as an unlabeled orange dot. One-way trips omit it
+  // (their separate green S / F / number pins are self-labeling). Lives inside
+  // mapCoverWrap so it consumes no extra page height.
+  mapLegend:       { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingTop: 6 },
+  mapLegendItem:   { flexDirection: 'row', alignItems: 'center', marginHorizontal: 8 },
+  mapLegendSwatch: { width: 8, height: 8, borderRadius: 4, marginRight: 5 },
+  mapLegendText:   { fontSize: 8, color: GRAY_5, letterSpacing: 0.3 },
 
   // Slim stats strip (cover page) — hairline rules above/below, 6 cells
   // (Miles | Nights | Stops | Est. Fuel | Est. Camp | Total) in a horizontal
@@ -739,6 +752,10 @@ interface Props {
 
 export function TripPDF({ trip, mapImageBase64, fuelEstimate }: Props) {
   const sortedStops = [...(trip.stops || [])].sort((a, b) => a.order - b.order)
+  // Round-trip? Same origin-based rule the server map image gates the combined
+  // start/finish pin on (computeTripShape), so the legend below always agrees
+  // with the pin. Derived in-component from stops already in `trip` — no extra prop.
+  const isRoundTrip = tripLoopsToOrigin(sortedStops)
 
   const rawEntries = buildTimeline(sortedStops, trip.startDate ?? undefined)
   const mergedEntries = trip.itinerary ? mergeAI(rawEntries, trip.itinerary) : rawEntries
@@ -892,6 +909,23 @@ export function TripPDF({ trip, mapImageBase64, fuelEstimate }: Props) {
         {mapImageBase64 ? (
           <View style={s.mapCoverWrap}>
             <Image src={mapImageBase64} style={s.mapCoverImg} />
+            {/* Legend ONLY on round trips — names the combined orange origin pin
+                so it isn't an unlabeled dot. One-way maps need none (separate
+                green S / F / number pins are self-labeling, and a same-color
+                legend would just confuse). */}
+            {isRoundTrip ? (
+              <View style={s.mapLegend}>
+                <View style={s.mapLegendItem}>
+                  <View style={[s.mapLegendSwatch, { backgroundColor: '#F97316' }]} />
+                  <Text style={s.mapLegendText}>Start / Finish (round trip)</Text>
+                </View>
+                <View style={s.mapLegendItem}>
+                  {/* approximates the Google "green" stop-marker color */}
+                  <View style={[s.mapLegendSwatch, { backgroundColor: '#34A853' }]} />
+                  <Text style={s.mapLegendText}>Stop</Text>
+                </View>
+              </View>
+            ) : null}
           </View>
         ) : null}
 
