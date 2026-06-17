@@ -1932,6 +1932,7 @@ export async function generateActivities(req: AuthRequest, res: Response, next: 
 
 export async function generatePackingList(req: AuthRequest, res: Response, next: NextFunction) {
   try {
+    if (await enforcePerUserDailyCap(req, res)) return
     const trip = await prisma.trip.findFirst({
       where: { id: req.params.id, userId: req.user!.id },
       // Party plumbed in so the packing list reflects traveling people —
