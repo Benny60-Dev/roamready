@@ -39,7 +39,16 @@ api.interceptors.response.use(
     // huge value doesn't freeze the UI. Default to 2s when no header is sent.
     // The _retried429 flag is separate from _retry so a 401→refresh→retry that
     // happens to also 429 still gets one rate-limit recovery shot.
-    if (error.response?.status === 429 && original && !original._retried429) {
+    //
+    // EXCEPTION — daily AI cap hits (DAILY_USER_CAP / DAILY_LIMIT) are
+    // DETERMINISTIC, not transient: the count won't drop within a retry window,
+    // so retrying just burns ~2s and a second blocked request before the same
+    // 429 comes back. Skip the retry for those (keyed on data.error) and let the
+    // caller render the server's friendly message immediately. Transient
+    // rate-limit 429s (no cap code) still get their one recovery shot.
+    const capError = error.response?.data?.error
+    const isDailyCap429 = capError === 'DAILY_USER_CAP' || capError === 'DAILY_LIMIT'
+    if (error.response?.status === 429 && original && !original._retried429 && !isDailyCap429) {
       const retryAfterRaw = error.response.headers?.['retry-after'] ?? '2'
       const retryAfterSec = parseInt(retryAfterRaw, 10)
       const safeSec = Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? retryAfterSec : 2

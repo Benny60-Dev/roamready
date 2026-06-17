@@ -316,6 +316,15 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
       if (err?.response?.status === 403 && err?.response?.data?.code === 'FEATURE_GATED') {
         return
       }
+      // Daily AI cap — per-user (DAILY_USER_CAP) or free-tier (DAILY_LIMIT). Show
+      // the 429 body's friendly message verbatim rather than the generic error.
+      // Discriminant is data.error (NOT data.code — that's FEATURE_GATED).
+      const capError = err?.response?.data?.error
+      if (err?.response?.status === 429 && (capError === 'DAILY_USER_CAP' || capError === 'DAILY_LIMIT')) {
+        const capMsg = err.response.data?.message || "You've reached today's AI limit — please try again later."
+        setMessages(prev => [...prev, { role: 'assistant', content: capMsg }])
+        return
+      }
       setMessages(prev => [
         ...prev,
         { role: 'assistant', content: 'Sorry, I had trouble responding. Please try again.' },

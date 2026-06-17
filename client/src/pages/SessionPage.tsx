@@ -741,6 +741,16 @@ export default function SessionPage() {
       if (err?.response?.status === 403 && err?.response?.data?.code === 'FEATURE_GATED') {
         return
       }
+      // Daily AI cap — per-user (DAILY_USER_CAP) or free-tier (DAILY_LIMIT). The
+      // 429 body carries a friendly, code-specific message ("resets in ~X
+      // hours" / "upgrade to Pro"); show it verbatim instead of the generic
+      // error. Discriminant is data.error (NOT data.code — that's FEATURE_GATED).
+      const capError = err?.response?.data?.error
+      if (err?.response?.status === 429 && (capError === 'DAILY_USER_CAP' || capError === 'DAILY_LIMIT')) {
+        const capMsg = err.response.data?.message || "You've reached today's AI limit — please try again later."
+        setMessages([...next, { role: 'assistant', content: capMsg }])
+        return
+      }
       setMessages([...next, { role: 'assistant', content: 'Sorry, I had trouble responding. Please try again.' }])
     } finally {
       setTyping(false)
