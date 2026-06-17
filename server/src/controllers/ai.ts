@@ -4,6 +4,7 @@ import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
 import { chatWithAI, generatePackingListAI, analyzeFeedbackAI, generatePlanningContextSummary } from '../services/ai'
+import { sendAiUsageWarning } from '../services/feedbackNotification'
 import {
   parseModifyBlocks, stripAppliedClaims, neutralizeLegacyMarkers,
   annotateForModel, buildAppliedLookup, actionKey,
@@ -55,6 +56,99 @@ async function enforceFreeAiCap(req: AuthRequest, res: Response): Promise<boolea
     res.status(429).json({
       error: 'DAILY_LIMIT',
       message: "You've reached your daily AI limit. Upgrade to Pro for unlimited trip planning, or try again tomorrow.",
+    })
+    return true
+  }
+  return false
+}
+
+// ── Per-user daily AI cap (ALL tiers) + heavy-usage owner alert — LS-AI-USAGE-CAP
+// A SECOND, tier-AGNOSTIC backstop layered ON TOP OF enforceFreeAiCap. Where the
+// free cap stops a free account from spamming the AI, this one bounds ANY single
+// account's daily Anthropic spend — free, trial, Pro, even owner — against
+// runaway usage (a buggy client retry loop, a shared login, deliberate abuse).
+// Both caps are tunable; this one is set well above any legitimate planning flow.
+const PER_USER_DAILY_CALL_CAP = 200
+const PER_USER_DAILY_WARN_THRESHOLD = 100
+const PER_USER_DAILY_WINDOW_MS = 24 * 60 * 60 * 1000
+
+// In-memory dedupe for the heavy-usage warning email: at most one alert per user
+// per UTC day, keyed `${userId}:${YYYY-MM-DD}`. Intentionally NOT persisted — it
+// resets on backend restart, which is acceptable for a fire-and-forget owner
+// alert (worst case: one duplicate alert right after a deploy). No schema/table.
+const warnedHeavyUsers = new Set<string>()
+
+/** Tier-agnostic per-user daily AI cap. Applies to EVERY account — NO Pro/trial/
+ *  owner exemption (unlike enforceFreeAiCap); it's a pure cost backstop, not a
+ *  tier feature. Additional to (never a replacement for) enforceFreeAiCap.
+ *  Returns true if the cap was hit AND the 429 was sent — caller must
+ *  early-return. Crossing PER_USER_DAILY_WARN_THRESHOLD also fires a
+ *  once-per-user-per-day owner alert email; that send is fully fire-and-forget
+ *  and can never break or delay the user's request. */
+export async function enforcePerUserDailyCap(req: AuthRequest, res: Response): Promise<boolean> {
+  const u = req.user!
+  const now = new Date()
+  const windowStart = new Date(now.getTime() - PER_USER_DAILY_WINDOW_MS)
+
+  const recentCallCount = await prisma.aIUsageLog.count({
+    where: { userId: u.id, createdAt: { gte: windowStart } },
+  })
+
+  // Heavy-usage owner alert — fired at the WARN threshold (below the hard cap),
+  // once per user per UTC day, so a heavy account is flagged even if it never
+  // reaches the block. Entirely fire-and-forget; a Resend failure is swallowed.
+  if (recentCallCount >= PER_USER_DAILY_WARN_THRESHOLD) {
+    const dayKey = `${u.id}:${now.toISOString().slice(0, 10)}`
+    if (!warnedHeavyUsers.has(dayKey)) {
+      warnedHeavyUsers.add(dayKey)
+      const isTrial = !!(u.trialEndsAt && now < new Date(u.trialEndsAt))
+      const tier = u.isOwner ? 'owner' : u.subscriptionTier === 'PRO' ? 'Pro' : isTrial ? 'trial' : 'free'
+      void (async () => {
+        try {
+          const agg = await prisma.aIUsageLog.aggregate({
+            _sum: { estimatedCostUsd: true },
+            where: { userId: u.id, createdAt: { gte: windowStart } },
+          })
+          // _sum is a Prisma Decimal (or null) — coerce via Number before toFixed.
+          const costUsd = Number(agg._sum.estimatedCostUsd ?? 0).toFixed(2)
+          await sendAiUsageWarning({
+            userEmail: u.email,
+            userId: u.id,
+            callCount: recentCallCount,
+            costUsd,
+            tier,
+            cap: PER_USER_DAILY_CALL_CAP,
+            threshold: PER_USER_DAILY_WARN_THRESHOLD,
+          })
+        } catch (err: any) {
+          // A send failure must NEVER surface to the user — log and move on.
+          console.error('[AI cap] heavy-usage warning email failed for userId=%s: %s', u.id, err?.message ?? err)
+        }
+      })()
+    }
+  }
+
+  if (recentCallCount >= PER_USER_DAILY_CALL_CAP) {
+    // Rolling 24h window: usage eases as the oldest in-window calls age out.
+    // Tell the user when the oldest call crosses 24h (count drops below the cap
+    // then). Approximate + friendly; this extra query only runs on the rare
+    // blocked request, never on the happy path.
+    const oldest = await prisma.aIUsageLog.findFirst({
+      where: { userId: u.id, createdAt: { gte: windowStart } },
+      orderBy: { createdAt: 'asc' },
+      select: { createdAt: true },
+    })
+    const resetMs = oldest
+      ? (oldest.createdAt.getTime() + PER_USER_DAILY_WINDOW_MS) - now.getTime()
+      : PER_USER_DAILY_WINDOW_MS
+    const hoursToReset = Math.max(1, Math.ceil(resetMs / (60 * 60 * 1000)))
+    console.warn(
+      `[AI cap] userId=${u.id} hit PER-USER daily cap (${recentCallCount}/${PER_USER_DAILY_CALL_CAP}) — ` +
+      `returning 429 DAILY_USER_CAP`
+    )
+    res.status(429).json({
+      error: 'DAILY_USER_CAP',
+      message: `You've hit today's trip-planning limit (${PER_USER_DAILY_CALL_CAP} AI requests in 24 hours). It resets in about ${hoursToReset} hour${hoursToReset === 1 ? '' : 's'} — thanks for your patience.`,
     })
     return true
   }
@@ -617,6 +711,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
 
     // Daily cap for non-paying, non-trial accounts. Quiet cost protection.
     if (await enforceFreeAiCap(req, res)) return
+    if (await enforcePerUserDailyCap(req, res)) return
 
     const userId = req.user!.id
 
@@ -1276,6 +1371,7 @@ export async function generateItinerary(req: AuthRequest, res: Response, next: N
     const { messages } = req.body
     // Daily cap for non-paying, non-trial accounts. Quiet cost protection.
     if (await enforceFreeAiCap(req, res)) return
+    if (await enforcePerUserDailyCap(req, res)) return
     const user = await prisma.user.findUnique({
       where: { id: req.user!.id },
       include: {
@@ -1315,6 +1411,7 @@ export async function generatePackingList(req: AuthRequest, res: Response, next:
     // check is unreachable for Free users in practice. Kept for symmetry
     // with the other AI-consuming controllers.
     if (await enforceFreeAiCap(req, res)) return
+    if (await enforcePerUserDailyCap(req, res)) return
     const trip = await prisma.trip.findFirst({
       where: { id: tripId, userId: req.user!.id },
       include: { stops: true },

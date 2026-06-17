@@ -6,6 +6,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
+import { enforcePerUserDailyCap } from './ai'
 import type { StopUpdateInput, TripUpdateInput, TripShiftDatesInput } from '../schemas'
 import { generatePackingListAI, generateTripItineraryAI, generateStopActivitiesAI, generateRouteHighlightsAI } from '../services/ai'
 import { fetchLiveForecast, fetchHistoricalWeather, isoDate } from '../services/weatherFetch'
@@ -1768,6 +1769,7 @@ export async function expandLongLegs(req: AuthRequest, res: Response, next: Next
 export async function generateItinerary(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     console.log('[generateItinerary] endpoint hit — tripId=%s userId=%s', req.params.id, req.user?.id)
+    if (await enforcePerUserDailyCap(req, res)) return
     const trip = await prisma.trip.findFirst({
       where: { id: req.params.id, userId: req.user!.id },
       // Party plumbed in so the day-by-day prompt reflects who's traveling —
@@ -1875,6 +1877,7 @@ export async function generateRoutes(req: AuthRequest, res: Response, next: Next
 
 export async function generateActivities(req: AuthRequest, res: Response, next: NextFunction) {
   try {
+    if (await enforcePerUserDailyCap(req, res)) return
     const trip = await prisma.trip.findFirst({
       where: { id: req.params.id, userId: req.user!.id },
       include: { stops: { orderBy: { order: 'asc' } } },
@@ -2011,6 +2014,11 @@ export async function generateRouteHighlights(req: AuthRequest, res: Response, n
     if ((stop as any).routeHighlights) {
       return res.json({ routeHighlights: (stop as any).routeHighlights })
     }
+
+    // LS-AI-USAGE-CAP — cap AFTER the cached-return short-circuit: a cached read
+    // makes no Anthropic call and must never be gated. Only an actual generate
+    // (the AI call below) counts against the per-user daily cap.
+    if (await enforcePerUserDailyCap(req, res)) return
 
     // Find the preceding stop to determine the origin
     const stopIdx = trip.stops.findIndex((s: any) => s.id === req.params.stopId)
