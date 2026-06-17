@@ -274,3 +274,60 @@ export async function sendFeedbackShippedNotification(feedback: FeedbackRow): Pr
   console.log('[feedbackNotification] shipped notice sent to submitter for feedback', feedback.id)
   return true
 }
+
+/** Heavy-AI-usage alert to the support/owner inbox (LS-AI-USAGE-CAP).
+ *  Fire-and-forget by contract: the caller (enforcePerUserDailyCap in
+ *  controllers/ai.ts) invokes this from a detached async wrapped in try/catch,
+ *  so a Resend outage can never affect or delay the user's request. Reuses this
+ *  file's module-level `resend` client, FROM_EMAIL/sandbox fallback, and the
+ *  `supportEmail` owner target — no new sending identity, no new Resend client. */
+export async function sendAiUsageWarning(info: {
+  userEmail: string
+  userId: string
+  callCount: number
+  costUsd: string
+  tier: string
+  cap: number
+  threshold: number
+}): Promise<void> {
+  const fromAddress = process.env.FROM_EMAIL
+  if (!fromAddress) {
+    console.warn(
+      '[aiUsageWarning] FROM_EMAIL is not set — falling back to Resend sandbox sender.'
+    )
+  }
+
+  const subject =
+    `[AI usage] Heavy usage: ${info.userEmail} — ${info.callCount} calls, $${info.costUsd} (24h)`
+
+  const rows: [string, string][] = [
+    ['User', info.userEmail],
+    ['User ID', info.userId],
+    ['Account tier', info.tier],
+    ['AI calls (last 24h)', String(info.callCount)],
+    ['Est. cost (last 24h)', `$${info.costUsd}`],
+    ['Warn threshold', String(info.threshold)],
+    ['Hard cap (calls/24h)', String(info.cap)],
+  ]
+
+  const html = `
+    <p><strong>Heavy AI usage detected</strong></p>
+    <p>This account has crossed the daily AI warning threshold (${info.threshold} calls/24h). It is hard-capped at ${info.cap} calls/24h.</p>
+    <table cellpadding="4" style="border-collapse:collapse;font-size:14px">
+      ${rows.map(([k, v]) => `<tr><td style="color:#6b7280">${k}</td><td>${escapeHtml(v)}</td></tr>`).join('\n      ')}
+    </table>
+  `.trim()
+
+  const text =
+    `Heavy AI usage detected — crossed ${info.threshold} calls/24h (hard cap ${info.cap}).\n\n` +
+    rows.map(([k, v]) => `${k}: ${v}`).join('\n')
+
+  await resend.emails.send({
+    from: fromAddress ?? 'RoamReady <onboarding@resend.dev>',
+    to: supportEmail,
+    subject,
+    html,
+    text,
+  })
+  console.log('[aiUsageWarning] heavy-usage alert sent for userId=%s (%d calls)', info.userId, info.callCount)
+}
