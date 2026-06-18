@@ -133,3 +133,23 @@
   0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
   30% { transform: translateY(-6px); opacity: 1; }
 }
+
+/* Onboarding — gentle "it's your turn" pulse on the active-conversation chat
+   input. Brand-blue ring (same #1F6F8B as .input's focus ring) that softly
+   breathes so older users notice it's their turn to type. ChatInput stops it
+   once the field is focused or has text, and once awaitingReply clears (send).
+   Honors reduced-motion with a static ring instead of an animation. */
+.chat-input-awaiting {
+  border-color: #1F6F8B !important;
+  animation: chat-input-awaiting-pulse 2s ease-in-out infinite;
+}
+@keyframes chat-input-awaiting-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(31, 111, 139, 0); }
+  50%      { box-shadow: 0 0 0 4px rgba(31, 111, 139, 0.18); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-input-awaiting {
+    animation: none;
+    box-shadow: 0 0 0 3px rgba(31, 111, 139, 0.18);
+  }
+}
