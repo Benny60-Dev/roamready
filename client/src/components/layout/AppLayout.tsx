@@ -266,7 +266,7 @@ export default function AppLayout() {
               className={({ isActive }) => {
                 const active = isActive || (matchPrefix ? pathname.startsWith(matchPrefix) : false)
                 return `flex-1 flex flex-col items-center py-2 gap-0.5 text-xs ${
-                  active ? 'text-[#1F6F8B]' : 'text-gray-500'
+                  active ? 'text-[#1F6F8B]' : 'text-gray-700'
                 }`
               }}
             >
