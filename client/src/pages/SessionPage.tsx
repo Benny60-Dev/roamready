@@ -960,6 +960,13 @@ export default function SessionPage() {
   // the early returns, because the SESS-LAYOUT-2 hooks below depend on it.
   const isEmptyState = !messages.some(m => m.role === 'user')
 
+  // ONBOARDING — the AI has asked something and it's the user's turn: not mid-
+  // generation, and the last message is the assistant's. Drives the action
+  // placeholder + the gentle "your turn" pulse on the compact input, so older
+  // users realize they need to type a reply (e.g. the origin question).
+  const awaitingReply =
+    !typing && messages.length > 0 && messages[messages.length - 1].role === 'assistant'
+
   // SESS-LAYOUT-2 — measured chat-column height. The previous hardcoded
   // h-[calc(100dvh-12.25rem)] subtracted a fixed chrome list (header + main
   // paddings + bottom nav) that silently went stale whenever anything ELSE
@@ -1805,15 +1812,17 @@ export default function SessionPage() {
                   replaces the over-reserved 7.5rem guess. md:pb-2 = desktop spacing
                   (input in-flow there). */}
               <div ref={listRef} className="flex-1 min-w-0 overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-2">
-                {/* Bottom-anchor on mobile: an inner min-h-full flex column with
+                {/* Bottom-anchor at ALL sizes: an inner min-h-full flex column with
                     justify-end rests a SHORT conversation at the bottom (last
-                    message just above the pinned input) instead of top-stacking it
-                    and leaving a large empty gap below — that gap, not the pb, was
-                    the remaining dead space. When the history overflows min-h-full
-                    the wrapper grows and scrolls normally (newest at the bottom).
-                    md:block md:min-h-0 restores desktop's top-anchored flow.
-                    space-y-3 moved here from the scroll box. */}
-                <div className="min-h-full flex flex-col justify-end space-y-3 md:block md:min-h-0">
+                    message just above the input) instead of top-stacking it and
+                    leaving a large empty gap below — that gap was the dead space
+                    older users mistook for "nothing to do here." When the history
+                    overflows min-h-full the wrapper grows and scrolls normally
+                    (newest at the bottom) — same on mobile and desktop. Previously
+                    desktop reverted to top-anchored flow (md:block md:min-h-0);
+                    that revert is removed so the input feels connected to the
+                    conversation everywhere. space-y-3 moved here from the scroll box. */}
+                <div className="min-h-full flex flex-col justify-end space-y-3">
                 {messages.map((msg, i) => (
                   <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div
@@ -1892,7 +1901,15 @@ export default function SessionPage() {
                   value={input}
                   onChange={setInput}
                   onSubmit={sendMessage}
-                  placeholder={isSmAndUp ? 'Message RoamReady AI...' : 'Message RoamReady…'}
+                  // When it's the user's turn, the placeholder itself carries the
+                  // "type your answer" cue (not color-only — accessible), and
+                  // isAwaiting drives the gentle pulse on the input.
+                  placeholder={
+                    awaitingReply
+                      ? 'Type your answer here…'
+                      : isSmAndUp ? 'Message RoamReady AI...' : 'Message RoamReady…'
+                  }
+                  isAwaiting={awaitingReply}
                   disabled={typing}
                   loading={typing}
                   speechSupported={speechSupported}

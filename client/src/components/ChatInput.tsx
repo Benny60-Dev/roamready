@@ -1,4 +1,4 @@
-import { forwardRef, KeyboardEvent } from 'react'
+import { forwardRef, KeyboardEvent, useState } from 'react'
 import { Loader, Send } from 'lucide-react'
 import { VoiceInputButton } from './VoiceInputButton'
 
@@ -39,6 +39,11 @@ interface ChatInputProps {
   /** 'hero' = pill wrapper + gold square Send (empty-state CTA);
    *  'compact' = bare flex row + btn-primary Send (in-conversation). */
   variant?: 'hero' | 'compact'
+  /** It's the user's turn (AI asked something and is done generating). Drives a
+   *  gentle brand-blue pulse on the compact input so the user notices it's their
+   *  turn. The pulse self-suppresses once the field is focused or has text.
+   *  Compact variant only; ignored by the hero variant. */
+  isAwaiting?: boolean
 }
 
 export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(function ChatInput(
@@ -53,9 +58,15 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
     listening = false,
     onToggleListening,
     variant = 'compact',
+    isAwaiting = false,
   },
   ref,
 ) {
+  // Pulse only while it's the user's turn AND they haven't engaged yet — stops
+  // the moment they focus the field or type anything (and when isAwaiting clears
+  // on send). Compact variant only.
+  const [focused, setFocused] = useState(false)
+  const showAwaitingPulse = isAwaiting && !focused && !value.trim()
   // MIC-SEND-1: submit while the mic is still listening. Recognition runs
   // continuous:true, so we must STOP it on submit — otherwise stray dictation
   // would repopulate the next turn's input and the recording UI would stay on.
@@ -142,12 +153,14 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
         ref={ref}
         rows={1}
         aria-label="Message RoamReady AI"
-        className="input flex-1 min-w-0 text-sm resize-none overflow-y-auto"
+        className={`input flex-1 min-w-0 text-sm resize-none overflow-y-auto${showAwaitingPulse ? ' chat-input-awaiting' : ''}`}
         style={{ fieldSizing: 'content', maxHeight: '8rem' } as React.CSSProperties}
         placeholder={placeholder}
         value={value}
         onChange={e => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         disabled={disabled}
         maxLength={4000}
       />
