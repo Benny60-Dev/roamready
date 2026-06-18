@@ -2226,7 +2226,7 @@ export default function TripMapPage() {
             boxShadow: '0 4px 20px rgba(0,0,0,0.10)',
           } : isMobile ? {
             width: '100%',
-            height: '45vh',
+            height: '34vh',
             flexShrink: 0,
             order: 1,
           } : !isDesktop ? {
