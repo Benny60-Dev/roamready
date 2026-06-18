@@ -104,33 +104,68 @@ export type TripShiftDatesInput = z.infer<typeof TripShiftDatesSchema>
  * (`custom`) — no preprocessed optionals, so the Zod v4 outer/inner placement
  * gotcha doesn't apply here.
  */
+// The category/item shape shared by Trip.packingList AND PackingTemplate.items.
+// Extracted so the saved-template endpoints (FR-SAVED-PACKING) validate the
+// EXACT same structure as a trip's packing list — keeping mergePackedState fed
+// consistent data whether items come from a trip, a regenerate, or a template.
+export const PackingCategoriesSchema = z
+  .array(
+    z
+      .object({
+        category: z.string().min(1).max(100),
+        items: z
+          .array(
+            z
+              .object({
+                name: z.string().min(1).max(200),
+                required: z.boolean(),
+                checked: z.boolean(),
+                // User-added items flag themselves so a Regenerate preserves
+                // them. Plain optional boolean (no preprocess — the Zod v4
+                // outer/inner gotcha in the docstring doesn't apply).
+                custom: z.boolean().optional(),
+              })
+              .strict(),
+          )
+          .max(100),
+      })
+      .strict(),
+  )
+  .max(30)
+
 export const TripPackingListSchema = z
-  .object({
-    packingList: z
-      .array(
-        z
-          .object({
-            category: z.string().min(1).max(100),
-            items: z
-              .array(
-                z
-                  .object({
-                    name: z.string().min(1).max(200),
-                    required: z.boolean(),
-                    checked: z.boolean(),
-                    // User-added items flag themselves so a Regenerate preserves
-                    // them. Plain optional boolean (no preprocess — the Zod v4
-                    // outer/inner gotcha in the docstring doesn't apply).
-                    custom: z.boolean().optional(),
-                  })
-                  .strict(),
-              )
-              .max(100),
-          })
-          .strict(),
-      )
-      .max(30),
-  })
+  .object({ packingList: PackingCategoriesSchema })
   .strict()
 
 export type TripPackingListInput = z.infer<typeof TripPackingListSchema>
+
+/**
+ * Create a saved packing template (POST /packing-templates) — FR-SAVED-PACKING.
+ * Body { name, items } where items is the same category/item shape as a trip's
+ * packing list. `checked` is accepted but normalized to false server-side at
+ * store time (a template is a starting point, not a packed state).
+ */
+export const PackingTemplateCreateSchema = z
+  .object({
+    name: z.string().min(1).max(120),
+    items: PackingCategoriesSchema,
+  })
+  .strict()
+
+export type PackingTemplateCreateInput = z.infer<typeof PackingTemplateCreateSchema>
+
+/** Seed a trip's packing list from a saved template
+ *  (POST /trips/:id/packing-list/from-template). */
+export const SeedFromTemplateSchema = z
+  .object({ templateId: z.string().min(1) })
+  .strict()
+
+export type SeedFromTemplateInput = z.infer<typeof SeedFromTemplateSchema>
+
+/** Copy (merge) another trip's packing list into this one
+ *  (POST /trips/:id/packing-list/copy-from). */
+export const CopyPackingFromTripSchema = z
+  .object({ sourceTripId: z.string().min(1) })
+  .strict()
+
+export type CopyPackingFromTripInput = z.infer<typeof CopyPackingFromTripSchema>

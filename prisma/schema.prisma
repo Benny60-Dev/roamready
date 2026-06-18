@@ -81,6 +81,24 @@ model User {
   parties             TravelParty[]
   journalEntries      JournalEntry[]
   visitedStates       VisitedState[]
+  packingTemplates    PackingTemplate[]
+}
+
+// Saved/reusable packing lists (FR-SAVED-PACKING). A USER-level template:
+// `items` mirrors Trip.packingList's shape exactly ([{ category,
+// items:[{ name, required, checked, custom? }] }]) so a template can be fed
+// straight through mergePackedState to seed a trip. `checked` is normalized to
+// false on save (a template is a starting point, not a packed state).
+model PackingTemplate {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  items     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 enum SubscriptionTier {

@@ -2,11 +2,15 @@ import { Router } from 'express'
 import { requireAuth, requireFeature, AuthRequest } from '../middleware/auth'
 import { requireVerifiedEmail } from '../middleware/requireVerifiedEmail'
 import { validateBody } from '../middleware/validate'
-import { StopUpdateSchema, TripUpdateSchema, TripShiftDatesSchema, TripPackingListSchema } from '../schemas'
+import {
+  StopUpdateSchema, TripUpdateSchema, TripShiftDatesSchema, TripPackingListSchema,
+  SeedFromTemplateSchema, CopyPackingFromTripSchema,
+} from '../schemas'
 import {
   getTrips, createTrip, getTrip, updateTrip, shiftTripDates, deleteTrip,
   getStops, createStop, updateStop, deleteStop,
   getSharedTrip, exportPdf, generatePackingList, updatePackingList,
+  seedPackingListFromTemplate, copyPackingListFromTrip,
   generateItinerary, saveItinerary, generateRoutes, generateActivities,
   generateRouteHighlights, getTripMapImage, getTripWeather, reassignPOIs,
   createShareToken, regenerateShareToken, revokeShareToken,
@@ -50,6 +54,13 @@ tripsRouter.post('/:id/packing-list', requireFeature('packingListGenerator'), ge
 // Pro-gated: generation is the gated feature; persisting your own checkmarks
 // on an existing list shouldn't paywall.
 tripsRouter.put('/:id/packing-list', validateBody(TripPackingListSchema), updatePackingList as any)
+// FR-SAVED-PACKING — seed this trip's packing list from existing data, MERGED
+// (mergePackedState), not overwritten. from-template is Pro (same gate as
+// generation); copy-from another owned trip is FREE (no gate — it only reads
+// data the user already owns). More-specific paths than /:id/packing-list above,
+// so no route collision.
+tripsRouter.post('/:id/packing-list/from-template', requireFeature('packingListGenerator'), validateBody(SeedFromTemplateSchema), seedPackingListFromTemplate as any)
+tripsRouter.post('/:id/packing-list/copy-from', validateBody(CopyPackingFromTripSchema), copyPackingListFromTrip as any)
 tripsRouter.post('/:id/stops/reassign-pois', reassignPOIs as any)
 // Deterministic per-leg max-drive-time guard — breaks over-long legs into
 // OVERNIGHT_ONLY transit stops. Ungated (Google Directions + Geocode, no LLM),
