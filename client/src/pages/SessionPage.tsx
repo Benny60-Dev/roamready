@@ -1894,7 +1894,7 @@ export default function SessionPage() {
                   The message list (above) carries matching bottom padding so its
                   last message clears this pinned input. */}
               <div
-                className="fixed left-0 right-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 bg-rr-bg px-4 pt-2 md:static md:bottom-auto md:left-auto md:right-auto md:z-auto md:bg-transparent md:px-0 md:pt-0 md:mt-3"
+                className="fixed left-0 right-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 bg-rr-bg px-4 pt-2 pb-3 md:static md:bottom-auto md:left-auto md:right-auto md:z-auto md:bg-transparent md:px-0 md:pt-0 md:pb-0 md:mt-3"
               >
                 <ChatInput
                   ref={inputRef}
