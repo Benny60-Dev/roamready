@@ -100,6 +100,7 @@ import { authRouter } from './routes/auth'
 import { usersRouter } from './routes/users'
 import { partiesRouter } from './routes/parties'
 import { tripsRouter } from './routes/trips'
+import { packingTemplatesRouter } from './routes/packingTemplates'
 import { aiRouter } from './routes/ai'
 import { campgroundsRouter } from './routes/campgrounds'
 import { weatherRouter } from './routes/weather'
@@ -180,6 +181,7 @@ app.use('/api/v1/auth', authRouter)
 app.use('/api/v1/users/me/parties', partiesRouter)
 app.use('/api/v1/users', usersRouter)
 app.use('/api/v1/trips', tripsRouter)
+app.use('/api/v1/packing-templates', packingTemplatesRouter)
 app.use('/api/v1/ai', aiRouter)
 app.use('/api/v1/campgrounds', campgroundsRouter)
 app.use('/api/v1/weather', weatherRouter)

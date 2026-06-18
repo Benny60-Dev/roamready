@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Wand2, Check, Loader, X, FileDown, Undo2, Plus, Pencil, ChevronDown } from 'lucide-react'
-import { tripsApi } from '../services/api'
+import { Wand2, Check, Loader, X, FileDown, Undo2, Plus, Pencil, ChevronDown, Bookmark, Copy, ChevronRight } from 'lucide-react'
+import { tripsApi, packingTemplatesApi, PackingTemplateSummary } from '../services/api'
 import { PackingCategory, PackingContext, PackingCounts } from '../types'
+import { useAuthStore } from '../store/authStore'
+import { useUIStore } from '../store/uiStore'
 import { Breadcrumb } from '../components/ui/Breadcrumb'
 import ConfirmModal from '../components/ui/ConfirmModal'
 import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
@@ -69,6 +71,23 @@ export default function PackingListPage() {
   // "no small job" line; stage 2 ("hang tight") flips in after BUILD_STAGE2_MS
   // if still generating. New top-section hook (above the loading early return).
   const [buildStage, setBuildStage] = useState<1 | 2>(1)
+
+  // FR-SAVED-PACKING — save-as-template + the "how do you want to start?" chooser.
+  // All hooks live in this unconditional top section (above the loading early
+  // return) per the Rules of Hooks.
+  const hasAccess = useAuthStore(s => s.hasAccess)
+  const openPaywall = useUIStore(s => s.openPaywall)
+  const isPro = hasAccess('packingListGenerator')
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false)
+  const [templateName, setTemplateName] = useState('')
+  const [includeChecked, setIncludeChecked] = useState(false)
+  const [savingTemplate, setSavingTemplate] = useState(false)
+  const [templateSavedMsg, setTemplateSavedMsg] = useState<string | null>(null)
+  // Chooser sources, lazily loaded only while the empty state is showing.
+  // null = not loaded yet; [] = loaded, none available.
+  const [templates, setTemplates] = useState<PackingTemplateSummary[] | null>(null)
+  const [copyTrips, setCopyTrips] = useState<{ id: string; name: string }[] | null>(null)
+  const [seeding, setSeeding] = useState(false)
 
   // Debounced persistence (PUT /trips/:id/packing-list). Toggles/removals
   // update local state optimistically and schedule a save; latestRef always
@@ -139,6 +158,32 @@ export default function PackingListPage() {
     })
   }, [tripId])
 
+  // Load the chooser sources while the empty state is showing (no list yet).
+  // Templates are fetched ONLY for Pro users — GET /packing-templates is
+  // server-gated, so a non-Pro fetch would 403 and pop the paywall just from
+  // viewing the page. Copy-source trips are free (filtered from getAll).
+  useEffect(() => {
+    if (loading || categories.length > 0 || !tripId) return
+    let cancelled = false
+    tripsApi.getAll()
+      .then(res => {
+        if (cancelled) return
+        const others = (res.data as any[])
+          .filter(t => t.id !== tripId && Array.isArray(t.packingList) && t.packingList.length > 0)
+          .map(t => ({ id: t.id as string, name: (t.name as string) || 'Untitled trip' }))
+        setCopyTrips(others)
+      })
+      .catch(() => { if (!cancelled) setCopyTrips([]) })
+    if (isPro) {
+      packingTemplatesApi.list()
+        .then(res => { if (!cancelled) setTemplates(res.data) })
+        .catch(() => { if (!cancelled) setTemplates([]) })
+    } else {
+      setTemplates([])
+    }
+    return () => { cancelled = true }
+  }, [loading, categories.length, tripId, isPro])
+
   // Reset window scroll to the top on the loading→ready edge when the tall
   // category checklist first mounts. See hooks/useScrollResetOnReady.
   useScrollResetOnReady(!loading)
@@ -171,6 +216,75 @@ export default function PackingListPage() {
     } finally {
       if (buildStageTimer.current) { clearTimeout(buildStageTimer.current); buildStageTimer.current = null }
       setGenerating(false)
+    }
+  }
+
+  // ─── FR-SAVED-PACKING actions ────────────────────────────────────────────────
+
+  async function saveAsTemplate() {
+    if (!tripId || !templateName.trim()) return
+    setSavingTemplate(true)
+    try {
+      // includeChecked OFF (default) → send items unchecked. The server ALSO
+      // forces checked:false at store time, so the toggle is UX clarity / an
+      // honest payload, not the source of truth.
+      const name = templateName.trim()
+      const items = includeChecked
+        ? categories
+        : categories.map(c => ({ ...c, items: c.items.map(i => ({ ...i, checked: false })) }))
+      await packingTemplatesApi.create(name, items)
+      setShowSaveTemplate(false)
+      setTemplateName('')
+      setIncludeChecked(false)
+      setTemplateSavedMsg(`Saved “${name}” as a template`)
+      setTimeout(() => setTemplateSavedMsg(null), 4000)
+      // Keep the chooser's template list fresh for a later empty state.
+      if (isPro) packingTemplatesApi.list().then(r => setTemplates(r.data)).catch(() => {})
+    } catch (err: any) {
+      // 403 FEATURE_GATED → paywall opened by the central interceptor.
+      if (err?.response?.status === 403 && err?.response?.data?.code === 'FEATURE_GATED') {
+        setShowSaveTemplate(false)
+        return
+      }
+      console.error('[PackingListPage] save template failed:', err)
+    } finally {
+      setSavingTemplate(false)
+    }
+  }
+
+  // Shared post-seed refresh: show the merged result immediately + re-pull the
+  // staleness snapshot (both seed endpoints write a fresh packingListMeta).
+  function applySeedResult(data: PackingCategory[]) {
+    setCategories(data)
+    if (tripId) tripsApi.get(tripId).then(r => setPackingContext(r.data.packingContext ?? null)).catch(() => {})
+  }
+
+  async function seedFromTemplate(templateId: string) {
+    if (!tripId) return
+    if (!isPro) { openPaywall('packingListGenerator'); return }
+    setSeeding(true)
+    try {
+      const res = await tripsApi.seedPackingFromTemplate(tripId, templateId)
+      applySeedResult(res.data)
+    } catch (err: any) {
+      if (err?.response?.status === 403 && err?.response?.data?.code === 'FEATURE_GATED') return
+      console.error('[PackingListPage] seed from template failed:', err)
+    } finally {
+      setSeeding(false)
+    }
+  }
+
+  async function copyFromTrip(sourceTripId: string) {
+    if (!tripId) return
+    setSeeding(true)
+    try {
+      const res = await tripsApi.copyPackingFromTrip(tripId, sourceTripId)
+      applySeedResult(res.data)
+    } catch (err: any) {
+      if (err?.response?.status === 403 && err?.response?.data?.code === 'FEATURE_GATED') return
+      console.error('[PackingListPage] copy from trip failed:', err)
+    } finally {
+      setSeeding(false)
     }
   }
 
@@ -367,6 +481,17 @@ export default function PackingListPage() {
                 </div>
               )}
             </div>
+            {/* Save the current list as a reusable template (Pro). Non-Pro
+                click opens the paywall instead of the dialog. */}
+            <button
+              onClick={() => isPro ? setShowSaveTemplate(true) : openPaywall('packingListGenerator')}
+              disabled={generating}
+              title="Save this list as a reusable template"
+              className="btn-outline text-sm flex items-center gap-1.5"
+            >
+              <Bookmark size={14} />
+              Save as template
+            </button>
             <button onClick={() => setShowRegenConfirm(true)} disabled={generating} className="btn-outline text-sm flex items-center gap-1.5">
               {generating ? <Loader size={14} className="animate-spin" /> : <Wand2 size={14} />}
               {generating ? 'Generating...' : 'Refresh suggestions'}
@@ -384,6 +509,15 @@ export default function PackingListPage() {
           >
             Retry
           </button>
+        </div>
+      )}
+
+      {/* Inline success confirmation after saving a template (no toast system
+          in the app — mirrors the saveError card pattern, auto-clears in 4s). */}
+      {templateSavedMsg && (
+        <div className="card bg-green-50 border-green-200 flex items-center gap-2">
+          <Check size={16} className="text-green-600 flex-shrink-0" />
+          <p className="text-sm text-green-800">{templateSavedMsg}</p>
         </div>
       )}
 
@@ -454,16 +588,155 @@ export default function PackingListPage() {
         onCancel={() => setShowRegenConfirm(false)}
       />
 
+      {/* Save-as-template dialog. Built inline (vs ConfirmModal) because it needs
+          a name input + a checkbox; matches ConfirmModal's overlay/card styling. */}
+      {showSaveTemplate && (
+        <div
+          className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+          onClick={() => { if (!savingTemplate) setShowSaveTemplate(false) }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="bg-white rounded-lg border border-gray-200 w-full max-w-[400px] p-6 shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 className="font-semibold text-lg text-gray-900 mb-1">Save as template</h2>
+            <p className="text-sm text-gray-600 mb-4">Reuse this list as a starting point for future trips.</p>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Template name</label>
+            <input
+              type="text"
+              autoFocus
+              value={templateName}
+              onChange={e => setTemplateName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && templateName.trim()) void saveAsTemplate() }}
+              placeholder="My Standard RV Kit"
+              className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:outline-none focus:border-[#1F6F8B] bg-white mb-4"
+            />
+            <label className="flex items-start gap-2 mb-6 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includeChecked}
+                onChange={e => setIncludeChecked(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span className="text-sm text-gray-600">
+                Include checked-off state
+                <span className="block text-xs text-gray-400">Off by default — a template is a fresh starting point.</span>
+              </span>
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowSaveTemplate(false)}
+                disabled={savingTemplate}
+                className="border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void saveAsTemplate()}
+                disabled={savingTemplate || !templateName.trim()}
+                className="bg-[#3E5540] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#2F4030] transition-colors disabled:opacity-50"
+              >
+                {savingTemplate ? 'Saving...' : 'Save template'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {categories.length === 0 ? (
-        generating ? buildingNotice : (
-          <div className="card text-center py-16">
-            <div className="text-4xl mb-3">🎒</div>
-            <p className="font-medium text-gray-700 mb-1">No packing list yet</p>
-            <p className="text-sm text-gray-500 mb-4">Generate one with AI based on your trip details</p>
-            <button onClick={generate} disabled={generating} className="btn-primary inline-flex items-center gap-2">
-              {generating ? <Loader size={15} className="animate-spin" /> : <Wand2 size={15} />}
-              Generate packing list
-            </button>
+        (generating || seeding) ? buildingNotice : (
+          <div className="card py-8">
+            <div className="text-center mb-5">
+              <div className="text-4xl mb-2">🎒</div>
+              <p className="font-medium text-gray-700">No packing list yet</p>
+              <p className="text-sm text-gray-500">How do you want to start?</p>
+            </div>
+            <div className="space-y-2.5 max-w-md mx-auto">
+              {/* 1 — Generate fresh with AI (existing flow) */}
+              <button
+                onClick={generate}
+                disabled={generating || seeding}
+                className="w-full text-left border border-gray-200 rounded-lg p-4 hover:border-[#1F6F8B] hover:bg-gray-50 transition-colors flex items-start gap-3 disabled:opacity-50"
+              >
+                <Wand2 size={18} className="text-[#1F6F8B] mt-0.5 flex-shrink-0" />
+                <span className="flex-1">
+                  <span className="block text-sm font-medium text-gray-800">Generate fresh with AI</span>
+                  <span className="block text-xs text-gray-500">Built for this trip's party, nights &amp; rig</span>
+                </span>
+                <ChevronRight size={16} className="text-gray-300 mt-0.5 flex-shrink-0" />
+              </button>
+
+              {/* 2 — Start from a template (Pro) */}
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="flex items-center gap-2 px-4 pt-3 pb-0.5">
+                  <Bookmark size={16} className="text-[#1F6F8B] flex-shrink-0" />
+                  <span className="text-sm font-medium text-gray-800">Start from a template</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-[#3E5540] bg-[#EAF0EA] rounded px-1.5 py-0.5">Pro</span>
+                </div>
+                {!isPro ? (
+                  <button
+                    onClick={() => openPaywall('packingListGenerator')}
+                    className="w-full text-left px-4 pb-3 pt-1 text-xs text-gray-500 hover:text-[#1F6F8B]"
+                  >
+                    Unlock Pro to reuse saved templates.
+                  </button>
+                ) : templates === null ? (
+                  <div className="px-4 pb-3 pt-1 text-xs text-gray-400 flex items-center gap-1.5">
+                    <Loader size={12} className="animate-spin" /> Loading templates…
+                  </div>
+                ) : templates.length === 0 ? (
+                  <p className="px-4 pb-3 pt-1 text-xs text-gray-400">Save a list as a template first.</p>
+                ) : (
+                  <div className="divide-y divide-gray-100 border-t border-gray-100 mt-1">
+                    {templates.map(t => (
+                      <button
+                        key={t.id}
+                        onClick={() => seedFromTemplate(t.id)}
+                        disabled={seeding}
+                        className="w-full text-left px-4 py-2.5 hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <span className="flex-1 text-sm text-gray-700">{t.name}</span>
+                        <span className="text-xs text-gray-400">{pluralize(t.itemCount, 'item')}</span>
+                        <ChevronRight size={15} className="text-gray-300 flex-shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 3 — Copy from a previous trip (Free) */}
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="flex items-center gap-2 px-4 pt-3 pb-0.5">
+                  <Copy size={16} className="text-[#1F6F8B] flex-shrink-0" />
+                  <span className="text-sm font-medium text-gray-800">Copy from a previous trip</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">Free</span>
+                </div>
+                <p className="px-4 text-xs text-gray-500">Reuse a list you already built — merged onto this trip.</p>
+                {copyTrips === null ? (
+                  <div className="px-4 pb-3 pt-1 text-xs text-gray-400 flex items-center gap-1.5">
+                    <Loader size={12} className="animate-spin" /> Loading trips…
+                  </div>
+                ) : copyTrips.length === 0 ? (
+                  <p className="px-4 pb-3 pt-1 text-xs text-gray-400">No other trips with a packing list yet.</p>
+                ) : (
+                  <div className="divide-y divide-gray-100 border-t border-gray-100 mt-2">
+                    {copyTrips.map(t => (
+                      <button
+                        key={t.id}
+                        onClick={() => copyFromTrip(t.id)}
+                        disabled={seeding}
+                        className="w-full text-left px-4 py-2.5 hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <span className="flex-1 text-sm text-gray-700">{t.name}</span>
+                        <ChevronRight size={15} className="text-gray-300 flex-shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )
       ) : (

@@ -12,7 +12,7 @@ import { generatePackingListAI, generateTripItineraryAI, generateStopActivitiesA
 import { fetchLiveForecast, fetchHistoricalWeather, isoDate } from '../services/weatherFetch'
 import { computeFuelEstimate } from '../services/fuelPrice'
 import { stampModifyActionApplied } from '../services/modifyActions'
-import { mergePackedState } from '../utils/packingMerge'
+import { mergePackedState, resetCheckedState } from '../utils/packingMerge'
 import { resolvePackingCounts, computeStaleness } from '../utils/packingMeta'
 import { parseTripDate } from '../utils/dates'
 import { computeTripShape } from '../utils/tripShape'
@@ -2038,6 +2038,96 @@ export async function updatePackingList(req: AuthRequest, res: Response, next: N
     const { packingList } = req.body
     await prisma.trip.update({ where: { id: trip.id }, data: { packingList } })
     res.json(packingList)
+  } catch (err) { next(err) }
+}
+
+// ─── FR-SAVED-PACKING ────────────────────────────────────────────────────────
+// Two ways to SEED a trip's packing list from existing data, both ending in the
+// SAME mergePackedState + staleness-snapshot path the generate flow uses
+// (generatePackingList above) — so checked-state + custom items carry over and
+// the "Made for X"/staleness banner stays correct. Factored here so both share
+// one persist routine.
+//
+//   seedPackingListFromTemplate — Pro. Seed from a saved PackingTemplate.
+//   copyPackingListFromTrip     — FREE. Merge another owned trip's list in.
+
+// Persist a seeded/merged list onto a trip with the same packingListMeta snapshot
+// the generate flow writes (resolvePackingCounts(trip.party ?? user-default) +
+// generatedAt). `incoming` is merged onto the trip's existing list via
+// mergePackedState (trip's checked-state + custom items preserved). Returns the
+// merged list to the caller.
+async function persistSeededPackingList(req: AuthRequest, trip: any, incoming: any[]) {
+  const merged = mergePackedState(trip.packingList, incoming)
+
+  // Default party for the nights/people snapshot — same resolution as generate.
+  const user = await prisma.user.findUnique({
+    where: { id: req.user!.id },
+    include: { parties: { where: { isDefault: true }, include: { people: true, pets: true }, take: 1 } },
+  })
+  const resolvedParty = trip.party ?? user?.parties?.[0] ?? null
+  const packingListMeta = {
+    ...resolvePackingCounts(resolvedParty, trip),
+    generatedAt: new Date().toISOString(),
+  }
+
+  await prisma.trip.update({
+    where: { id: trip.id },
+    data: { packingList: merged, packingListMeta: packingListMeta as any },
+  })
+  return merged
+}
+
+/** POST /trips/:id/packing-list/from-template — seed from a saved template (Pro).
+ *  Body { templateId }. Ownership-checks BOTH the trip and the template. */
+export async function seedPackingListFromTemplate(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { templateId } = req.body as { templateId: string }
+    const trip = await prisma.trip.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+      include: { stops: true, party: { include: { people: true, pets: true } } },
+    })
+    if (!trip) throw new AppError('Trip not found', 404)
+
+    const template = await prisma.packingTemplate.findFirst({
+      where: { id: templateId, userId: req.user!.id },
+    })
+    if (!template) throw new AppError('Template not found', 404)
+
+    // Reset checked:false on the seeded items — a template is a starting point,
+    // not a packed state (belt-and-suspenders; they're already stored unchecked).
+    const seed = resetCheckedState(template.items)
+    const merged = await persistSeededPackingList(req, trip, seed)
+    res.json(merged)
+  } catch (err) { next(err) }
+}
+
+/** POST /trips/:id/packing-list/copy-from — merge another owned trip's list (FREE).
+ *  Body { sourceTripId }. MERGE (not overwrite): adds onto the target list,
+ *  preserving its custom/checked items. Ownership-checks BOTH trips. */
+export async function copyPackingListFromTrip(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { sourceTripId } = req.body as { sourceTripId: string }
+    if (sourceTripId === req.params.id) throw new AppError('Source and target trip must be different', 400)
+
+    const [targetTrip, sourceTrip] = await Promise.all([
+      prisma.trip.findFirst({
+        where: { id: req.params.id, userId: req.user!.id },
+        include: { stops: true, party: { include: { people: true, pets: true } } },
+      }),
+      prisma.trip.findFirst({
+        where: { id: sourceTripId, userId: req.user!.id },
+      }),
+    ])
+    if (!targetTrip) throw new AppError('Trip not found', 404)
+    if (!sourceTrip) throw new AppError('Source trip not found', 404)
+
+    const sourceList = sourceTrip.packingList
+    if (!Array.isArray(sourceList) || sourceList.length === 0) {
+      throw new AppError('Source trip has no packing list to copy', 400)
+    }
+
+    const merged = await persistSeededPackingList(req, targetTrip, sourceList as any[])
+    res.json(merged)
   } catch (err) { next(err) }
 }
 

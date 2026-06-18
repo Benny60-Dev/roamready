@@ -149,6 +149,13 @@ export const tripsApi = {
     api.delete(`/trips/${id}/stops/${stopId}${modifyActionId ? `?modifyActionId=${encodeURIComponent(modifyActionId)}` : ''}`),
   generatePackingList: (id: string) => api.post(`/trips/${id}/packing-list`),
   savePackingList: (id: string, packingList: any[]) => api.put(`/trips/${id}/packing-list`, { packingList }),
+  // FR-SAVED-PACKING — seed a trip's packing list from existing data. Both MERGE
+  // (server-side mergePackedState), not overwrite. from-template is Pro-gated;
+  // copy-from another owned trip is free.
+  seedPackingFromTemplate: (id: string, templateId: string) =>
+    api.post(`/trips/${id}/packing-list/from-template`, { templateId }),
+  copyPackingFromTrip: (id: string, sourceTripId: string) =>
+    api.post(`/trips/${id}/packing-list/copy-from`, { sourceTripId }),
   exportPdf: (id: string) => api.post(`/trips/${id}/export/pdf`),
   reassignPOIs: (id: string) => api.post(`/trips/${id}/stops/reassign-pois`),
   expandLongLegs: (id: string) => api.post(`/trips/${id}/expand-long-legs`),
@@ -163,6 +170,22 @@ export const tripsApi = {
   // of the fuel-budget feature). Returns total + perLeg + freshness metadata;
   // see TripFuelEstimate in types/index.ts.
   getFuelEstimate: (id: string) => api.get<import('../types').TripFuelEstimate>(`/trips/${id}/fuel-estimate`),
+}
+
+// Saved packing templates (FR-SAVED-PACKING) — USER-level, Pro-gated CRUD.
+// List/create return the light shape ({ id, name, createdAt, itemCount }); get
+// returns full items for preview.
+export interface PackingTemplateSummary {
+  id: string
+  name: string
+  createdAt: string
+  itemCount: number
+}
+export const packingTemplatesApi = {
+  list: () => api.get<PackingTemplateSummary[]>('/packing-templates'),
+  get: (id: string) => api.get(`/packing-templates/${id}`),
+  create: (name: string, items: any[]) => api.post<PackingTemplateSummary>('/packing-templates', { name, items }),
+  delete: (id: string) => api.delete(`/packing-templates/${id}`),
 }
 
 // Planning Sessions

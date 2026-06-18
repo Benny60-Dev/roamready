@@ -64,3 +64,17 @@ export function mergePackedState(prev: unknown, next: any[]): any[] {
   }
   return result
 }
+
+/**
+ * Force checked:false on every item in a category list. Used by the saved-packing
+ * flows (FR-SAVED-PACKING): a template is a STARTING POINT, not a packed state,
+ * so checked marks are stripped both when a template is stored and again when its
+ * items seed a trip. Pure; returns a new array (does not mutate the input).
+ */
+export function resetCheckedState(categories: unknown): any[] {
+  if (!Array.isArray(categories)) return []
+  return categories.map((cat: any) => ({
+    ...cat,
+    items: (cat?.items ?? []).map((item: any) => ({ ...item, checked: false })),
+  }))
+}
