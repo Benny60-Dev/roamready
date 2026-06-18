@@ -16,6 +16,7 @@ import { mergePackedState } from '../utils/packingMerge'
 import { resolvePackingCounts, computeStaleness } from '../utils/packingMeta'
 import { parseTripDate } from '../utils/dates'
 import { computeTripShape } from '../utils/tripShape'
+import { getClientOrigin } from '../utils/clientOrigin'
 
 // ─── City name normalization ─────────────────────────────────────────────────
 // Strip ZIP, country, full state name, and trailing 2-letter state code so a
@@ -1612,6 +1613,21 @@ export async function getTripMapImage(req: AuthRequest, res: Response, next: Nex
     const lastStop = stops[stops.length - 1]
     let stopNum = 1
 
+    // BUG-MAP-PDF — the combined round-trip origin pin can read as the on-screen
+    // "S/F" teardrop by pointing Static Maps at our own hosted icon
+    // (client/public/sf-pin.png → <origin>/sf-pin.png). Google fetches that URL
+    // SERVER-SIDE from its own servers, so it only works when our public origin
+    // is reachable — i.e. a prod https host. On localhost Google can't reach the
+    // dev box, so we gate the icon on a public https origin and otherwise fall
+    // back to the single-char color:0xF97316|label:S pin. getClientOrigin returns
+    // CLIENT_URL in prod, so dev (localhost / unset CLIENT_URL) auto-falls-back
+    // with zero config. The PDF legend (TripPDF.tsx) names the pin either way.
+    const base = getClientOrigin(req)
+    const canUseIconPin =
+      base.startsWith('https://') &&
+      !/\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(base)
+    const sfIconUrl = `${base}/sf-pin.png`
+
     for (const stop of stops) {
       if (!stop.latitude || !stop.longitude) continue
       const coord = `${stop.latitude},${stop.longitude}`
@@ -1621,13 +1637,23 @@ export async function getTripMapImage(req: AuthRequest, res: Response, next: Nex
       // it doesn't stack under the combined origin pin (which carries S/F duty).
       if (isRoundTrip && stop.id === lastStop.id && stop.id !== firstStop.id) continue
 
+      // Combined start+finish pin on a round trip. Prefer the hosted S/F icon
+      // when our public origin is reachable; otherwise the single-char fallback.
+      // (icon: ignores color/label; anchor:bottom seats the teardrop tip on the
+      // coord. URLSearchParams URL-encodes the icon URL, which Static Maps wants.)
+      if (isRoundTrip && stop.id === firstStop.id) {
+        if (canUseIconPin) {
+          params.append('markers', `icon:${sfIconUrl}|anchor:bottom|${coord}`)
+        } else {
+          params.append('markers', `color:0xF97316|label:S|${coord}`)
+        }
+        continue
+      }
+
       let label: string
-      let markerColor = 'green'
+      const markerColor = 'green'
       if (stop.id === firstStop.id) {
-        label = 'S'
-        // Combined start+finish on a round trip → home/origin color. One-way
-        // start keeps the standard green (one-way rendering is unchanged).
-        if (isRoundTrip) markerColor = '0xF97316'
+        label = 'S' // one-way start (round-trip start handled above)
       } else if (stop.id === lastStop.id) {
         label = 'F' // one-way finish (round trips skip this stop above)
       } else {
