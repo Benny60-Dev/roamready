@@ -22,9 +22,9 @@ export default function AdminDashboardPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <Breadcrumb items={[{ label: 'Admin Dashboard' }]} />
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-xl font-medium text-gray-900">Admin Dashboard</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Link to="/admin/feedback" className="btn-ghost text-sm flex items-center gap-1.5"><MessageSquare size={14} /> Feedback</Link>
           <Link to="/admin/revenue" className="btn-ghost text-sm flex items-center gap-1.5"><DollarSign size={14} /> Revenue</Link>
           <Link to="/admin/subscribers" className="btn-ghost text-sm flex items-center gap-1.5"><Users size={14} /> Subscribers</Link>
