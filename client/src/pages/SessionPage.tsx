@@ -1629,6 +1629,11 @@ export default function SessionPage() {
                   listening={listening}
                   onToggleListening={toggleListening}
                   variant="hero"
+                  // "Start here" pulse — this hero block only renders on a fresh
+                  // new-session screen, so isAwaiting here means exactly that. It
+                  // self-suppresses on focus/typing; !typing avoids pulsing during
+                  // the first send's in-flight flash.
+                  isAwaiting={!typing}
                 />
 
                 {/* Learn how to prompt me — single quiet disclosure that replaces the
