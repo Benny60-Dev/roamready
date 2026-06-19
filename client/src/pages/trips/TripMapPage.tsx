@@ -1520,26 +1520,20 @@ export default function TripMapPage() {
         >
           <Download size={13} /> {downloadingPdf ? 'Generating...' : 'PDF'}
         </button>
-      </div>
-
-      {/* BUG-ITINERARY-BTN-FOLD — mobile-only guaranteed-visible itinerary CTA.
-          On content-heavy trips the canonical in-sidebar "View itinerary ›" sits
-          below the (tall) trip-detail block + the 34vh map, pushing it under the
-          fold. This thin strip — right after the action bar, ABOVE the map — keeps
-          the page's primary action visible on load. MOBILE ONLY; the sidebar CTA
-          is the canonical one on tablet/desktop (gated !isMobile there so this
-          isn't a duplicate). Reuses the exact gold Link styling, full-width for
-          prominence, same nonHomeStops gate so it hides on a no-real-stops trip. */}
-      {isMobile && nonHomeStops.length > 0 && (
-        <div className="flex-shrink-0 bg-white border-b border-gray-100 px-2 py-2">
+        {/* BUG-ITINERARY-BTN-FOLD — itinerary CTA in the action row, MOBILE ONLY.
+            Gold/solid (btn-primary IS #F7A829, same as PDF) + active state; sized
+            via btn-primary so it wraps cleanly in this flex-wrap row. Mobile only
+            (the in-sidebar !isMobile CTA stays the canonical one on desktop/tablet
+            — one CTA per breakpoint, no duplicate). Gated on nonHomeStops. */}
+        {isMobile && nonHomeStops.length > 0 && (
           <Link
             to={`/trips/${id}/itinerary`}
-            className="block w-full bg-[#F7A829] text-white hover:bg-[#C9851A] active:bg-[#8A5A0E] text-sm font-medium px-4 py-2.5 rounded-md text-center transition-colors"
+            className="btn-primary text-sm flex items-center gap-1.5 active:bg-[#8A5A0E]"
           >
             View itinerary ›
           </Link>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* ── Map + sidebar row ─────────────────────────────────────────────────── */}
       {/* Wrapper provides the reference height that expandMap() reads */}
@@ -2249,7 +2243,7 @@ export default function TripMapPage() {
             boxShadow: '0 4px 20px rgba(0,0,0,0.10)',
           } : isMobile ? {
             width: '100%',
-            height: '34vh',
+            height: '45vh',
             flexShrink: 0,
             order: 1,
           } : !isDesktop ? {
