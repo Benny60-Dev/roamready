@@ -1522,6 +1522,25 @@ export default function TripMapPage() {
         </button>
       </div>
 
+      {/* BUG-ITINERARY-BTN-FOLD — mobile-only guaranteed-visible itinerary CTA.
+          On content-heavy trips the canonical in-sidebar "View itinerary ›" sits
+          below the (tall) trip-detail block + the 34vh map, pushing it under the
+          fold. This thin strip — right after the action bar, ABOVE the map — keeps
+          the page's primary action visible on load. MOBILE ONLY; the sidebar CTA
+          is the canonical one on tablet/desktop (gated !isMobile there so this
+          isn't a duplicate). Reuses the exact gold Link styling, full-width for
+          prominence, same nonHomeStops gate so it hides on a no-real-stops trip. */}
+      {isMobile && nonHomeStops.length > 0 && (
+        <div className="flex-shrink-0 bg-white border-b border-gray-100 px-2 py-2">
+          <Link
+            to={`/trips/${id}/itinerary`}
+            className="block w-full bg-[#F7A829] text-white hover:bg-[#C9851A] active:bg-[#8A5A0E] text-sm font-medium px-4 py-2.5 rounded-md text-center transition-colors"
+          >
+            View itinerary ›
+          </Link>
+        </div>
+      )}
+
       {/* ── Map + sidebar row ─────────────────────────────────────────────────── */}
       {/* Wrapper provides the reference height that expandMap() reads */}
       <div>
@@ -1860,8 +1879,12 @@ export default function TripMapPage() {
                     this page (users return to review their day-by-day plan
                     repeatedly across the life of a trip). Restored to the
                     top of the stack from a brief C2 detour into the corner
-                    tab bar — placement there demoted it too far. */}
-                {nonHomeStops.length > 0 && (
+                    tab bar — placement there demoted it too far.
+                    !isMobile (BUG-ITINERARY-BTN-FOLD): on mobile this CTA is
+                    rendered as a top strip above the map instead (the in-sidebar
+                    one sits below the fold on tall trips); gating here keeps
+                    it to ONE CTA on mobile. Tablet/desktop keep it in-sidebar. */}
+                {!isMobile && nonHomeStops.length > 0 && (
                   <Link
                     to={`/trips/${id}/itinerary`}
                     className="bg-[#F7A829] text-white hover:bg-[#C9851A] active:bg-[#8A5A0E] text-sm font-medium px-4 py-2.5 rounded-md text-center transition-colors"
