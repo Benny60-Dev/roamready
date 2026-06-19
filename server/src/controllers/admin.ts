@@ -90,7 +90,8 @@ export async function getMetrics(_req: AuthRequest, res: Response, next: NextFun
 export async function getSubscribers(_req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const subscribers = await prisma.user.findMany({
-      where: { subscriptionTier: { not: 'FREE' } },
+      // No tier filter: return ALL users (FREE and PRO). The admin Users
+      // table splits/filters by tier client-side. (FR-ADMIN-USERLIST)
       select: {
         id: true, email: true, firstName: true, lastName: true,
         subscriptionTier: true, subscriptionEndsAt: true, createdAt: true,
