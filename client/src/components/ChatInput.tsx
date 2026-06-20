@@ -42,8 +42,7 @@ interface ChatInputProps {
   /** It's the user's turn (AI asked something and is done generating). Drives a
    *  gentle brand-blue pulse on the compact input so the user notices it's their
    *  turn. The pulse self-suppresses once the field is focused or has text.
-   *  Compact variant only; ignored by the hero variant (a hero pulse broke the
-   *  mic's paint on iOS Safari — see the note in the hero return). */
+   *  Compact variant only; ignored by the hero variant. */
   isAwaiting?: boolean
 }
 
@@ -92,11 +91,6 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
   // Mic + Send stick to the BOTTOM of the row rather than vertically centering
   // against a tall textarea — which looks awkward at 3+ lines.
   if (variant === 'hero') {
-    // NOTE: a "start here" pulse on this hero wrapper was tried in Batch 1
-    // (FR-UX-SENIOR-INPUTS-1) and reverted — animating the mic button's flex
-    // PARENT dropped the mic's paint on iOS Safari (desktop/Blink unaffected).
-    // If reintroduced, animate the textarea (like the compact variant, which is
-    // iOS-safe because the mic is its sibling), not this wrapper.
     return (
       <div
         className="flex items-end gap-2 bg-white"
@@ -106,7 +100,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
           ref={ref}
           rows={1}
           aria-label="Message RoamReady AI"
-          className="chat-textarea-hero caret-[#1F6F8B] flex-1 bg-transparent outline-none text-sm py-2 resize-none overflow-y-auto"
+          className="chat-textarea-hero flex-1 bg-transparent outline-none text-sm py-2 resize-none overflow-y-auto"
           // fieldSizing isn't yet in TS lib types, so cast through CSSProperties.
           // The runtime CSS property is `field-sizing: content`; React/JSX accepts
           // it as the camelCased key via inline style. Falls back silently on
@@ -159,7 +153,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
         ref={ref}
         rows={1}
         aria-label="Message RoamReady AI"
-        className={`input caret-[#1F6F8B] flex-1 min-w-0 text-sm resize-none overflow-y-auto${showAwaitingPulse ? ' chat-input-awaiting' : ''}`}
+        className={`input flex-1 min-w-0 text-sm resize-none overflow-y-auto${showAwaitingPulse ? ' chat-input-awaiting' : ''}`}
         style={{ fieldSizing: 'content', maxHeight: '8rem' } as React.CSSProperties}
         placeholder={placeholder}
         value={value}
