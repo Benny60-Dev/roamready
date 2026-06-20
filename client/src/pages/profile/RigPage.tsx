@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link } from 'react-router-dom'
 import { Plus, Trash2, Star, Pencil, BadgeInfo, Car, Truck, AlertCircle } from 'lucide-react'
@@ -228,7 +228,9 @@ export default function RigPage() {
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [towingChoice, setTowingChoice] = useState<TowingChoice>('NONE')
-  const { register, handleSubmit, reset, watch } = useForm()
+  // Scroll the just-revealed "Add a rig" form into view (FR-RIG-ADD-SCROLL).
+  const formRef = useRef<HTMLDivElement>(null)
+  const { register, handleSubmit, reset, watch, setFocus } = useForm()
   const vehicleType = watch('vehicleType') as VehicleType | undefined
   const isToyHauler = vehicleType === 'TOY_HAULER'
   // Block 7 — second-vehicle direction is derived from vehicleType. There's
@@ -255,6 +257,22 @@ export default function RigPage() {
   useEffect(() => {
     usersApi.getRigs().then(res => setRigs(res.data))
   }, [])
+
+  // FR-RIG-ADD-SCROLL: when "Add a rig" reveals the inline form, scroll it into
+  // view so the user sees it (on a long page / mobile it otherwise looks like
+  // nothing happened) and land the cursor on the first field. Keyed on showForm
+  // (not done in the click handler) so the form is mounted before we scroll.
+  // rAF ensures layout is committed; focus runs after the smooth scroll settles
+  // so element.focus() doesn't fight the animation. Honors reduced-motion.
+  useEffect(() => {
+    if (!showForm) return
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const raf = requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
+    })
+    const focusTimer = setTimeout(() => setFocus('vehicleType'), reduce ? 0 : 400)
+    return () => { cancelAnimationFrame(raf); clearTimeout(focusTimer) }
+  }, [showForm, setFocus])
 
   async function onSubmit(data: any) {
     setSaving(true)
@@ -367,7 +385,7 @@ export default function RigPage() {
       </div>
 
       {showForm && (
-        <div className="card-lg">
+        <div ref={formRef} className="card-lg scroll-mt-20">
           <h3 className="font-medium text-gray-900 mb-4">Add a rig</h3>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
