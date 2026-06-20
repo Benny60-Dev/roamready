@@ -39,11 +39,6 @@ export function useVoiceInput({ onTranscript, onStart, lang = 'en-US' }: UseVoic
   const [listening, setListening] = useState(false)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const prefixRef = useRef<string>('')
-  // MIC-CLEAR-1: stop() fires one final onresult ASYNC after it returns. Without
-  // this guard that trailing result calls onTranscript AFTER the consumer's send
-  // handler already cleared the input — re-filling the box. We flip stoppedRef
-  // true before stop() and drop any onresult that arrives while it's set.
-  const stoppedRef = useRef(false)
 
   useEffect(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition
@@ -51,11 +46,7 @@ export function useVoiceInput({ onTranscript, onStart, lang = 'en-US' }: UseVoic
   }, [])
 
   const stopListening = useCallback(() => {
-    stoppedRef.current = true
     if (recognitionRef.current) {
-      // Detach the handler on the LIVE rec object too — nulling recognitionRef
-      // alone doesn't unbind the closure's onresult, which can still fire post-stop.
-      recognitionRef.current.onresult = null
       recognitionRef.current.stop()
       recognitionRef.current = null
     }
@@ -72,8 +63,6 @@ export function useVoiceInput({ onTranscript, onStart, lang = 'en-US' }: UseVoic
 
     // Capture the current input value as a prefix so dictation appends rather than replaces.
     prefixRef.current = onStart?.() ?? ''
-    // New session — clear the post-stop guard so results flow again.
-    stoppedRef.current = false
 
     const rec = new SR()
     // Press-to-start / press-to-stop: don't auto-stop on pause, show interim results.
@@ -84,9 +73,6 @@ export function useVoiceInput({ onTranscript, onStart, lang = 'en-US' }: UseVoic
     rec.onstart = () => setListening(true)
 
     rec.onresult = (e: SpeechRecognitionEvent) => {
-      // Drop any trailing result that arrives after stopListening() — otherwise
-      // it would re-fill an input the consumer just cleared on send (MIC-CLEAR-1).
-      if (stoppedRef.current) return
       // Concatenate ALL results (final + interim) into one string for live transcript display.
       let combined = ''
       for (let i = 0; i < e.results.length; i++) {

@@ -1,4 +1,4 @@
-import { Mic } from 'lucide-react'
+import { Mic, MicOff } from 'lucide-react'
 
 interface VoiceInputButtonProps {
   listening: boolean
@@ -9,10 +9,8 @@ interface VoiceInputButtonProps {
 /**
  * Mic button that toggles voice dictation. Visual is a 36×36 (w-9 h-9) icon
  * tile matching the existing chat-input button shape used elsewhere in the
- * app. While `listening` is true, the button shows a red (NON-slashed) Mic
- * icon and a pulsing red overlay so the recording state is unmistakable. A
- * slashed MicOff glyph read as "disabled/off" to non-technical users, so
- * recording reuses the Mic glyph in red — the red tint + pulse signal "live".
+ * app. While `listening` is true, the button shows a red MicOff icon and a
+ * pulsing red overlay so the recording state is unmistakable.
  */
 export function VoiceInputButton({ listening, onClick, disabled = false }: VoiceInputButtonProps) {
   return (
@@ -35,7 +33,7 @@ export function VoiceInputButton({ listening, onClick, disabled = false }: Voice
         />
       )}
       <span className="relative z-10">
-        <Mic size={16} />
+        {listening ? <MicOff size={16} /> : <Mic size={16} />}
       </span>
     </button>
   )
