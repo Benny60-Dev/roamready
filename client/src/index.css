@@ -161,3 +161,30 @@
     box-shadow: 0 0 0 4px rgba(31, 111, 139, 0.35);
   }
 }
+
+/* HERO variant of the awaiting pulse. Same blue↔gold breathing glow + timing
+   as .chat-input-awaiting, but BOX-SHADOW ONLY — no animated border-color and
+   no geometry/layout property. It lives on the rounded WRAPPER box (which owns
+   the border-radius), so the glow hugs the whole rounded input instead of
+   drawing a sharp rectangle on the inner textarea. Box-shadow follows the
+   wrapper's border-radius, so the ring is rounded. Animating ONLY box-shadow
+   (not border-color) on this flex parent avoids the WebKit "child stops
+   painting during a parent animation" quirk that hid the mic on iOS Safari;
+   the mic button additionally carries `isolation: isolate` as a guard. */
+.hero-input-awaiting {
+  animation: hero-input-awaiting-pulse 2.4s ease-in-out infinite;
+}
+@keyframes hero-input-awaiting-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 3px rgba(31, 111, 139, 0.30), 0 0 12px 2px rgba(31, 111, 139, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(247, 168, 41, 0.45), 0 0 18px 4px rgba(247, 168, 41, 0.50);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-input-awaiting {
+    animation: none;
+    box-shadow: 0 0 0 4px rgba(31, 111, 139, 0.35);
+  }
+}

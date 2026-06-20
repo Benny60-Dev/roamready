@@ -42,9 +42,10 @@ interface ChatInputProps {
   /** Drives the gentle brand blue↔gold pulse (.chat-input-awaiting) so the user
    *  notices it's their turn / where to start. Self-suppresses once the field is
    *  focused or has text. Honored by BOTH variants: compact = "it's your turn to
-   *  reply"; hero = "start here" on a fresh new-session screen. In both cases the
-   *  pulse is applied to the TEXTAREA element (never a wrapper) — see the hero
-   *  return for the iOS-Safari reason. */
+   *  reply"; hero = "start here" on a fresh new-session screen. Compact pulses
+   *  the textarea (.chat-input-awaiting); hero pulses the rounded wrapper with a
+   *  box-shadow-only glow (.hero-input-awaiting) — see the hero return for the
+   *  iOS-Safari reason. */
   isAwaiting?: boolean
 }
 
@@ -66,7 +67,8 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
 ) {
   // Pulse only while it's the user's turn AND they haven't engaged yet — stops
   // the moment they focus the field or type anything (and when isAwaiting clears
-  // on send). Applied to the textarea in both variants (iOS-safe).
+  // on send). Compact: pulse on the textarea; hero: box-shadow glow on the
+  // rounded wrapper (iOS-safe).
   const [focused, setFocused] = useState(false)
   const showAwaitingPulse = isAwaiting && !focused && !value.trim()
   // MIC-SEND-1: submit while the mic is still listening. Recognition runs
@@ -93,20 +95,22 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
   // Mic + Send stick to the BOTTOM of the row rather than vertically centering
   // against a tall textarea — which looks awkward at 3+ lines.
   if (variant === 'hero') {
-    // The "start here" pulse is applied to the TEXTAREA below, NOT this wrapper.
-    // Animating the wrapper (the mic button's flex parent) triggered a WebKit
-    // quirk that dropped the mic's paint on iOS Safari. Mirroring the compact
-    // variant (pulse on the input element, mic is a sibling) is iOS-safe.
+    // The "start here" pulse is a BOX-SHADOW-ONLY glow on this rounded WRAPPER
+    // so it hugs the whole rounded box (border-radius below) instead of drawing
+    // a sharp rectangle on the inner textarea. Animating only box-shadow (never
+    // border-color or geometry) on this flex parent avoids the WebKit "child
+    // stops painting during a parent animation" quirk that previously hid the
+    // mic on iOS Safari; the mic button also carries `isolation: isolate`.
     return (
       <div
-        className="flex items-end gap-2 bg-white"
+        className={`flex items-end gap-2 bg-white${showAwaitingPulse ? ' hero-input-awaiting' : ''}`}
         style={{ border: '0.5px solid #E8E4DA', borderRadius: 8, padding: '6px 6px 6px 16px' }}
       >
         <textarea
           ref={ref}
           rows={1}
           aria-label="Message RoamReady AI"
-          className={`chat-textarea-hero caret-[#1F6F8B] flex-1 bg-transparent outline-none text-sm py-2 resize-none overflow-y-auto${showAwaitingPulse ? ' chat-input-awaiting' : ''}`}
+          className="chat-textarea-hero caret-[#1F6F8B] flex-1 bg-transparent outline-none text-sm py-2 resize-none overflow-y-auto"
           // fieldSizing isn't yet in TS lib types, so cast through CSSProperties.
           // The runtime CSS property is `field-sizing: content`; React/JSX accepts
           // it as the camelCased key via inline style. Falls back silently on
@@ -118,11 +122,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
           // placeholder — worse now that the iOS guard forces 16px. 3.5rem =
           // 2×20px line-height (text-sm) + 8+8px padding, border-box. fieldSizing
           // + maxHeight still let it grow for real multi-line input.
-          // border: 1px transparent so the .chat-input-awaiting ring's animated
-          // border-color has a width to render on (box-shadow shows regardless).
-          // box-sizing:border-box (global) keeps layout stable; invisible when not
-          // pulsing.
-          style={{ fieldSizing: 'content', minHeight: '3.5rem', maxHeight: '8rem', paddingTop: 8, paddingBottom: 8, border: '1px solid transparent' } as React.CSSProperties}
+          style={{ fieldSizing: 'content', minHeight: '3.5rem', maxHeight: '8rem', paddingTop: 8, paddingBottom: 8 } as React.CSSProperties}
           placeholder={placeholder}
           value={value}
           onChange={e => onChange(e.target.value)}
