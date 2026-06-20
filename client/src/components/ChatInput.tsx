@@ -39,12 +39,11 @@ interface ChatInputProps {
   /** 'hero' = pill wrapper + gold square Send (empty-state CTA);
    *  'compact' = bare flex row + btn-primary Send (in-conversation). */
   variant?: 'hero' | 'compact'
-  /** Drives the gentle brand blue↔gold pulse (.chat-input-awaiting) so the user
-   *  notices it's their turn / where to start. The pulse self-suppresses once the
-   *  field is focused or has text. Honored by BOTH variants: compact = "it's your
-   *  turn to reply" (AI done generating); hero = "start here" on a fresh home
-   *  screen. The hero variant only renders in the empty new-session state, so
-   *  passing isAwaiting there means exactly that. */
+  /** It's the user's turn (AI asked something and is done generating). Drives a
+   *  gentle brand-blue pulse on the compact input so the user notices it's their
+   *  turn. The pulse self-suppresses once the field is focused or has text.
+   *  Compact variant only; ignored by the hero variant (a hero pulse broke the
+   *  mic's paint on iOS Safari — see the note in the hero return). */
   isAwaiting?: boolean
 }
 
@@ -66,7 +65,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
 ) {
   // Pulse only while it's the user's turn AND they haven't engaged yet — stops
   // the moment they focus the field or type anything (and when isAwaiting clears
-  // on send). Drives both variants (compact "your turn", hero "start here").
+  // on send). Compact variant only.
   const [focused, setFocused] = useState(false)
   const showAwaitingPulse = isAwaiting && !focused && !value.trim()
   // MIC-SEND-1: submit while the mic is still listening. Recognition runs
@@ -93,12 +92,14 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
   // Mic + Send stick to the BOTTOM of the row rather than vertically centering
   // against a tall textarea — which looks awkward at 3+ lines.
   if (variant === 'hero') {
-    // Pulse lives on the bordered WRAPPER (the hero textarea is borderless; the
-    // visible border/pill is this div), so .chat-input-awaiting animates the ring
-    // the user actually sees. Same self-suppress guard as compact.
+    // NOTE: a "start here" pulse on this hero wrapper was tried in Batch 1
+    // (FR-UX-SENIOR-INPUTS-1) and reverted — animating the mic button's flex
+    // PARENT dropped the mic's paint on iOS Safari (desktop/Blink unaffected).
+    // If reintroduced, animate the textarea (like the compact variant, which is
+    // iOS-safe because the mic is its sibling), not this wrapper.
     return (
       <div
-        className={`flex items-end gap-2 bg-white${showAwaitingPulse ? ' chat-input-awaiting' : ''}`}
+        className="flex items-end gap-2 bg-white"
         style={{ border: '0.5px solid #E8E4DA', borderRadius: 8, padding: '6px 6px 6px 16px' }}
       >
         <textarea
@@ -122,8 +123,6 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
           value={value}
           onChange={e => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
           disabled={disabled}
           maxLength={4000}
         />
