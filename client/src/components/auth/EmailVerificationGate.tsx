@@ -109,9 +109,13 @@ export function EmailVerificationGate() {
           <h1 className="text-lg font-medium text-gray-900">Verify your email to continue</h1>
         </div>
 
-        <p className="text-sm text-gray-700 mb-6">
+        <p className="text-sm text-gray-700 mb-2">
           We sent a verification link to <span className="font-medium">{user?.email ?? 'your inbox'}</span>.
           The link doesn't expire — click it whenever you're ready.
+        </p>
+
+        <p className="text-xs text-gray-500 mb-6">
+          Don't see it? Check your spam or junk folder, and mark it "Not Spam" so future emails reach your inbox.
         </p>
 
         <button
