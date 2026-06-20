@@ -7,6 +7,11 @@ import { useAuthStore } from '../../store/authStore'
 import { Rig, VehicleType, TowedType } from '../../types'
 import { deriveSecondVehicle } from '../../utils/rigs'
 
+// Year dropdown range: next year (current + 1, for new-model-year rigs) down to
+// 1990, newest first. Computed once at module load — not a hardcoded list.
+const YEAR_MAX = new Date().getFullYear() + 1
+const YEARS = Array.from({ length: YEAR_MAX - 1990 + 1 }, (_, i) => YEAR_MAX - i)
+
 export const VEHICLE_LABELS: Record<VehicleType, string> = {
   RV_CLASS_A: 'Class A Motorhome',
   RV_CLASS_B: 'Class B / Camper Van',
@@ -397,7 +402,10 @@ export default function RigPage() {
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="label">Year</label>
-                <input type="number" className="input" {...register('year', { valueAsNumber: true })} />
+                <select className="input" {...register('year', { setValueAs: v => v === '' ? undefined : Number(v), required: true })}>
+                  <option value="">Select year</option>
+                  {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
               </div>
               <div>
                 <label className="label">Make</label>
@@ -566,7 +574,10 @@ export default function RigPage() {
                         <div className="grid grid-cols-3 gap-3">
                           <div>
                             <label className="label">Year</label>
-                            <input type="number" className="input" placeholder="2019" {...register('towedYear', { valueAsNumber: true })} />
+                            <select className="input" {...register('towedYear', { setValueAs: v => v === '' ? undefined : Number(v), required: true })}>
+                              <option value="">Select year</option>
+                              {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                            </select>
                           </div>
                           <div>
                             <label className="label">Make</label>
@@ -625,7 +636,10 @@ export default function RigPage() {
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="label">Year</label>
-                    <input type="number" className="input" placeholder="2020" {...register('towedYear', { valueAsNumber: true })} />
+                    <select className="input" {...register('towedYear', { setValueAs: v => v === '' ? undefined : Number(v), required: true })}>
+                      <option value="">Select year</option>
+                      {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
                   </div>
                   <div>
                     <label className="label">Make</label>
