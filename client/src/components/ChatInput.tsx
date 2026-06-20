@@ -39,10 +39,12 @@ interface ChatInputProps {
   /** 'hero' = pill wrapper + gold square Send (empty-state CTA);
    *  'compact' = bare flex row + btn-primary Send (in-conversation). */
   variant?: 'hero' | 'compact'
-  /** It's the user's turn (AI asked something and is done generating). Drives a
-   *  gentle brand-blue pulse on the compact input so the user notices it's their
-   *  turn. The pulse self-suppresses once the field is focused or has text.
-   *  Compact variant only; ignored by the hero variant. */
+  /** Drives the gentle brand blue↔gold pulse (.chat-input-awaiting) so the user
+   *  notices it's their turn / where to start. Self-suppresses once the field is
+   *  focused or has text. Honored by BOTH variants: compact = "it's your turn to
+   *  reply"; hero = "start here" on a fresh new-session screen. In both cases the
+   *  pulse is applied to the TEXTAREA element (never a wrapper) — see the hero
+   *  return for the iOS-Safari reason. */
   isAwaiting?: boolean
 }
 
@@ -64,7 +66,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
 ) {
   // Pulse only while it's the user's turn AND they haven't engaged yet — stops
   // the moment they focus the field or type anything (and when isAwaiting clears
-  // on send). Compact variant only.
+  // on send). Applied to the textarea in both variants (iOS-safe).
   const [focused, setFocused] = useState(false)
   const showAwaitingPulse = isAwaiting && !focused && !value.trim()
   // MIC-SEND-1: submit while the mic is still listening. Recognition runs
@@ -91,6 +93,10 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
   // Mic + Send stick to the BOTTOM of the row rather than vertically centering
   // against a tall textarea — which looks awkward at 3+ lines.
   if (variant === 'hero') {
+    // The "start here" pulse is applied to the TEXTAREA below, NOT this wrapper.
+    // Animating the wrapper (the mic button's flex parent) triggered a WebKit
+    // quirk that dropped the mic's paint on iOS Safari. Mirroring the compact
+    // variant (pulse on the input element, mic is a sibling) is iOS-safe.
     return (
       <div
         className="flex items-end gap-2 bg-white"
@@ -100,7 +106,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
           ref={ref}
           rows={1}
           aria-label="Message RoamReady AI"
-          className="chat-textarea-hero flex-1 bg-transparent outline-none text-sm py-2 resize-none overflow-y-auto"
+          className={`chat-textarea-hero caret-[#1F6F8B] flex-1 bg-transparent outline-none text-sm py-2 resize-none overflow-y-auto${showAwaitingPulse ? ' chat-input-awaiting' : ''}`}
           // fieldSizing isn't yet in TS lib types, so cast through CSSProperties.
           // The runtime CSS property is `field-sizing: content`; React/JSX accepts
           // it as the camelCased key via inline style. Falls back silently on
@@ -112,11 +118,17 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
           // placeholder — worse now that the iOS guard forces 16px. 3.5rem =
           // 2×20px line-height (text-sm) + 8+8px padding, border-box. fieldSizing
           // + maxHeight still let it grow for real multi-line input.
-          style={{ fieldSizing: 'content', minHeight: '3.5rem', maxHeight: '8rem', paddingTop: 8, paddingBottom: 8 } as React.CSSProperties}
+          // border: 1px transparent so the .chat-input-awaiting ring's animated
+          // border-color has a width to render on (box-shadow shows regardless).
+          // box-sizing:border-box (global) keeps layout stable; invisible when not
+          // pulsing.
+          style={{ fieldSizing: 'content', minHeight: '3.5rem', maxHeight: '8rem', paddingTop: 8, paddingBottom: 8, border: '1px solid transparent' } as React.CSSProperties}
           placeholder={placeholder}
           value={value}
           onChange={e => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           disabled={disabled}
           maxLength={4000}
         />
@@ -153,7 +165,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(functio
         ref={ref}
         rows={1}
         aria-label="Message RoamReady AI"
-        className={`input flex-1 min-w-0 text-sm resize-none overflow-y-auto${showAwaitingPulse ? ' chat-input-awaiting' : ''}`}
+        className={`input caret-[#1F6F8B] flex-1 min-w-0 text-sm resize-none overflow-y-auto${showAwaitingPulse ? ' chat-input-awaiting' : ''}`}
         style={{ fieldSizing: 'content', maxHeight: '8rem' } as React.CSSProperties}
         placeholder={placeholder}
         value={value}
