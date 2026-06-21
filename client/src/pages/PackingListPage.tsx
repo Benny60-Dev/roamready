@@ -432,7 +432,7 @@ export default function PackingListPage() {
         { label: tripName || 'Trip', href: `/trips/${tripId}/map` },
         { label: 'Packing List' },
       ]} />
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-xl font-medium text-gray-900">Packing List</h1>
           {/* "Made for X" — from the generation snapshot, so it describes what
@@ -445,7 +445,7 @@ export default function PackingListPage() {
             Refresh (confirm-gated) + Export; with no list, the empty-state
             card below owns the only Generate button. */}
         {categories.length > 0 && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {/* Export PDF ▾ — choose blank (pen-and-paper) or a current-state
                 snapshot at print time. Menu closes on select or outside click. */}
             <div className="relative" ref={exportMenuRef}>
@@ -461,7 +461,7 @@ export default function PackingListPage() {
                 {!exporting && <ChevronDown size={14} className="-mr-0.5" />}
               </button>
               {exportMenuOpen && !exporting && (
-                <div role="menu" className="absolute right-0 mt-1 w-60 bg-white border border-gray-200 rounded-md shadow-lg z-10 py-1">
+                <div role="menu" className="absolute left-0 mt-1 w-60 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-md shadow-lg z-10 py-1">
                   <button
                     role="menuitem"
                     onClick={() => { setExportMenuOpen(false); void exportPdf('current') }}
