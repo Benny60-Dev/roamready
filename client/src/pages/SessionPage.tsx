@@ -1841,7 +1841,7 @@ export default function SessionPage() {
                     desktop reverted to top-anchored flow (md:block md:min-h-0);
                     that revert is removed so the input feels connected to the
                     conversation everywhere. space-y-3 moved here from the scroll box. */}
-                <div className="min-h-full flex flex-col justify-end space-y-3">
+                <div className="min-h-full flex flex-col justify-end md:justify-start space-y-3">
                 {messages.map((msg, i) => (
                   <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div
@@ -1913,7 +1913,7 @@ export default function SessionPage() {
                   The message list (above) carries matching bottom padding so its
                   last message clears this pinned input. */}
               <div
-                className="fixed left-0 right-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 bg-rr-bg px-4 pt-2 pb-3 md:static md:bottom-auto md:left-auto md:right-auto md:z-auto md:bg-transparent md:px-0 md:pt-0 md:pb-0 md:mt-3"
+                className="fixed left-0 right-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 bg-rr-bg px-4 pt-2 pb-3 md:static md:bottom-auto md:left-auto md:right-auto md:z-auto md:bg-transparent md:px-2.5 md:pt-2.5 md:pb-2.5 md:mt-3"
               >
                 <ChatInput
                   ref={inputRef}
