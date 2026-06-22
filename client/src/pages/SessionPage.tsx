@@ -920,6 +920,19 @@ export default function SessionPage() {
       }
       console.timeEnd('[buildItinerary] expandLongLegs')
 
+      // BUILD 3b — deterministic nights reconciler. Makes total nights exactly
+      // equal the captured requestedNights by adjusting DESTINATION-stop nights.
+      // AWAITED and AFTER expandLongLegs (so transit nights are counted) and
+      // BEFORE generateItinerary (so the day-by-day narration sees final nights).
+      // Fail-soft server-side; wrapped so a reconcile error never blocks the build.
+      console.time('[buildItinerary] reconcileNights')
+      try {
+        await tripsApi.reconcileNights(tripId)
+      } catch (e) {
+        console.error('[buildItinerary] reconcileNights failed (non-fatal):', e)
+      }
+      console.timeEnd('[buildItinerary] reconcileNights')
+
       tripsApi.generateItinerary(tripId).catch(err =>
         console.error('[buildItinerary] generateItinerary failed in background:', err)
       )
