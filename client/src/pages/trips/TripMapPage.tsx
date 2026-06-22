@@ -820,11 +820,19 @@ export default function TripMapPage() {
     console.log('[TripMapPage] geocoding', toGeocode.length, 'stop(s) missing coordinates')
     setGeocoding(true)
     const geocoder = new window.google.maps.Geocoder()
+    // Canadian provinces/territories. Stops in these resolve to Canada with a
+    // CA component restriction so ambiguous names (e.g. "Vancouver, BC") don't
+    // collide with a US namesake (Vancouver, WA) under a forced "USA" suffix.
+    // The Alaska route runs through BC + YT, so this is a real route, not an
+    // edge case. locationState is a 2-letter code in this data (e.g. "BC").
+    const CA_PROVINCES = new Set(['AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT'])
 
     Promise.all(toGeocode.map(stop =>
       new Promise<{ stop: Stop; lat: number; lng: number } | null>(resolve => {
-        const q = [stop.locationName, stop.locationState, 'USA'].filter(Boolean).join(', ')
-        geocoder.geocode({ address: q }, (results, status) => {
+        const isCanadian = !!stop.locationState && CA_PROVINCES.has(stop.locationState.trim().toUpperCase())
+        const country = isCanadian ? 'Canada' : 'USA'
+        const q = [stop.locationName, stop.locationState, country].filter(Boolean).join(', ')
+        geocoder.geocode({ address: q, componentRestrictions: { country: isCanadian ? 'CA' : 'US' } }, (results, status) => {
           if (status === 'OK' && results?.[0]) {
             const loc = results[0].geometry.location
             console.log('[TripMapPage] geocoded', stop.locationName, '→', loc.lat(), loc.lng())
