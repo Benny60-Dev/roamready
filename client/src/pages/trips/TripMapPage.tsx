@@ -1573,7 +1573,7 @@ export default function TripMapPage() {
             flexShrink: 0,
             position: 'sticky',
             top: '4rem',
-            height: 'calc(100dvh - 5rem)',
+            height: 'calc(100dvh - 9rem)',
             display: 'flex',
             flexDirection: 'column',
           }}
@@ -2273,7 +2273,7 @@ export default function TripMapPage() {
           } : {
             flex: 1,
             minWidth: 0,
-            height: 'min(720px, calc(100dvh - 5rem))',
+            height: 'min(720px, calc(100dvh - 9rem))',
             flexShrink: 0,
             position: 'sticky',
             top: '4rem',
