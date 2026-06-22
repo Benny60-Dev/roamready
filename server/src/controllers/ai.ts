@@ -965,6 +965,12 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       })
       const ptd = (sess?.partialTripData as any) ?? null
       ;(userProfile as any).capturedOrigin = ptd?.origin ?? null
+      // BUILD 3a — surface the confirmed requested trip length (nights) captured
+      // on a PRIOR turn (via the <requestedNights> tag below) so the DURATION
+      // CONFIRMATION rule in services/ai.ts sees it in the profile context and
+      // does NOT re-ask/re-confirm. Capture + confirm only; no reconciler yet.
+      ;(userProfile as any).capturedRequestedNights =
+        typeof ptd?.requestedNights === 'number' ? ptd.requestedNights : null
       // PLANNING-RETENTION (A1) — inject the agreed stop-set as a grounding
       // system message so it survives HISTORY_CAP and re-grounds the model every
       // turn. Planning only (modify mode uses buildLiveTripState/liveStateMsg).
@@ -1235,6 +1241,29 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
         }
       } else if (rawRig) {
         console.warn('[AI rig-capture] ignored non-enum <rig> value "%s" sessionId=%s', rawRig, sessionId ?? '(none)')
+      }
+    }
+
+    // REQUESTED-NIGHTS CAPTURE (BUILD 3a) — capture the AI's structured
+    // <requestedNights> tag, emitted only on the turn the user CONFIRMS the trip
+    // length (per the DURATION CONFIRMATION rule). Strip it from the displayed
+    // message (mirrors <origin>/<rig>), validate it is a positive integer, and
+    // persist to partialTripData.requestedNights for the later (Build 3b)
+    // reconciler. Capture + confirm ONLY — this number does not yet pad/trim any
+    // trip. Merge so origin / agreedStops / statedRig are never clobbered.
+    const reqNightsMatch = response.match(/<requestedNights>([\s\S]*?)<\/requestedNights>/)
+    if (reqNightsMatch) {
+      response = response.replace(/<requestedNights>[\s\S]*?<\/requestedNights>/g, '').trim()
+      const rawNights = reqNightsMatch[1].trim()
+      const parsedNights = Number(rawNights)
+      if (sessionId && Number.isInteger(parsedNights) && parsedNights > 0) {
+        try {
+          await mergePartialTripData(sessionId, { requestedNights: parsedNights })
+        } catch (e: any) {
+          console.error('[AI requested-nights-capture] persist failed for sessionId=%s: %s', sessionId, e?.message)
+        }
+      } else if (rawNights) {
+        console.warn('[AI requested-nights-capture] ignored non-positive-integer <requestedNights> value "%s" sessionId=%s', rawNights, sessionId ?? '(none)')
       }
     }
 
