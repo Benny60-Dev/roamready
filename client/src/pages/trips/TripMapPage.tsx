@@ -2262,8 +2262,11 @@ export default function TripMapPage() {
           } : {
             flex: 1,
             minWidth: 0,
-            height: '720px',
+            height: 'min(720px, calc(100dvh - 5rem))',
             flexShrink: 0,
+            position: 'sticky',
+            top: '4rem',
+            alignSelf: 'flex-start',
             transition: 'width 0.35s cubic-bezier(0.4, 0, 0.2, 1), height 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
           }}
         >
