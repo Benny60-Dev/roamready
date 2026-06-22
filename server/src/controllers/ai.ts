@@ -1244,20 +1244,41 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     // of the HISTORY_CAP window (the root cause of the dropped-stops bug). Merge,
     // never overwrite, so the captured origin is preserved. Planning only; modify
     // mode edits a persisted trip and uses buildLiveTripState instead.
-    if (sessionId && context !== 'modify') {
+    // BUG-TRIP-NIGHTS Build 2a (Gap A) — deterministic SHORTFALL truth net.
+    // Stamped on the chat response so the client can later surface a banner.
+    // AI-scoped by construction: only this planning parse point (context !==
+    // 'modify', parseable <itinerary>) computes it. Manual trips go through
+    // createTrip/createStop and never reach here.
+    let nightsShortfall: { claimed: number; built: number; gap: number } | null = null
+    if (context !== 'modify') {
       const builtItin = parseItineraryBlock(response)
       const builtStops = Array.isArray(builtItin?.stops) ? builtItin.stops : null
       if (builtStops && builtStops.length > 0) {
-        const agreedStops = builtStops.map((s: any) => ({
-          name: s.locationName ?? null,
-          state: s.locationState ?? null,
-          type: s.type ?? 'DESTINATION',
-          nights: typeof s.nights === 'number' ? s.nights : 0,
-        }))
-        try {
-          await mergePartialTripData(sessionId, { agreedStops })
-        } catch (e: any) {
-          console.error('[AI planning-retention] agreedStops persist failed for sessionId=%s: %s', sessionId, e?.message)
+        // Count nights with the SAME OVERNIGHT_ONLY=1 rule as the canonical
+        // recomputeStopDates (controllers/trips.ts) so this never disagrees
+        // with the persisted total. Do NOT use the raw s.nights mapping below.
+        const builtNights = builtStops.reduce(
+          (n: number, s: any) => n + (s.type === 'OVERNIGHT_ONLY' ? 1 : (s.nights ?? 0)),
+          0,
+        )
+        const claimedNights = typeof builtItin?.totalNights === 'number' ? builtItin.totalNights : null
+        // Flag ONLY a shortfall — the AI claimed more nights than it built.
+        if (claimedNights != null && claimedNights > builtNights) {
+          nightsShortfall = { claimed: claimedNights, built: builtNights, gap: claimedNights - builtNights }
+        }
+
+        if (sessionId) {
+          const agreedStops = builtStops.map((s: any) => ({
+            name: s.locationName ?? null,
+            state: s.locationState ?? null,
+            type: s.type ?? 'DESTINATION',
+            nights: typeof s.nights === 'number' ? s.nights : 0,
+          }))
+          try {
+            await mergePartialTripData(sessionId, { agreedStops })
+          } catch (e: any) {
+            console.error('[AI planning-retention] agreedStops persist failed for sessionId=%s: %s', sessionId, e?.message)
+          }
         }
       }
     }
@@ -1324,6 +1345,9 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       message: response,
       modifyOutcome,
       actions: parsedActions.map(a => ({ ...a, applied: false })),
+      // BUG-TRIP-NIGHTS Build 2a — Gap A shortfall ({ claimed, built, gap }) or
+      // null. Distinct from modifyOutcome (modify-only); planning builds only.
+      nightsShortfall,
     })
   } catch (err: any) {
     console.error('[AI chat error] message:', err?.message)
