@@ -14,7 +14,7 @@ import {
   generateItinerary, saveItinerary, generateRoutes, generateActivities,
   generateRouteHighlights, getTripMapImage, getTripWeather, reassignPOIs,
   createShareToken, regenerateShareToken, revokeShareToken,
-  getTripFuelEstimate, expandLongLegs,
+  getTripFuelEstimate, expandLongLegs, reconcileNights,
 } from '../controllers/trips'
 
 export const tripsRouter = Router()
@@ -66,6 +66,12 @@ tripsRouter.post('/:id/stops/reassign-pois', reassignPOIs as any)
 // OVERNIGHT_ONLY transit stops. Ungated (Google Directions + Geocode, no LLM),
 // same posture as reassign-pois. Called from buildItinerary before generateItinerary.
 tripsRouter.post('/:id/expand-long-legs', expandLongLegs as any)
+// BUILD 3b — deterministic nights reconciler. Makes total nights exactly equal
+// the captured requestedNights (read from the linked session; no migration) by
+// adjusting DESTINATION-stop nights only. Ungated/fail-soft, same posture as
+// expand-long-legs. Called from buildItinerary AFTER expand-long-legs (so
+// transit nights are counted) and BEFORE generateItinerary.
+tripsRouter.post('/:id/reconcile-nights', reconcileNights as any)
 // Block 9 — three AI-calling endpoints on the trips router get
 // requireFeature('aiPlannerUnlimited') so non-Pro users hit a 403 → paywall.
 //   /:id/itinerary/generate   → generateTripItineraryAI  (build from chat)
