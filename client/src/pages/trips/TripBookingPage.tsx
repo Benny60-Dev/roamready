@@ -625,6 +625,7 @@ function RecommendedCampgroundCard({
   marker,
   draftMode,
   onSelectCampground,
+  onRequestExternalBooking,
   onStopUpdated,
   membershipLabels,
   altCount,
@@ -640,6 +641,7 @@ function RecommendedCampgroundCard({
   marker: string
   draftMode: boolean
   onSelectCampground: () => void
+  onRequestExternalBooking: (cg: Campground, onProceed?: () => void) => void
   onStopUpdated: (stopId: string, data: Partial<Stop>) => void
   membershipLabels: string[]
   // B3 — alternates toggle moved from below the card into the card's contact
@@ -743,7 +745,7 @@ function RecommendedCampgroundCard({
             <div className="flex items-center gap-3 flex-wrap" style={{ marginTop: 12 }}>
               {cg.reservationUrl && (
                 <button
-                  onClick={() => window.open(cg.reservationUrl!, '_blank', 'noopener,noreferrer')}
+                  onClick={() => onRequestExternalBooking(cg)}
                   className="inline-flex items-center gap-1.5 transition-colors hover:bg-[#BA7517]/5"
                   style={{
                     color: '#BA7517',
@@ -851,6 +853,7 @@ function AlternateCampgroundCard({
   primary,
   draftMode,
   onSelectCampground,
+  onRequestExternalBooking,
   membershipLabels,
 }: {
   cg: Campground
@@ -863,6 +866,7 @@ function AlternateCampgroundCard({
   // defensive — kept to mirror the primary card's draftMode visibility logic.
   draftMode: boolean
   onSelectCampground: () => void
+  onRequestExternalBooking: (cg: Campground, onProceed?: () => void) => void
   // Same shape/source as on the primary card — see RecommendedCampgroundCard.
   membershipLabels: string[]
 }) {
@@ -936,9 +940,9 @@ function AlternateCampgroundCard({
           </a>
         )}
         {cg.reservationUrl && (
-          <a href={cg.reservationUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-[#1F6F8B] hover:text-[#134756] transition-colors">
+          <button type="button" onClick={() => onRequestExternalBooking(cg)} className="flex items-center gap-1 text-xs text-[#1F6F8B] hover:text-[#134756] transition-colors">
             <ExternalLink size={11} /> {reservationLinkLabel(cg.reservationUrl)}
-          </a>
+          </button>
         )}
         <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#1F6F8B] transition-colors ml-auto">
           <MapPin size={11} /> Map
@@ -952,10 +956,7 @@ function AlternateCampgroundCard({
       {!isConfirmed && !draftMode && (
         <>
           <button
-            onClick={() => {
-              if (cg.reservationUrl) window.open(cg.reservationUrl, '_blank', 'noopener,noreferrer')
-              onSelectCampground()
-            }}
+            onClick={() => onRequestExternalBooking(cg, onSelectCampground)}
             className="bg-rr-gold hover:bg-rr-gold-dark text-white rounded-lg font-medium transition-colors text-sm w-full flex items-center justify-center gap-1.5 py-2.5 mt-3"
           >
             Choose this campground instead
@@ -1067,6 +1068,16 @@ export default function TripBookingPage() {
   const [activeStop, setActiveStop] = useState<string | null>(null)
   // per-stop expand/collapse alternatives
   const [expandedAlts, setExpandedAlts] = useState<Record<string, boolean>>({})
+  // "Leaving RoamReady" confirm before opening an external campground booking site.
+  // pendingBooking holds the campground whose site we're about to open; pendingPromote
+  // carries the alt-card's onSelectCampground() so the promote still runs ON CONFIRM
+  // (not on cancel). Both clear together when the modal closes.
+  const [pendingBooking, setPendingBooking] = useState<Campground | null>(null)
+  const [pendingPromote, setPendingPromote] = useState<(() => void) | null>(null)
+  const requestExternalBooking = (cg: Campground, onProceed?: () => void) => {
+    setPendingBooking(cg)
+    setPendingPromote(() => onProceed ?? null)
+  }
   // Reservation Honesty: clicking the gold button records the user's chosen campground here
   // *without* writing to the DB. The form expands in draft mode and only the user's "Save
   // reservation info" click (in ReservationSection) commits the booking. Keys are stopIds;
@@ -1418,6 +1429,7 @@ export default function TripBookingPage() {
             marker={marker}
             draftMode={stopDraftMode}
             onSelectCampground={() => handleSelectCampground(stop, recommended)}
+            onRequestExternalBooking={requestExternalBooking}
             onStopUpdated={handleStopUpdated}
             membershipLabels={membershipLabels}
             altCount={altOptions.length}
@@ -1506,6 +1518,7 @@ export default function TripBookingPage() {
                     // stay clickable so the user can switch drafts before committing.
                     draftMode={draftSelections[stop.id]?.id === cg.id}
                     onSelectCampground={() => handleSelectCampground(stop, cg)}
+                    onRequestExternalBooking={requestExternalBooking}
                     membershipLabels={membershipLabels}
                   />
                 ))}
@@ -1831,6 +1844,25 @@ export default function TripBookingPage() {
         onConfirm={handleUnbook}
         onCancel={() => !unbooking && setUnbookTarget(null)}
         isConfirming={unbooking}
+      />
+
+      <ConfirmModal
+        isOpen={pendingBooking !== null}
+        title="Leaving RoamReady"
+        message={
+          <>
+            You're about to leave RoamReady to book at <strong>{pendingBooking?.name}</strong> on their website. When you're done, come back here and click "Already booked? Record conf #" to save your confirmation number with this trip.
+          </>
+        }
+        confirmLabel="Continue to site →"
+        cancelLabel="Stay here"
+        onConfirm={() => {
+          if (pendingBooking?.reservationUrl) window.open(pendingBooking.reservationUrl, '_blank', 'noopener,noreferrer')
+          pendingPromote?.()
+          setPendingBooking(null)
+          setPendingPromote(null)
+        }}
+        onCancel={() => { setPendingBooking(null); setPendingPromote(null) }}
       />
 
       <RigInfoModal
