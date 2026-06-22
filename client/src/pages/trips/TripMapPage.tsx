@@ -2261,7 +2261,7 @@ export default function TripMapPage() {
             flexShrink: 0,
           } : {
             width: '650px',
-            height: '550px',
+            height: '720px',
             flexShrink: 0,
             transition: 'width 0.35s cubic-bezier(0.4, 0, 0.2, 1), height 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
           }}
