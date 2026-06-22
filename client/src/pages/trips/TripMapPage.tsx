@@ -1571,6 +1571,11 @@ export default function TripMapPage() {
             overflow: 'hidden',
             transition: 'width 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
             flexShrink: 0,
+            position: 'sticky',
+            top: '4rem',
+            height: 'calc(100dvh - 5rem)',
+            display: 'flex',
+            flexDirection: 'column',
           }}
         >
             {/* Header: trip name + rename + close. C1 — trip name typography
@@ -1989,8 +1994,14 @@ export default function TripMapPage() {
               </button>
             </div>
 
-            {/* Tab content — scrollable */}
-            <div className="p-3 pb-20 lg:pb-3">
+            {/* Tab content — scrollable. Desktop: bounded flex child with its own
+                scrollbar so only the stops list scrolls while the header + tab bar
+                stay pinned (minHeight:0 is mandatory for overflow to engage).
+                Mobile/tablet: unstyled, normal full-page scroll. */}
+            <div
+              className="p-3 pb-20 lg:pb-3"
+              style={isDesktop ? { flex: 1, minHeight: 0, overflowY: 'auto' } : undefined}
+            >
               {sidebarTab === 'stops' && (
                 <div className="space-y-0.5">
                   {(() => {
