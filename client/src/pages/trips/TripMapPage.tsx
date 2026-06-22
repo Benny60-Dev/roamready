@@ -1481,7 +1481,10 @@ export default function TripMapPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
-    <div className="-mx-4 -mb-6 -mt-2 md:-mt-6">
+    <div
+      className="-mx-4 -mb-6 -mt-2 md:-mt-6"
+      style={isDesktop ? { height: 'calc(100dvh - 4rem)', display: 'flex', flexDirection: 'column', minHeight: 0 } : undefined}
+    >
 
       {/* Breadcrumb strip */}
       <div className="flex-shrink-0 bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-1.5">
@@ -1545,11 +1548,15 @@ export default function TripMapPage() {
 
       {/* ── Map + sidebar row ─────────────────────────────────────────────────── */}
       {/* Wrapper provides the reference height that expandMap() reads */}
-      <div>
+      <div style={isDesktop ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } : undefined}>
       <div
         ref={mapRowRef}
         className={isMobile ? 'flex flex-col' : 'flex items-start'}
-        style={{
+        style={isDesktop ? {
+          transition: 'height 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+          flex: 1,
+          minHeight: 0,
+        } : {
           transition: 'height 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
@@ -1571,9 +1578,7 @@ export default function TripMapPage() {
             overflow: 'hidden',
             transition: 'width 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
             flexShrink: 0,
-            position: 'sticky',
-            top: '4rem',
-            height: 'calc(100dvh - 9rem)',
+            height: '100%',
             display: 'flex',
             flexDirection: 'column',
           }}
@@ -2273,10 +2278,8 @@ export default function TripMapPage() {
           } : {
             flex: 1,
             minWidth: 0,
-            height: 'min(720px, calc(100dvh - 9rem))',
+            height: '100%',
             flexShrink: 0,
-            position: 'sticky',
-            top: '4rem',
             alignSelf: 'flex-start',
             transition: 'width 0.35s cubic-bezier(0.4, 0, 0.2, 1), height 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
           }}
