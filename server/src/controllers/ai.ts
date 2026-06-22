@@ -971,6 +971,12 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       // does NOT re-ask/re-confirm. Capture + confirm only; no reconciler yet.
       ;(userProfile as any).capturedRequestedNights =
         typeof ptd?.requestedNights === 'number' ? ptd.requestedNights : null
+      // BUG-AI-NODATE-ASK Part A — surface the confirmed requested START DATE
+      // captured on a PRIOR turn (via the <requestedStartDate> tag below) so the
+      // DEPARTURE DATE RULE in services/ai.ts sees it and does NOT re-ask. Capture
+      // only; the backend date default is unchanged (Part B, separate).
+      ;(userProfile as any).capturedRequestedStartDate =
+        typeof ptd?.requestedStartDate === 'string' ? ptd.requestedStartDate : null
       // PLANNING-RETENTION (A1) — inject the agreed stop-set as a grounding
       // system message so it survives HISTORY_CAP and re-grounds the model every
       // turn. Planning only (modify mode uses buildLiveTripState/liveStateMsg).
@@ -1264,6 +1270,32 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
         }
       } else if (rawNights) {
         console.warn('[AI requested-nights-capture] ignored non-positive-integer <requestedNights> value "%s" sessionId=%s', rawNights, sessionId ?? '(none)')
+      }
+    }
+
+    // REQUESTED-START-DATE CAPTURE (BUG-AI-NODATE-ASK Part A) — capture the AI's
+    // <requestedStartDate> tag, emitted once the trip start date is settled.
+    // Strip it from the displayed message (mirrors <requestedNights>/<rig>),
+    // validate it is a real ISO yyyy-mm-dd, and persist to
+    // partialTripData.requestedStartDate so the DEPARTURE DATE RULE won't re-ask.
+    // Capture ONLY — does NOT change the backend date default (Part B, separate).
+    // Merge so origin / agreedStops / statedRig / requestedNights are never clobbered.
+    const reqStartMatch = response.match(/<requestedStartDate>([\s\S]*?)<\/requestedStartDate>/)
+    if (reqStartMatch) {
+      response = response.replace(/<requestedStartDate>[\s\S]*?<\/requestedStartDate>/g, '').trim()
+      const rawDate = reqStartMatch[1].trim()
+      // Real-calendar-date guard: the round-trip through Date rejects malformed
+      // or out-of-range values (e.g. 2026-13-40) that pass the shape regex.
+      const isShaped = /^\d{4}-\d{2}-\d{2}$/.test(rawDate)
+      const isReal = isShaped && new Date(`${rawDate}T00:00:00Z`).toISOString().slice(0, 10) === rawDate
+      if (sessionId && isReal) {
+        try {
+          await mergePartialTripData(sessionId, { requestedStartDate: rawDate })
+        } catch (e: any) {
+          console.error('[AI requested-start-date-capture] persist failed for sessionId=%s: %s', sessionId, e?.message)
+        }
+      } else if (rawDate) {
+        console.warn('[AI requested-start-date-capture] ignored invalid <requestedStartDate> value "%s" sessionId=%s', rawDate, sessionId ?? '(none)')
       }
     }
 
