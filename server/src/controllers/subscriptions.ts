@@ -5,6 +5,7 @@ import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
 import { stripe, createStripeCustomer, createCheckoutSession, createPortalSession } from '../services/stripe'
 import { getClientOrigin } from '../utils/clientOrigin'
+import { sendNewSubscriptionAlert, sendCancellationAlert } from '../services/feedbackNotification'
 
 // Same client + env-var setup as auth.ts:10 (forgotPassword email). Kept as
 // a per-controller singleton rather than extracted to a shared helper because
@@ -177,6 +178,26 @@ function tierFromPriceId(priceId: string | null | undefined): 'PRO' {
   return 'PRO'
 }
 
+/** Human-readable plan label from a Stripe priceId, using the same env price-ID
+ *  mapping as tierFromPriceId. Covers both the regular and founder-rate price
+ *  IDs for each interval. Falls back to 'Pro' for an unrecognized price. Used
+ *  only for the internal owner-notification alerts. */
+function planLabelFromPriceId(priceId: string | null | undefined): string {
+  if (
+    priceId === process.env.STRIPE_PRO_MONTHLY_PRICE_ID ||
+    priceId === process.env.STRIPE_PRO_FOUNDER_MONTHLY_PRICE_ID
+  ) {
+    return 'Pro Monthly'
+  }
+  if (
+    priceId === process.env.STRIPE_PRO_ANNUAL_PRICE_ID ||
+    priceId === process.env.STRIPE_PRO_FOUNDER_ANNUAL_PRICE_ID
+  ) {
+    return 'Pro Annual'
+  }
+  return 'Pro'
+}
+
 export async function getStatus(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const user = await prisma.user.findUnique({
@@ -303,6 +324,17 @@ export async function handleWebhook(req: Request, res: Response, next: NextFunct
               emailErr?.message,
             )
           }
+
+          // Owner alert: new paid subscription. Fire-and-forget — the .catch
+          // keeps a Resend outage off the webhook's 200 path. amount comes from
+          // the retrieved price object (unit_amount, cents); null if absent.
+          const priceObj = sub.items.data[0]?.price as any
+          const amount = priceObj?.unit_amount != null ? `$${(priceObj.unit_amount / 100).toFixed(2)}` : null
+          sendNewSubscriptionAlert(updatedUser, {
+            planLabel: planLabelFromPriceId(priceId),
+            amount,
+            periodEnd,
+          }).catch(() => {})
         }
         break
       }
@@ -339,6 +371,22 @@ export async function handleWebhook(req: Request, res: Response, next: NextFunct
               ...(hasPeriodEnd ? { subscriptionEndsAt: new Date(cpe * 1000) } : {}),
             },
           })
+
+          // Owner alert: cancellation REQUESTED (not the later .deleted). Fire
+          // only on the false→true transition of cancel_at_period_end — Stripe
+          // includes the prior value in event.data.previous_attributes, so we
+          // alert once at the moment of cancel and not on every subsequent
+          // update. `user` is the pre-update record (name/email intact).
+          // adminInitiated separates admin/script cancels from real churn.
+          const prevAttrs = (event.data as any).previous_attributes
+          const cancelJustRequested =
+            sub.cancel_at_period_end === true && prevAttrs?.cancel_at_period_end === false
+          if (cancelJustRequested) {
+            sendCancellationAlert(user, {
+              planLabel: planLabelFromPriceId(priceId),
+              adminInitiated: sub.metadata?.admin_cancel === 'true',
+            }).catch(() => {})
+          }
         }
         break
       }

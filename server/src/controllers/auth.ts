@@ -8,6 +8,7 @@ import { AuthRequest } from '../middleware/auth'
 import { isFounderEligible } from '../config/founderPricing'
 import { isDisposableEmail } from '../utils/disposableEmails'
 import { generateVerificationToken, sendVerificationEmail } from '../services/emailVerification'
+import { sendNewSignupAlert } from '../services/feedbackNotification'
 import { validatePassword } from '../utils/passwordPolicy'
 import { getClientOrigin } from '../utils/clientOrigin'
 import { normalizeEmail } from '../utils/email'
@@ -99,6 +100,10 @@ export async function register(req: Request, res: Response, next: NextFunction) 
         founderPricing,
       } as any,
     })
+
+    // Owner alert: new signup. Fire-and-forget — the .catch keeps a Resend
+    // outage off the registration response path.
+    sendNewSignupAlert(user, { provider: 'email' }).catch(() => {})
 
     // Stripe customer creation is deferred to first checkout (createCheckout
     // controller has an on-demand recovery path that creates + persists
