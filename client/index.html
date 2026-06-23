@@ -1,6 +1,13 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      // Bounce the bare Render hostname to the canonical domain. Scoped to the
+      // onrender host only, so roamready.ai never matches and cannot loop.
+      if (location.hostname === 'roamready-client.onrender.com') {
+        location.replace('https://roamready.ai' + location.pathname + location.search + location.hash);
+      }
+    </script>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/roamready-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
