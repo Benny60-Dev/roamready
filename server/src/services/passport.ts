@@ -63,6 +63,14 @@ passport.use(
           // Stripe customer is lazily created on first checkout — see the
           // recovery path in createCheckout (controllers/subscriptions.ts).
         } else {
+          // Deactivated accounts cannot sign in via Google either — reject
+          // BEFORE the link/verify updates below so OAuth never silently
+          // revives a deactivated user. We deliberately do NOT clear
+          // deactivatedAt here; reactivation is an explicit admin action.
+          if ((user as any).deactivatedAt) {
+            return done(new Error('Account deactivated'), undefined)
+          }
+
           // Existing user signing in via Google. Two cases:
           //
           //  1. Account was created via Google before (googleId already

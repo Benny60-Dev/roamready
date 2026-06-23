@@ -68,6 +68,14 @@ model User {
   /// never expire per spec.
   emailVerificationSentAt    DateTime?
   isOwner             Boolean              @default(false)
+  /// Reversible account deactivation (Tier 1 account removal). Null = active.
+  /// When set, the account cannot authenticate (login, OAuth, JWT refresh all
+  /// reject) and is hidden from admin active lists/counts. Reversible: clearing
+  /// both fields reactivates. NO personal-data scrub and NO Stripe cancellation
+  /// happen here — a deactivated PRO user is still billed until cancelled
+  /// separately (Tier 2). deactivatedReason is operator-supplied audit context.
+  deactivatedAt       DateTime?
+  deactivatedReason   String?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   rigs                Rig[]
@@ -745,4 +753,22 @@ model OhvLinkCheck {
   createdAt    DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// Append-only audit trail for privileged account-lifecycle actions (Tier 1
+// account removal: DEACTIVATE / REACTIVATE; DELETE / ANONYMIZE reserved for
+// Tier 2). targetUserId is a PLAIN STRING, intentionally NOT a relation/FK —
+// the audit row must survive the target user's eventual deletion, which an
+// onDelete:Cascade relation would defeat. performedBy is an owner id or
+// "script:<name>" for CLI-driven actions.
+model AdminActionLog {
+  id           String   @id @default(cuid())
+  action       String   // DEACTIVATE | REACTIVATE  (DELETE/ANONYMIZE reserved for Tier 2)
+  targetUserId String   // plain string, NOT a relation/FK — must survive target deletion
+  performedBy  String   // owner id, or "script:<name>"
+  reason       String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([targetUserId])
 }

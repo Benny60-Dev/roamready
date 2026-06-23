@@ -57,8 +57,12 @@ export async function getMetrics(_req: AuthRequest, res: Response, next: NextFun
     // tripsForStatus: all trips with the fields deriveTripStatus needs. Admin-
     // only + low-frequency, so a full scan with stops is acceptable here.
     const [totalUsers, proUsers, totalTrips, tripsForStatus] = await Promise.all([
-      prisma.user.count(),
-      prisma.user.count({ where: { subscriptionTier: 'PRO' } }),
+      // Active-account counts exclude deactivated users (Tier 1). NOTE: revenue
+      // figures in getRevenue intentionally do NOT apply this filter — a
+      // deactivated PRO user is still being billed until Stripe is cancelled
+      // separately, so MRR/ARR must keep counting them.
+      prisma.user.count({ where: { deactivatedAt: null } as any }),
+      prisma.user.count({ where: { subscriptionTier: 'PRO', deactivatedAt: null } as any }),
       prisma.trip.count(),
       prisma.trip.findMany({
         select: {
@@ -74,7 +78,7 @@ export async function getMetrics(_req: AuthRequest, res: Response, next: NextFun
     const completedTrips = tripsForStatus.filter(isDerivedCompleted).length
 
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-    const newUsers = await prisma.user.count({ where: { createdAt: { gte: thirtyDaysAgo } } })
+    const newUsers = await prisma.user.count({ where: { createdAt: { gte: thirtyDaysAgo }, deactivatedAt: null } as any })
 
     res.json({
       totalUsers,
@@ -92,6 +96,10 @@ export async function getSubscribers(_req: AuthRequest, res: Response, next: Nex
     const subscribers = await prisma.user.findMany({
       // No tier filter: return ALL users (FREE and PRO). The admin Users
       // table splits/filters by tier client-side. (FR-ADMIN-USERLIST)
+      // Deactivated accounts are hidden from the active list (Tier 1). `as any`
+      // covers the stale Prisma client's missing deactivatedAt, same as the
+      // archivedAt pattern in getAdminFeedback.
+      where: { deactivatedAt: null } as any,
       select: {
         id: true, email: true, firstName: true, lastName: true,
         subscriptionTier: true, subscriptionEndsAt: true, createdAt: true,
