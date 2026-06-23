@@ -3,7 +3,8 @@ import { requireAuth, requireOwner } from '../middleware/auth'
 import { requireVerifiedEmail } from '../middleware/requireVerifiedEmail'
 import { validateBody } from '../middleware/validate'
 import { AdminFeedbackUpdateSchema } from '../schemas/feedback'
-import { getMetrics, getSubscribers, getRevenue, getAdminFeedback, updateFeedback, analyzeFeedback, getLinkHealth, inspectSession } from '../controllers/admin'
+import { AdminSuspendSchema } from '../schemas/admin'
+import { getMetrics, getSubscribers, getRevenue, getAdminFeedback, updateFeedback, analyzeFeedback, getLinkHealth, inspectSession, suspendUser, reactivateUser, getUserHistory } from '../controllers/admin'
 
 export const adminRouter = Router()
 // requireVerifiedEmail before requireOwner — owners always bypass the
@@ -15,6 +16,14 @@ adminRouter.use(requireAuth, requireVerifiedEmail, requireOwner as any)
 adminRouter.get('/metrics', getMetrics as any)
 adminRouter.get('/subscribers', getSubscribers as any)
 adminRouter.get('/revenue', getRevenue as any)
+
+// Account suspend / reactivate + per-account moderation history. All inherit
+// the owner gate from the adminRouter.use mount above. Suspend requires a
+// non-empty reason (AdminSuspendSchema); self/owner-target guards live in the
+// controller.
+adminRouter.post('/users/:id/suspend', validateBody(AdminSuspendSchema), suspendUser as any)
+adminRouter.post('/users/:id/reactivate', reactivateUser as any)
+adminRouter.get('/users/:id/history', getUserHistory as any)
 adminRouter.get('/feedback', getAdminFeedback as any)
 adminRouter.patch('/feedback/:id', validateBody(AdminFeedbackUpdateSchema), updateFeedback as any)
 adminRouter.post('/feedback/analyze', analyzeFeedback as any)

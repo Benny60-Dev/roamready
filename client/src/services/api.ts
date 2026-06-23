@@ -341,7 +341,12 @@ export const notificationsApi = {
 // Admin
 export const adminApi = {
   getMetrics: () => api.get('/admin/metrics'),
-  getSubscribers: () => api.get('/admin/subscribers'),
+  getSubscribers: (params?: { status?: 'active' | 'suspended' | 'all' }) =>
+    api.get('/admin/subscribers', { params }),
+  suspendUser: (id: string, reason: string) =>
+    api.post(`/admin/users/${id}/suspend`, { reason }),
+  reactivateUser: (id: string) => api.post(`/admin/users/${id}/reactivate`),
+  getUserHistory: (id: string) => api.get(`/admin/users/${id}/history`),
   getRevenue: () => api.get('/admin/revenue'),
   getFeedback: (params?: { status?: string; includeArchived?: boolean }) =>
     api.get('/admin/feedback', { params }),
