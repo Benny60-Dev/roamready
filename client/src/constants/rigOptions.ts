@@ -31,4 +31,4 @@ export const HEIGHTS: number[] = buildRange(8, 14, 0.5)
 
 // Whole numbers, emitted as `number` (the columns are Float? but accept ints).
 export const MPG_OPTIONS: number[] = buildRange(5, 30, 1)
-export const TANK_OPTIONS: number[] = buildRange(10, 200, 1)
+export const TANK_OPTIONS: number[] = buildRange(10, 200, 5)
