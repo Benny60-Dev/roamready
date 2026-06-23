@@ -10,6 +10,7 @@ import { isDisposableEmail } from '../utils/disposableEmails'
 import { generateVerificationToken, sendVerificationEmail } from '../services/emailVerification'
 import { validatePassword } from '../utils/passwordPolicy'
 import { getClientOrigin } from '../utils/clientOrigin'
+import { normalizeEmail } from '../utils/email'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -30,10 +31,16 @@ function setRefreshCookie(res: Response, token: string) {
 
 export async function register(req: Request, res: Response, next: NextFunction) {
   try {
-    const { email, password, firstName, lastName } = req.body
-    if (!email || !password || !firstName || !lastName) {
+    const { email: rawEmail, password, firstName, lastName } = req.body
+    if (!rawEmail || !password || !firstName || !lastName) {
       throw new AppError('All fields required', 400)
     }
+
+    // Normalize once and reuse everywhere below (disposable check, duplicate
+    // lookup, the create write, and the echoed response). Lowercasing at the
+    // door is what makes the case-sensitive unique index behave
+    // case-insensitively.
+    const email = normalizeEmail(rawEmail)
 
     // Block known disposable / throwaway email providers. Anti-abuse:
     // disposable inboxes are the primary vector for trial-cycling
@@ -169,9 +176,10 @@ export async function register(req: Request, res: Response, next: NextFunction) 
 
 export async function login(req: Request, res: Response, next: NextFunction) {
   try {
-    const { email, password } = req.body
-    if (!email || !password) throw new AppError('Email and password required', 400)
+    const { email: rawEmail, password } = req.body
+    if (!rawEmail || !password) throw new AppError('Email and password required', 400)
 
+    const email = normalizeEmail(rawEmail)
     const user = await prisma.user.findUnique({ where: { email } })
     if (!user || !user.passwordHash) throw new AppError('Invalid credentials', 401)
 
@@ -233,7 +241,8 @@ export async function refreshToken(req: Request, res: Response, next: NextFuncti
 
 export async function forgotPassword(req: Request, res: Response, next: NextFunction) {
   try {
-    const { email } = req.body
+    const { email: rawEmail } = req.body
+    const email = normalizeEmail(rawEmail ?? '')
     const user = await prisma.user.findUnique({ where: { email } })
 
     // Always return success to prevent email enumeration
