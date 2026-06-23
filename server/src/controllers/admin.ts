@@ -21,6 +21,9 @@ function publicUserRow(u: any) {
     createdAt: u.createdAt,
     deactivatedAt: u.deactivatedAt ?? null,
     deactivatedReason: u.deactivatedReason ?? null,
+    // Complimentary Pro — badged distinctly from real Stripe Pro on the client.
+    compTier: u.compTier ?? null,
+    compExpiresAt: u.compExpiresAt ?? null,
   }
 }
 
@@ -133,6 +136,7 @@ export async function getSubscribers(req: AuthRequest, res: Response, next: Next
         id: true, email: true, firstName: true, lastName: true,
         subscriptionTier: true, subscriptionEndsAt: true, createdAt: true,
         deactivatedAt: true, deactivatedReason: true,
+        compTier: true, compExpiresAt: true,
       },
       orderBy: { createdAt: 'desc' },
     }
@@ -179,6 +183,41 @@ export async function reactivateUser(req: AuthRequest, res: Response, next: Next
     if (!target) throw new AppError('User not found', 404)
 
     const updated = await accountLifecycle.reactivate(targetId, req.user!.id)
+    res.json(publicUserRow(updated))
+  } catch (err) { next(err) }
+}
+
+// ── Complimentary Pro grant / revoke (admin UI) ──────────────────────────────
+// Owner-gated by the adminRouter.use mount. Delegates to accountLifecycle so the
+// comp* write + GRANT_PRO/REVOKE_PRO audit row happen in one transaction. Comps
+// live ONLY in comp* fields — Stripe state is never touched.
+
+export async function grantProUser(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const targetId = req.params.id
+    const target = await prisma.user.findUnique({ where: { id: targetId }, select: { id: true } })
+    if (!target) throw new AppError('User not found', 404)
+
+    // Body validated by AdminGrantProSchema (durationKind, optional
+    // customExpiresAt for CUSTOM, non-empty reason).
+    const { durationKind, customExpiresAt, reason } = req.body
+    const updated = await accountLifecycle.grantPro(targetId, {
+      durationKind,
+      customExpiresAt: customExpiresAt ? new Date(customExpiresAt) : undefined,
+      reason,
+      performedBy: req.user!.id,
+    })
+    res.json(publicUserRow(updated))
+  } catch (err) { next(err) }
+}
+
+export async function revokeProUser(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const targetId = req.params.id
+    const target = await prisma.user.findUnique({ where: { id: targetId }, select: { id: true } })
+    if (!target) throw new AppError('User not found', 404)
+
+    const updated = await accountLifecycle.revokePro(targetId, req.user!.id)
     res.json(publicUserRow(updated))
   } catch (err) { next(err) }
 }

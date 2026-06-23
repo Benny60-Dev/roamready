@@ -76,6 +76,17 @@ model User {
   /// separately (Tier 2). deactivatedReason is operator-supplied audit context.
   deactivatedAt       DateTime?
   deactivatedReason   String?
+  /// Complimentary ("comp") Pro access granted by an owner — NO Stripe charge.
+  /// Deliberately SEPARATE from subscriptionTier/subscriptionId so a comp never
+  /// collides with or overwrites real Stripe state and is never touched by
+  /// Stripe webhooks. compTier === PRO + (compExpiresAt null = lifetime, or now
+  /// < compExpiresAt) grants Pro via hasAccess() as an ADDITIONAL path. Cleared
+  /// entirely on revoke. compGrantedBy is the owner id who granted it.
+  compTier            SubscriptionTier?
+  compExpiresAt       DateTime?
+  compReason          String?
+  compGrantedBy       String?
+  compGrantedAt       DateTime?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   rigs                Rig[]

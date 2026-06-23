@@ -347,6 +347,11 @@ export const adminApi = {
     api.post(`/admin/users/${id}/suspend`, { reason }),
   reactivateUser: (id: string) => api.post(`/admin/users/${id}/reactivate`),
   getUserHistory: (id: string) => api.get(`/admin/users/${id}/history`),
+  grantPro: (
+    id: string,
+    body: { durationKind: 'MONTH' | 'YEAR' | 'LIFETIME' | 'CUSTOM'; customExpiresAt?: string; reason: string },
+  ) => api.post(`/admin/users/${id}/grant-pro`, body),
+  revokePro: (id: string) => api.post(`/admin/users/${id}/revoke-pro`),
   getRevenue: () => api.get('/admin/revenue'),
   getFeedback: (params?: { status?: string; includeArchived?: boolean }) =>
     api.get('/admin/feedback', { params }),
