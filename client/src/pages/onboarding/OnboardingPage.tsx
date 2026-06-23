@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Check } from 'lucide-react'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { usersApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 import { VehicleType, TowedType } from '../../types'
+import RangeSelect from '../../components/forms/RangeSelect'
+import { YEARS, LENGTHS, HEIGHTS, MPG_OPTIONS, TANK_OPTIONS } from '../../constants/rigOptions'
 
 // Local UI shape — 'NONE' is the implicit default; serialized into
 // isTowing / towedType when the rig payload is built.
@@ -163,7 +165,13 @@ export default function OnboardingPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">Year</label>
-                  <input type="number" className="input" placeholder="2020" {...rigForm.register('year', { valueAsNumber: true })} />
+                  <Controller
+                    control={rigForm.control}
+                    name="year"
+                    render={({ field }) => (
+                      <RangeSelect options={YEARS} integer placeholder="Select year" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                    )}
+                  />
                 </div>
                 <div>
                   <label className="label">Make</label>
@@ -177,22 +185,46 @@ export default function OnboardingPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">Length (ft)</label>
-                  <input type="number" step="0.1" min="0" className="input" placeholder="38" {...rigForm.register('length', { valueAsNumber: true })} />
+                  <Controller
+                    control={rigForm.control}
+                    name="length"
+                    render={({ field }) => (
+                      <RangeSelect options={LENGTHS} placeholder="Select length" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                    )}
+                  />
                 </div>
                 <div>
                   <label className="label">Height (ft)</label>
-                  <input type="number" step="0.1" min="0" className="input" placeholder="13" {...rigForm.register('height', { valueAsNumber: true })} />
+                  <Controller
+                    control={rigForm.control}
+                    name="height"
+                    render={({ field }) => (
+                      <RangeSelect options={HEIGHTS} placeholder="Select height" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                    )}
+                  />
                 </div>
               </div>
               {vehicleType !== 'CAR_CAMPING' && vehicleType !== 'VAN' && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="label">MPG</label>
-                    <input type="number" step="0.1" min="0" className="input" placeholder="8" {...rigForm.register('mpg', { valueAsNumber: true })} />
+                    <Controller
+                      control={rigForm.control}
+                      name="mpg"
+                      render={({ field }) => (
+                        <RangeSelect options={MPG_OPTIONS} placeholder="Select MPG" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                      )}
+                    />
                   </div>
                   <div>
                     <label className="label">Tank (gal)</label>
-                    <input type="number" step="0.1" min="0" className="input" placeholder="100" {...rigForm.register('tankSize', { valueAsNumber: true })} />
+                    <Controller
+                      control={rigForm.control}
+                      name="tankSize"
+                      render={({ field }) => (
+                        <RangeSelect options={TANK_OPTIONS} placeholder="Select tank size" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                      )}
+                    />
                   </div>
                 </div>
               )}
@@ -248,7 +280,13 @@ export default function OnboardingPage() {
                           <div className="grid grid-cols-3 gap-3">
                             <div>
                               <label className="label">Year</label>
-                              <input type="number" className="input" placeholder="2019" {...rigForm.register('towedYear', { valueAsNumber: true })} />
+                              <Controller
+                                control={rigForm.control}
+                                name="towedYear"
+                                render={({ field }) => (
+                                  <RangeSelect options={YEARS} integer placeholder="Select year" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                                )}
+                              />
                             </div>
                             <div>
                               <label className="label">Make</label>
@@ -262,7 +300,13 @@ export default function OnboardingPage() {
                           <div className="grid grid-cols-2 gap-3">
                             <div>
                               <label className="label">Length (ft)</label>
-                              <input type="number" step="0.1" min="0" className="input" placeholder="14" {...rigForm.register('towedLength', { valueAsNumber: true })} />
+                              <Controller
+                                control={rigForm.control}
+                                name="towedLength"
+                                render={({ field }) => (
+                                  <RangeSelect options={LENGTHS} placeholder="Select length" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                                )}
+                              />
                             </div>
                             <div>
                               <label className="label">License plate</label>
@@ -280,7 +324,13 @@ export default function OnboardingPage() {
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <label className="label">Length (ft)</label>
-                            <input type="number" step="0.1" min="0" className="input" placeholder="14" {...rigForm.register('towedLength', { valueAsNumber: true })} />
+                            <Controller
+                              control={rigForm.control}
+                              name="towedLength"
+                              render={({ field }) => (
+                                <RangeSelect options={LENGTHS} placeholder="Select length" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                              )}
+                            />
                           </div>
                           <div>
                             <label className="label">License plate</label>
