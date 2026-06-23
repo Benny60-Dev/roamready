@@ -13,7 +13,11 @@ type User = {
   createdAt: string
   deactivatedAt: string | null
   deactivatedReason: string | null
+  compTier: 'FREE' | 'PRO' | null
+  compExpiresAt: string | null
 }
+
+type DurationKind = 'MONTH' | 'YEAR' | 'LIFETIME' | 'CUSTOM'
 
 type HistoryRow = {
   id: string
@@ -33,6 +37,11 @@ const fullName = (u: User) => `${u.firstName} ${u.lastName}`.trim()
 const fmtDate = (d: string | null) => (d ? format(new Date(d), 'MMM d, yyyy') : '—')
 const fmtDateTime = (d: string) => format(new Date(d), 'MMM d, yyyy h:mm a')
 const isSuspended = (u: User) => !!u.deactivatedAt
+// A comp exists once compTier is set (we don't auto-clear expired comps; the
+// badge surfaces the expiry so a lapsed comp is visible and revocable).
+const hasComp = (u: User) => u.compTier === 'PRO'
+const compBadgeLabel = (u: User) =>
+  u.compExpiresAt ? `Comped · expires ${fmtDate(u.compExpiresAt)}` : 'Comped · Lifetime'
 
 // Quote a CSV field only when it contains a comma, quote, or newline; double
 // any embedded quotes per RFC 4180.
@@ -58,6 +67,13 @@ export default function AdminSubscribersPage() {
   const [historyTarget, setHistoryTarget] = useState<User | null>(null)
   const [historyRows, setHistoryRows] = useState<HistoryRow[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+
+  // Grant / revoke complimentary Pro.
+  const [grantTarget, setGrantTarget] = useState<User | null>(null)
+  const [grantDuration, setGrantDuration] = useState<DurationKind>('MONTH')
+  const [grantCustomDate, setGrantCustomDate] = useState('')
+  const [grantReason, setGrantReason] = useState('')
+  const [revokeProTarget, setRevokeProTarget] = useState<User | null>(null)
 
   // Server-side status filter (active/suspended/all). Refetches when it changes
   // — suspended users are only returned for 'suspended'/'all', which is what
@@ -162,6 +178,50 @@ export default function AdminSubscribersPage() {
     }
   }
 
+  // CUSTOM requires a future date; the confirm button is disabled until valid.
+  const grantValid =
+    !!grantReason.trim() &&
+    (grantDuration !== 'CUSTOM' ||
+      (!!grantCustomDate && new Date(grantCustomDate).getTime() > Date.now()))
+
+  async function doGrantPro() {
+    if (!grantTarget || !grantValid) return
+    setActionBusy(true)
+    setActionError(null)
+    try {
+      await adminApi.grantPro(grantTarget.id, {
+        durationKind: grantDuration,
+        // Send a full ISO datetime so the server's .datetime() validator passes.
+        customExpiresAt: grantDuration === 'CUSTOM' ? new Date(grantCustomDate).toISOString() : undefined,
+        reason: grantReason.trim(),
+      })
+      setGrantTarget(null)
+      setGrantReason('')
+      setGrantCustomDate('')
+      setGrantDuration('MONTH')
+      fetchUsers(status)
+    } catch (err: any) {
+      setActionError(err?.response?.data?.error || err?.response?.data?.issues?.[0]?.message || 'Failed to grant Pro.')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  async function doRevokePro() {
+    if (!revokeProTarget) return
+    setActionBusy(true)
+    setActionError(null)
+    try {
+      await adminApi.revokePro(revokeProTarget.id)
+      setRevokeProTarget(null)
+      fetchUsers(status)
+    } catch (err: any) {
+      setActionError(err?.response?.data?.error || 'Failed to revoke Pro.')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
   function openHistory(u: User) {
     setHistoryTarget(u)
     setHistoryRows([])
@@ -246,6 +306,11 @@ export default function AdminSubscribersPage() {
                             Suspended
                           </span>
                         )}
+                        {hasComp(u) && (
+                          <span className="badge text-xs bg-indigo-100 text-indigo-700" title="Complimentary Pro (no Stripe charge)">
+                            {compBadgeLabel(u)}
+                          </span>
+                        )}
                       </div>
                       {isSuspended(u) && u.deactivatedReason && (
                         <div className="text-xs text-gray-400 mt-0.5 max-w-xs truncate" title={u.deactivatedReason}>
@@ -276,6 +341,21 @@ export default function AdminSubscribersPage() {
                             className="text-xs px-2.5 py-1 rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors"
                           >
                             Suspend
+                          </button>
+                        )}
+                        {hasComp(u) ? (
+                          <button
+                            onClick={() => { setActionError(null); setRevokeProTarget(u) }}
+                            className="text-xs px-2.5 py-1 rounded-md border border-[#1F6F8B] text-[#1F6F8B] hover:bg-[#1F6F8B]/10 transition-colors"
+                          >
+                            Revoke Pro
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => { setActionError(null); setGrantReason(''); setGrantCustomDate(''); setGrantDuration('MONTH'); setGrantTarget(u) }}
+                            className="text-xs px-2.5 py-1 rounded-md bg-[#1F6F8B] text-white hover:bg-[#185a72] transition-colors"
+                          >
+                            Grant Pro
                           </button>
                         )}
                         <button onClick={() => openHistory(u)} className="btn-ghost text-xs">History</button>
@@ -372,6 +452,117 @@ export default function AdminSubscribersPage() {
                 className="bg-[#1F6F8B] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#185a72] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {actionBusy ? 'Reactivating…' : 'Reactivate'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Grant complimentary Pro (duration + required reason) ──────────── */}
+      {grantTarget && (
+        <div
+          className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+          onClick={() => { if (!actionBusy) setGrantTarget(null) }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="bg-white rounded-lg border border-gray-200 w-full max-w-[440px] p-6 shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 className="font-semibold text-lg text-gray-900 mb-2">Grant complimentary Pro</h2>
+            <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+              Give <strong>{fullName(grantTarget)}</strong> ({grantTarget.email}) Pro access with
+              <strong> no Stripe charge</strong>. This is separate from paid subscriptions and is revocable.
+            </p>
+
+            <label className="block text-xs font-medium text-gray-500 mb-1">Duration</label>
+            <div className="flex flex-wrap rounded-lg border border-gray-200 overflow-hidden text-sm mb-3 w-fit">
+              {(['MONTH', 'YEAR', 'LIFETIME', 'CUSTOM'] as DurationKind[]).map(d => (
+                <button
+                  key={d}
+                  onClick={() => setGrantDuration(d)}
+                  className={`px-3 py-1.5 transition-colors ${grantDuration === d ? 'bg-[#1F6F8B] text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+                >
+                  {d === 'MONTH' ? '1 Month' : d === 'YEAR' ? '1 Year' : d === 'LIFETIME' ? 'Lifetime' : 'Custom'}
+                </button>
+              ))}
+            </div>
+
+            {grantDuration === 'CUSTOM' && (
+              <div className="mb-3">
+                <label className="block text-xs font-medium text-gray-500 mb-1">Expires on (future date)</label>
+                <input
+                  type="date"
+                  value={grantCustomDate}
+                  min={format(new Date(Date.now() + 86400000), 'yyyy-MM-dd')}
+                  onChange={e => setGrantCustomDate(e.target.value)}
+                  className="input"
+                />
+              </div>
+            )}
+
+            <label className="block text-xs font-medium text-gray-500 mb-1">Reason (required)</label>
+            <textarea
+              value={grantReason}
+              onChange={e => setGrantReason(e.target.value)}
+              rows={2}
+              className="input w-full"
+              placeholder="Why is this comp being granted?"
+            />
+            {actionError && <p className="text-sm text-red-600 mt-2">{actionError}</p>}
+            <div className="flex justify-end gap-2 mt-5">
+              <button
+                onClick={() => setGrantTarget(null)}
+                disabled={actionBusy}
+                className="border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={doGrantPro}
+                disabled={actionBusy || !grantValid}
+                className="bg-[#1F6F8B] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#185a72] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {actionBusy ? 'Granting…' : 'Grant Pro'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Revoke complimentary Pro (light confirm) ──────────────────────── */}
+      {revokeProTarget && (
+        <div
+          className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+          onClick={() => { if (!actionBusy) setRevokeProTarget(null) }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="bg-white rounded-lg border border-gray-200 w-full max-w-[420px] p-6 shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 className="font-semibold text-lg text-gray-900 mb-2">Revoke complimentary Pro</h2>
+            <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+              Remove complimentary Pro from <strong>{fullName(revokeProTarget)}</strong> ({revokeProTarget.email})?
+              Any real paid subscription is unaffected.
+            </p>
+            {actionError && <p className="text-sm text-red-600 mb-2">{actionError}</p>}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setRevokeProTarget(null)}
+                disabled={actionBusy}
+                className="border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={doRevokePro}
+                disabled={actionBusy}
+                className="bg-[#1F6F8B] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#185a72] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {actionBusy ? 'Revoking…' : 'Revoke Pro'}
               </button>
             </div>
           </div>

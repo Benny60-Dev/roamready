@@ -17,6 +17,10 @@ export interface AuthRequest extends Request {
     // createdAt + 1h, gated routes 403.
     emailVerified: boolean
     createdAt: Date
+    // Complimentary (owner-granted) Pro — independent of Stripe. Read by
+    // hasAccess as an additional grant path.
+    compTier: string | null
+    compExpiresAt: Date | null
   }
 }
 
@@ -50,6 +54,9 @@ export async function requireAuth(req: AuthRequest, _res: Response, next: NextFu
         // this select covers the stale Prisma client the same way emailVerified
         // does. A valid-but-deactivated session must not pass.
         deactivatedAt: true,
+        // Complimentary Pro fields — read by hasAccess (additional grant path).
+        compTier: true,
+        compExpiresAt: true,
       } as any,
     }) as unknown as AuthRequest['user']
 
@@ -94,7 +101,14 @@ export function requireFeature(feature: string) {
 }
 
 export function hasAccess(
-  user: { subscriptionTier: string; trialEndsAt: Date | null; subscriptionEndsAt?: Date | null; isOwner?: boolean },
+  user: {
+    subscriptionTier: string
+    trialEndsAt: Date | null
+    subscriptionEndsAt?: Date | null
+    isOwner?: boolean
+    compTier?: string | null
+    compExpiresAt?: Date | null
+  },
   feature: string,
 ): boolean {
   const FEATURE_GATES: Record<string, string[]> = {
@@ -118,6 +132,11 @@ export function hasAccess(
   // Cancellation grace period: user paid through subscriptionEndsAt, even if
   // their tier was flipped to FREE by the cancellation webhook.
   if (user.subscriptionEndsAt && new Date() < new Date(user.subscriptionEndsAt)) return true
+  // Complimentary (owner-granted) Pro — fully independent of Stripe. Valid when
+  // compTier is PRO and either lifetime (no expiry) or not yet expired. This is
+  // an ADDITIONAL grant path; it never reads or writes subscriptionTier/
+  // subscriptionEndsAt, so comps and real Stripe subs never collide.
+  if (user.compTier === 'PRO' && (!user.compExpiresAt || new Date() < new Date(user.compExpiresAt))) return true
   const gates = FEATURE_GATES[feature]
   if (!gates) return true
   return gates.includes(user.subscriptionTier)
