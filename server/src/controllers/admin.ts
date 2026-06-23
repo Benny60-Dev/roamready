@@ -5,6 +5,24 @@ import { AppError } from '../middleware/errorHandler'
 import { stripe } from '../services/stripe'
 import { analyzeFeedbackAI } from '../services/ai'
 import { sendFeedbackShippedNotification } from '../services/feedbackNotification'
+import * as accountLifecycle from '../services/accountLifecycle'
+
+// Narrow projection returned by the user-list + suspend/reactivate endpoints —
+// never leak passwordHash / verification tokens. Mirrors the AdminSubscribersPage
+// `User` type; deactivatedAt/deactivatedReason drive the Suspended badge + why.
+function publicUserRow(u: any) {
+  return {
+    id: u.id,
+    firstName: u.firstName,
+    lastName: u.lastName,
+    email: u.email,
+    subscriptionTier: u.subscriptionTier,
+    subscriptionEndsAt: u.subscriptionEndsAt,
+    createdAt: u.createdAt,
+    deactivatedAt: u.deactivatedAt ?? null,
+    deactivatedReason: u.deactivatedReason ?? null,
+  }
+}
 
 // ── Date-derived trip completion ─────────────────────────────────────────────
 // The stored Trip.status enum is vestigial — nothing sets COMPLETED anymore
@@ -91,22 +109,125 @@ export async function getMetrics(_req: AuthRequest, res: Response, next: NextFun
   } catch (err) { next(err) }
 }
 
-export async function getSubscribers(_req: AuthRequest, res: Response, next: NextFunction) {
+export async function getSubscribers(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const subscribers = await prisma.user.findMany({
-      // No tier filter: return ALL users (FREE and PRO). The admin Users
-      // table splits/filters by tier client-side. (FR-ADMIN-USERLIST)
-      // Deactivated accounts are hidden from the active list (Tier 1). `as any`
-      // covers the stale Prisma client's missing deactivatedAt, same as the
-      // archivedAt pattern in getAdminFeedback.
-      where: { deactivatedAt: null } as any,
+    // ?status=active (default, back-compat) | suspended | all. Active hides
+    // deactivated accounts; suspended shows only them (so they're reachable to
+    // reactivate); all shows everyone. deactivatedAt/deactivatedReason are
+    // selected so the client can badge + show the why inline.
+    const status = req.query.status === 'suspended' || req.query.status === 'all'
+      ? req.query.status
+      : 'active'
+    const where =
+      status === 'active' ? { deactivatedAt: null }
+      : status === 'suspended' ? { deactivatedAt: { not: null } }
+      : {}
+
+    // Built as `any` so the stale Prisma client doesn't reject the
+    // deactivatedAt where/select keys (same pattern as getAdminFeedback).
+    const args: any = {
+      // No tier filter: return ALL matching users (FREE and PRO). The admin
+      // Users table splits/filters by tier client-side. (FR-ADMIN-USERLIST)
+      where,
       select: {
         id: true, email: true, firstName: true, lastName: true,
         subscriptionTier: true, subscriptionEndsAt: true, createdAt: true,
+        deactivatedAt: true, deactivatedReason: true,
       },
       orderBy: { createdAt: 'desc' },
-    })
+    }
+    const subscribers = await prisma.user.findMany(args)
     res.json(subscribers)
+  } catch (err) { next(err) }
+}
+
+// ── Account suspend / reactivate (admin UI) ──────────────────────────────────
+// Owner-gated by the adminRouter.use(requireAuth + requireVerifiedEmail +
+// requireOwner) mount. Both delegate the deactivatedAt + AdminActionLog write to
+// services/accountLifecycle — the SAME implementation the CLI uses — so there is
+// one code path. performedBy is the acting owner's id (NOT a 'script:...' label).
+
+export async function suspendUser(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const targetId = req.params.id
+    // Self-lockout guard: an owner suspending themselves would 401 their own
+    // session and hide their own row — refuse.
+    if (targetId === req.user!.id) {
+      throw new AppError('You cannot suspend your own account.', 400)
+    }
+    const target = await prisma.user.findUnique({
+      where: { id: targetId },
+      select: { id: true, isOwner: true },
+    })
+    if (!target) throw new AppError('User not found', 404)
+    // Owner-target guard: owners must not be able to lock each other out.
+    if (target.isOwner) throw new AppError('You cannot suspend an owner account.', 403)
+
+    // reason is validated non-empty by AdminSuspendSchema on the route.
+    const updated = await accountLifecycle.suspend(targetId, req.body.reason, req.user!.id)
+    res.json(publicUserRow(updated))
+  } catch (err) { next(err) }
+}
+
+export async function reactivateUser(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const targetId = req.params.id
+    const target = await prisma.user.findUnique({
+      where: { id: targetId },
+      select: { id: true },
+    })
+    if (!target) throw new AppError('User not found', 404)
+
+    const updated = await accountLifecycle.reactivate(targetId, req.user!.id)
+    res.json(publicUserRow(updated))
+  } catch (err) { next(err) }
+}
+
+// Per-account moderation history — every AdminActionLog row for this user,
+// newest first. performedBy that is an owner id is resolved to a display
+// label; script labels ('script:...') pass through unchanged. Generic over
+// action type so SUSPEND/REACTIVATE today and CANCEL/future types render
+// without per-type handling.
+export async function getUserHistory(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const targetId = req.params.id
+    const logs: any[] = await (prisma as any).adminActionLog.findMany({
+      where: { targetUserId: targetId },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    // Resolve owner-id performedBy values to a name/email label in one query.
+    const ownerIds = [
+      ...new Set(
+        logs
+          .map(l => l.performedBy)
+          .filter((p: string) => p && !p.startsWith('script:')),
+      ),
+    ] as string[]
+    const owners = ownerIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: ownerIds } },
+          select: { id: true, email: true, firstName: true, lastName: true },
+        })
+      : []
+    const ownerById = new Map(owners.map(o => [o.id, o]))
+
+    res.json(
+      logs.map(l => {
+        const o = ownerById.get(l.performedBy)
+        return {
+          id: l.id,
+          action: l.action,
+          performedBy: l.performedBy,
+          performedByLabel: o
+            ? `${`${o.firstName} ${o.lastName}`.trim()} (${o.email})`
+            : l.performedBy,
+          reason: l.reason ?? null,
+          metadata: l.metadata ?? null,
+          createdAt: l.createdAt,
+        }
+      }),
+    )
   } catch (err) { next(err) }
 }
 
