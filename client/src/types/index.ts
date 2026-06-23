@@ -36,6 +36,12 @@ export interface User {
   customerId?: string
   trialEndsAt?: string
   subscriptionEndsAt?: string
+  /** Complimentary (owner-granted) Pro — independent of Stripe. compTier === 'PRO'
+   *  with compExpiresAt null = lifetime, or a future date = time-limited. Drives
+   *  the Billing page's "Pro (complimentary)" display; entitlement is handled
+   *  server-side by hasAccess. */
+  compTier?: SubscriptionTier | null
+  compExpiresAt?: string | null
   /** Lifetime founder rate eligibility — stamped at signup if joined
    *  before FOUNDER_CUTOFF_DATE. Drives founder-rate pricing/badge on
    *  PricingPage + PaywallModal and the priceId picked at checkout. */

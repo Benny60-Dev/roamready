@@ -181,7 +181,11 @@ export async function getStatus(req: AuthRequest, res: Response, next: NextFunct
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.id },
-      select: { subscriptionTier: true, subscriptionId: true, trialEndsAt: true, subscriptionEndsAt: true },
+      // compTier/compExpiresAt surface complimentary (owner-granted) Pro so the
+      // billing UI can reflect it. `as any` covers the stale Prisma client; the
+      // columns exist via add_complimentary_access. Entitlement is unchanged —
+      // hasAccess already honors comps; this only exposes the fields for display.
+      select: { subscriptionTier: true, subscriptionId: true, trialEndsAt: true, subscriptionEndsAt: true, compTier: true, compExpiresAt: true } as any,
     })
     res.json(user)
   } catch (err) { next(err) }
