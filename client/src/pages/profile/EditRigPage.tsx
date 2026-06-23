@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { usersApi } from '../../services/api'
@@ -7,11 +7,8 @@ import { Rig, TowedType, VehicleType } from '../../types'
 import { VEHICLE_LABELS } from './RigPage'
 import { deriveSecondVehicle } from '../../utils/rigs'
 import { useScrollResetOnReady } from '../../hooks/useScrollResetOnReady'
-
-// Year dropdown range: next year (current + 1, for new-model-year rigs) down to
-// 1990, newest first. Computed once at module load — not a hardcoded list.
-const YEAR_MAX = new Date().getFullYear() + 1
-const YEARS = Array.from({ length: YEAR_MAX - 1990 + 1 }, (_, i) => YEAR_MAX - i)
+import RangeSelect from '../../components/forms/RangeSelect'
+import { YEARS, LENGTHS, HEIGHTS, MPG_OPTIONS, TANK_OPTIONS } from '../../constants/rigOptions'
 
 type TowingChoice = 'NONE' | 'VEHICLE' | 'TRAILER'
 
@@ -28,7 +25,7 @@ export default function EditRigPage() {
   const [notFound, setNotFound] = useState(false)
   const [saving, setSaving] = useState(false)
   const [towingChoice, setTowingChoice] = useState<TowingChoice>('NONE')
-  const { register, handleSubmit, reset, watch } = useForm()
+  const { register, handleSubmit, reset, watch, control } = useForm()
   const vehicleType: VehicleType | undefined = watch('vehicleType') as VehicleType | undefined
   const isToyHauler = vehicleType === 'TOY_HAULER'
   // Block 7 — see RigPage.tsx for the full direction-derivation rationale.
@@ -201,10 +198,14 @@ export default function EditRigPage() {
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="label">Year</label>
-              <select className="input" {...register('year', { setValueAs: v => v === '' ? undefined : Number(v), required: true })}>
-                <option value="">Select year</option>
-                {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
+              <Controller
+                control={control}
+                name="year"
+                rules={{ required: true }}
+                render={({ field }) => (
+                  <RangeSelect options={YEARS} integer placeholder="Select year" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                )}
+              />
             </div>
             <div>
               <label className="label">Make</label>
@@ -218,11 +219,23 @@ export default function EditRigPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Length (ft)</label>
-              <input type="number" step="0.1" min="0" className="input" {...register('length', { valueAsNumber: true })} />
+              <Controller
+                control={control}
+                name="length"
+                render={({ field }) => (
+                  <RangeSelect options={LENGTHS} placeholder="Select length" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                )}
+              />
             </div>
             <div>
               <label className="label">Height (ft)</label>
-              <input type="number" step="0.1" min="0" className="input" {...register('height', { valueAsNumber: true })} />
+              <Controller
+                control={control}
+                name="height"
+                render={({ field }) => (
+                  <RangeSelect options={HEIGHTS} placeholder="Select height" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                )}
+              />
             </div>
           </div>
           {/* ── Fuel / MPG section — adapts to rig type (Pass 2 of towing-
@@ -241,12 +254,24 @@ export default function EditRigPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">MPG — towing this trailer</label>
-                  <input type="number" step="0.1" min="0" className="input" {...register('mpgTowing', { valueAsNumber: true })} />
+                  <Controller
+                    control={control}
+                    name="mpgTowing"
+                    render={({ field }) => (
+                      <RangeSelect options={MPG_OPTIONS} placeholder="Select MPG" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                    )}
+                  />
                   <p className="mt-1 text-xs text-gray-400">What your tow vehicle gets pulling this rig.</p>
                 </div>
                 <div>
                   <label className="label">Tank (gal)</label>
-                  <input type="number" step="0.1" min="0" className="input" {...register('tankSize', { valueAsNumber: true })} />
+                  <Controller
+                    control={control}
+                    name="tankSize"
+                    render={({ field }) => (
+                      <RangeSelect options={TANK_OPTIONS} placeholder="Select tank size" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                    )}
+                  />
                 </div>
               </div>
             </>
@@ -264,16 +289,34 @@ export default function EditRigPage() {
                 </div>
                 <div>
                   <label className="label">MPG — solo</label>
-                  <input type="number" step="0.1" min="0" className="input" {...register('mpg', { valueAsNumber: true })} />
+                  <Controller
+                    control={control}
+                    name="mpg"
+                    render={({ field }) => (
+                      <RangeSelect options={MPG_OPTIONS} placeholder="Select MPG" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                    )}
+                  />
                 </div>
                 <div>
                   <label className="label">Tank (gal)</label>
-                  <input type="number" step="0.1" min="0" className="input" {...register('tankSize', { valueAsNumber: true })} />
+                  <Controller
+                    control={control}
+                    name="tankSize"
+                    render={({ field }) => (
+                      <RangeSelect options={TANK_OPTIONS} placeholder="Select tank size" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                    )}
+                  />
                 </div>
               </div>
               <div>
                 <label className="label">MPG — towing a toad</label>
-                <input type="number" step="0.1" min="0" className="input" {...register('mpgTowing', { valueAsNumber: true })} />
+                <Controller
+                  control={control}
+                  name="mpgTowing"
+                  render={({ field }) => (
+                    <RangeSelect options={MPG_OPTIONS} placeholder="Select MPG" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                  )}
+                />
                 <p className="mt-1 text-xs text-gray-400">
                   Trips use the towing figure when you're bringing the toad, solo otherwise. Leave blank to always use solo.
                 </p>
@@ -294,7 +337,13 @@ export default function EditRigPage() {
               <p className="text-sm font-medium text-amber-800">🏍️ Toy Hauler Details</p>
               <div>
                 <label className="label">Garage length (ft)</label>
-                <input type="number" step="0.1" min="0" className="input" {...register('garageLength', { valueAsNumber: true })} />
+                <Controller
+                  control={control}
+                  name="garageLength"
+                  render={({ field }) => (
+                    <RangeSelect options={LENGTHS} placeholder="Select length" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                  )}
+                />
               </div>
               <div>
                 <label className="label">Toys (check all that apply)</label>
@@ -365,10 +414,14 @@ export default function EditRigPage() {
                       <div className="grid grid-cols-3 gap-3">
                         <div>
                           <label className="label">Year</label>
-                          <select className="input" {...register('towedYear', { setValueAs: v => v === '' ? undefined : Number(v), required: true })}>
-                            <option value="">Select year</option>
-                            {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
-                          </select>
+                          <Controller
+                            control={control}
+                            name="towedYear"
+                            rules={{ required: true }}
+                            render={({ field }) => (
+                              <RangeSelect options={YEARS} integer placeholder="Select year" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                            )}
+                          />
                         </div>
                         <div>
                           <label className="label">Make</label>
@@ -382,7 +435,13 @@ export default function EditRigPage() {
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="label">Length (ft)</label>
-                          <input type="number" step="0.1" min="0" className="input" {...register('towedLength', { valueAsNumber: true })} />
+                          <Controller
+                            control={control}
+                            name="towedLength"
+                            render={({ field }) => (
+                              <RangeSelect options={LENGTHS} placeholder="Select length" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                            )}
+                          />
                         </div>
                         <div>
                           <label className="label">License plate</label>
@@ -399,7 +458,13 @@ export default function EditRigPage() {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="label">Length (ft)</label>
-                        <input type="number" step="0.1" min="0" className="input" {...register('towedLength', { valueAsNumber: true })} />
+                        <Controller
+                          control={control}
+                          name="towedLength"
+                          render={({ field }) => (
+                            <RangeSelect options={LENGTHS} placeholder="Select length" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                          )}
+                        />
                       </div>
                       <div>
                         <label className="label">License plate</label>
@@ -425,10 +490,14 @@ export default function EditRigPage() {
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="label">Year</label>
-                  <select className="input" {...register('towedYear', { setValueAs: v => v === '' ? undefined : Number(v), required: true })}>
-                    <option value="">Select year</option>
-                    {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
+                  <Controller
+                    control={control}
+                    name="towedYear"
+                    rules={{ required: true }}
+                    render={({ field }) => (
+                      <RangeSelect options={YEARS} integer placeholder="Select year" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                    )}
+                  />
                 </div>
                 <div>
                   <label className="label">Make</label>
@@ -442,11 +511,23 @@ export default function EditRigPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">Length (ft)</label>
-                  <input type="number" step="0.1" min="0" className="input" {...register('towedLength', { valueAsNumber: true })} />
+                  <Controller
+                    control={control}
+                    name="towedLength"
+                    render={({ field }) => (
+                      <RangeSelect options={LENGTHS} placeholder="Select length" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                    )}
+                  />
                 </div>
                 <div>
                   <label className="label">Height (ft)</label>
-                  <input type="number" step="0.1" min="0" className="input" {...register('towedHeight', { valueAsNumber: true })} />
+                  <Controller
+                    control={control}
+                    name="towedHeight"
+                    render={({ field }) => (
+                      <RangeSelect options={HEIGHTS} placeholder="Select height" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                    )}
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
