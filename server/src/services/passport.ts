@@ -3,6 +3,7 @@ import { Strategy as GoogleStrategy } from 'passport-google-oauth20'
 import { prisma } from '../utils/prisma'
 import { isFounderEligible } from '../config/founderPricing'
 import { isDisposableEmail } from '../utils/disposableEmails'
+import { normalizeEmail } from '../utils/email'
 
 passport.use(
   new GoogleStrategy(
@@ -13,8 +14,13 @@ passport.use(
     },
     async (_accessToken, _refreshToken, profile, done) => {
       try {
-        const email = profile.emails?.[0]?.value
-        if (!email) return done(new Error('No email from Google'), undefined)
+        const rawEmail = profile.emails?.[0]?.value
+        if (!rawEmail) return done(new Error('No email from Google'), undefined)
+
+        // Google usually returns a lowercase address, but doesn't guarantee it
+        // for every Workspace domain — normalize so the lookup below and the
+        // create stay consistent with the email/password path.
+        const email = normalizeEmail(rawEmail)
 
         // Block known disposable email domains. Safety net for the edge
         // case of a Google Workspace account configured on a throwaway
