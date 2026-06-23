@@ -4,6 +4,7 @@ import { prisma } from '../utils/prisma'
 import { isFounderEligible } from '../config/founderPricing'
 import { isDisposableEmail } from '../utils/disposableEmails'
 import { normalizeEmail } from '../utils/email'
+import { sendNewSignupAlert } from './feedbackNotification'
 
 passport.use(
   new GoogleStrategy(
@@ -62,6 +63,10 @@ passport.use(
 
           // Stripe customer is lazily created on first checkout — see the
           // recovery path in createCheckout (controllers/subscriptions.ts).
+
+          // Owner alert: new signup via Google. Fire-and-forget — the .catch
+          // keeps a Resend outage from failing the OAuth callback.
+          sendNewSignupAlert(user, { provider: 'google' }).catch(() => {})
         } else {
           // Deactivated accounts cannot sign in via Google either — reject
           // BEFORE the link/verify updates below so OAuth never silently

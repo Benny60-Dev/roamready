@@ -15,6 +15,10 @@ import { fbRef } from '../utils/fbRef'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const supportEmail = process.env.SUPPORT_EMAIL ?? 'support@roamready.ai'
+// Internal owner-inbox for lifecycle alerts (signup / new sub / cancellation).
+// Distinct from SUPPORT_EMAIL on purpose — these are operational notices, not
+// customer support. Code-defaulted so no .env change is required.
+const ownerNotifyEmail = process.env.OWNER_NOTIFY_EMAIL ?? 'dev@roamready.ai'
 
 type FeedbackRow = {
   id: string
@@ -330,4 +334,113 @@ export async function sendAiUsageWarning(info: {
     text,
   })
   console.log('[aiUsageWarning] heavy-usage alert sent for userId=%s (%d calls)', info.userId, info.callCount)
+}
+
+// ── Owner lifecycle alerts (signup / new subscription / cancellation) ────────
+// Internal notices to ownerNotifyEmail (dev@roamready.ai). Same Resend client,
+// FROM_EMAIL sandbox fallback, and [label, value][] table layout as the senders
+// above. All three are fire-and-forget BY CONTRACT: callers invoke them with
+// `.catch(() => {})` so a Resend outage can never break signup, checkout, or a
+// webhook's 200 response. These functions therefore let errors propagate (the
+// caller's .catch is where they die) — they never run on the response's
+// critical path.
+
+/** Shared sender for the owner lifecycle alerts. Builds the standard HTML/text
+ *  table and posts to the owner inbox. */
+async function sendOwnerAlert(subject: string, intro: string, rows: [string, string][]): Promise<void> {
+  const fromAddress = process.env.FROM_EMAIL
+  if (!fromAddress) {
+    console.warn(
+      '[ownerAlert] FROM_EMAIL is not set — falling back to Resend sandbox sender. ' +
+      'Set FROM_EMAIL in .env once your domain is verified in the Resend dashboard.'
+    )
+  }
+
+  const html = `
+    <p><strong>${escapeHtml(intro)}</strong></p>
+    <table cellpadding="4" style="border-collapse:collapse;font-size:14px">
+      ${rows.map(([k, v]) => `<tr><td style="color:#6b7280">${k}</td><td>${escapeHtml(v)}</td></tr>`).join('\n      ')}
+    </table>
+  `.trim()
+
+  const text = `${intro}\n\n` + rows.map(([k, v]) => `${k}: ${v}`).join('\n')
+
+  await resend.emails.send({
+    from: fromAddress ?? 'RoamReady <onboarding@resend.dev>',
+    to: ownerNotifyEmail,
+    subject,
+    html,
+    text,
+  })
+}
+
+type AlertUser = {
+  email: string
+  firstName?: string | null
+  lastName?: string | null
+  founderPricing?: boolean | null
+}
+
+const alertName = (u: AlertUser) =>
+  [u.firstName, u.lastName].filter(Boolean).join(' ') || '—'
+
+/** New account created — fired from both the email/password and Google signup
+ *  paths (provider distinguishes them). */
+export async function sendNewSignupAlert(
+  user: AlertUser,
+  opts: { provider: 'email' | 'google' },
+): Promise<void> {
+  const rows: [string, string][] = [
+    ['Email', user.email],
+    ['Name', alertName(user)],
+    ['Provider', opts.provider],
+    ['Founder', user.founderPricing ? 'yes' : 'no'],
+    ['Time', new Date().toISOString()],
+  ]
+  await sendOwnerAlert(`New signup (${opts.provider}): ${user.email}`, 'New user account created', rows)
+  console.log('[ownerAlert] new-signup alert sent for', user.email, `(${opts.provider})`)
+}
+
+/** New paid subscription — fired from checkout.session.completed. */
+export async function sendNewSubscriptionAlert(
+  user: AlertUser,
+  opts: { planLabel: string; amount: string | null; periodEnd: Date | null },
+): Promise<void> {
+  const rows: [string, string][] = [
+    ['Email', user.email],
+    ['Name', alertName(user)],
+    ['Plan', opts.planLabel],
+    ['Amount', opts.amount ?? '—'],
+    ['Renews', opts.periodEnd ? opts.periodEnd.toISOString() : '—'],
+    ['Founder', user.founderPricing ? 'yes' : 'no'],
+    ['Time', new Date().toISOString()],
+  ]
+  const subject =
+    `New Pro subscription: ${user.email} — ${opts.planLabel}${opts.amount ? ` ${opts.amount}` : ''}`
+  await sendOwnerAlert(subject, 'New paid subscription', rows)
+  console.log('[ownerAlert] new-subscription alert sent for', user.email)
+}
+
+/** Cancellation requested — fired on the cancel_at_period_end transition in
+ *  customer.subscription.updated (NOT on .deleted). adminInitiated separates a
+ *  real customer churn from an admin/script-initiated cancel. */
+export async function sendCancellationAlert(
+  user: AlertUser,
+  opts: { planLabel: string; adminInitiated: boolean },
+): Promise<void> {
+  const kind = opts.adminInitiated ? 'admin-initiated' : 'self-cancel'
+  const rows: [string, string][] = [
+    ['Email', user.email],
+    ['Name', alertName(user)],
+    ['Plan', opts.planLabel],
+    ['Type', kind],
+    ['Founder', user.founderPricing ? 'yes' : 'no'],
+    ['Time', new Date().toISOString()],
+  ]
+  await sendOwnerAlert(
+    `Cancellation requested (${kind}): ${user.email} — ${opts.planLabel}`,
+    'Subscription cancellation requested',
+    rows,
+  )
+  console.log('[ownerAlert] cancellation alert sent for', user.email, `(${kind})`)
 }
