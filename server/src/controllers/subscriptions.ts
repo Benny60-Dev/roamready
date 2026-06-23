@@ -353,9 +353,21 @@ export async function handleWebhook(req: Request, res: Response, next: NextFunct
           // cancellation_details.reason === 'cancellation_requested'.
           // subscriptionEndsAt is intentionally untouched (paid-through
           // grace period, see middleware/auth.ts).
+          //
+          // ADMIN-CANCEL EXCEPTION: an admin cancelling a founder's sub via
+          // server/scripts/deactivate-account.js is NOT a voluntary forfeiture
+          // by the user. That script stamps metadata.admin_cancel='true' on the
+          // subscription, which rides along on this event — when present we do
+          // NOT forfeit, preserving the founder rate. A genuine user self-cancel
+          // (Stripe portal / dashboard) carries no such tag, so it still
+          // forfeits exactly as before. Note: an API cancel DOES set
+          // reason==='cancellation_requested', so this metadata tag is the only
+          // thing distinguishing admin-initiated from user-initiated here.
+          const adminCancel = sub.metadata?.admin_cancel === 'true'
           const forfeitsFounderRate =
             (user as any).founderPricing === true &&
-            sub.cancellation_details?.reason === 'cancellation_requested'
+            sub.cancellation_details?.reason === 'cancellation_requested' &&
+            !adminCancel
           await prisma.user.update({
             where: { id: user.id },
             // Cast matches auth.ts: the generated Prisma client may be stale
