@@ -186,6 +186,19 @@ export async function login(req: Request, res: Response, next: NextFunction) {
     const valid = await bcrypt.compare(password, user.passwordHash)
     if (!valid) throw new AppError('Invalid credentials', 401)
 
+    // Block deactivated accounts AFTER the password check so we never reveal
+    // (to someone guessing) that a given email exists but is deactivated — only
+    // a caller who already knows the correct password reaches this branch. A
+    // distinct message + code lets support tell "deactivated" apart from a
+    // wrong password without it being an enumeration oracle for unknown emails.
+    if ((user as any).deactivatedAt) {
+      throw new AppError(
+        'This account has been deactivated. Contact support@roamready.ai to restore access.',
+        403,
+        { code: 'ACCOUNT_DEACTIVATED' },
+      )
+    }
+
     const { accessToken, refreshToken } = generateTokens(user.id)
     setRefreshCookie(res, refreshToken)
 
@@ -229,6 +242,11 @@ export async function refreshToken(req: Request, res: Response, next: NextFuncti
     const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET!) as { userId: string }
     const user = await prisma.user.findUnique({ where: { id: decoded.userId } })
     if (!user) throw new AppError('User not found', 401)
+
+    // A 30-day refresh cookie must not revive a deactivated session — reject
+    // here too, otherwise the access-token gate in requireAuth is the only
+    // thing standing between a deactivated user and a fresh 15-min token.
+    if ((user as any).deactivatedAt) throw new AppError('Account deactivated', 401)
 
     const tokens = generateTokens(user.id)
     setRefreshCookie(res, tokens.refreshToken)

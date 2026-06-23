@@ -46,10 +46,20 @@ export async function requireAuth(req: AuthRequest, _res: Response, next: NextFu
         isOwner: true,
         emailVerified: true,
         createdAt: true,
+        // Account-deactivation gate (Tier 1). Real DB column; the `as any` on
+        // this select covers the stale Prisma client the same way emailVerified
+        // does. A valid-but-deactivated session must not pass.
+        deactivatedAt: true,
       } as any,
     }) as unknown as AuthRequest['user']
 
     if (!user) throw new AppError('User not found', 401)
+
+    // Reject deactivated accounts even with an otherwise-valid JWT — this is
+    // what stops a still-live 15-min access token from working after deactivate.
+    if ((user as any).deactivatedAt) {
+      throw new AppError('Account deactivated', 401, { code: 'ACCOUNT_DEACTIVATED' })
+    }
 
     req.user = user
     next()
