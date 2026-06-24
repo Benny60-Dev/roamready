@@ -27,7 +27,14 @@ export function cleanChatText(text: string): string {
     .replace(/<modify>[\s\S]*/g, '')
     .trim()
 
-  return stripMarkdownEmphasis(withoutTags).trim()
+  return stripMarkdownEmphasis(withoutTags)
+    // Collapse oversized vertical gaps: the model sometimes emits 3+ consecutive
+    // newlines, which render as a big blank space under whitespace-pre-wrap.
+    // Squash any run of 3+ down to a normal paragraph break (exactly two), so
+    // paragraphs keep ONE blank line between them but never a large gap. Single
+    // and double newlines are left intact. Horizontal whitespace is untouched.
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 /**
