@@ -45,23 +45,32 @@ function largerClauses(d: RigSwapDeltas): string {
  * reselecting the old rig — this is informational, not a block).
  */
 export default function TripRigSelector({ tripId, rigs, currentRigId, onSwapped }: Props) {
-  const [selected, setSelected] = useState<string>(currentRigId ?? '')
+  const resolveRig = (rigId: string | null): Rig | null =>
+    (rigId ? rigs.find(r => r.id === rigId) : null) ?? rigs.find(r => r.isDefault) ?? null
+
+  // The trip's EFFECTIVE current rig id: the explicit trip.rigId, else the profile
+  // default rig (isDefault), else the first rig. A null trip.rigId ("uses the
+  // profile default") is shown as the actual default rig's name — never a blank or
+  // a "default" entry. DISPLAY only: the null-resolves-to-default concept used
+  // everywhere else is untouched.
+  const resolvedCurrentRigId = resolveRig(currentRigId)?.id ?? rigs[0]?.id ?? ''
+
+  const [selected, setSelected] = useState<string>(resolvedCurrentRigId)
   const [busy, setBusy] = useState(false)
   const [success, setSuccess] = useState(false)
   const [warning, setWarning] = useState<{ newName: string; oldName: string; deltas: RigSwapDeltas } | null>(null)
 
-  // Keep the dropdown in sync if the trip's rig changes (after a swap, or from
-  // elsewhere). Resyncing to the new current rig makes `dirty` go false again.
-  useEffect(() => { setSelected(currentRigId ?? '') }, [currentRigId])
+  // Keep the dropdown synced to the effective current rig (after a swap, or once
+  // rigs finish loading). Resyncing makes `dirty` go false again.
+  useEffect(() => { setSelected(resolvedCurrentRigId) }, [resolvedCurrentRigId])
 
-  const dirty = (selected || null) !== (currentRigId ?? null)
-
-  const resolveRig = (rigId: string | null): Rig | null =>
-    (rigId ? rigs.find(r => r.id === rigId) : null) ?? rigs.find(r => r.isDefault) ?? null
+  // This control now only ever sends a REAL rig id (no "default"/null option), so
+  // dirty is a plain id mismatch against the effective current rig.
+  const dirty = selected !== '' && selected !== resolvedCurrentRigId
 
   const handleChange = async () => {
-    if (!dirty || busy) return
-    const newRigId = selected || null
+    if (!dirty || busy || !selected) return
+    const newRigId = selected
     const oldRig = resolveRig(currentRigId)
     setBusy(true)
     setSuccess(false)
@@ -89,6 +98,19 @@ export default function TripRigSelector({ tripId, rigs, currentRigId, onSwapped 
     }
   }
 
+  // Defensive: the parent only renders this when rigs.length > 0, but never
+  // crash on an empty list — show a disabled "no rigs" state instead.
+  if (rigs.length === 0) {
+    return (
+      <div className="mt-3 pt-3 border-t border-gray-100" style={{ borderTopWidth: '0.5px' }}>
+        <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+          Rig for this trip
+        </label>
+        <p className="text-xs text-gray-400">No rigs on your profile.</p>
+      </div>
+    )
+  }
+
   return (
     <div className="mt-3 pt-3 border-t border-gray-100" style={{ borderTopWidth: '0.5px' }}>
       <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
@@ -100,7 +122,6 @@ export default function TripRigSelector({ tripId, rigs, currentRigId, onSwapped 
           onChange={e => { setSelected(e.target.value); setSuccess(false) }}
           className="flex-1 min-w-0 text-sm border border-gray-200 rounded-md px-2 py-2 bg-white text-gray-900 focus:outline-none focus:border-[#1F6F8B]"
         >
-          <option value="">Use profile default</option>
           {rigs.map(r => (
             <option key={r.id} value={r.id}>
               {rigDisplayName(r)}{r.length ? ` — ${r.length} ft` : ''}
