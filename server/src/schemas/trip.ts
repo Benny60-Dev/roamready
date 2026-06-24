@@ -61,6 +61,11 @@ export const TripUpdateSchema = z
     // same shape applies here.
     bringingTowed: z.boolean().nullable().optional(),
     adHocVehicle: z.record(z.string(), z.unknown()).nullable().optional(),
+    // AI-MESA-10 — when the Modify panel applies an AI-proposed change_rig action
+    // via this endpoint (RIG-CHANGE Phase 3), it threads the action's id so the
+    // server stamps the persisted proposal applied=true after the rig swap runs.
+    // Pulled out of the data before the Prisma write (not a Trip column).
+    modifyActionId: z.string().max(100).optional(),
   })
   .strict()
 

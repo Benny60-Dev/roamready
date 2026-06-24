@@ -1089,7 +1089,9 @@ export async function updateTrip(req: AuthRequest, res: Response, next: NextFunc
     if (!trip) throw new AppError('Trip not found', 404)
 
     // req.body is guaranteed to be a parsed TripUpdateInput by validateBody on the route.
-    const data: TripUpdateInput = req.body
+    // modifyActionId (RIG-CHANGE Phase 3) is AI-MESA-10 apply-stamp plumbing, not a
+    // Trip column — pulled out so it never reaches prisma.trip.update.
+    const { modifyActionId, ...data } = req.body as TripUpdateInput
     // RIG-CHANGE (Phase 1): capture the pre-update rigId before the write so the
     // swap delta is computed against the genuine OLD rig. A swap is when the body
     // sets a non-empty rigId that differs from the current one. (rigId → null, i.e.
@@ -1117,6 +1119,10 @@ export async function updateTrip(req: AuthRequest, res: Response, next: NextFunc
         console.warn('[applyRigChange] updateTrip tripId=%s failed: %s', req.params.id, e?.message)
       }
     }
+    // AI-MESA-10 — when this update applied an AI-proposed change_rig action (the
+    // Modify panel threads modifyActionId), stamp the persisted proposal
+    // applied=true now that the mutation executed. Never throws; no-ops if absent.
+    await stampModifyActionApplied(req.params.id, modifyActionId)
     res.json(rigSwap ? { ...updated, rigSwap } : updated)
   } catch (err) { next(err) }
 }

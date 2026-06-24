@@ -22,7 +22,7 @@ const QUICK_CHIPS = [
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ModifyAction {
-  action: 'add_stop' | 'remove_stop' | 'change_nights' | 'suggest_campground' | 'shift_trip_dates'
+  action: 'add_stop' | 'remove_stop' | 'change_nights' | 'suggest_campground' | 'shift_trip_dates' | 'change_rig'
   // new schema (server-injected prompt)
   locationName?: string
   locationState?: string
@@ -37,6 +37,11 @@ interface ModifyAction {
   // shift_trip_dates — ISO YYYY-MM-DD string emitted by the AI; the server
   // parses via z.coerce.date() so a Date instance is unnecessary here.
   newStartDate?: string
+  // change_rig (RIG-CHANGE Phase 3) — rigId is the swap target (server-validated,
+  // scoped to the user via applyRigChange); rigName is the AI-supplied display
+  // name for the confirmation card only.
+  rigId?: string
+  rigName?: string
 }
 
 /** AI-MESA-10 — one server-parsed <modify> action. The SERVER is the single
@@ -104,6 +109,8 @@ function getConfirmationText(action: ModifyAction): string {
         : (action.newStartDate ?? 'a new date')
       return `Shift trip to start on ${pretty}`
     }
+    case 'change_rig':
+      return `Switch this trip's rig to ${action.rigName ?? 'the selected rig'}`
     default:
       return 'Apply this change'
   }
@@ -117,6 +124,8 @@ function getApplyButtonLabel(action: ModifyAction): string {
   switch (action.action) {
     case 'shift_trip_dates':
       return 'Shift dates'
+    case 'change_rig':
+      return 'Change rig'
     default:
       return '✓ Apply'
   }
@@ -470,6 +479,17 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
         const shiftRes = await tripsApi.shiftDates(trip.id, { newStartDate: action.newStartDate, modifyActionId })
         onTripUpdated(shiftRes.data)
         return
+      }
+      case 'change_rig': {
+        // RIG-CHANGE Phase 3 — route through the SAME PUT /trips/:id path the
+        // trip-page rig selector uses; the server runs the guarded applyRigChange
+        // (repoint + larger-rig delta + booked-stop re-verify + NOT_BOOKED
+        // refilter) and stamps this proposal via modifyActionId. No parallel
+        // rig-change logic here. The trailing refetch below picks up the new rig
+        // so the data-derived banner/labels (Phase 2) update.
+        if (!action.rigId) throw new Error('change_rig missing rigId')
+        await tripsApi.update(trip.id, { rigId: action.rigId, modifyActionId })
+        break
       }
       default:
         console.error('Unsupported modify action:', action)
