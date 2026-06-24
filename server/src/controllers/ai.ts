@@ -704,6 +704,28 @@ function buildLiveTripState(trip: any): string {
   ].join('\n')
 }
 
+/** Deterministic backstop for requested-nights capture: pull an EXPLICIT
+ *  integer duration ("6 days", "10 nights", "3-day") from a user message. "N
+ *  days" maps to N nights (mirrors the DURATION CONFIRMATION prompt rule).
+ *  Explicit digits ONLY — fuzzy lengths ("a couple weeks") are deliberately left
+ *  to the model's <requestedNights> tag, so this never guesses. Nights phrasing
+ *  wins over days when both appear. Returns null when no explicit duration. */
+function parseExplicitNights(text?: string | null): number | null {
+  if (!text) return null
+  const t = text.toLowerCase()
+  const nightM = t.match(/\b(\d{1,3})\s*-?\s*nights?\b/)
+  if (nightM) {
+    const n = Number(nightM[1])
+    if (Number.isInteger(n) && n > 0 && n <= 365) return n
+  }
+  const dayM = t.match(/\b(\d{1,3})\s*-?\s*days?\b/)
+  if (dayM) {
+    const n = Number(dayM[1])
+    if (Number.isInteger(n) && n > 0 && n <= 365) return n
+  }
+  return null
+}
+
 export async function chat(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { messages, tripId, sessionId, context, rigId, adHocVehicle } = req.body
@@ -1270,6 +1292,31 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
         }
       } else if (rawNights) {
         console.warn('[AI requested-nights-capture] ignored non-positive-integer <requestedNights> value "%s" sessionId=%s', rawNights, sessionId ?? '(none)')
+      }
+    }
+
+    // REQUESTED-NIGHTS SINGLE-SHOT FALLBACK — under the state-and-proceed opening
+    // flow a one-shot prompt ("…6 days…") can state the length AND emit the
+    // <itinerary> in the SAME turn; if the model didn't append <requestedNights>
+    // on that turn, the target would never persist and reconcileNights would
+    // no-op ('no-target'), leaving the built trip short. Backstop: when THIS turn
+    // builds an itinerary, no valid tag was captured above, and no target is
+    // already locked, deterministically parse an EXPLICIT integer duration from
+    // the user's latest message and persist it. Conservative — explicit digits
+    // only; fuzzy lengths stay the model's job via the tag.
+    const tagCaptured = !!reqNightsMatch
+    const alreadyLocked =
+      Number.isInteger((userProfile as any).capturedRequestedNights) &&
+      (userProfile as any).capturedRequestedNights > 0
+    if (sessionId && !tagCaptured && !alreadyLocked && /<itinerary>/.test(response)) {
+      const fallbackNights = parseExplicitNights(lastUserMsg?.content)
+      if (fallbackNights) {
+        try {
+          await mergePartialTripData(sessionId, { requestedNights: fallbackNights })
+          console.log('[AI requested-nights-fallback] captured %d nights from user text (no tag) sessionId=%s', fallbackNights, sessionId)
+        } catch (e: any) {
+          console.error('[AI requested-nights-fallback] persist failed for sessionId=%s: %s', sessionId, e?.message)
+        }
       }
     }
 

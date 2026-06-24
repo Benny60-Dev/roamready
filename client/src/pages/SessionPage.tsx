@@ -14,7 +14,7 @@ import { useSessionAutosave } from '../hooks/useSessionAutosave'
 import { useVoiceInput } from '../hooks/useVoiceInput'
 import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
 import { useMediaQuery } from '../hooks/useMediaQuery'
-import { hasRoundTripIntent } from '../utils/roundTripIntent'
+import { hasRoundTripIntent, hasOneWayIntent } from '../utils/roundTripIntent'
 import { ChatInput } from '../components/ChatInput'
 import { selectGreeting } from '../utils/greeting'
 import { relativeTime } from '../utils/dates'
@@ -153,14 +153,24 @@ function stripUnrequestedReturnLeg(
   const stops: any[] = itinerary?.stops
   if (!Array.isArray(stops) || stops.length < 2) return { itinerary, stripped: false }
 
-  // AI-RT-1 — widened detection lives in utils/roundTripIntent.ts ("and
-  // back", "there and back", "return(ing)", plus "back to <X>" for ANY
-  // user-stated origin or the itinerary's own HOME stop — not just the
-  // profile homeCity, which no-home accounts lack). Regression-checked by
-  // npm run check:round-trip-intent.
+  // AI-RT-2 — the MODEL is now the primary round-trip decider; this guard is a
+  // BACKSTOP, not the override. Two gates, in order:
+  //   1. Round-trip intent (inclusive — "come home", "back home", "and back",
+  //      "return", "loop", "back to <origin>", etc.) → the model's return leg is
+  //      correct, KEEP it.
+  //   2. Otherwise, only strip when there is POSITIVE one-way evidence
+  //      (hasOneWayIntent). When the request is genuinely AMBIGUOUS (no return
+  //      signal either way), KEEP whatever the model built — we no longer
+  //      amputate a return leg just because the round-trip phrase test missed.
+  // This stops both failure modes: rejecting "come home" (gate 1) AND nuking a
+  // legitimate model-built return leg on an ambiguous prompt (gate 2).
+  // Regression-checked by npm run check:round-trip-intent.
   const userMessages = messages.filter(m => m.role === 'user').map(m => m.content)
   if (hasRoundTripIntent(userMessages, [homeCity, stops[0]?.locationName])) {
     return { itinerary, stripped: false }  // genuine round trip — no-op
+  }
+  if (!hasOneWayIntent(userMessages)) {
+    return { itinerary, stripped: false }  // ambiguous — trust the model, keep its build
   }
 
   // Find turnaround: last DESTINATION-typed stop with nights > 0 that isn't

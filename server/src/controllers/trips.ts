@@ -1884,6 +1884,27 @@ export async function reconcileNights(req: AuthRequest, res: Response, next: Nex
     const FLOOR = 1
     let delta = target - built // >0 pad, <0 trim
 
+    // MISSING-LEG GUARD (AI-RT-2 / scope safety). The reconciler pads/trims
+    // EXISTING destination nights — it cannot build a missing leg. A pad large
+    // enough to roughly DOUBLE the trip almost always means a whole leg is
+    // absent (e.g. an unbuilt return-home leg), not ordinary rounding drift.
+    // Padding a destination to hit the number anyway yields a right-count /
+    // wrong-shape trip, which is exactly the failure we must not mask. So when
+    // the needed pad is BOTH large in absolute terms (≥3 nights) AND at least as
+    // big as what was actually built (a doubling), DO NOT silently pad: log
+    // loudly and surface a `flagged` reason so the client/AI can act, leaving
+    // the trip as-built. Conservative by design — ordinary small drift (delta 1-2,
+    // or any delta smaller than what's built) still auto-pads below, unchanged,
+    // and trims (delta < 0) never trip this.
+    const SUSPECT_MIN_PAD = 3
+    if (delta >= SUSPECT_MIN_PAD && delta >= built) {
+      console.warn(
+        '[reconcileNights] SUSPECTED MISSING LEG tripId=%s target=%d built=%d delta=+%d — refusing to silently pad existing stops; left as-built',
+        trip.id, target, built, delta,
+      )
+      return res.json({ reconciled: false, reason: 'suspected-missing-leg', flagged: true, target, built, delta })
+    }
+
     if (delta > 0) {
       // ── PAD: distribute +delta proportional to current nights, largest-
       // remainder, remainder biased to bigger stops (then earlier order). ──
