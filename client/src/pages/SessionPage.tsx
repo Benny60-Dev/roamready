@@ -817,6 +817,30 @@ export default function SessionPage() {
     // ConfirmVehiclesModal path calls this directly, so a double-confirm
     // click could otherwise start two builds.
     if (!itinerary || !sessionId || creating) return
+
+    // FR-BUILD-GATE — client backstop (defense in depth). The server gate
+    // (controllers/ai.ts) now discards any itinerary missing a pinned start date
+    // or a real destination, so the client shouldn't normally see one. But never
+    // silently promote a dateless / destination-less plan: surface the same
+    // "still need X" message instead of building. WHEN keys on a real ISO
+    // startDate (the stated-assumption path sets one, so it passes).
+    const buildStops = itinerary.stops ?? []
+    const isoStart =
+      typeof itinerary.startDate === 'string' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(itinerary.startDate)
+    const homeNorm = (buildStops[0]?.locationName ?? '').toLowerCase().trim()
+    const hasDestination = buildStops.some(
+      (s: any) => s?.type === 'DESTINATION' && (s?.locationName ?? '').toLowerCase().trim() !== homeNorm,
+    )
+    if (!isoStart || !hasDestination) {
+      const needs = [
+        !hasDestination ? 'a destination' : null,
+        !isoStart ? 'a start date' : null,
+      ].filter(Boolean).join(' and ')
+      setBuildError(`I still need ${needs} before I can build this trip — just let me know in the chat and I'll finish it.`)
+      return
+    }
+
     setCreating(true)
     setBuildError(null)
     try {

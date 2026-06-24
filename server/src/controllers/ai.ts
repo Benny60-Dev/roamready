@@ -726,6 +726,25 @@ function parseExplicitNights(text?: string | null): number | null {
   return null
 }
 
+/** Builds the targeted "still need X" reply for the WHERE/WHEN/LENGTH build gate.
+ *  Names ONLY the missing essential(s); when several are missing they're asked
+ *  together in one message. Contains no <itinerary>, so the client shows no Build
+ *  button. */
+function buildGateAsk(whereOk: boolean, whenOk: boolean, lengthOk: boolean): string {
+  const needs: string[] = []
+  if (!whereOk) needs.push('where you want to go')
+  if (!whenOk) needs.push("a start date (a rough month is fine — I'll pin a specific day)")
+  if (!lengthOk) needs.push('how many nights you want')
+  const list =
+    needs.length <= 1
+      ? needs[0] ?? 'a few details'
+      : needs.length === 2
+        ? `${needs[0]} and ${needs[1]}`
+        : `${needs.slice(0, -1).join(', ')}, and ${needs[needs.length - 1]}`
+  const those = needs.length > 1 ? 'those' : 'that'
+  return `Before I map this out, I just need ${list}. Share ${those} and I'll build your itinerary right away.`
+}
+
 export async function chat(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { messages, tripId, sessionId, context, rigId, adHocVehicle } = req.body
@@ -1343,6 +1362,85 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
         }
       } else if (rawDate) {
         console.warn('[AI requested-start-date-capture] ignored invalid <requestedStartDate> value "%s" sessionId=%s', rawDate, sessionId ?? '(none)')
+      }
+    }
+
+    // FR-BUILD-GATE — DETERMINISTIC WHERE/WHEN/LENGTH BUILD GATE. Sibling to the
+    // AI-MESA-7 origin guard: the planner must NOT build until all three
+    // essentials are present. Prompt-only gating proved insufficient (the nights
+    // regression), so this is the guarantee — if the model emits an <itinerary>
+    // in planning mode that lacks a real destination, a pinned start date, or a
+    // length, we DISCARD the itinerary and replace the reply with a targeted ask
+    // (no <itinerary> → no Build button → cannot promote). Runs for ALL planning
+    // users (unlike the origin guard's no-home scope) and BEFORE the
+    // planning-retention snapshot so an incomplete build is never snapshotted.
+    //
+    // Composition with the origin guard: if that guard already stripped the
+    // itinerary (response = NO_ORIGIN_RESPONSE), parseItineraryBlock returns null
+    // here and this gate no-ops — the user sees ONE coherent ask, never two.
+    //
+    // Anti-re-ask (do NOT reintroduce the 6bad5e1 regression): the gate reads the
+    // FRESH persisted captures (this turn's <requestedNights>/<requestedStartDate>
+    // were merged just above) plus the itinerary's own startDate, so it never
+    // re-asks for a date/length the user gave on a PRIOR turn. WHEN keys on a real
+    // startDate (the stated-assumption / first-Tuesday path sets one, so it
+    // passes) — only a truly null/un-pinned date is blocked.
+    if (context !== 'modify') {
+      const gateItin = parseItineraryBlock(response)
+      const gateStops = Array.isArray(gateItin?.stops) ? (gateItin!.stops as any[]) : null
+      if (gateItin && gateStops && gateStops.length > 0) {
+        // Freshest persisted captures (include this turn's tags merged above).
+        let gatePtd: any = null
+        if (sessionId) {
+          try {
+            const s = await prisma.planningSession.findUnique({
+              where: { id: sessionId },
+              select: { partialTripData: true },
+            })
+            gatePtd = (s?.partialTripData as any) ?? null
+          } catch { /* fall back to itinerary-only signals */ }
+        }
+
+        const isIsoDate = (v: unknown) =>
+          typeof v === 'string' &&
+          /^\d{4}-\d{2}-\d{2}$/.test(v) &&
+          new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v
+
+        // WHEN — primary signal: the itinerary's own startDate is a real ISO date.
+        // Passes both a user-typed date AND the stated-assumption path (both set
+        // startDate); a captured requestedStartDate also counts. Only a truly
+        // null/un-pinned date blocks.
+        const whenOk = isIsoDate(gateItin.startDate) || isIsoDate(gatePtd?.requestedStartDate)
+
+        // LENGTH — captured target is primary; fall back to the itinerary's summed
+        // nights (OVERNIGHT_ONLY counts as 1, mirroring the reconciler).
+        const capturedNights = Number(gatePtd?.requestedNights)
+        const summedNights = gateStops.reduce(
+          (n, s) => n + (s?.type === 'OVERNIGHT_ONLY' ? 1 : (Number(s?.nights) || 0)),
+          0,
+        )
+        const lengthOk = (Number.isInteger(capturedNights) && capturedNights > 0) || summedNights > 0
+
+        // WHERE — at least one real DESTINATION stop away from the origin/home
+        // city (a lone HOME stop, or only a same-city return closer, doesn't count).
+        const normCity = (s: unknown) => String(s ?? '').toLowerCase().trim()
+        const homeCityNorm = normCity(gateStops[0]?.locationName)
+        const whereOk = gateStops.some(
+          s => s?.type === 'DESTINATION' && normCity(s?.locationName) !== homeCityNorm,
+        )
+
+        if (!whereOk || !whenOk || !lengthOk) {
+          const missing = [
+            !whereOk ? 'where' : null,
+            !whenOk ? 'when' : null,
+            !lengthOk ? 'length' : null,
+          ].filter(Boolean).join('+')
+          console.warn(
+            '[AI build-gate] blocking itinerary — missing %s (whereOk=%s whenOk=%s lengthOk=%s) userId=%s sessionId=%s',
+            missing, whereOk, whenOk, lengthOk, userId, sessionId ?? '(none)',
+          )
+          response = buildGateAsk(whereOk, whenOk, lengthOk)
+        }
       }
     }
 
