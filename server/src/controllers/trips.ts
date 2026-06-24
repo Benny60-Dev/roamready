@@ -113,16 +113,55 @@ async function recomputeStopDates(tripId: string): Promise<void> {
   if (!trip || trip.stops.length === 0) return
 
   // Anchor: trip.startDate if set, else the first stop with a stored
-  // arrivalDate (cascade-populated by prior edits), else today. Null
-  // here would re-introduce the bug we're fixing, hence the new Date()
-  // floor — same fallback the client cascade uses. Validate against
-  // an Invalid Date snuck in from corrupted data so the walk never
-  // propagates NaN into stop.arrivalDate columns.
+  // arrivalDate (cascade-populated by prior edits). There is deliberately
+  // NO `?? new Date()` fallback here.
+  //
+  // BUG-AI-NODATE-ASK-B (Part B): the prior version floored a missing/invalid
+  // anchor to today, then walked real-looking dates onto every stop AND
+  // persisted that fabricated "today" back to Trip.startDate (below) — silently
+  // converting a date-unset trip into one that looks scheduled for today, with
+  // the "no date set" signal gone for good. The build-gate (RR50) and opening
+  // flow (RR48) keep a normal build from reaching here without a date, but a
+  // legacy/edge trip with no real anchor must NOT be fabricated. When no real
+  // anchor exists, we leave every stop date null (the client renders null dates
+  // as blank / "Dates TBD") and do NOT write a fabricated Trip.startDate/endDate.
+  // An Invalid Date from corrupted data is treated as "no anchor" for the same
+  // reason — never propagate NaN, never fabricate today.
   const firstDatedStop = trip.stops.find(s => s.arrivalDate != null)
-  const anchorRaw = trip.startDate ?? firstDatedStop?.arrivalDate ?? new Date()
-  const anchor: Date = isNaN(anchorRaw.getTime()) ? new Date() : anchorRaw
-  let current = new Date(anchor.getTime())
+  const anchorCandidate = trip.startDate ?? firstDatedStop?.arrivalDate ?? null
+  const anchor: Date | null =
+    anchorCandidate && !isNaN(anchorCandidate.getTime()) ? anchorCandidate : null
+
   let totalNights = 0
+
+  // No real start date anywhere → leave stop dates null, persist totalNights
+  // only (date-independent), and leave Trip.startDate/endDate null so the
+  // missing date stays visible instead of being invented.
+  if (anchor === null) {
+    const nullWrites = trip.stops.map(stop => {
+      totalNights += stop.type === 'OVERNIGHT_ONLY' ? 1 : (stop.nights ?? 0)
+      return prisma.stop.update({
+        where: { id: stop.id },
+        data: { arrivalDate: null, departureDate: null },
+      })
+    })
+    await prisma.$transaction([
+      ...nullWrites,
+      prisma.trip.update({
+        where: { id: tripId },
+        data: { totalNights },
+      }),
+    ])
+    console.log(
+      '[recomputeStopDates] tripId=%s stops=%d NO ANCHOR — stop dates left null, Trip.startDate NOT fabricated; totalNights=%d',
+      tripId,
+      trip.stops.length,
+      totalNights,
+    )
+    return
+  }
+
+  let current = new Date(anchor.getTime())
 
   // Build the per-stop update operations up front, then run the whole
   // batch atomically via the array form of $transaction.
