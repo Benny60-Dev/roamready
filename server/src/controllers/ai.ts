@@ -547,6 +547,13 @@ function buildLiveTripState(trip: any, rigs: any[] = []): string {
       s.bookingStatus,
     ]
     if (s.campgroundName) parts.push(`campground: ${s.campgroundName}`)
+    // BUG-MODIFY-ADDSTOP-SEQUENCE — surface each stop's coordinates so the model
+    // can obey the on-route add_stop placement rule for unfamiliar towns (it was
+    // guessing geography from names alone). Omit the clause when coords are
+    // missing rather than printing "(undefined)".
+    if (typeof s.latitude === 'number' && typeof s.longitude === 'number') {
+      parts.push(`(${s.latitude.toFixed(3)}, ${s.longitude.toFixed(3)})`)
+    }
     return parts.join(' | ')
   })
 
@@ -631,6 +638,7 @@ function buildLiveTripState(trip: any, rigs: any[] = []): string {
     '  nights parsing rules: "one night" = 1 | "two nights" or "a couple nights" = 2 | "three nights" = 3 | "a few nights" = 2 | "the weekend" = 2 | "three days" = 2 (days minus 1) | default to 1 if ambiguous. Parse nights EXACTLY as stated — do not infer or round up.',
     '  POSITION + GEOGRAPHY — HARD RULE: inserting "after [stop A]" places the new stop BETWEEN [stop A] and the stop that currently follows it ([stop B]) — the new stop slots in right after [stop A], and [stop B] (and everything after it) shifts one position later. Set after_stop to [stop A]\'s name.',
     '  The added stop — whether the USER named it or YOU were asked to pick it — MUST lie geographically ON THE ROUTE between [stop A] and [stop B]. It must NOT sit past [stop B], and must NEVER force a backtrack (driving beyond [stop B] and then doubling back to it). Compare the candidate against the locations of BOTH bracketing stops: if it is farther along the route than [stop B], or so far off to the side that reaching it adds a there-and-back detour, it is the WRONG choice — use a city that genuinely falls on the leg from [stop A] to [stop B].',
+    '  USE THE COORDINATES: each stop in the list above carries its (lat, lng). Look up the NEW stop\'s real-world coordinates and compare them against those of the existing stops to choose after_stop, so the new stop slots between the two stops it is geographically BETWEEN along the route — not merely after whichever stop the user happened to mention. A town that lies west/behind an earlier stop belongs EARLIER in the sequence (set after_stop to the stop it actually follows geographically), never wedged between two later stops it would force a backtrack through.',
     '  When the user defers the choice to you ("you pick", "pick a place", "surprise me") for an after-[stop A] insertion, choose a sensible overnight city sitting roughly on the straight line between [stop A] and [stop B] — a midpoint of THAT specific leg. Anchor your choice ONLY on the locations of [stop A] and [stop B]; do NOT anchor on the overall trip direction, the final destination, or any later stop.',
     '  EXCEPTION: if [stop A] is the LAST stop (nothing currently follows it), nothing brackets the new stop on the far side — normal "extend the trip toward a new destination" behavior applies, and you may omit after_stop to append at the end. The between-stops constraint is the only new rule.',
     '',
