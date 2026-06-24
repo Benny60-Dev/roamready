@@ -478,6 +478,21 @@ model Stop {
   // in later Block 15 steps; this column is unused until then.
   stayActivities         Json?
   campgroundCandidates   Json?
+  // RIG-CHANGE Phase 1 — accountability stamp: the rig a site was BOOKED
+  // against, written at the moment bookingStatus transitions to a booked state
+  // (CONFIRMED/PENDING/WAITLISTED) in updateStop. Lets a later rig swap warn
+  // that prior bookings were checked against a different rig — WITHOUT ever
+  // altering the reservation. All nullable: bookings made before this shipped,
+  // and every NOT_BOOKED stop, carry null = "not recorded". bookedForRigType
+  // references the EXISTING VehicleType enum (no enum change). towedLength is
+  // captured for the record only — it is NOT used in the larger-rig fit warning.
+  bookedForRigName        String?
+  bookedForRigType        VehicleType?
+  bookedForRigLength      Float?
+  bookedForRigTowedLength Float?
+  bookedForRigHeight      Float?
+  bookedForRigWeight      Float?
+  bookedForRigAt          DateTime?
   createdAt              DateTime      @default(now())
   updatedAt              DateTime      @updatedAt
   journalEntries         JournalEntry[]

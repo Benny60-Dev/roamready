@@ -962,6 +962,125 @@ export async function getTrip(req: AuthRequest, res: Response, next: NextFunctio
   } catch (err) { next(err) }
 }
 
+// ─── RIG-CHANGE (Phase 1) — shared rig resolution + guarded swap core ─────────
+
+/**
+ * Resolve the rig a trip is planned against: the explicitly-assigned `rigId` if
+ * set, else the user's default rig (isDefault=true). BOTH lookups are scoped to
+ * userId so a forged/foreign id can never lift another user's rig — a miss falls
+ * through to the default, and if there's no default either, returns null. Callers
+ * treat null as "rig not recorded" and never fabricate. Mirrors the inline
+ * two-step resolution in getTripFuelEstimate (the live FK lookup).
+ */
+async function resolveTripRig(rigId: string | null, userId: string) {
+  if (rigId) {
+    const assigned = await prisma.rig.findFirst({ where: { id: rigId, userId } })
+    if (assigned) return assigned
+  }
+  return prisma.rig.findFirst({ where: { userId, isDefault: true } })
+}
+
+/** Human label for a rig — "[year] [make] [model]", falling back to the
+ *  vehicleType enum when none of those are set. Mirrors the client's rig-chip
+ *  derivation (SessionPage.tsx) so the stamp reads the same as the UI. */
+function rigDisplayName(rig: { year: number | null; make: string | null; model: string | null; vehicleType: string }): string {
+  const ymm = [rig.year, rig.make, rig.model].filter(Boolean).join(' ').trim()
+  return ymm || rig.vehicleType
+}
+
+/** Booking states that represent a real reservation — never auto-altered by a
+ *  rig swap. NOT_BOOKED stops are re-filterable; CANCELLED is left alone. */
+const BOOKED_STATES: string[] = ['CONFIRMED', 'PENDING', 'WAITLISTED']
+
+export interface RigSwapResult {
+  isLarger: boolean
+  deltas: { length: number; height: number; weight: number }
+  bookedStopsNeedingReverify: Array<{ stopId: string; name: string; bookedForRigName: string | null }>
+  refilteredStopIds: string[]
+}
+
+/**
+ * Guarded rig swap for an existing trip. Repoints Trip.rigId, then:
+ *   - decides isLarger using LENGTH/HEIGHT/WEIGHT (towed EXCLUDED — both a toad
+ *     and a tow vehicle detach at camp; the rig's own length is the footprint);
+ *   - for NOT_BOOKED stops, when the new rig is larger, clears the now-stale fit
+ *     REASONS (computed against the old rig) and reports them as re-filtered —
+ *     it does NOT fabricate a new isCompatible; the precise re-check happens on
+ *     TripBookingPage open, as it does today;
+ *   - for CONFIRMED/PENDING/WAITLISTED stops, NEVER touches the stop, its
+ *     booking, or its bookedForRig* stamp — only collects them (when larger) as
+ *     needing manual re-verification with the campground.
+ * Fuel self-heals on the next getTripFuelEstimate read (live rig lookup), so no
+ * fuel action here. Returns a payload Phase 2's UI renders the warning from.
+ *
+ * Both rigs are resolved scoped to userId (defense-in-depth), independent of
+ * what's currently persisted, so the delta is correct regardless of call order.
+ */
+async function applyRigChange(
+  tripId: string,
+  oldRigId: string | null,
+  newRigId: string,
+  userId: string,
+): Promise<RigSwapResult> {
+  const [oldRig, newRig] = await Promise.all([
+    resolveTripRig(oldRigId, userId),
+    resolveTripRig(newRigId, userId),
+  ])
+
+  const oldLen = oldRig?.length ?? 0, oldH = oldRig?.height ?? 0, oldW = oldRig?.gvwr ?? 0
+  const newLen = newRig?.length ?? 0, newH = newRig?.height ?? 0, newW = newRig?.gvwr ?? 0
+  // LENGTH-only footprint: towed length is intentionally NOT compared — the toad
+  // / tow vehicle detaches at the site, so only the rig's own length matters.
+  const isLarger = newLen > oldLen || newH > oldH || newW > oldW
+  const deltas = { length: newLen - oldLen, height: newH - oldH, weight: newW - oldW }
+
+  const stops = await prisma.stop.findMany({
+    where: { tripId },
+    orderBy: { order: 'asc' },
+    select: { id: true, locationName: true, bookingStatus: true, bookedForRigName: true },
+  })
+
+  const bookedStopsNeedingReverify: RigSwapResult['bookedStopsNeedingReverify'] = []
+  const refilteredStopIds: string[] = []
+
+  // Always repoint the rig (the actual swap). Stop-fit writes only when larger.
+  const writes: Prisma.PrismaPromise<unknown>[] = [
+    prisma.trip.update({ where: { id: tripId }, data: { rigId: newRigId } }),
+  ]
+
+  if (isLarger) {
+    for (const s of stops) {
+      if (BOOKED_STATES.includes(s.bookingStatus)) {
+        // Real reservation — never altered; flagged for manual re-verify.
+        bookedStopsNeedingReverify.push({
+          stopId: s.id,
+          name: s.locationName,
+          bookedForRigName: s.bookedForRigName,
+        })
+      } else if (s.bookingStatus === 'NOT_BOOKED') {
+        // Stale fit reasons referenced the OLD rig's dimensions — clear them and
+        // report for re-check. isCompatible is left as-is (not fabricated).
+        writes.push(prisma.stop.update({
+          where: { id: s.id },
+          data: { incompatibilityReasons: Prisma.DbNull },
+        }))
+        refilteredStopIds.push(s.id)
+      }
+      // CANCELLED (or any other state): left untouched.
+    }
+  }
+
+  await prisma.$transaction(writes)
+
+  console.log(
+    '[applyRigChange] tripId=%s old=%s new=%s isLarger=%s deltas=%j reverify=%d refiltered=%d',
+    tripId, oldRigId ?? 'default', newRigId, isLarger, deltas,
+    bookedStopsNeedingReverify.length, refilteredStopIds.length,
+  )
+
+  return { isLarger, deltas, bookedStopsNeedingReverify, refilteredStopIds }
+}
+
 export async function updateTrip(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     // Defense-in-depth: ownership check stays even though validateBody has already
@@ -971,6 +1090,13 @@ export async function updateTrip(req: AuthRequest, res: Response, next: NextFunc
 
     // req.body is guaranteed to be a parsed TripUpdateInput by validateBody on the route.
     const data: TripUpdateInput = req.body
+    // RIG-CHANGE (Phase 1): capture the pre-update rigId before the write so the
+    // swap delta is computed against the genuine OLD rig. A swap is when the body
+    // sets a non-empty rigId that differs from the current one. (rigId → null, i.e.
+    // unassign-to-default, is not treated as a larger-rig swap.)
+    const oldRigId = trip.rigId
+    const newRigId = typeof data.rigId === 'string' && data.rigId.length > 0 ? data.rigId : null
+    const rigChanging = newRigId !== null && newRigId !== oldRigId
     // See sessions.ts:145 for the rationale on the adHocVehicle cast — Zod
     // typed it as Record<string, unknown> which TS can't prove satisfies
     // Prisma.InputJsonValue; the cast bridges the two type systems without
@@ -979,7 +1105,19 @@ export async function updateTrip(req: AuthRequest, res: Response, next: NextFunc
       where: { id: req.params.id },
       data: { ...data, adHocVehicle: data.adHocVehicle as Prisma.InputJsonValue | undefined },
     })
-    res.json(updated)
+    // When the rig actually changed, run the guarded swap (re-point is idempotent
+    // with the write above; the value matches). The swap recomputes/flags fit and
+    // returns the warning payload for Phase 2's UI. Booked reservations are never
+    // altered. Failure here must not 500 a successful trip update, so it's guarded.
+    let rigSwap: RigSwapResult | null = null
+    if (rigChanging) {
+      try {
+        rigSwap = await applyRigChange(req.params.id, oldRigId, newRigId!, req.user!.id)
+      } catch (e: any) {
+        console.warn('[applyRigChange] updateTrip tripId=%s failed: %s', req.params.id, e?.message)
+      }
+    }
+    res.json(rigSwap ? { ...updated, rigSwap } : updated)
   } catch (err) { next(err) }
 }
 
@@ -1351,9 +1489,37 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
       data.notes = null
     }
 
+    // RIG-CHANGE (Phase 1) — accountability stamp. On a transition INTO a booked
+    // state (CONFIRMED/PENDING/WAITLISTED) from a non-booked one, record the rig
+    // this site was booked against. Server-injected — StopUpdateSchema is .strict()
+    // so the client cannot send bookedForRig*. We do NOT clear the stamp on a later
+    // un-book (CONFIRMED → NOT_BOOKED): the record of what a site was booked against
+    // has historical value, and a re-book re-stamps the then-current rig. If no rig
+    // resolves (no rigId and no default), the stamp stays null — honest "not
+    // recorded", never fabricated.
+    const stampPatch: Prisma.StopUpdateInput = {}
+    const wasBooked = BOOKED_STATES.includes(stop.bookingStatus)
+    const nowBooked = !!data.bookingStatus && BOOKED_STATES.includes(data.bookingStatus)
+    if (!wasBooked && nowBooked) {
+      const rig = await resolveTripRig(trip.rigId, req.user!.id)
+      if (rig) {
+        stampPatch.bookedForRigName = rigDisplayName(rig)
+        stampPatch.bookedForRigType = rig.vehicleType
+        stampPatch.bookedForRigLength = rig.length
+        stampPatch.bookedForRigTowedLength = rig.towedLength
+        stampPatch.bookedForRigHeight = rig.height
+        stampPatch.bookedForRigWeight = rig.gvwr
+        stampPatch.bookedForRigAt = new Date()
+        console.log('[updateStop] booked-transition stamp stopId=%s status=%s rig="%s"',
+          req.params.stopId, data.bookingStatus, stampPatch.bookedForRigName)
+      } else {
+        console.log('[updateStop] booked-transition but no rig resolved — stamp left null stopId=%s', req.params.stopId)
+      }
+    }
+
     const updated = await prisma.stop.update({
       where: { id: req.params.stopId },
-      data,
+      data: { ...data, ...stampPatch },
     })
 
     // routeHighlights requires raw SQL until prisma generate is run after db push
