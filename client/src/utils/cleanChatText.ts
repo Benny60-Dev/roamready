@@ -23,8 +23,8 @@ export function cleanChatText(text: string): string {
     // the other is a harmless no-op, so one cleaner safely serves both bubbles.
     .replace(/<itinerary>[\s\S]*?<\/itinerary>/g, '')
     .replace(/<itinerary>[\s\S]*/g, '')
-    .replace(/<modify>[\s\S]*?<\/modify>/g, '')
-    .replace(/<modify>[\s\S]*/g, '')
+    .replace(/<modify\b[^>]*>[\s\S]*?<\/modify>/g, '')
+    .replace(/<modify\b[^>]*>[\s\S]*/g, '')
     .trim()
 
   return stripMarkdownEmphasis(withoutTags)
