@@ -6,6 +6,7 @@ import { Trip, StopType } from '../../types'
 import { useVoiceInput } from '../../hooks/useVoiceInput'
 import { ChatInput } from '../ChatInput'
 import { parseTripDate } from '../../utils/dates'
+import { cleanChatText } from '../../utils/cleanChatText'
 import { userFacingStopCount } from '../../utils/userFacingStopCount'
 
 // ─── Quick suggestion chips ───────────────────────────────────────────────────
@@ -78,9 +79,6 @@ interface ChatMsg {
 // `message` only for old-client compat — this client renders actions[] and
 // never re-parses text (the old parseModify took only the FIRST block, which
 // silently dropped stops 2-N of a multi-step plan: the Cindy/Mesa incident).
-function cleanText(text: string): string {
-  return text.replace(/<modify>[\s\S]*?<\/modify>/g, '').trim()
-}
 
 function getConfirmationText(action: ModifyAction): string {
   const name = action.locationName ?? action.location ?? 'stop'
@@ -298,7 +296,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
       const modifyOutcome: string | undefined = res.data?.modifyOutcome
 
       // AI-MESA-10 — the server's parsed actions[] is the only apply source;
-      // the prose is display-only (tags stripped at render by cleanText).
+      // the prose is display-only (tags stripped at render by cleanChatText).
       const serverActions: ServerModifyAction[] = Array.isArray(res.data?.actions) ? res.data.actions : []
       const aiMsg: ChatMsg = {
         role: 'assistant',
@@ -619,7 +617,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
                   }`}
                   style={{ borderWidth: '0.5px' }}
                 >
-                  <p className="whitespace-pre-wrap">{cleanText(msg.content)}</p>
+                  <p className="whitespace-pre-wrap">{cleanChatText(msg.content)}</p>
                 </div>
               </div>
 

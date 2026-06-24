@@ -15,6 +15,7 @@ import { useVoiceInput } from '../hooks/useVoiceInput'
 import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { hasRoundTripIntent, hasOneWayIntent } from '../utils/roundTripIntent'
+import { cleanChatText } from '../utils/cleanChatText'
 import { ChatInput } from '../components/ChatInput'
 import { selectGreeting } from '../utils/greeting'
 import { relativeTime } from '../utils/dates'
@@ -996,10 +997,6 @@ export default function SessionPage() {
     }
   }
 
-  const cleanText = (text: string) => text
-    .replace(/<itinerary>[\s\S]*?<\/itinerary>/g, '')
-    .replace(/<itinerary>[\s\S]*/g, '')
-    .trim()
 
   // Pre-conversation = the user hasn't sent anything yet. Using "no user
   // message" (rather than messages.length===0) also covers any edge case where
@@ -1886,7 +1883,7 @@ export default function SessionPage() {
                       }`}
                       style={{ borderWidth: '0.5px' }}
                     >
-                      <p className="whitespace-pre-wrap break-words">{cleanText(msg.content)}</p>
+                      <p className="whitespace-pre-wrap break-words">{cleanChatText(msg.content)}</p>
                     </div>
                   </div>
                 ))}
