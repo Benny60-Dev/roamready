@@ -79,10 +79,20 @@ export const useAuthStore = create<AuthState>()(
         }
       },
       hasAccess: (feature) => {
+        // MIRRORS server/src/middleware/auth.ts hasAccess — keep the clause set
+        // and ORDER in sync (owner → trial → paid-through grace → comp → tier
+        // gate). A comp-blind client check here paywalled comped users whose
+        // server access already passed (subscriptionTier=FREE + compTier=PRO).
         const user = get().user
         if (!user) return false
         if (user.isOwner) return true
         if (user.trialEndsAt && new Date() < new Date(user.trialEndsAt)) return true
+        // Cancellation grace: paid through subscriptionEndsAt even if tier flipped
+        // to FREE by the cancellation webhook.
+        if (user.subscriptionEndsAt && new Date() < new Date(user.subscriptionEndsAt)) return true
+        // Complimentary (owner-granted) Pro — independent of Stripe. Valid when
+        // compTier is PRO and either lifetime (no expiry) or not yet expired.
+        if (user.compTier === 'PRO' && (!user.compExpiresAt || new Date() < new Date(user.compExpiresAt))) return true
         const gates = FEATURE_GATES[feature]
         if (!gates) return true
         return gates.includes(user.subscriptionTier)

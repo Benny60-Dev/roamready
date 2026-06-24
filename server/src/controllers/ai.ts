@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../utils/prisma'
-import { AuthRequest } from '../middleware/auth'
+import { AuthRequest, hasAccess } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
 import { chatWithAI, generatePackingListAI, analyzeFeedbackAI, generatePlanningContextSummary } from '../services/ai'
 import { sendAiUsageWarning } from '../services/feedbackNotification'
@@ -36,10 +36,12 @@ const FREE_TIER_AI_WINDOW_MS = 24 * 60 * 60 * 1000
 async function enforceFreeAiCap(req: AuthRequest, res: Response): Promise<boolean> {
   const u = req.user!
   const now = new Date()
-  const isTrialActive = u.trialEndsAt && now < new Date(u.trialEndsAt)
-  const isPro = u.subscriptionTier === 'PRO'
-  const isOwner = u.isOwner === true
-  if (isPro || isTrialActive || isOwner) return false
+  // Anyone with full Pro access — paid PRO, active trial, paid-through grace, a
+  // valid complimentary comp, or owner — is exempt from the free-tier cap. Routed
+  // through the shared hasAccess (server source of truth) so a comped user
+  // (subscriptionTier=FREE + compTier=PRO) is NOT rate-limited as free; an expired
+  // comp and plain free still fall through to the cap.
+  if (hasAccess(u, 'aiPlannerUnlimited')) return false
 
   const windowStart = new Date(now.getTime() - FREE_TIER_AI_WINDOW_MS)
   const recentCallCount = await prisma.aIUsageLog.count({
@@ -102,7 +104,10 @@ export async function enforcePerUserDailyCap(req: AuthRequest, res: Response): P
     if (!warnedHeavyUsers.has(dayKey)) {
       warnedHeavyUsers.add(dayKey)
       const isTrial = !!(u.trialEndsAt && now < new Date(u.trialEndsAt))
-      const tier = u.isOwner ? 'owner' : u.subscriptionTier === 'PRO' ? 'Pro' : isTrial ? 'trial' : 'free'
+      // Comp-aware label so a comped user reads as 'comp', not the misleading
+      // 'free' (mirrors hasAccess's comp clause: PRO + lifetime-or-unexpired).
+      const isComp = u.compTier === 'PRO' && (!u.compExpiresAt || now < new Date(u.compExpiresAt))
+      const tier = u.isOwner ? 'owner' : u.subscriptionTier === 'PRO' ? 'Pro' : isComp ? 'comp' : isTrial ? 'trial' : 'free'
       void (async () => {
         try {
           const agg = await prisma.aIUsageLog.aggregate({
