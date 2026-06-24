@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Tent, DollarSign, Clock, type LucideIcon } from 'lucide-react'
 import { Trip, Stop, BookingStatus } from '../../types'
-import { formatTripDate } from '../../utils/dates'
+import { formatTripDate, parseTripDate } from '../../utils/dates'
 
 /**
  * Reservations tab content — fresh per-stop roll-up across all trips.
@@ -74,7 +74,7 @@ export default function ReservationsTabContent({ trips }: Props) {
   const now = new Date()
   function isPast(stop: Stop): boolean {
     if (!stop.arrivalDate) return false
-    return new Date(stop.arrivalDate) < now
+    return parseTripDate(stop.arrivalDate)! < now
   }
 
   // ISO date strings sort lexically — same chronological order, no parse step.
