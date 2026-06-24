@@ -272,6 +272,18 @@ export interface Stop {
   isMilitaryOnly: boolean
   isCompatible: boolean
   incompatibilityReasons?: string[]
+  // RIG-CHANGE Phase 1 — accountability stamp written server-side when this
+  // stop transitions into a booked state (CONFIRMED/PENDING/WAITLISTED). Records
+  // the rig the site was booked against so a later (larger) rig swap can flag it
+  // for re-verification without ever altering the reservation. All optional —
+  // null on unbooked stops and on bookings made before the stamp shipped.
+  bookedForRigName?: string | null
+  bookedForRigType?: VehicleType | null
+  bookedForRigLength?: number | null
+  bookedForRigTowedLength?: number | null
+  bookedForRigHeight?: number | null
+  bookedForRigWeight?: number | null
+  bookedForRigAt?: string | null
   alternates?: any[]
   weatherForecast?: WeatherDay[]
   highwayRoute?: string | null

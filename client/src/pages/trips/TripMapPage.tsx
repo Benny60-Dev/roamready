@@ -10,11 +10,12 @@ import {
 import { DayPicker } from 'react-day-picker'
 import 'react-day-picker/style.css'
 import { formatTripDate, lifecycleDate, parseTripDate, toYmd } from '../../utils/dates'
-import { tripsApi } from '../../services/api'
-import { Trip, Stop, StopWeather, LiveForecast, TripFuelEstimate } from '../../types'
+import { tripsApi, usersApi } from '../../services/api'
+import { Trip, Stop, Rig, StopWeather, LiveForecast, TripFuelEstimate } from '../../types'
 import { computeTripTotals } from '../../utils/tripTotals'
 import { StopWeatherCard, ALERT_STYLES } from '../../components/weather/StopWeatherCard'
 const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel'))
+import TripRigSelector from '../../components/trip/TripRigSelector'
 import ConfirmModal from '../../components/ui/ConfirmModal'
 import ShareModal from '../../components/trip/ShareModal'
 import { useAuthStore } from '../../store/authStore'
@@ -461,6 +462,10 @@ export default function TripMapPage() {
   const [selectedStop, setSelectedStop]     = useState<Stop | null>(null)
   const [sidebarOpen, setSidebarOpen]       = useState(true)
   const [sidebarTab, setSidebarTab]         = useState<'stops' | 'weather'>('stops')
+  // RIG-CHANGE Phase 2 — the user's profile rigs, for the "Rig for this trip"
+  // selector and to resolve the current rig's length for the booked-fit banner
+  // and per-stop "booked for" labels.
+  const [rigs, setRigs]                     = useState<Rig[]>([])
   // Layers state retired with the Layers panel — all four layers stay on
   // permanently. None of them had a plausible "turn off" use case, and
   // the panel itself was adding sidebar noise without earning its space.
@@ -710,6 +715,14 @@ export default function TripMapPage() {
       setTripNameInput(data.name)
     })
   }, [id])
+
+  // RIG-CHANGE Phase 2 — load the user's profile rigs once, for the rig selector
+  // and the current-rig-length resolution behind the booked-fit banner/labels.
+  useEffect(() => {
+    usersApi.getRigs()
+      .then(res => setRigs(Array.isArray(res.data) ? res.data : []))
+      .catch(err => console.error('[TripMapPage] rig load failed', err))
+  }, [])
 
   // Refetch trip when window regains focus (e.g. returning from TripBookingPage)
   useEffect(() => {
@@ -1132,6 +1145,28 @@ export default function TripMapPage() {
       bookedStops: booked,
     }
   }, [trip, fuelEstimate, stopBadges])
+
+  // RIG-CHANGE Phase 2 — resolve the trip's CURRENT rig (assigned rigId, else the
+  // user's default) and its length, then derive which BOOKED stops were stamped
+  // against a SMALLER rig than the current one. Data-derived (not session state)
+  // so the booked-fit banner + per-stop re-verify flags appear on plain page load
+  // too, and clear automatically once nothing is undersized (e.g. swap back).
+  const currentTripRig = useMemo<Rig | null>(() => {
+    if (!rigs.length) return null
+    return (trip?.rigId ? rigs.find(r => r.id === trip.rigId) : null)
+      ?? rigs.find(r => r.isDefault)
+      ?? null
+  }, [rigs, trip?.rigId])
+  const currentRigLength = currentTripRig?.length ?? null
+  const BOOKED_STATUSES = ['CONFIRMED', 'PENDING', 'WAITLISTED']
+  const undersizedBookedStops = useMemo(() => {
+    if (currentRigLength == null) return []
+    return (trip?.stops || []).filter(s =>
+      BOOKED_STATUSES.includes(s.bookingStatus) &&
+      s.bookedForRigLength != null &&
+      s.bookedForRigLength < currentRigLength,
+    )
+  }, [trip?.stops, currentRigLength])
 
   // Total unique weather alerts across all stops — for the Weather tab badge
   const totalAlerts = useMemo(() => {
@@ -1959,6 +1994,26 @@ export default function TripMapPage() {
                 >
                   <Wand2 size={13} /> Modify trip with AI
                 </button>
+
+                {/* RIG-CHANGE Phase 2 — "Rig for this trip" selector. Only when
+                    the user has at least one profile rig to choose from. On a
+                    swap it refreshes the trip (fit/labels/banner) and the fuel
+                    estimate (trip.id is unchanged so the fuel effect won't re-run
+                    on its own). A larger swap surfaces the warning inside the
+                    selector; the persistent booked-fit banner is data-derived below. */}
+                {id && trip && rigs.length > 0 && (
+                  <TripRigSelector
+                    tripId={id}
+                    rigs={rigs}
+                    currentRigId={trip.rigId ?? null}
+                    onSwapped={fresh => {
+                      setTrip(fresh)
+                      tripsApi.getFuelEstimate(id)
+                        .then(res => setFuelEstimate(res.data))
+                        .catch(() => {})
+                    }}
+                  />
+                )}
               </div>
 
               {/* C1 — 4-card stats grid removed. Miles + Nights + Est. cost
@@ -2009,6 +2064,27 @@ export default function TripMapPage() {
             >
               {sidebarTab === 'stops' && (
                 <div className="space-y-0.5">
+                  {/* RIG-CHANGE Phase 2 — booked-fit warning banner. Mirrors the
+                      weather-alerts banner (amber tokens). Data-derived: shows
+                      whenever a booked stop was stamped against a rig SHORTER than
+                      the current trip rig; clears automatically once none are
+                      undersized. Informational only — no dismiss, no reservation
+                      change (Pine stays exclusively on the booked status pill). */}
+                  {undersizedBookedStops.length > 0 && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 mb-2">
+                      <p className="text-[10px] font-semibold text-amber-800 mb-1.5 flex items-center gap-1">
+                        <AlertTriangle size={11} className="flex-shrink-0" />
+                        {undersizedBookedStops.length} booked site{undersizedBookedStops.length === 1 ? '' : 's'} may not fit your current rig
+                      </p>
+                      <div className="space-y-1">
+                        {undersizedBookedStops.map(s => (
+                          <div key={s.id} className="border border-amber-200 bg-white rounded px-2 py-1 text-[10px] text-amber-800 leading-snug">
+                            {s.locationName} — booked for {s.bookedForRigName} ({s.bookedForRigLength} ft). Call the campground to confirm it fits your current rig. We won't change your reservation.
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {(() => {
                     const sortedStops = trip?.stops?.slice().sort((a, b) => a.order - b.order) ?? []
                     return sortedStops.map((stop, i) => {
@@ -2176,6 +2252,23 @@ export default function TripMapPage() {
                           <p className="text-[10px] text-gray-400 truncate">{subtitleLine1}</p>
                           {subtitleLine2 && (
                             <p className="text-[10px] text-gray-400 truncate">{subtitleLine2}</p>
+                          )}
+                          {/* RIG-CHANGE Phase 2 — per-stop "booked for" record.
+                              Shown for booked stops carrying a stamp. The amber
+                              re-verify flag (NOT Pine — Pine is the booked status
+                              pill only) appears when the stamped rig is shorter
+                              than the current trip rig. */}
+                          {BOOKED_STATUSES.includes(stop.bookingStatus) && stop.bookedForRigName && (
+                            <>
+                              <p className="text-[10px] text-gray-400 truncate">
+                                Booked for: {stop.bookedForRigName}{stop.bookedForRigLength != null ? ` (${stop.bookedForRigLength} ft)` : ''}
+                              </p>
+                              {stop.bookedForRigLength != null && currentRigLength != null && stop.bookedForRigLength < currentRigLength && (
+                                <p className="text-[10px] text-amber-700 flex items-center gap-1">
+                                  <AlertTriangle size={10} className="flex-shrink-0" /> Re-verify fit for new rig
+                                </p>
+                              )}
+                            </>
                           )}
                         </div>
                         <div className="flex flex-col items-end gap-0.5 flex-shrink-0">

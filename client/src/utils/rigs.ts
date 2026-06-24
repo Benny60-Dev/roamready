@@ -52,3 +52,43 @@ export function deriveSecondVehicle(vehicleType: VehicleType | undefined | null)
   if (!vehicleType) return { direction: 'none', required: false }
   return DIRECTION_BY_VEHICLE_TYPE[vehicleType] ?? { direction: 'none', required: false }
 }
+
+/**
+ * Human-readable vehicle-type labels. Moved here from pages/profile/RigPage so a
+ * util (this file) can reuse it without a circular import (RigPage imports
+ * deriveSecondVehicle from here). RigPage re-exports it for backward compat, so
+ * existing `import { VEHICLE_LABELS } from './RigPage'` callers keep working.
+ */
+export const VEHICLE_LABELS: Record<VehicleType, string> = {
+  RV_CLASS_A: 'Class A Motorhome',
+  RV_CLASS_B: 'Class B / Camper Van',
+  RV_CLASS_C: 'Class C Motorhome',
+  FIFTH_WHEEL: 'Fifth Wheel',
+  TRAVEL_TRAILER: 'Travel Trailer',
+  TOY_HAULER: 'Toy Hauler',
+  POP_UP: 'Pop-Up Camper',
+  VAN: 'Converted Van',
+  CAR_CAMPING: 'Car Camping',
+}
+
+/**
+ * Display name for a rig — "[year] [make] [model]", falling back to the
+ * vehicleType label when none of those are set. Single source of truth for the
+ * rig-chip text used by the planning canvas (SessionPage), the trip-page rig
+ * selector, the larger-rig warning, and the per-stop "booked for" label.
+ *
+ * vehicleType is optional so an ad-hoc one-off vehicle (year/make/model only,
+ * no type — SessionPage's adHocVehicle) is handled too: with no type and no
+ * year/make/model it returns '' (matching the prior inline behavior), and a
+ * real Rig falls back to the friendly VEHICLE_LABELS.
+ */
+export function rigDisplayName(rig: {
+  year?: number | null
+  make?: string | null
+  model?: string | null
+  vehicleType?: VehicleType | null
+}): string {
+  const ymm = [rig.year, rig.make, rig.model].filter(Boolean).join(' ').trim()
+  if (ymm) return ymm
+  return rig.vehicleType ? VEHICLE_LABELS[rig.vehicleType] : ''
+}

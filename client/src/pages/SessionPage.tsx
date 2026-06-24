@@ -4,7 +4,7 @@ import { MapPin, Tent, Users, Loader, Plus, X, Sparkles, ChevronDown, ChevronUp,
 import { aiApi, sessionsApi, tripsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import { ChatMessage, Trip, Rig } from '../types'
-import { VEHICLE_LABELS } from './profile/RigPage'
+import { VEHICLE_LABELS, rigDisplayName } from '../utils/rigs'
 import BottomSheet from '../components/ui/BottomSheet'
 import ConfirmModal from '../components/ui/ConfirmModal'
 import ConfirmVehiclesModal, { type ConfirmVehiclesResult } from '../components/trip/ConfirmVehiclesModal'
@@ -1075,9 +1075,7 @@ export default function SessionPage() {
   // Phase B — the chip reads selectedRig (per-trip override), not the user's
   // global default. selectedRig may be a real Rig or an AdHocRig; both have
   // year/make/model/length so the same derivation works for either.
-  const rigName = selectedRig
-    ? [selectedRig.year, selectedRig.make, selectedRig.model].filter(Boolean).join(' ').trim()
-    : ''
+  const rigName = selectedRig ? rigDisplayName(selectedRig) : ''
   const rigChipText = rigName
     ? selectedRig?.length
       ? `${rigName} (${selectedRig.length}ft)`
