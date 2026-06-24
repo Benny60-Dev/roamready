@@ -1521,6 +1521,24 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
       } else {
         console.log('[updateStop] booked-transition but no rig resolved — stamp left null stopId=%s', req.params.stopId)
       }
+
+      // ADDSTOP-RESLOT Phase A — reservation-truth stamp. Capture the arrivalDate
+      // this stop is booked FOR at the booked transition, so a later itinerary
+      // shift (inserting a stop ahead of it) can surface "originally booked for
+      // [date]". Stamped OUTSIDE the rig branch above — a booking has a date
+      // whether or not a rig is on file. Uses the effective arrival being persisted
+      // (data.arrivalDate) else the stored arrival; if neither exists, leave it null
+      // (no date to record — and don't overwrite a prior record with null on a
+      // dateless re-book). recomputeStopDates never touches this column, so it
+      // survives a later shift. Re-stamped on each re-book; never cleared on un-book
+      // (historical record, like bookedForRig*). Server-injected — StopUpdateSchema
+      // is .strict(), so the client cannot send originalBookedDate.
+      const bookedArrival = data.arrivalDate ?? stop.arrivalDate
+      if (bookedArrival) {
+        stampPatch.originalBookedDate = bookedArrival
+        console.log('[updateStop] originalBookedDate stamp stopId=%s date=%s',
+          req.params.stopId, bookedArrival instanceof Date ? bookedArrival.toISOString() : bookedArrival)
+      }
     }
 
     const updated = await prisma.stop.update({

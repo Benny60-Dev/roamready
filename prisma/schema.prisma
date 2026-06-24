@@ -493,6 +493,13 @@ model Stop {
   bookedForRigHeight      Float?
   bookedForRigWeight      Float?
   bookedForRigAt          DateTime?
+  // ADDSTOP-RESLOT Phase A — the arrivalDate captured at the moment this stop
+  // transitioned into a booked state (CONFIRMED/PENDING/WAITLISTED), in updateStop.
+  // The reservation-truth record: if a later itinerary shift (e.g. inserting a stop
+  // ahead of it) moves arrivalDate, the UI can show "originally booked for [date]".
+  // recomputeStopDates never touches this column, so it survives the shift. Nullable:
+  // null on unbooked stops and on bookings made before this shipped.
+  originalBookedDate      DateTime?
   createdAt              DateTime      @default(now())
   updatedAt              DateTime      @updatedAt
   journalEntries         JournalEntry[]
