@@ -5,21 +5,15 @@ import { Plus, Trash2, Star, Pencil, BadgeInfo, Car, Truck, AlertCircle } from '
 import { usersApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 import { Rig, VehicleType, TowedType } from '../../types'
-import { deriveSecondVehicle } from '../../utils/rigs'
+import { deriveSecondVehicle, VEHICLE_LABELS } from '../../utils/rigs'
 import RangeSelect from '../../components/forms/RangeSelect'
 import { YEARS, LENGTHS, HEIGHTS, MPG_OPTIONS, TANK_OPTIONS } from '../../constants/rigOptions'
 
-export const VEHICLE_LABELS: Record<VehicleType, string> = {
-  RV_CLASS_A: 'Class A Motorhome',
-  RV_CLASS_B: 'Class B / Camper Van',
-  RV_CLASS_C: 'Class C Motorhome',
-  FIFTH_WHEEL: 'Fifth Wheel',
-  TRAVEL_TRAILER: 'Travel Trailer',
-  TOY_HAULER: 'Toy Hauler',
-  POP_UP: 'Pop-Up Camper',
-  VAN: 'Converted Van',
-  CAR_CAMPING: 'Car Camping',
-}
+// VEHICLE_LABELS now lives in utils/rigs (so utils can reuse it without a
+// circular import). Re-exported here so existing `import { VEHICLE_LABELS }
+// from './RigPage'` callers (EditRigPage, SessionPage, ConfirmVehiclesModal,
+// RigInfoModal) keep resolving unchanged.
+export { VEHICLE_LABELS }
 
 function RigCard({ rig, onDelete, onSetDefault }: { rig: Rig; onDelete: (id: string) => void; onSetDefault: (id: string) => void }) {
   // The "towed unit" inline summary line (formatTowedLine) was removed Block 7
