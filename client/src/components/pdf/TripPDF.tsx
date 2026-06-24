@@ -277,6 +277,12 @@ function fmtDateRange(start?: Date, end?: Date): string {
 function fmtTime(hhmm?: string | null): string {
   if (!hhmm) return '—'
   const [h, m] = hhmm.split(':').map(Number)
+  // checkInTime/checkOutTime are unvalidated free-text (Stop.checkInTime String?,
+  // user-entered on the booking page). A colon-less value ("3pm", "noon") leaves
+  // m undefined and a bad hour leaves h NaN — m.toString() below then crashed the
+  // ENTIRE @react-pdf render. Fall back to the raw string so "3pm" prints as "3pm"
+  // (preserve the user's text) rather than dropping it or crashing.
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return hhmm
   const period = h >= 12 ? 'pm' : 'am'
   const dH = h > 12 ? h - 12 : h === 0 ? 12 : h
   return `${dH}:${m.toString().padStart(2, '0')}${period}`
