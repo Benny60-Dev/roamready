@@ -1221,17 +1221,20 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
         }
       }
 
-      // INVERTED ORIGIN GUARD — origin is KNOWN but the model re-asked anyway.
-      // capturedOrigin is set (deterministic from-X-to-Y capture, or a prior
-      // <origin> tag), yet the reply still emits the origin/home-ask — stochastic
-      // non-compliance, proven on "Nola" (origin "San Jose" captured + persisted,
-      // model asked anyway). Force one re-call with an unambiguous "already known,
-      // proceed now" reminder so the user never sees the redundant ask and gets a
-      // real plan. Mirrors the modify forced-retry above; the extra AI call only
-      // happens on this rare miss path. Inert when capturedOrigin is null (a
-      // legitimate no-origin ask passes through). MESA-7/9 above don't fire here:
-      // they require a fabricated/un-typed origin, but capturedOrigin is a
-      // user-typed city.
+    }
+
+    // INVERTED ORIGIN GUARD — origin is KNOWN but the model re-asked anyway. Runs
+    // for ALL planning users (home-on-file INCLUDED): a home-on-file user's
+    // confirmed/defaulted-home origin now persists via <origin> too (the :247
+    // carve-out was removed), so the same deterministic backstop applies —
+    // capturedOrigin is set yet the reply still emits an origin/home re-ask
+    // (stochastic non-compliance), so we force ONE re-call with an "already known,
+    // proceed now" reminder and the user never sees the redundant re-ask. Inert
+    // when capturedOrigin is null (a legitimate FIRST origin ask passes through
+    // untouched). The MESA-7/9 no-home guards above don't overlap: they fire on a
+    // fabricated/un-typed origin, whereas capturedOrigin is a real captured city
+    // or the user's saved home.
+    if (context !== 'modify') {
       const capturedOrigin = (userProfile as any).capturedOrigin as string | null
       if (capturedOrigin && isOriginAsk(response)) {
         console.warn(
