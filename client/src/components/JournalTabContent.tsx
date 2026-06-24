@@ -4,7 +4,7 @@ import { journalApi, visitedStatesApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import { useUIStore } from '../store/uiStore'
 import { JournalEntry, Trip } from '../types'
-import { formatTripDate, toYmd } from '../utils/dates'
+import { formatTripDate, parseTripDate, toYmd } from '../utils/dates'
 import { deriveTripStatus } from '../utils/tripStatus'
 import { normalizeStateCode, STATE_CODES, type StateTier, type StateMeta } from './journal/stateUtils'
 import VisitedStatesBanner from './journal/VisitedStatesBanner'
@@ -609,7 +609,7 @@ export function AddEntryModal({
   const [rating, setRating] = useState<number | null>(entry?.rating ?? null)
   const [tagsInput, setTagsInput] = useState((entry?.tags ?? []).join(', '))
   const [entryDate, setEntryDate] = useState(
-    entry?.entryDate ? toYmd(new Date(entry.entryDate)) : toYmd(new Date()),
+    entry?.entryDate ? toYmd(parseTripDate(entry.entryDate)!) : toYmd(new Date()),
   )
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)

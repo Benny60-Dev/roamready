@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { Search, AlertTriangle, User as UserIcon, ChevronLeft } from 'lucide-react'
 import { adminApi } from '../../services/api'
+import { parseTripDate } from '../../utils/dates'
 
 // ── Types (loose — mirrors the read-only admin envelope) ─────────────────────
 interface Msg { role: string; content: string }
@@ -75,10 +76,13 @@ const fmtDateTime = (iso?: string | null) => {
   try { return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) }
   catch { return String(iso) }
 }
-// Date-only, e.g. "Sep 1, 2026". Used for the trip's intended travel date.
+// Date-only, e.g. "Sep 1, 2026". Used for the trip's intended travel date — a
+// stored UTC-midnight calendar date, so route through parseTripDate (local-noon
+// anchor on the UTC day) to avoid the negative-offset day-shift. fmtDate /
+// fmtDateTime above format true timestamps (createdAt/updatedAt) and stay raw.
 const fmtDateOnly = (iso?: string | null) => {
   if (!iso) return 'not set'
-  try { return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
+  try { return parseTripDate(iso)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) ?? 'not set' }
   catch { return String(iso) }
 }
 const titleCase = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s)

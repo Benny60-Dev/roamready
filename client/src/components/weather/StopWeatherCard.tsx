@@ -1,5 +1,6 @@
 import { Droplets, Snowflake, Thermometer, Wind, ExternalLink } from 'lucide-react'
 import { Stop, StopWeather, LiveForecast, HistoricalWeather } from '../../types'
+import { formatTripDate } from '../../utils/dates'
 
 // React is needed for JSX and ReactNode type (no explicit import required with modern JSX transform,
 // but ReactNode must be in scope for the ALERT_ICONS record type)
@@ -18,12 +19,6 @@ export const ALERT_ICONS: Record<string, ReactNode> = {
   rain:   <Droplets    size={12} className="flex-shrink-0" />,
   freeze: <Thermometer size={12} className="flex-shrink-0" />,
   snow:   <Snowflake   size={12} className="flex-shrink-0" />,
-}
-
-function shortDay(isoDate: string): string {
-  return new Date(isoDate).toLocaleDateString('en-US', {
-    weekday: 'short', month: 'numeric', day: 'numeric',
-  })
 }
 
 // ─── StopWeatherCard ──────────────────────────────────────────────────────────
@@ -145,7 +140,7 @@ export function StopWeatherCard({ stop, weather, compact = false }: Props) {
             key={day.date}
             className="flex-shrink-0 flex flex-col items-center gap-0.5 bg-white border border-gray-100 rounded-lg px-2 py-2 min-w-[62px]"
           >
-            <span className="text-gray-500 text-[10px] whitespace-nowrap">{shortDay(day.date)}</span>
+            <span className="text-gray-500 text-[10px] whitespace-nowrap">{formatTripDate(day.date, 'M/d/yyyy')}</span>
             <span className="text-lg leading-none">{day.icon}</span>
             <span className="font-semibold text-gray-800">{day.high}°</span>
             <span className="text-gray-400">{day.low}°</span>
