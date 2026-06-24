@@ -460,7 +460,7 @@ function serializeParty(party: any | null) {
 /** Builds a compact live-state system message for the modify flow.
  *  Injected before every Claude call so the AI always sees the actual stop list,
  *  not just what it remembers from conversation history. */
-function buildLiveTripState(trip: any): string {
+function buildLiveTripState(trip: any, rigs: any[] = []): string {
   const stops: any[] = trip.stops ?? []
   const stopNames = stops.map((s: any) => s.locationName.toLowerCase())
 
@@ -561,6 +561,16 @@ function buildLiveTripState(trip: any): string {
   const effectiveStart = trip.startDate ?? firstStopArrival
   const effectiveEnd = trip.endDate ?? lastStopDeparture
 
+  // RIG-CHANGE Phase 3 — the user's saved rigs, rendered for the change_rig
+  // action so the model can map "the Allegro Bus" / "the bigger rig" to a real
+  // rigId. Display name mirrors rigDisplayName: "[year] [make] [model]" else the
+  // vehicleType. Empty list → change_rig has no valid target (handled in-prompt).
+  const rigLines: string[] = (rigs ?? []).map((r: any) => {
+    const nm = [r.year, r.make, r.model].filter(Boolean).join(' ').trim() || r.vehicleType
+    const len = r.length != null ? `${r.length}ft` : 'length n/a'
+    return `  - ${nm} | ${len} | ${r.vehicleType}${r.isDefault ? ' | (profile default)' : ''} | rigId: ${r.id}`
+  })
+
   return [
     '=== MODIFY MODE — TRIP MODIFICATION INSTRUCTIONS ===',
     '',
@@ -647,6 +657,18 @@ function buildLiveTripState(trip: any): string {
     '  Avoid emitting a past newStartDate unless the user explicitly asks to backdate the trip (e.g. for completed-trip record-keeping). When in doubt, ask the user to confirm before emitting.',
     '  Do NOT use this action for changing the length of a single stop — use change_nights for that.',
     '',
+    'Change the rig (RV / vehicle) used for THIS trip:',
+    '<modify>{"action":"change_rig","rigId":"<EXACT id from YOUR RIGS below>","rigName":"<that rig\'s display name>"}</modify>',
+    '  Use when the user asks to change / switch the rig, RV, camper, motorhome, trailer, or vehicle for this trip (e.g. "use my Allegro Bus", "switch to the bigger rig", "change my RV to the 40-footer", "plan this for the van instead").',
+    '  rigId MUST be copied EXACTLY from the YOUR RIGS list below — never invent or guess an id. rigName is that rig\'s display name (shown to the user on the confirmation card).',
+    '  Match the user\'s words to a rig by make / model / year / length / type against YOUR RIGS, and emit change_rig ONLY when you can confidently identify the ONE rig they mean.',
+    '  If you CANNOT identify which rig — the wording is ambiguous, the named rig is not in YOUR RIGS, or there is only one (or zero) rig on file so there is nothing to switch to — do NOT guess and do NOT emit change_rig. Instead wrap this exact sentence in a <clarify> tag: "You can change the rig for this trip on the trip page using the \'Rig for this trip\' selector." NEVER tell the user that changing the rig is "not supported".',
+    '  Booked stops are NEVER altered by a rig change — the system keeps every reservation and flags any that need re-verifying with the campground. Do not claim a booking changed.',
+    '',
+    'YOUR RIGS (the user\'s saved rigs — the ONLY valid change_rig targets; copy rigId verbatim):',
+    ...(rigLines.length ? rigLines : ['  (none on file — do NOT emit change_rig; if asked, give the trip-page selector fallback above)']),
+    ...(rigLines.length === 1 ? ['  NOTE: only one rig on file — there is nothing to switch to. If asked to change the rig, give the trip-page selector fallback, do not emit change_rig.'] : []),
+    '',
     'EXAMPLE — correct assistant response when user says "Add [EXAMPLE_DESTINATION_CITY] for one night after [EXAMPLE_STOP_2]":',
     'Sure! I\'ll add [EXAMPLE_DESTINATION_CITY], [STATE] for one night after [EXAMPLE_STOP_2].',
     '<modify>{"action":"add_stop","locationName":"[EXAMPLE_DESTINATION_CITY]","locationState":"[STATE]","type":"DESTINATION","nights":1,"after_stop":"[EXAMPLE_STOP_2]"}</modify>',
@@ -658,6 +680,10 @@ function buildLiveTripState(trip: any): string {
     'EXAMPLE — correct assistant response when user says "Push the trip to start August 9th":',
     'Sure! I\'ll shift the whole trip so it starts August 9th. Your stop count and per-stop nights stay the same.',
     '<modify>{"action":"shift_trip_dates","newStartDate":"2026-08-09"}</modify>',
+    '',
+    'EXAMPLE — correct assistant response when user says "Switch this trip to my Allegro Bus" (and YOUR RIGS lists an Allegro Bus):',
+    'Sure! I\'ll switch this trip to your Allegro Bus. Your booked stops stay exactly as they are — I\'ll just flag any that are worth a quick re-check with the campground for the new rig size.',
+    '<modify>{"action":"change_rig","rigId":"<the Allegro Bus rigId from YOUR RIGS>","rigName":"Allegro Bus"}</modify>',
     '',
     'EXAMPLE — correct MULTI-STEP response when user says "Route me home with overnight stops along the way":',
     'Here\'s a return route home within your drive limit — three stops, each a separate change for you to apply:',
@@ -792,6 +818,11 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     // This is injected as a grounding system message so Claude always sees the actual
     // stop list — even if the user changed the trip outside the chat panel between messages.
     let liveTrip: any = null
+    // RIG-CHANGE Phase 3 — all of the user's saved rigs, injected into the modify
+    // prompt so the change_rig action can resolve "the Allegro Bus" → a rigId.
+    // (The shared userProfile below only carries the DEFAULT rig.) Default first,
+    // then oldest, for a stable, readable list.
+    let modifyRigs: any[] = []
     if (context === 'modify' && tripId) {
       liveTrip = await prisma.trip.findFirst({
         where: { id: tripId, userId: req.user!.id },
@@ -804,6 +835,10 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
           // Tiny payload (the conversation is already small enough to summarize).
           planningSession: { select: { id: true, messages: true } },
         },
+      })
+      modifyRigs = await prisma.rig.findMany({
+        where: { userId: req.user!.id },
+        orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
       })
 
       // Lazy backfill: trip predates this feature (or its summary call failed
@@ -877,7 +912,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       m.role === 'assistant' ? { ...m, content: annotateForModelTurn(m.content) } : m
     )
 
-    const liveStateMsg = liveTrip ? buildLiveTripState(liveTrip) : null
+    const liveStateMsg = liveTrip ? buildLiveTripState(liveTrip, modifyRigs) : null
     if (liveStateMsg) {
       console.log('[AI modify] context=modify tripId=%s stops=%d history=%d',
         tripId, liveTrip.stops?.length ?? 0, nonSystemMessages.length)
