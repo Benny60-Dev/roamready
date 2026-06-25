@@ -1756,6 +1756,18 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
         req.params.id, e?.code, e?.message, e?.stack,
       )
     }
+    // PLAN-IS-TRUTH (Part 2, step 3) — a new stop can create an over-cap leg.
+    // Re-check now, AFTER the insert + reslot + resequence + recompute, so we
+    // measure the SETTLED list (the new stop is already in its correct position —
+    // manual-add passes `order`, modify-add reslots above — never a transient end
+    // leg). OPT-OUT direction: the build loop sets skipLongLegCheck because the
+    // approved plan already carries its transit stops (Part 2 step 2) and a
+    // per-stop re-check during bulk assembly would be wasteful; every other caller
+    // (manual add, modify add) re-checks by default, so a forgotten flag is a
+    // harmless redundant idempotent check, never a missed insert. Fail-soft.
+    if (req.body.skipLongLegCheck !== true) {
+      await recheckLongLegs(req.params.id, req.user!.id)
+    }
     // Refetch the stop so the response reflects the post-recompute
     // arrivalDate/departureDate. The caller (ModifyTripPanel) does its
     // own GET-trip refetch afterward, but returning fresh dates here
@@ -1912,6 +1924,23 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
         console.warn('[recomputeStopDates] updateStop tripId=%s failed: %s', req.params.id, e?.message)
       }
     }
+    // PLAN-IS-TRUTH (Part 2, step 3) — re-check the drive cap ONLY when this edit
+    // actually changed a leg: a type toggle (DESTINATION↔OVERNIGHT_ONLY changes
+    // which segments are "answered") or a relocation (locationName/state/lat/lng
+    // move a stop). A pure nights/booking/notes edit leaves the geometry untouched,
+    // so it skips the check (no wasted Directions calls). Runs on the settled,
+    // already-resequenced list above. Idempotent + fail-soft. `order` is
+    // deliberately NOT a trigger — there is no drag-reorder, and the only
+    // order-writing client paths were dropped (see createStop/deleteStop notes).
+    const legAffectingChanged =
+      (data.type !== undefined && data.type !== stop.type) ||
+      (data.locationName !== undefined && data.locationName !== stop.locationName) ||
+      (data.locationState !== undefined && data.locationState !== stop.locationState) ||
+      (data.latitude !== undefined && data.latitude !== stop.latitude) ||
+      (data.longitude !== undefined && data.longitude !== stop.longitude)
+    if (legAffectingChanged) {
+      await recheckLongLegs(req.params.id, req.user!.id)
+    }
     // AI-MESA-10 — verified apply stamp (mutation succeeded above). Never throws.
     await stampModifyActionApplied(req.params.id, modifyActionId)
     res.json(updated)
@@ -1971,6 +2000,10 @@ export async function deleteStop(req: AuthRequest, res: Response, next: NextFunc
     } catch (e: any) {
       console.warn('[recomputeStopDates] deleteStop tripId=%s failed: %s', req.params.id, e?.message)
     }
+    // PLAN-IS-TRUTH (Part 2, step 3) — a delete MERGES two legs into one, which
+    // can now exceed the drive cap. Re-check on the SETTLED, already-resequenced
+    // list so the merged leg gets a transit stop if needed. Idempotent + fail-soft.
+    await recheckLongLegs(req.params.id, req.user!.id)
     // AI-MESA-10 — verified apply stamp. DELETE has no body, so the Modify
     // panel threads the action id as a query param. Never throws.
     if (typeof req.query.modifyActionId === 'string') {
@@ -2258,36 +2291,54 @@ export async function getTripMapImage(req: AuthRequest, res: Response, next: Nex
  * per-leg routing/geocoding error leaves that leg as-is and is logged, never
  * aborting the build.
  */
-export async function expandLongLegs(req: AuthRequest, res: Response, next: NextFunction) {
+/**
+ * THE SINGLE DRIVE-TIME RE-CHECK CHOKE POINT (Part 2, step 3).
+ *
+ * Every server path that mutates a trip's stop set funnels through this one
+ * function so the over-cap rule is enforced in exactly one place — never N
+ * copies of the splice. It is the persist half of the old expandLongLegs:
+ * measure with the shared pure core (planTransitInserts), then translate its
+ * idempotent `inserts` into DB writes.
+ *
+ * Callers: deleteStop (always), createStop (unless the build loop opts out),
+ * updateStop (only on a leg-affecting field change), and the HTTP wrapper
+ * expandLongLegs below. Idempotent — re-running on a settled itinerary inserts
+ * nothing (planTransitInserts skips real→real segments that already carry an
+ * overnight), so a double-insert is impossible by construction.
+ *
+ * MUST run on a SETTLED, correctly-ordered stop list (callers invoke it AFTER
+ * their own resequence), never on a transient half-reordered state — otherwise
+ * it could measure a leg that won't exist and leave an orphan overnight.
+ *
+ * Fail-soft: ANY error (routing, geocode, DB) is swallowed and logged; the trip
+ * is left as-is and the caller's response is never blocked.
+ */
+export async function recheckLongLegs(tripId: string, userId: string): Promise<{ inserted: number }> {
   try {
     const apiKey = process.env.GOOGLE_MAPS_API_KEY
-    if (!apiKey) {
-      console.warn('[expandLongLegs] GOOGLE_MAPS_API_KEY not set — skipping')
-      return res.json({ inserted: 0, skipped: 'no-api-key' })
-    }
+    if (!apiKey) return { inserted: 0 }
 
     const trip = await prisma.trip.findFirst({
-      where: { id: req.params.id, userId: req.user!.id },
+      where: { id: tripId, userId },
       include: { stops: { orderBy: { order: 'asc' } } },
     })
-    if (!trip) throw new AppError('Trip not found', 404)
+    if (!trip) return { inserted: 0 }
 
     const user = await prisma.user.findUnique({
-      where: { id: req.user!.id },
+      where: { id: userId },
       include: { travelProfile: true },
     })
     // Shared single source of truth for the per-leg cap (see deriveCapHours).
     const maxHours = deriveCapHours(user?.travelProfile)
 
     const stops = trip.stops as any[]
-    if (stops.length < 2) return res.json({ inserted: 0 })
+    if (stops.length < 2) return { inserted: 0 }
 
-    // Measurement + splitting is the shared pure core (planTransitInserts); this
-    // controller only translates its `inserts` into DB writes — the SAME check the
-    // planning path will run on the AI's city-name itinerary, so build and
-    // planning can never disagree about which legs need a transit stop.
+    // Measurement + splitting is the shared pure core (planTransitInserts); here
+    // we only translate its idempotent `inserts` into DB writes. Same check the
+    // planning path runs, so build, planning, and post-build edits never disagree.
     const { inserts } = await planTransitInserts(stops, maxHours, apiKey)
-    if (inserts.length === 0) return res.json({ inserted: 0 })
+    if (inserts.length === 0) return { inserted: 0 }
 
     // Apply insertions. Process gaps from HIGHEST afterOrder to LOWEST so each
     // order-shift only touches stops above an already-processed gap, leaving the
@@ -2330,10 +2381,31 @@ export async function expandLongLegs(req: AuthRequest, res: Response, next: Next
     try {
       await syncTripEndpoints(trip.id)
     } catch (e: any) {
-      console.warn('[expandLongLegs] syncTripEndpoints failed (non-fatal):', e?.message)
+      console.warn('[recheckLongLegs] syncTripEndpoints failed (non-fatal):', e?.message)
+    }
+    // Inserted transit nights shift the schedule downstream — re-stamp dates so
+    // the new OVERNIGHT_ONLY stops and every following stop get arrival/departure.
+    try {
+      await recomputeStopDates(trip.id)
+    } catch (e: any) {
+      console.warn('[recheckLongLegs] recomputeStopDates failed (non-fatal):', e?.message)
     }
 
-    console.log('[expandLongLegs] tripId=%s inserted %d transit stop(s) across %d leg(s)', trip.id, inserted, plans.length)
+    console.log('[recheckLongLegs] tripId=%s inserted %d transit stop(s) across %d leg(s)', trip.id, inserted, plans.length)
+    return { inserted }
+  } catch (err: any) {
+    // Fail soft — a re-check failure must never block the mutation that triggered it.
+    console.error('[recheckLongLegs] FAILED tripId=%s (left as-is): %s', tripId, err?.message ?? err)
+    return { inserted: 0 }
+  }
+}
+
+// Thin HTTP wrapper over the choke point. Retained so the existing
+// POST /:id/expand-long-legs route keeps working; the build chain no longer
+// calls it (Part 1), but the endpoint stays a valid manual re-check trigger.
+export async function expandLongLegs(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { inserted } = await recheckLongLegs(req.params.id, req.user!.id)
     res.json({ inserted })
   } catch (err) { next(err) }
 }
