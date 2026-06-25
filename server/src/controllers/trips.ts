@@ -2003,7 +2003,12 @@ export async function deleteStop(req: AuthRequest, res: Response, next: NextFunc
     if (req.query.acknowledgeLongLeg === 'true') {
       const ordered = await prisma.stop.findMany({ where: { tripId: req.params.id }, orderBy: { order: 'asc' } })
       const ep = mergedLegEndpoints(ordered as any[], stop.id)
-      if (ep) ackLegKey = `${ep.a.id}|${ep.b.id}`
+      // Only ack the real→real pair when it will actually be EMPTY after the delete
+      // (no surviving overnight between them) — that's the only case recheck would
+      // re-insert on. If an overnight remains in the span (e.g. deleting a
+      // destination that sat between two transit overnights), recheck skips it
+      // anyway, so acking would be a wrong, unrelated leg (the latent over-ack bug).
+      if (ep && !ep.otherOvernightBetween) ackLegKey = `${ep.a.id}|${ep.b.id}`
     }
 
     await prisma.stop.delete({ where: { id: req.params.stopId } })
@@ -2067,25 +2072,42 @@ export async function longLegPreview(req: AuthRequest, res: Response, next: Next
     const target = stops.find(s => s.id === req.params.stopId)
     if (!target) return res.json({ exceeds: false })
 
-    const ep = mergedLegEndpoints(stops, target.id)
-    // No real neighbors, or another overnight remains between them → removing this
-    // one won't create an empty over-cap leg, so there's nothing to confirm.
-    if (!ep || ep.otherOvernightBetween) return res.json({ exceeds: false })
+    // The drive day that RESULTS from deleting this stop is between its IMMEDIATE
+    // neighbors — the stop directly before and directly after it — regardless of
+    // their type. Both overnight and destination stops are sleep points, so a
+    // destination sandwiched between two transit overnights (Chambers → Moab →
+    // Coalville) merges into the Chambers → Coalville drive when Moab is removed.
+    // BUG (fixed): the prior code used the nearest REAL stops (skipping overnights),
+    // which measured the wrong far-apart leg (Mesa → Bozeman) and then suppressed
+    // the warning via otherOvernightBetween. Immediate neighbors are the truth.
+    const idx = stops.findIndex(s => s.id === target.id)
+    const prev = idx > 0 ? stops[idx - 1] : null
+    const next = idx < stops.length - 1 ? stops[idx + 1] : null
+    // First or last stop → nothing merges; no resulting long drive to warn about.
+    if (!prev || !next) return res.json({ exceeds: false })
 
     const apiKey = process.env.GOOGLE_MAPS_API_KEY
     if (!apiKey) return res.json({ exceeds: false })
     const user = await prisma.user.findUnique({ where: { id: req.user!.id }, include: { travelProfile: true } })
     const cap = deriveCapHours(user?.travelProfile)
-    const detail = await fetchLegDetail(ep.a, ep.b, apiKey)
+    const detail = await fetchLegDetail(prev, next, apiKey)
     if (!detail) return res.json({ exceeds: false })
     const legHours = detail.durationSec / 3600
     const exceeds = legHours > cap + LEG_GRACE_HOURS
+    // Diagnostic: shows exactly what the preview computes for a delete (kept — same
+    // observability posture as [recheckLongLegs]/[planTransitInserts]; low-noise,
+    // one line per delete-preview).
+    console.log(
+      '[longLegPreview] tripId=%s deleting "%s" → merged %s → %s = %sh (cap=%sh +%sh grace) exceeds=%s',
+      req.params.id, target.locationName, prev.locationName, next.locationName,
+      legHours.toFixed(1), cap, LEG_GRACE_HOURS, exceeds,
+    )
     res.json({
       exceeds,
       legHours: Math.round(legHours * 10) / 10,
       cap,
-      fromName: ep.a.locationName,
-      toName: ep.b.locationName,
+      fromName: prev.locationName,
+      toName: next.locationName,
     })
   } catch (err) { next(err) }
 }
