@@ -15,7 +15,7 @@ import { computeTripShape } from '../utils/tripShape'
 // with build's expandLongLegs. trips.ts already imports enforcePerUserDailyCap
 // from this module; both exports are only ever CALLED inside request handlers
 // (never at module load), so the two-way import resolves cleanly at call time.
-import { planTransitInserts, deriveCapHours, buildTransitNote } from './trips'
+import { planTransitInserts, deriveCapHours, buildTransitNote, minimalTripBudget } from './trips'
 
 // Soft cap: inject a "wrap up" system message and let Claude actually respond
 // (so it has a chance to emit the <itinerary> JSON block).
@@ -818,13 +818,13 @@ function buildGateAsk(whereOk: boolean, whenOk: boolean, lengthOk: boolean): str
   return `Before I map this out, I just need ${list}. Share ${those} and I'll build your itinerary right away.`
 }
 
-/** BUG-2 — refuse-and-ask when mandatory transit overnights blow the user's stated
- *  total-nights budget. One short question; no itinerary, so nothing builds until
- *  the user resolves the conflict. */
-function buildBudgetConflictAsk(destName: string, transitNights: number, requestedNights: number): string {
-  const ovn = `${transitNights} overnight driving stop${transitNights === 1 ? '' : 's'}`
-  const nights = `${requestedNights} night${requestedNights === 1 ? '' : 's'}`
-  return `Reaching ${destName} and covering the distance needs about ${ovn} just for the drive — more than the ${nights} you set for the whole trip. Want to give it more nights, or pick somewhere closer so it fits in ${nights}?`
+/** BUG-2 — refuse-and-ask when the MINIMAL trip can't fit the user's stated
+ *  total-nights budget. Names the turnaround, states the specific minimum, and
+ *  offers to set it. No itinerary, so nothing builds until the user resolves it. */
+function buildBudgetConflictAsk(destName: string, minNeeded: number, requestedNights: number): string {
+  const need = `${minNeeded} night${minNeeded === 1 ? '' : 's'}`
+  const have = `${requestedNights} night${requestedNights === 1 ? '' : 's'}`
+  return `This trip to ${destName} needs about ${need} minimum just for the driving — more than the ${have} you set. Want me to bump it to ${need} so it fits, or pick somewhere closer?`
 }
 
 export async function chat(req: AuthRequest, res: Response, next: NextFunction) {
@@ -1562,42 +1562,38 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
         const transitStops = Array.isArray(transitItin?.stops) ? (transitItin!.stops as any[]) : null
         if (transitItin && transitStops && transitStops.length >= 2) {
           const capHours = deriveCapHours(user?.travelProfile)
-          const { stops: splicedStops, inserts } = await planTransitInserts(
-            transitStops, capHours, process.env.GOOGLE_MAPS_API_KEY,
-          )
-          if (inserts.length > 0) {
-            const addedNights = inserts.reduce((n, ins) => n + ins.towns.length, 0)
 
-            // BUG-2 — refuse-and-ask on a night-budget conflict. If the user set a
-            // total-nights budget and the MANDATORY transit overnights (plus one
-            // night minimum per real destination) can't fit inside it, do NOT
-            // silently overshoot: discard the itinerary and ask one question.
-            let reqNights: number | null = null
-            if (sessionId) {
-              try {
-                const s = await prisma.planningSession.findUnique({ where: { id: sessionId }, select: { partialTripData: true } })
-                const r = Number((s?.partialTripData as any)?.requestedNights)
-                reqNights = Number.isInteger(r) && r > 0 ? r : null
-              } catch { /* no budget known → no conflict */ }
-            }
-            const normCity = (v?: string | null) => (v ?? '').toLowerCase().trim()
-            const homeCity = normCity(transitStops[0]?.locationName)
-            const realDests = transitStops.filter((s: any, i: number) =>
-              s.type === 'DESTINATION' &&
-              !(i === transitStops.length - 1 && (s.nights ?? 0) === 0 && normCity(s.locationName) === homeCity),
+          // BUG-2 — DETERMINISTIC minimal-trip night-budget gate (refuse-and-ask).
+          // Anchored on the MINIMAL trip (origin → turnaround → origin), NOT the AI's
+          // variable per-run itinerary — that variability is why identical input
+          // refused inconsistently. Same input → same outcome.
+          let reqNights: number | null = null
+          if (sessionId) {
+            try {
+              const s = await prisma.planningSession.findUnique({ where: { id: sessionId }, select: { partialTripData: true } })
+              const r = Number((s?.partialTripData as any)?.requestedNights)
+              reqNights = Number.isInteger(r) && r > 0 ? r : null
+            } catch { /* no budget known → no conflict */ }
+          }
+          const conflict = reqNights != null
+            ? await minimalTripBudget(transitStops, capHours, reqNights, process.env.GOOGLE_MAPS_API_KEY)
+            : null
+
+          if (conflict) {
+            // Discard the itinerary; ask ONE actionable question naming the turnaround
+            // and the specific minimum, offering to set it. Nothing builds until resolved.
+            response = buildBudgetConflictAsk(conflict.turnaroundName, conflict.minNeeded, reqNights!)
+            console.warn(
+              '[AI budget-conflict] sessionId=%s refusing — turnaround=%s minNeeded=%d requested=%d',
+              sessionId ?? '(none)', conflict.turnaroundName, conflict.minNeeded, reqNights,
             )
-            const budgetConflict = reqNights != null && (realDests.length + addedNights) > reqNights
-
-            if (budgetConflict) {
-              const destName = realDests.length
-                ? (realDests[realDests.length - 1].locationName ?? 'your destination')
-                : (transitStops[transitStops.length - 1]?.locationName ?? 'your destination')
-              response = buildBudgetConflictAsk(destName, addedNights, reqNights!)
-              console.warn(
-                '[AI budget-conflict] sessionId=%s refusing — requested=%d realDests=%d transit=%d',
-                sessionId ?? '(none)', reqNights, realDests.length, addedNights,
-              )
-            } else {
+          } else {
+            // No budget conflict → run the normal transit splice on the AI's full route.
+            const { stops: splicedStops, inserts } = await planTransitInserts(
+              transitStops, capHours, process.env.GOOGLE_MAPS_API_KEY,
+            )
+            if (inserts.length > 0) {
+            const addedNights = inserts.reduce((n, ins) => n + ins.towns.length, 0)
             // Bump totalNights by the inserted nights (each OVERNIGHT_ONLY = 1) so
             // the nightsShortfall check below doesn't false-flag our own inserts.
             const prevTotal = typeof transitItin.totalNights === 'number' ? transitItin.totalNights : 0

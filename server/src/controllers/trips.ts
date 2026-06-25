@@ -987,6 +987,75 @@ export async function planTransitInserts(
   return { stops: splicedStops, inserts }
 }
 
+/**
+ * BUG-2 — DETERMINISTIC minimal-trip night-budget check. Independent of the AI's
+ * per-run elaboration (which destinations it adds, how it allocates nights — the
+ * source of the inconsistent refusals). Anchors on the MINIMAL trip the request
+ * implies: origin → TURNAROUND → origin (round trip) or origin → turnaround
+ * (one-way). Returns { minNeeded, turnaroundName } when the minimal trip can't fit
+ * requestedNights, else null.
+ *   - turnaround = the destination FARTHEST from origin (Haversine when coords
+ *     exist; else road drive-time via fetchLegDetail; a single destination IS the
+ *     turnaround, no search).
+ *   - minNeeded = 1 night at the turnaround + the mandatory transit overnights for
+ *     the core route (one leg measured; ×2 for a round trip — same road reversed).
+ * Same inputs (origin, turnaround, cap, requestedNights) → same result. Fail-soft:
+ * any measurement failure returns null (no refusal — the trip builds).
+ */
+export async function minimalTripBudget(
+  stops: PlannableStop[],
+  capHours: number,
+  requestedNights: number,
+  apiKey: string,
+): Promise<{ minNeeded: number; turnaroundName: string } | null> {
+  try {
+    if (!apiKey || !Array.isArray(stops) || stops.length < 2) return null
+    const norm = (v?: string | null) => (v ?? '').toLowerCase().trim()
+    const origin = stops[0] as any
+    const homeName = norm(origin?.locationName)
+    const realDests = (stops as any[]).filter((s, i) =>
+      s.type === 'DESTINATION' &&
+      !(i === stops.length - 1 && (s.nights ?? 0) === 0 && norm(s.locationName) === homeName),
+    )
+    if (!realDests.length) return null
+
+    // Turnaround = farthest destination from origin.
+    let turnaround = realDests[0]
+    if (realDests.length > 1) {
+      const haveCoords =
+        origin?.latitude != null && origin?.longitude != null &&
+        realDests.every(d => d.latitude != null && d.longitude != null)
+      if (haveCoords) {
+        turnaround = realDests.reduce((far, d) =>
+          haversineMiles(origin.latitude, origin.longitude, d.latitude, d.longitude) >
+          haversineMiles(origin.latitude, origin.longitude, far.latitude, far.longitude) ? d : far)
+      } else {
+        let maxSec = -1
+        for (const d of realDests) {
+          const detail = await fetchLegDetail(origin, d, apiKey)
+          if (detail && detail.durationSec > maxSec) { maxSec = detail.durationSec; turnaround = d }
+        }
+      }
+    }
+
+    // Mandatory transit for the CORE route (origin → turnaround, one leg). The return
+    // leg is the same road reversed, so ×2 for a round trip.
+    const { inserts } = await planTransitInserts([origin, turnaround], capHours, apiKey)
+    const oneWayTransit = inserts.reduce((n, ins) => n + ins.towns.length, 0)
+    const roundTrip = computeTripShape(stops as any[]) === 'ROUND_TRIP'
+    const coreTransit = oneWayTransit * (roundTrip ? 2 : 1)
+    const minNeeded = 1 + coreTransit
+
+    if (minNeeded > requestedNights) {
+      return { minNeeded, turnaroundName: turnaround.locationName }
+    }
+    return null
+  } catch (e: any) {
+    console.warn('[minimalTripBudget] failed (no refusal): %s', e?.message ?? e)
+    return null
+  }
+}
+
 // ─── POI geocoding helpers ────────────────────────────────────────────────────
 
 function pointToSegmentDistance(
