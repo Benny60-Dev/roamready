@@ -1994,14 +1994,15 @@ export async function deleteStop(req: AuthRequest, res: Response, next: NextFunc
       )
     }
 
-    // "Keep the long drive" (Part 2) — the user confirmed deleting this overnight
-    // and keeping the merged leg as one drive. Capture the merged-leg endpoints
-    // BEFORE the delete so we can mark the leg acknowledged afterward; the recheck
-    // below (and every future one) then skips it instead of re-inserting.
+    // "Remove it anyway" (over-cap delete) — the user confirmed deleting this stop
+    // (overnight OR destination) and keeping the resulting merged leg as one drive.
+    // Capture the merged-leg endpoints BEFORE the delete so we can mark the leg
+    // acknowledged afterward; the recheck below (and every future one) then skips it
+    // instead of inserting an overnight. Applies to ANY stop type now.
     let ackLegKey: string | null = null
-    if (req.query.acknowledgeLongLeg === 'true' && stop.type === 'OVERNIGHT_ONLY') {
+    if (req.query.acknowledgeLongLeg === 'true') {
       const ordered = await prisma.stop.findMany({ where: { tripId: req.params.id }, orderBy: { order: 'asc' } })
-      const ep = overnightMergeEndpoints(ordered as any[], stop.id)
+      const ep = mergedLegEndpoints(ordered as any[], stop.id)
       if (ep) ackLegKey = `${ep.a.id}|${ep.b.id}`
     }
 
@@ -2048,13 +2049,12 @@ export async function deleteStop(req: AuthRequest, res: Response, next: NextFunc
 }
 
 /**
- * Long-leg delete PREVIEW (Part 2 "keep the long drive"). Before the client
- * finalizes deleting an OVERNIGHT_ONLY transit stop, it asks whether removing it
- * would create an over-cap leg that the recheck would otherwise re-insert on, and
- * returns the REAL measured drive time of the merged leg so the confirm modal can
- * show it. Read-only — no mutation. Mirrors planLegSplits' split trigger
- * (legHours > cap + grace), so the modal only appears when a delete would actually
- * be undone by a re-insert.
+ * Long-leg delete PREVIEW (over-cap delete warning). Before the client finalizes
+ * deleting ANY stop (overnight OR destination), it asks whether removing it would
+ * create a too-long merged drive day, and returns the REAL measured drive time of
+ * the merged leg so the confirm modal can show it. Read-only — no mutation. Mirrors
+ * planLegSplits' split trigger (legHours > cap + grace), so the modal only appears
+ * when the resulting drive would actually exceed the user's daily limit.
  */
 export async function longLegPreview(req: AuthRequest, res: Response, next: NextFunction) {
   try {
@@ -2065,9 +2065,9 @@ export async function longLegPreview(req: AuthRequest, res: Response, next: Next
     if (!trip) throw new AppError('Trip not found', 404)
     const stops = trip.stops as any[]
     const target = stops.find(s => s.id === req.params.stopId)
-    if (!target || target.type !== 'OVERNIGHT_ONLY') return res.json({ exceeds: false })
+    if (!target) return res.json({ exceeds: false })
 
-    const ep = overnightMergeEndpoints(stops, target.id)
+    const ep = mergedLegEndpoints(stops, target.id)
     // No real neighbors, or another overnight remains between them → removing this
     // one won't create an empty over-cap leg, so there's nothing to confirm.
     if (!ep || ep.otherOvernightBetween) return res.json({ exceeds: false })
@@ -2432,11 +2432,13 @@ function adjacentRealKeys(stops: any[]): Set<string> {
   return set
 }
 
-/** Real predecessor + successor of an OVERNIGHT_ONLY stop (its merged-leg endpoints
- *  once removed), plus whether ANOTHER overnight remains between them (in which case
- *  removing this one leaves the segment answered — no re-insert, no merge to confirm). */
-function overnightMergeEndpoints(stops: any[], overnightId: string): { a: any; b: any; otherOvernightBetween: boolean } | null {
-  const idx = stops.findIndex(s => s.id === overnightId)
+/** Merged-leg endpoints for deleting ANY stop: the nearest REAL (non-OVERNIGHT_ONLY)
+ *  stop before and after it — the two stops that become one leg once it's removed —
+ *  plus whether ANOTHER overnight survives between them (in which case the span stays
+ *  "answered": no auto-overnight, nothing to confirm). Works for overnight AND
+ *  destination deletes (a destination's own real neighbors are the merged leg). */
+function mergedLegEndpoints(stops: any[], deletedStopId: string): { a: any; b: any; otherOvernightBetween: boolean } | null {
+  const idx = stops.findIndex(s => s.id === deletedStopId)
   if (idx < 0) return null
   let a: any = null, b: any = null
   for (let i = idx - 1; i >= 0; i--) if (stops[i].type !== 'OVERNIGHT_ONLY') { a = stops[i]; break }
@@ -2444,7 +2446,7 @@ function overnightMergeEndpoints(stops: any[], overnightId: string): { a: any; b
   if (!a || !b) return null
   const aIdx = stops.indexOf(a), bIdx = stops.indexOf(b)
   let otherOvernightBetween = false
-  for (let i = aIdx + 1; i < bIdx; i++) if (stops[i].id !== overnightId && stops[i].type === 'OVERNIGHT_ONLY') otherOvernightBetween = true
+  for (let i = aIdx + 1; i < bIdx; i++) if (stops[i].id !== deletedStopId && stops[i].type === 'OVERNIGHT_ONLY') otherOvernightBetween = true
   return { a, b, otherOvernightBetween }
 }
 

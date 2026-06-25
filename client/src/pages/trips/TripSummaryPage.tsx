@@ -986,11 +986,11 @@ export default function TripSummaryPage() {
   // (e.g. confirmed booking).
   const requestDeleteStop = async (stop: Stop) => {
     setDeleteError(null)
-    // Deleting an OVERNIGHT_ONLY transit stop may re-merge an over-cap leg that the
-    // server would otherwise re-insert on. Measure it first; if over the cap, show
-    // the "keep the long drive?" modal (with real hours) instead of the plain delete
-    // confirm. Any preview failure falls through to the normal confirm.
-    if (stop.type === 'OVERNIGHT_ONLY' && id && !checkingLongLeg) {
+    // Deleting ANY stop (destination OR overnight) can leave a too-long merged drive
+    // day. Measure it first; if the merged leg is over the cap (+grace), show the
+    // over-cap warning modal (with real hours) instead of the plain delete confirm.
+    // Any preview failure falls through to the normal confirm.
+    if (id && !checkingLongLeg) {
       setCheckingLongLeg(true)
       try {
         const res = await tripsApi.longLegPreview(id, stop.id)
@@ -1010,8 +1010,8 @@ export default function TripSummaryPage() {
     setPendingDeleteStop(stop)
   }
 
-  // "Keep the long drive" — delete the overnight WITH acknowledgeLongLeg so the
-  // server records the merged leg as acknowledged and never re-inserts on it.
+  // "Remove it anyway" — delete the stop WITH acknowledgeLongLeg so the server
+  // records the merged leg as acknowledged and never auto-inserts an overnight on it.
   const confirmKeepLongDrive = async () => {
     if (!id || !longDrivePrompt) return
     setDeleting(true)
@@ -2053,9 +2053,9 @@ export default function TripSummaryPage() {
       {longDrivePrompt && (
         <ConfirmModal
           isOpen={true}
-          title="Remove this overnight stop?"
+          title={`Remove ${longDrivePrompt.stop.locationName}?`}
           message={
-            `Without it, the ${longDrivePrompt.fromName} → ${longDrivePrompt.toName} drive is about ${longDrivePrompt.legHours} hours — over your ${Number.isInteger(longDrivePrompt.cap) ? longDrivePrompt.cap : longDrivePrompt.cap.toFixed(1)}-hour daily limit. You'll be driving it in one day.` +
+            `Without it, the ${longDrivePrompt.fromName} → ${longDrivePrompt.toName} drive is about ${longDrivePrompt.legHours} hours — over your ${Number.isInteger(longDrivePrompt.cap) ? longDrivePrompt.cap : longDrivePrompt.cap.toFixed(1)}-hour daily limit.` +
             (deleteError ? ` ${deleteError}` : '')
           }
           confirmLabel="Remove it anyway"
