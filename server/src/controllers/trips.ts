@@ -17,6 +17,7 @@ import { resolvePackingCounts, computeStaleness } from '../utils/packingMeta'
 import { parseTripDate } from '../utils/dates'
 import { computeTripShape } from '../utils/tripShape'
 import { getClientOrigin } from '../utils/clientOrigin'
+import { geocodeHomeAddress } from '../utils/geocodeHome'
 
 // ─── City name normalization ─────────────────────────────────────────────────
 // Strip ZIP, country, full state name, and trailing 2-letter state code so a
@@ -45,6 +46,121 @@ async function resequenceStops(tripId: string): Promise<void> {
   await prisma.$transaction(
     stops.map((s, i) => prisma.stop.update({ where: { id: s.id }, data: { order: i + 1 } }))
   )
+}
+
+/** Haversine distance in miles between two lat/lng points. Local helper — no dep. */
+function haversineMiles(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const R = 3958.8 // earth radius, miles
+  const dLat = toRad(bLat - aLat)
+  const dLng = toRad(bLng - aLng)
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s))
+}
+
+/**
+ * ADDSTOP-RESLOT Phase B — deterministically place a newly-added MODIFY stop in
+ * its geographically-correct slot by MINIMUM ADDED DETOUR, moving ONLY that stop.
+ * The AI picks the insertion point from stop names + coords (attempt 1) but still
+ * mis-slots unfamiliar towns; this is the server safety net.
+ *
+ * The modify add path creates the stop coord-less, so we GEOCODE it first
+ * (reusing geocodeHomeAddress — Google forward geocoder, no new dep). If geocoding
+ * fails we no-op and keep the AI's chosen position.
+ *
+ * Guardrails: origin (first) never moves; on a ROUND_TRIP the return-home closer
+ * stays LAST (the new stop lands before it); on a ONE_WAY the new stop MAY become
+ * the last stop (a genuine extension). Booked stops are NOT blocked from being
+ * passed (decision 2c — allow + warn; the caller surfaces any date shift) but are
+ * never themselves reordered. No-op when the new stop has no coords, there are
+ * <2 coordinated other stops, or it is already in the best slot.
+ */
+async function geoReslotModifyStop(
+  tripId: string,
+  newStopId: string,
+  locationName: string,
+  locationState?: string | null,
+): Promise<void> {
+  const newStop = await prisma.stop.findUnique({
+    where: { id: newStopId },
+    select: { latitude: true, longitude: true },
+  })
+  if (!newStop) return
+
+  // 1. Ensure coordinates — geocode the (typically coord-less) modify-added stop.
+  let nLat = newStop.latitude
+  let nLng = newStop.longitude
+  if (nLat == null || nLng == null) {
+    const addr = [locationName, locationState].filter(Boolean).join(', ')
+    const geo = await geocodeHomeAddress(addr)
+    if (geo) {
+      nLat = geo.homeLat
+      nLng = geo.homeLng
+      await prisma.stop.update({ where: { id: newStopId }, data: { latitude: nLat, longitude: nLng } })
+      console.log('[geoReslot] geocoded new stop "%s" → (%s, %s)', addr, nLat, nLng)
+    }
+  }
+  if (nLat == null || nLng == null) {
+    console.log('[geoReslot] no coords for new stop %s — keeping AI position', newStopId)
+    return
+  }
+
+  // 2. Ordered stops; need >=2 coordinated other stops to reason about geography.
+  const stops = await prisma.stop.findMany({
+    where: { tripId },
+    orderBy: { order: 'asc' },
+    select: { id: true, locationName: true, type: true, latitude: true, longitude: true },
+  })
+  const others = stops.filter(s => s.id !== newStopId)
+  if (others.filter(s => s.latitude != null && s.longitude != null).length < 2) return
+
+  // Candidate insertion = "after others[i]" for i in [0, maxI]:
+  //   i=0 → right after the origin (never before it).
+  //   ROUND_TRIP → maxI = others.length-2 so the new stop lands BEFORE the
+  //     return-home closer (which stays last).
+  //   ONE_WAY → maxI = others.length-1 so a genuine extension can become last.
+  const isRoundTrip = computeTripShape(stops) === 'ROUND_TRIP'
+  const maxI = (isRoundTrip ? others.length - 2 : others.length - 1)
+
+  let bestI = -1
+  let bestDetour = Infinity
+  for (let i = 0; i <= maxI; i++) {
+    const a = others[i]
+    if (!a || a.latitude == null || a.longitude == null) continue
+    const b = others[i + 1]
+    let detour: number
+    if (b) {
+      if (b.latitude == null || b.longitude == null) continue
+      detour =
+        haversineMiles(a.latitude, a.longitude, nLat, nLng) +
+        haversineMiles(nLat, nLng, b.latitude, b.longitude) -
+        haversineMiles(a.latitude, a.longitude, b.latitude, b.longitude)
+    } else {
+      // Append at the end (ONE_WAY extension) — only the open new leg counts.
+      detour = haversineMiles(a.latitude, a.longitude, nLat, nLng)
+    }
+    if (detour < bestDetour) {
+      bestDetour = detour
+      bestI = i
+    }
+  }
+  if (bestI < 0) return
+
+  // 3. Move ONLY the new stop to the best slot; every other stop keeps relative order.
+  const targetIds = [
+    ...others.slice(0, bestI + 1).map(s => s.id),
+    newStopId,
+    ...others.slice(bestI + 1).map(s => s.id),
+  ]
+  if (targetIds.join(',') === stops.map(s => s.id).join(',')) return // already best — no-op
+
+  await prisma.$transaction(
+    targetIds.map((id, idx) => prisma.stop.update({ where: { id }, data: { order: idx + 1 } })),
+  )
+  console.log('[geoReslot] moved new stop %s to slot after index %d (added detour %s mi)',
+    newStopId, bestI, bestDetour.toFixed(1))
 }
 
 /** Recompute Trip.startLocation / endLocation from the current first/last stop.
@@ -1422,6 +1538,20 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
       },
     })
     await resequenceStops(req.params.id)
+
+    // ADDSTOP-RESLOT Phase B — for a MODIFY add_stop (modifyActionId present) of a
+    // non-HOME stop, re-slot the new stop into its geographically-correct position
+    // BEFORE syncTripEndpoints + recomputeStopDates run, so both operate on the final
+    // order. Guarded — a geocode/reslot failure never blocks the successful insert.
+    const isModifyAdd = typeof req.body.modifyActionId === 'string'
+    if (isModifyAdd && type !== 'HOME') {
+      try {
+        await geoReslotModifyStop(req.params.id, stop.id, locationName, locationState)
+      } catch (e: any) {
+        console.warn('[geoReslot] createStop tripId=%s failed: %s', req.params.id, e?.message)
+      }
+    }
+
     try {
       await syncTripEndpoints(req.params.id)
     } catch (e: any) {
@@ -1461,8 +1591,40 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
     if (typeof req.body.modifyActionId === 'string') {
       await stampModifyActionApplied(req.params.id, req.body.modifyActionId)
     }
+
+    // ADDSTOP-RESLOT Phase B — after re-slot + date recompute, surface any BOOKED
+    // stop whose itinerary arrivalDate now differs from the originalBookedDate
+    // stamped at booking (Phase A). The reservation is NOT altered — only the trip's
+    // date moved (decision 2c: allow + warn). Returned in the response so the modify
+    // Apply flow can show the heads-up; the per-stop note is data-derived client-side.
+    let shiftedBookedStops: Array<{ stopId: string; name: string; originalBookedDate: string; newArrivalDate: string }> = []
+    if (isModifyAdd) {
+      const post = await prisma.stop.findMany({
+        where: { tripId: req.params.id },
+        select: { id: true, locationName: true, bookingStatus: true, arrivalDate: true, originalBookedDate: true },
+      })
+      shiftedBookedStops = post
+        .filter(s =>
+          BOOKED_STATES.includes(s.bookingStatus) &&
+          s.originalBookedDate != null && s.arrivalDate != null &&
+          s.arrivalDate.getTime() !== s.originalBookedDate.getTime(),
+        )
+        .map(s => ({
+          stopId: s.id,
+          name: s.locationName,
+          originalBookedDate: s.originalBookedDate!.toISOString(),
+          newArrivalDate: s.arrivalDate!.toISOString(),
+        }))
+      if (shiftedBookedStops.length) {
+        console.log('[createStop] %d booked stop(s) date-shifted by insert on trip %s',
+          shiftedBookedStops.length, req.params.id)
+      }
+    }
+
     const finalStop = await prisma.stop.findUnique({ where: { id: stop.id } })
-    res.status(201).json(finalStop ?? stop)
+    res.status(201).json(
+      shiftedBookedStops.length ? { ...finalStop, shiftedBookedStops } : (finalStop ?? stop),
+    )
   } catch (err: any) {
     console.error('[createStop] FAILED tripId=%s:', req.params.id, err?.message)
     next(err)

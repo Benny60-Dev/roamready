@@ -2270,6 +2270,18 @@ export default function TripMapPage() {
                               )}
                             </>
                           )}
+                          {/* ADDSTOP-RESLOT Phase B — a booked stop whose itinerary
+                              date shifted (a later insert moved arrivalDate off the
+                              originalBookedDate stamped at booking). Data-derived:
+                              persists on reload, clears if the dates realign. The
+                              reservation is unchanged — this just flags the date move. */}
+                          {BOOKED_STATUSES.includes(stop.bookingStatus) &&
+                            stop.originalBookedDate && stop.arrivalDate &&
+                            parseTripDate(stop.originalBookedDate)?.getTime() !== parseTripDate(stop.arrivalDate)?.getTime() && (
+                              <p className="text-[10px] text-amber-700 flex items-center gap-1">
+                                <AlertTriangle size={10} className="flex-shrink-0" /> Originally booked for {formatTripDate(stop.originalBookedDate, 'MMM d, yyyy')}
+                              </p>
+                            )}
                         </div>
                         <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
                           {ctaEl}
