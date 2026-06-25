@@ -1379,12 +1379,14 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     // REQUESTED-NIGHTS SINGLE-SHOT FALLBACK — under the state-and-proceed opening
     // flow a one-shot prompt ("…6 days…") can state the length AND emit the
     // <itinerary> in the SAME turn; if the model didn't append <requestedNights>
-    // on that turn, the target would never persist and reconcileNights would
-    // no-op ('no-target'), leaving the built trip short. Backstop: when THIS turn
-    // builds an itinerary, no valid tag was captured above, and no target is
-    // already locked, deterministically parse an EXPLICIT integer duration from
-    // the user's latest message and persist it. Conservative — explicit digits
-    // only; fuzzy lengths stay the model's job via the tag.
+    // on that turn, the target would never persist. It still backs the deterministic
+    // build gate's LENGTH signal (capturedRequestedNights), so capture it here too:
+    // when THIS turn builds an itinerary, no valid tag was captured above, and no
+    // target is already locked, deterministically parse an EXPLICIT integer duration
+    // from the user's latest message and persist it. Conservative — explicit digits
+    // only; fuzzy lengths stay the model's job via the tag. (The old nights
+    // reconciler that also consumed this was retired in Part 2 — transit nights are
+    // now real nights the user sees and approves.)
     const tagCaptured = !!reqNightsMatch
     const alreadyLocked =
       Number.isInteger((userProfile as any).capturedRequestedNights) &&
@@ -1538,12 +1540,37 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             const prevTotal = typeof transitItin.totalNights === 'number' ? transitItin.totalNights : 0
             const splicedItin = { ...transitItin, stops: splicedStops, totalNights: prevTotal + addedNights }
             const json = JSON.stringify(splicedItin, null, 2)
-            // Re-serialize into the <itinerary> block. Handle the closed form and
-            // the truncated/unclosed form (mirrors parseItineraryBlock's two cases).
+
+            // PLAN-IS-TRUTH (Part 2, step 3) — GROUNDED drive-time note. Built ONLY
+            // from inserts MADE THIS TURN, using the REAL measured legHours from the
+            // Directions check — no 2nd AI call, no fabrication. A re-emit that
+            // inserts nothing produces NO note (prior overnights are never
+            // re-announced — they're "answered" segments the check skipped). The AI
+            // itself stays silent on drive-time compliance (planner prompt, step 4),
+            // so this server note is the single authoritative statement about why a
+            // transit stop exists. afterIndex+1 is the segment's far real stop (only
+            // empty adjacent real→real segments ever yield an insert).
+            const capLabel = Number.isInteger(capHours) ? `${capHours}-hour` : `${capHours.toFixed(1)}-hour`
+            const noteSentences = inserts.map(ins => {
+              const from = transitStops[ins.afterIndex]?.locationName ?? 'your previous stop'
+              const to = transitStops[ins.afterIndex + 1]?.locationName ?? 'the next stop'
+              const townPhrase = ins.towns
+                .map((t: any) => (t.locationState ? `${t.locationName}, ${t.locationState}` : t.locationName))
+                .join(' and ')
+              const added = ins.towns.length > 1 ? `overnight stops in ${townPhrase}` : `an overnight in ${townPhrase}`
+              return `The ${from} → ${to} drive is about ${ins.legHours.toFixed(1)} hours, over your ${capLabel} limit, so I added ${added}.`
+            })
+            const note = noteSentences.join(' ')
+
+            // Re-serialize the <itinerary> block AND prepend the grounded note to the
+            // prose (immediately before the block = the end of the visible reply;
+            // cleanChatText strips the tags but keeps the note). Handle the closed
+            // form and the truncated/unclosed form (mirrors parseItineraryBlock).
+            const replacement = `${note}\n\n<itinerary>\n${json}\n</itinerary>`
             if (/<itinerary>[\s\S]*?<\/itinerary>/.test(response)) {
-              response = response.replace(/<itinerary>[\s\S]*?<\/itinerary>/, `<itinerary>\n${json}\n</itinerary>`)
+              response = response.replace(/<itinerary>[\s\S]*?<\/itinerary>/, replacement)
             } else {
-              response = response.replace(/<itinerary>[\s\S]*/, `<itinerary>\n${json}\n</itinerary>`)
+              response = response.replace(/<itinerary>[\s\S]*/, replacement)
             }
             console.log(
               '[AI transit-insert] sessionId=%s inserted %d transit stop(s) across %d leg(s) (+%d night(s))',

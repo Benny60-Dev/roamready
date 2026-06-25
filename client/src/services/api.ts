@@ -158,8 +158,6 @@ export const tripsApi = {
     api.post(`/trips/${id}/packing-list/copy-from`, { sourceTripId }),
   exportPdf: (id: string) => api.post(`/trips/${id}/export/pdf`),
   reassignPOIs: (id: string) => api.post(`/trips/${id}/stops/reassign-pois`),
-  expandLongLegs: (id: string) => api.post(`/trips/${id}/expand-long-legs`),
-  reconcileNights: (id: string) => api.post(`/trips/${id}/reconcile-nights`),
   generateItinerary: (id: string) => api.post(`/trips/${id}/itinerary/generate`),
   saveItinerary: (id: string, itinerary: any[]) => api.put(`/trips/${id}/itinerary`, itinerary),
   generateRoutes: (id: string) => api.post(`/trips/${id}/routes`),
