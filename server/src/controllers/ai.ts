@@ -15,7 +15,7 @@ import { computeTripShape } from '../utils/tripShape'
 // with build's expandLongLegs. trips.ts already imports enforcePerUserDailyCap
 // from this module; both exports are only ever CALLED inside request handlers
 // (never at module load), so the two-way import resolves cleanly at call time.
-import { planTransitInserts, deriveCapHours } from './trips'
+import { planTransitInserts, deriveCapHours, buildTransitNote } from './trips'
 
 // Soft cap: inject a "wrap up" system message and let Claude actually respond
 // (so it has a chance to emit the <itinerary> JSON block).
@@ -603,14 +603,7 @@ function buildLiveTripState(trip: any, rigs: any[] = []): string {
     '- When the user says "first stop" / "stop 1" / "the second stop" / "the last stop", they almost always mean a NUMBERED DESTINATION — not the home departure and not the return-home entry. If the request is ambiguous, ASK BEFORE EMITTING a <modify> tag: "Just to confirm — you mean [first destination], not your home departure?"',
     '- Concrete example: trip is "Starting point: [HomeCity] | Stop 1: [EXAMPLE_STOP_1] | Stop 2: [EXAMPLE_STOP_2] | Return home: [HomeCity]". User says "remove the first stop" → that means [EXAMPLE_STOP_1], not [HomeCity]. Confirm with the user, then emit <modify>{"action":"remove_stop","locationName":"[EXAMPLE_STOP_1]"}</modify>.',
     '',
-    'DRIVE-TIME CONSTRAINT — HARD RULE: The user has a max daily drive time set in their travelProfile (`maxDriveHours`, in hours). Treat this as a HARD upper bound on each leg between consecutive stops, NOT an average across the trip.',
-    '  Conversion: at typical RV highway speeds (~55 mph), 1 hour ≈ 55 miles. Add ~30% slack for non-highway routing and stops. So 6 hours ≈ ~330 miles per leg, 8 hours ≈ ~440 miles per leg.',
-    '  If a planned leg between two consecutive stops would exceed the user\'s limit, you MUST insert one or more OVERNIGHT_ONLY stops to break the leg up. For each transit stop you propose, you MUST estimate the distance from the previous stop and confirm it falls within the limit (with the ~30% slack noted above). Distance from the destination is irrelevant — only distance from the previous stop. If the most well-known transit city for the route is too far from the previous stop, pick a closer city instead, even if that means adding an extra overnight stop. It is better to insert two short transit days than one too-long day. When in doubt, err on the side of MORE transit stops, not fewer.',
-    '  Fallback values when fields are null:',
-    '    - If `maxDriveHours` is null but `maxMilesPerDay` is set, use `maxMilesPerDay` directly as the per-leg limit.',
-    '    - If both are null, default to 350 miles per leg.',
-    '  Override conditions: if the user explicitly says in this conversation that they want to drive straight through, do a long day, or skip overnight stops, that overrides this rule for that trip only. Otherwise, NEVER emit a <modify> that creates a leg you believe will exceed the limit.',
-    '  Specifically for modify actions: if removing a stop would create an over-long leg between the two surrounding stops, propose inserting a transit stop instead, or warn the user before emitting the modify. If adding a stop creates an over-long leg into or out of the new stop, suggest a transit stop along the way. Adding a return-home stop is a special case of this: it creates a final leg from the current last stop back to the user\'s home — verify that leg fits within maxDriveHours and propose an OVERNIGHT_ONLY transit stop along the route if not.',
+    'DRIVE-TIME — THE APP HANDLES IT, NOT YOU: After ANY change you propose (add, remove, reorder, return-home), the app measures REAL drive times and automatically inserts any overnight transit stop a new or merged leg needs, then tells the user about it. So: do NOT propose, add, or emit OVERNIGHT_ONLY / transit stops in a <modify> (no transit stop in add_stop, none "along the way") — just propose the destination change the user asked for. And do NOT tell the user that a leg "stays within" / "is over" / "fits" their drive-time limit, how many hours or miles a leg is, or that you checked/verified drive times — your estimate is not authoritative. Reproduce any OVERNIGHT_ONLY stops already in the live trip unchanged; never invent new ones.',
     '',
     'TRAVEL PARTY — HARD RULE: The trip-scoped `party` (in the JSON context below, when present) or the user\'s `defaultParty` describes who is traveling. Trip-scoped overrides user-level. You MUST consult party data when proposing modifications.',
     '  PEOPLE',
@@ -1550,17 +1543,10 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             // so this server note is the single authoritative statement about why a
             // transit stop exists. afterIndex+1 is the segment's far real stop (only
             // empty adjacent real→real segments ever yield an insert).
-            const capLabel = Number.isInteger(capHours) ? `${capHours}-hour` : `${capHours.toFixed(1)}-hour`
-            const noteSentences = inserts.map(ins => {
-              const from = transitStops[ins.afterIndex]?.locationName ?? 'your previous stop'
-              const to = transitStops[ins.afterIndex + 1]?.locationName ?? 'the next stop'
-              const townPhrase = ins.towns
-                .map((t: any) => (t.locationState ? `${t.locationName}, ${t.locationState}` : t.locationName))
-                .join(' and ')
-              const added = ins.towns.length > 1 ? `overnight stops in ${townPhrase}` : `an overnight in ${townPhrase}`
-              return `The ${from} → ${to} drive is about ${ins.legHours.toFixed(1)} hours, over your ${capLabel} limit, so I added ${added}.`
-            })
-            const note = noteSentences.join(' ')
+            // Shared phrasing with the post-build recheck (recheckLongLegs) so a
+            // transit note reads identically whether it came from planning or a
+            // later edit. inserts is non-empty here (guarded above), so non-null.
+            const note = buildTransitNote(inserts, transitStops, capHours) ?? ''
 
             // Re-serialize the <itinerary> block AND prepend the grounded note to the
             // prose (immediately before the block = the end of the visible reply;

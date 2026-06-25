@@ -209,6 +209,11 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
   // Kept distinct from bookedShiftWarning so dismissing the modal ("Got it")
   // does NOT clear the inline banner, which persists as the chat-history record.
   const [bookedShiftModalOpen, setBookedShiftModalOpen] = useState(false)
+  // Grounded drive-time note (Part 2, step 3 — modify parity). Set from a
+  // create/remove endpoint response when the server's recheckLongLegs inserted an
+  // overnight on a new/merged over-cap leg; surfaced as an info banner so the user
+  // learns WHY a transit stop appeared. Informational; reservation-neutral.
+  const [transitNote, setTransitNote] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   // MODIFY-RESET-1: number of messages seeded from persisted history when the
@@ -472,12 +477,18 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
           // banner above persists as the record.
           setBookedShiftModalOpen(true)
         }
+        // Server may have inserted an overnight on an over-cap leg into/out of the
+        // new stop — surface the grounded note.
+        if (createRes.data?.transitNote) setTransitNote(createRes.data.transitNote)
         break
       }
       case 'remove_stop': {
         const stop = findStop(cleanName)
         if (!stop) throw new Error(`Could not find stop: ${cleanName}`)
-        await tripsApi.deleteStop(trip.id, stop.id, modifyActionId)
+        // Removing a stop merges two legs — the server may insert an overnight on
+        // the merged over-cap leg. Surface the grounded note when it does.
+        const removeRes = await tripsApi.deleteStop(trip.id, stop.id, modifyActionId)
+        if (removeRes.data?.transitNote) setTransitNote(removeRes.data.transitNote)
         break
       }
       case 'change_nights': {
@@ -529,6 +540,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
   async function applyAction(msgIndex: number, sa: ServerModifyAction): Promise<boolean> {
     setApplying(true)
     setBookedShiftWarning(null) // clear any prior heads-up; executeAction re-sets it if this add shifts a booking
+    setTransitNote(null) // clear any prior transit note; executeAction re-sets it if this edit triggers an insert
     setActionUi(prev => ({ ...prev, [sa.id]: { status: 'applying' } }))
     try {
       await executeAction(sa.action, sa.id)
@@ -669,6 +681,20 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
                 </p>
               )
             })}
+          </div>
+        )}
+
+        {/* Grounded drive-time note (Part 2, step 3) — info banner explaining a
+            server-inserted overnight after an add/remove that created an over-cap
+            leg. Teal/info styling (distinct from the amber booked-shift warning). */}
+        {transitNote && (
+          <div className="px-3 py-2 border-b border-teal-200 bg-teal-50 flex-shrink-0" style={{ borderBottomWidth: '0.5px' }}>
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-[11px] text-teal-800 leading-snug">{transitNote}</p>
+              <button onClick={() => setTransitNote(null)} className="text-teal-700 hover:text-teal-900 flex-shrink-0">
+                <X size={12} />
+              </button>
+            </div>
           </div>
         )}
 
