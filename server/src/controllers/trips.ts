@@ -802,20 +802,51 @@ async function planLegSplits(
 
 // ─── Transit-insert planner (pure, DB-free) ──────────────────────────────────
 /**
+ * Per-user daily drive cap in HOURS — the SINGLE source of truth for the
+ * drive-time check (build's expandLongLegs and planning's transit-insert both
+ * call this; never re-derive inline). Mirrors the planner prompt's DRIVE-TIME
+ * CONSTRAINT fallback chain: maxDriveHours → derive from maxMilesPerDay
+ * (~55 mph) → default 6h.
+ */
+export function deriveCapHours(
+  travelProfile: { maxDriveHours?: number | null; maxMilesPerDay?: number | null } | null | undefined,
+): number {
+  let maxHours = travelProfile?.maxDriveHours ?? null
+  if (maxHours == null && travelProfile?.maxMilesPerDay != null) maxHours = travelProfile.maxMilesPerDay / 55
+  if (maxHours == null || maxHours <= 0) maxHours = 6
+  return maxHours
+}
+
+/**
  * PLAN-IS-TRUTH (Part 2, step 1) — the measurement/splitting CORE extracted out
  * of expandLongLegs so the SAME deterministic drive-time check can run during
  * PLANNING (on the AI's city-name itinerary) as well as at build. Single source
  * of truth: build and planning can never disagree about which legs need a stop.
  *
  * Given an ORDERED stop list, the per-user drive cap in HOURS, and a Google Maps
- * key, it walks each consecutive leg with REAL Google Directions times (via
- * planLegSplits → fetchLegDetail, which works on lat/lng OR "City, State"
- * strings — so it does NOT require pre-geocoded coords) and returns:
+ * key, it walks each leg with REAL Google Directions times (via planLegSplits →
+ * fetchLegDetail, which works on lat/lng OR "City, State" strings — so it does
+ * NOT require pre-geocoded coords) and returns:
  *   - inserts: one entry per leg that needs splitting — the index/order of the
  *     stop the transit stops go AFTER, the OVERNIGHT_ONLY towns to add, and the
  *     measured drive time of that leg (legHours) for honest narration.
  *   - stops:   a NEW array with the OVERNIGHT_ONLY transit stops spliced in and
  *     `order` renumbered 1..N. The input array is never mutated.
+ *
+ * IDEMPOTENT BY CONSTRUCTION (Part 2, step 2). The unit of work is the SEGMENT
+ * between two consecutive REAL (non-OVERNIGHT_ONLY) stops:
+ *   - A segment that ALREADY contains an OVERNIGHT_ONLY is "answered" — it was
+ *     split on a prior turn — so it is SKIPPED: no measurement, no re-insertion.
+ *     Re-emitting an unchanged itinerary therefore makes ZERO Google calls for
+ *     every leg that needed a stop, and a transit stop can never be DOUBLED.
+ *   - An EMPTY adjacent real→real segment is measured once. A stop removal that
+ *     merges two legs leaves an empty (longer) segment, so the merged leg reads
+ *     as unanswered and is correctly re-measured. The decision lives in the LEG
+ *     structure itself (the presence/absence of the overnight) — there is NO
+ *     separate snapshot of prior stop state to keep in sync.
+ *   (Residual by design: an under-cap direct leg carries no structural "fine"
+ *   marker, so it is re-measured — one cheap fetchLegDetail — on each emit. That
+ *   is the accepted cost of having no second memory.)
  *
  * PURE: no prisma, no req/res, no DB writes. Callers decide how to persist
  * (build → DB writes; planning → re-serialize into the <itinerary> JSON).
@@ -870,9 +901,23 @@ export async function planTransitInserts(
 
   const inserts: TransitInsert[] = []
 
-  for (let i = 1; i < stops.length; i++) {
-    const from: any = stops[i - 1]
-    const to:   any = stops[i]
+  // Walk SEGMENTS between consecutive REAL (non-OVERNIGHT_ONLY) stops. A segment
+  // that already has an overnight between its endpoints is answered → skipped; an
+  // empty adjacent segment is measured once. See the idempotency note above.
+  const realIdx: number[] = []
+  for (let i = 0; i < stops.length; i++) {
+    if ((stops[i] as any).type !== 'OVERNIGHT_ONLY') realIdx.push(i)
+  }
+
+  for (let k = 1; k < realIdx.length; k++) {
+    const a = realIdx[k - 1]
+    const b = realIdx[k]
+    // Already-answered: one or more OVERNIGHT_ONLY stops sit between the two real
+    // stops (b is not directly after a). Skip — no Google calls, no double-insert.
+    if (b > a + 1) continue
+
+    const from: any = stops[a]
+    const to:   any = stops[b]
     const fromTown: TransitTown = { locationName: from.locationName, locationState: from.locationState, latitude: from.latitude, longitude: from.longitude }
     const toTown:   TransitTown = { locationName: to.locationName,   locationState: to.locationState,   latitude: to.latitude,   longitude: to.longitude }
 
@@ -898,7 +943,7 @@ export async function planTransitInserts(
       // partition the real route through the transit towns).
       const legHours = legPlan.subLegs.reduce((h, sl) => h + sl.hours, 0)
       inserts.push({
-        afterIndex: i - 1,
+        afterIndex: a,
         afterOrder: typeof from.order === 'number' ? from.order : null,
         towns: legPlan.towns,
         legHours,
@@ -2231,12 +2276,8 @@ export async function expandLongLegs(req: AuthRequest, res: Response, next: Next
       where: { id: req.user!.id },
       include: { travelProfile: true },
     })
-    const tp = user?.travelProfile
-    // Fallback chain mirrors the planner prompt's DRIVE-TIME CONSTRAINT:
-    // maxDriveHours → derive from maxMilesPerDay (~55 mph) → default 6h.
-    let maxHours = tp?.maxDriveHours ?? null
-    if (maxHours == null && tp?.maxMilesPerDay != null) maxHours = tp.maxMilesPerDay / 55
-    if (maxHours == null || maxHours <= 0) maxHours = 6
+    // Shared single source of truth for the per-leg cap (see deriveCapHours).
+    const maxHours = deriveCapHours(user?.travelProfile)
 
     const stops = trip.stops as any[]
     if (stops.length < 2) return res.json({ inserted: 0 })

@@ -11,6 +11,11 @@ import {
 } from '../services/modifyActions'
 import { parseTripDate } from '../utils/dates'
 import { computeTripShape } from '../utils/tripShape'
+// PLAN-IS-TRUTH (Part 2, step 2) — the deterministic drive-time check, shared
+// with build's expandLongLegs. trips.ts already imports enforcePerUserDailyCap
+// from this module; both exports are only ever CALLED inside request handlers
+// (never at module load), so the two-way import resolves cleanly at call time.
+import { planTransitInserts, deriveCapHours } from './trips'
 
 // Soft cap: inject a "wrap up" system message and let Claude actually respond
 // (so it has a chance to emit the <itinerary> JSON block).
@@ -1498,6 +1503,56 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
           )
           response = buildGateAsk(whereOk, whenOk, lengthOk)
         }
+      }
+    }
+
+    // PLAN-IS-TRUTH (Part 2, step 2) — DETERMINISTIC DRIVE-TIME CHECK AT PLANNING
+    // TIME. The planner only ESTIMATES drive times (~55 mph), so it under-inserts
+    // transit stops; build no longer fixes this (Part 1 removed expandLongLegs from
+    // the build chain). Run the SAME deterministic check here, on the AI's
+    // city-name itinerary, so any needed OVERNIGHT_ONLY transit stop lands in the
+    // panel the user APPROVES — and build stays a verbatim copy.
+    //
+    // Idempotent by construction (planTransitInserts skips any real→real segment
+    // that already carries an overnight): re-emitting an unchanged itinerary never
+    // re-splits or double-inserts. The inserted stop survives turn-to-turn via the
+    // existing agreedStops snapshot below (it captures stop type), so the next turn
+    // re-grounds the model with it — NO new memory.
+    //
+    // Splice BEFORE the planning-retention/nightsShortfall block so both read the
+    // corrected itinerary. Planning only; fail-soft — a Directions error (or any
+    // throw) leaves the itinerary as the AI emitted it and never blocks the reply.
+    if (context !== 'modify' && process.env.GOOGLE_MAPS_API_KEY) {
+      try {
+        const transitItin = parseItineraryBlock(response)
+        const transitStops = Array.isArray(transitItin?.stops) ? (transitItin!.stops as any[]) : null
+        if (transitItin && transitStops && transitStops.length >= 2) {
+          const capHours = deriveCapHours(user?.travelProfile)
+          const { stops: splicedStops, inserts } = await planTransitInserts(
+            transitStops, capHours, process.env.GOOGLE_MAPS_API_KEY,
+          )
+          if (inserts.length > 0) {
+            // Bump totalNights by the inserted nights (each OVERNIGHT_ONLY = 1) so
+            // the nightsShortfall check below doesn't false-flag our own inserts.
+            const addedNights = inserts.reduce((n, ins) => n + ins.towns.length, 0)
+            const prevTotal = typeof transitItin.totalNights === 'number' ? transitItin.totalNights : 0
+            const splicedItin = { ...transitItin, stops: splicedStops, totalNights: prevTotal + addedNights }
+            const json = JSON.stringify(splicedItin, null, 2)
+            // Re-serialize into the <itinerary> block. Handle the closed form and
+            // the truncated/unclosed form (mirrors parseItineraryBlock's two cases).
+            if (/<itinerary>[\s\S]*?<\/itinerary>/.test(response)) {
+              response = response.replace(/<itinerary>[\s\S]*?<\/itinerary>/, `<itinerary>\n${json}\n</itinerary>`)
+            } else {
+              response = response.replace(/<itinerary>[\s\S]*/, `<itinerary>\n${json}\n</itinerary>`)
+            }
+            console.log(
+              '[AI transit-insert] sessionId=%s inserted %d transit stop(s) across %d leg(s) (+%d night(s))',
+              sessionId ?? '(none)', addedNights, inserts.length, addedNights,
+            )
+          }
+        }
+      } catch (e: any) {
+        console.error('[AI transit-insert] failed (non-fatal) sessionId=%s: %s', sessionId ?? '(none)', e?.message ?? e)
       }
     }
 
