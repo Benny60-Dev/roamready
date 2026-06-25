@@ -539,6 +539,13 @@ export default function TripSummaryPage() {
   const [pendingDeleteStop, setPendingDeleteStop] = useState<Stop | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  // Long-drive opt-in (Part 2): trashing an OVERNIGHT_ONLY whose removal re-merges
+  // an over-cap leg first measures it (preview), then asks "keep the long drive?"
+  // with the REAL hours before deleting + acknowledging.
+  const [longDrivePrompt, setLongDrivePrompt] = useState<
+    { stop: Stop; legHours: number; cap: number; fromName: string; toName: string } | null
+  >(null)
+  const [checkingLongLeg, setCheckingLongLeg] = useState(false)
   const [addAfterOrder, setAddAfterOrder] = useState<number | null>(null)
   const [mutating, setMutating] = useState(false)
   const [modifyPanelOpen, setModifyPanelOpen] = useState(false)
@@ -977,9 +984,48 @@ export default function TripSummaryPage() {
   // Step 1 of the manual-delete flow: queue the stop for confirmation.
   // ConfirmModal asks first and surfaces any cascading-delete warnings
   // (e.g. confirmed booking).
-  const requestDeleteStop = (stop: Stop) => {
+  const requestDeleteStop = async (stop: Stop) => {
     setDeleteError(null)
+    // Deleting an OVERNIGHT_ONLY transit stop may re-merge an over-cap leg that the
+    // server would otherwise re-insert on. Measure it first; if over the cap, show
+    // the "keep the long drive?" modal (with real hours) instead of the plain delete
+    // confirm. Any preview failure falls through to the normal confirm.
+    if (stop.type === 'OVERNIGHT_ONLY' && id && !checkingLongLeg) {
+      setCheckingLongLeg(true)
+      try {
+        const res = await tripsApi.longLegPreview(id, stop.id)
+        if (res.data?.exceeds) {
+          setLongDrivePrompt({
+            stop,
+            legHours: res.data.legHours,
+            cap: res.data.cap,
+            fromName: res.data.fromName,
+            toName: res.data.toName,
+          })
+          return
+        }
+      } catch { /* fall through to the normal delete confirm */ }
+      finally { setCheckingLongLeg(false) }
+    }
     setPendingDeleteStop(stop)
+  }
+
+  // "Keep the long drive" — delete the overnight WITH acknowledgeLongLeg so the
+  // server records the merged leg as acknowledged and never re-inserts on it.
+  const confirmKeepLongDrive = async () => {
+    if (!id || !longDrivePrompt) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await tripsApi.deleteStop(id, longDrivePrompt.stop.id, undefined, true)
+      await reloadTrip()
+      setLongDrivePrompt(null)
+    } catch (err: any) {
+      const message = err?.response?.data?.error || err?.message || 'Could not remove the overnight. Please try again.'
+      setDeleteError(message)
+    } finally {
+      setDeleting(false)
+    }
   }
 
   // Step 2: user clicked Confirm in the ConfirmModal. Fire the actual delete,
@@ -1998,6 +2044,24 @@ export default function TripSummaryPage() {
           onConfirm={confirmDeleteStop}
           onCancel={() => { if (!deleting) { setPendingDeleteStop(null); setDeleteError(null) } }}
           danger
+          isConfirming={deleting}
+        />
+      )}
+      {/* Long-drive opt-in (Part 2) — trashing an overnight whose removal re-merges
+          an over-cap leg. "Keep the long drive" deletes + acknowledges (no re-insert);
+          "Cancel" leaves the overnight in place. */}
+      {longDrivePrompt && (
+        <ConfirmModal
+          isOpen={true}
+          title="Keep this as one drive?"
+          message={
+            `The ${longDrivePrompt.fromName} → ${longDrivePrompt.toName} drive is about ${longDrivePrompt.legHours} hours, over your ${Number.isInteger(longDrivePrompt.cap) ? longDrivePrompt.cap : longDrivePrompt.cap.toFixed(1)}-hour driving preference. Remove the overnight and keep it as a single drive?` +
+            (deleteError ? ` ${deleteError}` : '')
+          }
+          confirmLabel="Keep the long drive"
+          cancelLabel="Cancel"
+          onConfirm={confirmKeepLongDrive}
+          onCancel={() => { if (!deleting) { setLongDrivePrompt(null); setDeleteError(null) } }}
           isConfirming={deleting}
         />
       )}

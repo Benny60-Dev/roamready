@@ -882,6 +882,7 @@ export async function planTransitInserts(
   stops: PlannableStop[],
   capHours: number,
   apiKey: string,
+  ackKeys: Set<string> = new Set(),
 ): Promise<PlanTransitResult> {
   // No key or fewer than two stops → nothing to measure; return the input
   // unchanged (defensive copy) so callers can treat the result uniformly.
@@ -915,6 +916,12 @@ export async function planTransitInserts(
     // Already-answered: one or more OVERNIGHT_ONLY stops sit between the two real
     // stops (b is not directly after a). Skip — no Google calls, no double-insert.
     if (b > a + 1) continue
+
+    // ACKNOWLEDGED long leg: the user explicitly opted into this as one drive
+    // ("keep the long drive"). Do NOT measure or re-insert — the confirm IS the
+    // acknowledgment. Keyed by the two real endpoint stop ids; planning stops have
+    // no id, so this never matches on the planning path.
+    if (ackKeys.has(`${(stops[a] as any).id}|${(stops[b] as any).id}`)) continue
 
     const from: any = stops[a]
     const to:   any = stops[b]
@@ -1987,6 +1994,17 @@ export async function deleteStop(req: AuthRequest, res: Response, next: NextFunc
       )
     }
 
+    // "Keep the long drive" (Part 2) — the user confirmed deleting this overnight
+    // and keeping the merged leg as one drive. Capture the merged-leg endpoints
+    // BEFORE the delete so we can mark the leg acknowledged afterward; the recheck
+    // below (and every future one) then skips it instead of re-inserting.
+    let ackLegKey: string | null = null
+    if (req.query.acknowledgeLongLeg === 'true' && stop.type === 'OVERNIGHT_ONLY') {
+      const ordered = await prisma.stop.findMany({ where: { tripId: req.params.id }, orderBy: { order: 'asc' } })
+      const ep = overnightMergeEndpoints(ordered as any[], stop.id)
+      if (ep) ackLegKey = `${ep.a.id}|${ep.b.id}`
+    }
+
     await prisma.stop.delete({ where: { id: req.params.stopId } })
     await resequenceStops(req.params.id)
     try {
@@ -2005,9 +2023,17 @@ export async function deleteStop(req: AuthRequest, res: Response, next: NextFunc
     } catch (e: any) {
       console.warn('[recomputeStopDates] deleteStop tripId=%s failed: %s', req.params.id, e?.message)
     }
+    // Record the acknowledgment (if "keep the long drive") so the recheck below —
+    // and every future recheck — skips this leg instead of re-inserting an overnight.
+    if (ackLegKey) {
+      const cur = await getAckLegKeys(req.params.id)
+      cur.add(ackLegKey)
+      await setAckLegKeys(req.params.id, [...cur])
+    }
     // PLAN-IS-TRUTH (Part 2, step 3) — a delete MERGES two legs into one, which
     // can now exceed the drive cap. Re-check on the SETTLED, already-resequenced
-    // list so the merged leg gets a transit stop if needed. Idempotent + fail-soft.
+    // list so the merged leg gets a transit stop if needed (unless acknowledged
+    // above). Idempotent + fail-soft.
     const { note: deleteTransitNote } = await recheckLongLegs(req.params.id, req.user!.id)
     // AI-MESA-10 — verified apply stamp. DELETE has no body, so the Modify
     // panel threads the action id as a query param. Never throws.
@@ -2018,6 +2044,49 @@ export async function deleteStop(req: AuthRequest, res: Response, next: NextFunc
     // overnight, return the grounded note so the client (ModifyTripPanel) can tell
     // the user why a transit stop appeared. Omitted when nothing was inserted.
     res.json({ message: 'Stop deleted', ...(deleteTransitNote ? { transitNote: deleteTransitNote } : {}) })
+  } catch (err) { next(err) }
+}
+
+/**
+ * Long-leg delete PREVIEW (Part 2 "keep the long drive"). Before the client
+ * finalizes deleting an OVERNIGHT_ONLY transit stop, it asks whether removing it
+ * would create an over-cap leg that the recheck would otherwise re-insert on, and
+ * returns the REAL measured drive time of the merged leg so the confirm modal can
+ * show it. Read-only — no mutation. Mirrors planLegSplits' split trigger
+ * (legHours > cap + grace), so the modal only appears when a delete would actually
+ * be undone by a re-insert.
+ */
+export async function longLegPreview(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const trip = await prisma.trip.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+      include: { stops: { orderBy: { order: 'asc' } } },
+    })
+    if (!trip) throw new AppError('Trip not found', 404)
+    const stops = trip.stops as any[]
+    const target = stops.find(s => s.id === req.params.stopId)
+    if (!target || target.type !== 'OVERNIGHT_ONLY') return res.json({ exceeds: false })
+
+    const ep = overnightMergeEndpoints(stops, target.id)
+    // No real neighbors, or another overnight remains between them → removing this
+    // one won't create an empty over-cap leg, so there's nothing to confirm.
+    if (!ep || ep.otherOvernightBetween) return res.json({ exceeds: false })
+
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY
+    if (!apiKey) return res.json({ exceeds: false })
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id }, include: { travelProfile: true } })
+    const cap = deriveCapHours(user?.travelProfile)
+    const detail = await fetchLegDetail(ep.a, ep.b, apiKey)
+    if (!detail) return res.json({ exceeds: false })
+    const legHours = detail.durationSec / 3600
+    const exceeds = legHours > cap + LEG_GRACE_HOURS
+    res.json({
+      exceeds,
+      legHours: Math.round(legHours * 10) / 10,
+      cap,
+      fromName: ep.a.locationName,
+      toName: ep.b.locationName,
+    })
   } catch (err) { next(err) }
 }
 
@@ -2327,6 +2396,67 @@ export function buildTransitNote(
 }
 
 /**
+ * Acknowledged-long-leg store ("keep the long drive"). Persisted in the linked
+ * PlanningSession's partialTripData (no migration). Each entry is "fromStopId|
+ * toStopId" — the two adjacent REAL stops of a leg the user opted to keep as one
+ * drive. Trips with NO planning session (rare manual trips) cannot persist acks;
+ * recheck will re-insert on those (known limitation).
+ */
+async function getAckLegKeys(tripId: string): Promise<Set<string>> {
+  try {
+    const s = await prisma.planningSession.findUnique({ where: { tripId }, select: { partialTripData: true } })
+    const ptd = (s?.partialTripData as any) ?? null
+    const arr = Array.isArray(ptd?.acknowledgedLongLegs) ? ptd.acknowledgedLongLegs : []
+    return new Set(arr.filter((x: any): x is string => typeof x === 'string'))
+  } catch {
+    return new Set()
+  }
+}
+
+async function setAckLegKeys(tripId: string, keys: string[]): Promise<void> {
+  try {
+    const s = await prisma.planningSession.findUnique({ where: { tripId }, select: { id: true, partialTripData: true } })
+    if (!s) return // no session (manual trip) — acks not persisted (known limitation)
+    const base =
+      s.partialTripData && typeof s.partialTripData === 'object' && !Array.isArray(s.partialTripData)
+        ? (s.partialTripData as Record<string, unknown>)
+        : {}
+    await prisma.planningSession.update({
+      where: { id: s.id },
+      data: { partialTripData: { ...base, acknowledgedLongLegs: keys } as any },
+    })
+  } catch (e: any) {
+    console.warn('[recheckLongLegs] ack-leg persist failed tripId=%s: %s', tripId, e?.message)
+  }
+}
+
+/** Adjacent-real-pair keys ("fromId|toId") for the current order — the only ack
+ *  keys still valid. An ack whose endpoints are no longer consecutive real stops
+ *  (a stop added/removed between them, or an endpoint deleted) is stale → pruned. */
+function adjacentRealKeys(stops: any[]): Set<string> {
+  const reals = stops.filter(s => s.type !== 'OVERNIGHT_ONLY')
+  const set = new Set<string>()
+  for (let i = 1; i < reals.length; i++) set.add(`${reals[i - 1].id}|${reals[i].id}`)
+  return set
+}
+
+/** Real predecessor + successor of an OVERNIGHT_ONLY stop (its merged-leg endpoints
+ *  once removed), plus whether ANOTHER overnight remains between them (in which case
+ *  removing this one leaves the segment answered — no re-insert, no merge to confirm). */
+function overnightMergeEndpoints(stops: any[], overnightId: string): { a: any; b: any; otherOvernightBetween: boolean } | null {
+  const idx = stops.findIndex(s => s.id === overnightId)
+  if (idx < 0) return null
+  let a: any = null, b: any = null
+  for (let i = idx - 1; i >= 0; i--) if (stops[i].type !== 'OVERNIGHT_ONLY') { a = stops[i]; break }
+  for (let i = idx + 1; i < stops.length; i++) if (stops[i].type !== 'OVERNIGHT_ONLY') { b = stops[i]; break }
+  if (!a || !b) return null
+  const aIdx = stops.indexOf(a), bIdx = stops.indexOf(b)
+  let otherOvernightBetween = false
+  for (let i = aIdx + 1; i < bIdx; i++) if (stops[i].id !== overnightId && stops[i].type === 'OVERNIGHT_ONLY') otherOvernightBetween = true
+  return { a, b, otherOvernightBetween }
+}
+
+/**
  * THE SINGLE DRIVE-TIME RE-CHECK CHOKE POINT (Part 2, step 3).
  *
  * Every server path that mutates a trip's stop set funnels through this one
@@ -2384,8 +2514,16 @@ export async function recheckLongLegs(tripId: string, userId: string): Promise<{
     // Always log entry AND outcome so this path is observable even when it inserts
     // 0 — a leg within cap+grace is a legitimate no-op, NOT a skipped call. (The
     // per-leg measured hours are logged by planTransitInserts.)
-    console.log('[recheckLongLegs] tripId=%s checking %d stop(s) against cap=%sh', tripId, stops.length, maxHours)
-    const { inserts } = await planTransitInserts(stops, maxHours, apiKey)
+    // Acknowledged long legs the user opted to keep as one drive — never re-insert
+    // on them. Prune any no longer adjacent real pairs (reset rule: endpoints
+    // changed / a stop added or removed on the leg), persisting the prune.
+    const storedAcks = await getAckLegKeys(tripId)
+    const validAdj = adjacentRealKeys(stops)
+    const effectiveAcks = new Set([...storedAcks].filter(k => validAdj.has(k)))
+    if (effectiveAcks.size !== storedAcks.size) await setAckLegKeys(tripId, [...effectiveAcks])
+
+    console.log('[recheckLongLegs] tripId=%s checking %d stop(s) against cap=%sh (%d acknowledged leg(s))', tripId, stops.length, maxHours, effectiveAcks.size)
+    const { inserts } = await planTransitInserts(stops, maxHours, apiKey, effectiveAcks)
     if (inserts.length === 0) {
       console.log('[recheckLongLegs] tripId=%s no over-cap leg found — inserted 0', tripId)
       return { inserted: 0, note: null }

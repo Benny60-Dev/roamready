@@ -8,7 +8,7 @@ import {
 } from '../schemas'
 import {
   getTrips, createTrip, getTrip, updateTrip, shiftTripDates, deleteTrip,
-  getStops, createStop, updateStop, deleteStop,
+  getStops, createStop, updateStop, deleteStop, longLegPreview,
   getSharedTrip, exportPdf, generatePackingList, updatePackingList,
   seedPackingListFromTemplate, copyPackingListFromTrip,
   generateItinerary, saveItinerary, generateRoutes, generateActivities,
@@ -37,6 +37,10 @@ tripsRouter.get('/:id/stops', getStops as any)
 tripsRouter.post('/:id/stops', createStop as any)
 tripsRouter.put('/:id/stops/:stopId', validateBody(StopUpdateSchema), updateStop as any)
 tripsRouter.delete('/:id/stops/:stopId', deleteStop as any)
+// Long-leg delete preview — measures the merged leg before the client finalizes
+// deleting an OVERNIGHT_ONLY stop, so the "keep the long drive?" confirm modal can
+// show the real hours. Read-only; same ungated posture as the other measure paths.
+tripsRouter.post('/:id/stops/:stopId/long-leg-preview', longLegPreview as any)
 
 tripsRouter.post('/:id/share', requireFeature('tripSharing'), createShareToken as any)
 tripsRouter.post('/:id/share/regenerate', requireFeature('tripSharing'), regenerateShareToken as any)
