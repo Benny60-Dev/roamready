@@ -145,8 +145,20 @@ export const tripsApi = {
   updateStop: (id: string, stopId: string, data: any) => api.put(`/trips/${id}/stops/${stopId}`, data),
   // modifyActionId (AI-MESA-10): DELETE has no body, so the apply-stamp id
   // travels as a query param; the other apply endpoints take it in the body.
-  deleteStop: (id: string, stopId: string, modifyActionId?: string) =>
-    api.delete(`/trips/${id}/stops/${stopId}${modifyActionId ? `?modifyActionId=${encodeURIComponent(modifyActionId)}` : ''}`),
+  // acknowledgeLongLeg (Part 2): set when the user chose "keep the long drive" in
+  // the delete-confirm modal — the server records the merged leg as acknowledged so
+  // recheckLongLegs won't re-insert an overnight on it.
+  deleteStop: (id: string, stopId: string, modifyActionId?: string, acknowledgeLongLeg?: boolean) => {
+    const params = new URLSearchParams()
+    if (modifyActionId) params.set('modifyActionId', modifyActionId)
+    if (acknowledgeLongLeg) params.set('acknowledgeLongLeg', 'true')
+    const qs = params.toString()
+    return api.delete(`/trips/${id}/stops/${stopId}${qs ? `?${qs}` : ''}`)
+  },
+  // Long-leg delete preview — measures the merged leg before deleting an overnight
+  // so the confirm modal can show real hours. See controllers/trips.ts.
+  longLegPreview: (id: string, stopId: string) =>
+    api.post(`/trips/${id}/stops/${stopId}/long-leg-preview`),
   generatePackingList: (id: string) => api.post(`/trips/${id}/packing-list`),
   savePackingList: (id: string, packingList: any[]) => api.put(`/trips/${id}/packing-list`, { packingList }),
   // FR-SAVED-PACKING — seed a trip's packing list from existing data. Both MERGE
