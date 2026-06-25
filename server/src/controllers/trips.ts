@@ -926,17 +926,19 @@ export async function planTransitInserts(
     // Per-leg log: original leg + the resulting sub-leg durations (with any
     // still-over markers and warnings) so over-cap tails are never hidden.
     // (Template literals — Node's console.log does NOT support %.1f.)
-    if (legPlan.towns.length > 0 || legPlan.warnings.length > 0) {
-      const subLegStr = legPlan.subLegs
-        .map(sl => `${sl.from}→${sl.to} ${sl.hours.toFixed(1)}h${sl.over ? ' [OVER CAP]' : ''}`)
-        .join(' | ')
-      console.log(
-        `[planTransitInserts] leg ${from.locationName}→${to.locationName} ` +
-        `(cap ${maxHours.toFixed(1)}h): ${legPlan.towns.length} transit stop(s) → ` +
-        `${subLegStr || '(no split)'}`,
-      )
-      for (const w of legPlan.warnings) console.warn('[planTransitInserts] %s', w)
-    }
+    // Always log the measured leg (even a clean under-cap pass) so a "why no
+    // overnight?" question is answerable from the log: it shows the REAL measured
+    // hours vs the cap (a leg ≤ cap + LEG_GRACE_HOURS stays one day). Warnings
+    // (over-cap tails, routing failures) still print separately.
+    const subLegStr = legPlan.subLegs
+      .map(sl => `${sl.from}→${sl.to} ${sl.hours.toFixed(1)}h${sl.over ? ' [OVER CAP]' : ''}`)
+      .join(' | ')
+    console.log(
+      `[planTransitInserts] leg ${from.locationName}→${to.locationName} ` +
+      `(cap ${maxHours.toFixed(1)}h +${LEG_GRACE_HOURS}h grace): ${legPlan.towns.length} transit stop(s) → ` +
+      `${subLegStr || '(no split — within cap+grace)'}`,
+    )
+    for (const w of legPlan.warnings) console.warn('[planTransitInserts] %s', w)
 
     if (legPlan.towns.length > 0) {
       // Measured drive time of the leg = sum of the placed sub-legs (they
@@ -1765,8 +1767,9 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
     // per-stop re-check during bulk assembly would be wasteful; every other caller
     // (manual add, modify add) re-checks by default, so a forgotten flag is a
     // harmless redundant idempotent check, never a missed insert. Fail-soft.
+    let createTransitNote: string | null = null
     if (req.body.skipLongLegCheck !== true) {
-      await recheckLongLegs(req.params.id, req.user!.id)
+      createTransitNote = (await recheckLongLegs(req.params.id, req.user!.id)).note
     }
     // Refetch the stop so the response reflects the post-recompute
     // arrivalDate/departureDate. The caller (ModifyTripPanel) does its
@@ -1812,9 +1815,10 @@ export async function createStop(req: AuthRequest, res: Response, next: NextFunc
     }
 
     const finalStop = await prisma.stop.findUnique({ where: { id: stop.id } })
-    res.status(201).json(
-      shiftedBookedStops.length ? { ...finalStop, shiftedBookedStops } : (finalStop ?? stop),
-    )
+    const createResponse: any = { ...(finalStop ?? stop) }
+    if (shiftedBookedStops.length) createResponse.shiftedBookedStops = shiftedBookedStops
+    if (createTransitNote) createResponse.transitNote = createTransitNote
+    res.status(201).json(createResponse)
   } catch (err: any) {
     console.error('[createStop] FAILED tripId=%s:', req.params.id, err?.message)
     next(err)
@@ -1938,12 +1942,13 @@ export async function updateStop(req: AuthRequest, res: Response, next: NextFunc
       (data.locationState !== undefined && data.locationState !== stop.locationState) ||
       (data.latitude !== undefined && data.latitude !== stop.latitude) ||
       (data.longitude !== undefined && data.longitude !== stop.longitude)
+    let updateTransitNote: string | null = null
     if (legAffectingChanged) {
-      await recheckLongLegs(req.params.id, req.user!.id)
+      updateTransitNote = (await recheckLongLegs(req.params.id, req.user!.id)).note
     }
     // AI-MESA-10 — verified apply stamp (mutation succeeded above). Never throws.
     await stampModifyActionApplied(req.params.id, modifyActionId)
-    res.json(updated)
+    res.json(updateTransitNote ? { ...updated, transitNote: updateTransitNote } : updated)
   } catch (err) { next(err) }
 }
 
@@ -2003,13 +2008,16 @@ export async function deleteStop(req: AuthRequest, res: Response, next: NextFunc
     // PLAN-IS-TRUTH (Part 2, step 3) — a delete MERGES two legs into one, which
     // can now exceed the drive cap. Re-check on the SETTLED, already-resequenced
     // list so the merged leg gets a transit stop if needed. Idempotent + fail-soft.
-    await recheckLongLegs(req.params.id, req.user!.id)
+    const { note: deleteTransitNote } = await recheckLongLegs(req.params.id, req.user!.id)
     // AI-MESA-10 — verified apply stamp. DELETE has no body, so the Modify
     // panel threads the action id as a query param. Never throws.
     if (typeof req.query.modifyActionId === 'string') {
       await stampModifyActionApplied(req.params.id, req.query.modifyActionId)
     }
-    res.json({ message: 'Stop deleted' })
+    // transitNote (Part 2, step 3 — modify parity): if the merged leg needed an
+    // overnight, return the grounded note so the client (ModifyTripPanel) can tell
+    // the user why a transit stop appeared. Omitted when nothing was inserted.
+    res.json({ message: 'Stop deleted', ...(deleteTransitNote ? { transitNote: deleteTransitNote } : {}) })
   } catch (err) { next(err) }
 }
 
@@ -2292,6 +2300,33 @@ export async function getTripMapImage(req: AuthRequest, res: Response, next: Nex
  * aborting the build.
  */
 /**
+ * Grounded drive-time note, shared by the planning splice (controllers/ai.ts) and
+ * recheckLongLegs below so both phrase it identically. Built ONLY from inserts
+ * MADE THIS TURN, using the REAL measured legHours — no fabrication. Returns null
+ * when nothing was inserted (a re-check that adds nothing announces nothing).
+ * afterIndex+1 is the segment's far real stop (only empty adjacent real→real
+ * segments ever yield an insert).
+ */
+export function buildTransitNote(
+  inserts: TransitInsert[],
+  preInsertStops: PlannableStop[],
+  capHours: number,
+): string | null {
+  if (!inserts.length) return null
+  const capLabel = Number.isInteger(capHours) ? `${capHours}-hour` : `${capHours.toFixed(1)}-hour`
+  const sentences = inserts.map(ins => {
+    const from = (preInsertStops[ins.afterIndex] as any)?.locationName ?? 'your previous stop'
+    const to = (preInsertStops[ins.afterIndex + 1] as any)?.locationName ?? 'the next stop'
+    const townPhrase = ins.towns
+      .map(t => (t.locationState ? `${t.locationName}, ${t.locationState}` : t.locationName))
+      .join(' and ')
+    const added = ins.towns.length > 1 ? `overnight stops in ${townPhrase}` : `an overnight in ${townPhrase}`
+    return `The ${from} → ${to} drive is about ${ins.legHours.toFixed(1)} hours, over your ${capLabel} limit, so I added ${added}.`
+  })
+  return sentences.join(' ')
+}
+
+/**
  * THE SINGLE DRIVE-TIME RE-CHECK CHOKE POINT (Part 2, step 3).
  *
  * Every server path that mutates a trip's stop set funnels through this one
@@ -2313,16 +2348,22 @@ export async function getTripMapImage(req: AuthRequest, res: Response, next: Nex
  * Fail-soft: ANY error (routing, geocode, DB) is swallowed and logged; the trip
  * is left as-is and the caller's response is never blocked.
  */
-export async function recheckLongLegs(tripId: string, userId: string): Promise<{ inserted: number }> {
+export async function recheckLongLegs(tripId: string, userId: string): Promise<{ inserted: number; note: string | null }> {
   try {
     const apiKey = process.env.GOOGLE_MAPS_API_KEY
-    if (!apiKey) return { inserted: 0 }
+    if (!apiKey) {
+      console.warn('[recheckLongLegs] tripId=%s SKIPPED — GOOGLE_MAPS_API_KEY not set (no transit stop this run)', tripId)
+      return { inserted: 0, note: null }
+    }
 
     const trip = await prisma.trip.findFirst({
       where: { id: tripId, userId },
       include: { stops: { orderBy: { order: 'asc' } } },
     })
-    if (!trip) return { inserted: 0 }
+    if (!trip) {
+      console.warn('[recheckLongLegs] tripId=%s SKIPPED — trip not found', tripId)
+      return { inserted: 0, note: null }
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -2332,13 +2373,24 @@ export async function recheckLongLegs(tripId: string, userId: string): Promise<{
     const maxHours = deriveCapHours(user?.travelProfile)
 
     const stops = trip.stops as any[]
-    if (stops.length < 2) return { inserted: 0 }
+    if (stops.length < 2) {
+      console.log('[recheckLongLegs] tripId=%s stops=%d cap=%sh — too few stops, nothing to check', tripId, stops.length, maxHours)
+      return { inserted: 0, note: null }
+    }
 
     // Measurement + splitting is the shared pure core (planTransitInserts); here
     // we only translate its idempotent `inserts` into DB writes. Same check the
     // planning path runs, so build, planning, and post-build edits never disagree.
+    // Always log entry AND outcome so this path is observable even when it inserts
+    // 0 — a leg within cap+grace is a legitimate no-op, NOT a skipped call. (The
+    // per-leg measured hours are logged by planTransitInserts.)
+    console.log('[recheckLongLegs] tripId=%s checking %d stop(s) against cap=%sh', tripId, stops.length, maxHours)
     const { inserts } = await planTransitInserts(stops, maxHours, apiKey)
-    if (inserts.length === 0) return { inserted: 0 }
+    if (inserts.length === 0) {
+      console.log('[recheckLongLegs] tripId=%s no over-cap leg found — inserted 0', tripId)
+      return { inserted: 0, note: null }
+    }
+    const note = buildTransitNote(inserts, stops, maxHours)
 
     // Apply insertions. Process gaps from HIGHEST afterOrder to LOWEST so each
     // order-shift only touches stops above an already-processed gap, leaving the
@@ -2392,11 +2444,11 @@ export async function recheckLongLegs(tripId: string, userId: string): Promise<{
     }
 
     console.log('[recheckLongLegs] tripId=%s inserted %d transit stop(s) across %d leg(s)', trip.id, inserted, plans.length)
-    return { inserted }
+    return { inserted, note }
   } catch (err: any) {
     // Fail soft — a re-check failure must never block the mutation that triggered it.
     console.error('[recheckLongLegs] FAILED tripId=%s (left as-is): %s', tripId, err?.message ?? err)
-    return { inserted: 0 }
+    return { inserted: 0, note: null }
   }
 }
 
