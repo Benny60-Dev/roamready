@@ -2053,15 +2053,16 @@ export default function TripSummaryPage() {
       {longDrivePrompt && (
         <ConfirmModal
           isOpen={true}
-          title="Keep this as one drive?"
+          title="Remove this overnight stop?"
           message={
-            `The ${longDrivePrompt.fromName} → ${longDrivePrompt.toName} drive is about ${longDrivePrompt.legHours} hours, over your ${Number.isInteger(longDrivePrompt.cap) ? longDrivePrompt.cap : longDrivePrompt.cap.toFixed(1)}-hour driving preference. Remove the overnight and keep it as a single drive?` +
+            `Without it, the ${longDrivePrompt.fromName} → ${longDrivePrompt.toName} drive is about ${longDrivePrompt.legHours} hours — over your ${Number.isInteger(longDrivePrompt.cap) ? longDrivePrompt.cap : longDrivePrompt.cap.toFixed(1)}-hour daily limit. You'll be driving it in one day.` +
             (deleteError ? ` ${deleteError}` : '')
           }
-          confirmLabel="Keep the long drive"
-          cancelLabel="Cancel"
+          confirmLabel="Remove it anyway"
+          cancelLabel="Keep the stop"
           onConfirm={confirmKeepLongDrive}
           onCancel={() => { if (!deleting) { setLongDrivePrompt(null); setDeleteError(null) } }}
+          danger
           isConfirming={deleting}
         />
       )}
