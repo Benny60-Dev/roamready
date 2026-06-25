@@ -2396,18 +2396,19 @@ export function buildTransitNote(
 }
 
 /**
- * Acknowledged-long-leg store ("keep the long drive"). Persisted in the linked
- * PlanningSession's partialTripData (no migration). Each entry is "fromStopId|
- * toStopId" — the two adjacent REAL stops of a leg the user opted to keep as one
- * drive. Trips with NO planning session (rare manual trips) cannot persist acks;
- * recheck will re-insert on those (known limitation).
+ * Acknowledged-long-leg store ("keep the long drive"). Persisted on the TRIP
+ * (Trip.acknowledgedLongLegs, JSONB) so it works for EVERY trip — including manual
+ * trips with no planning session, which previously couldn't store an ack and so
+ * silently re-inserted the overnight. Each entry is "fromStopId|toStopId" — the two
+ * adjacent REAL stops of a leg the user opted to keep as one drive. Null/absent =
+ * none. (Pre-migration acks that lived in PlanningSession.partialTripData are not
+ * migrated — harmless: the leg re-inserts once and the user can re-acknowledge.)
  */
 async function getAckLegKeys(tripId: string): Promise<Set<string>> {
   try {
-    const s = await prisma.planningSession.findUnique({ where: { tripId }, select: { partialTripData: true } })
-    const ptd = (s?.partialTripData as any) ?? null
-    const arr = Array.isArray(ptd?.acknowledgedLongLegs) ? ptd.acknowledgedLongLegs : []
-    return new Set(arr.filter((x: any): x is string => typeof x === 'string'))
+    const trip = await prisma.trip.findUnique({ where: { id: tripId }, select: { acknowledgedLongLegs: true } })
+    const arr = Array.isArray(trip?.acknowledgedLongLegs) ? trip.acknowledgedLongLegs : []
+    return new Set((arr as any[]).filter((x: any): x is string => typeof x === 'string'))
   } catch {
     return new Set()
   }
@@ -2415,16 +2416,7 @@ async function getAckLegKeys(tripId: string): Promise<Set<string>> {
 
 async function setAckLegKeys(tripId: string, keys: string[]): Promise<void> {
   try {
-    const s = await prisma.planningSession.findUnique({ where: { tripId }, select: { id: true, partialTripData: true } })
-    if (!s) return // no session (manual trip) — acks not persisted (known limitation)
-    const base =
-      s.partialTripData && typeof s.partialTripData === 'object' && !Array.isArray(s.partialTripData)
-        ? (s.partialTripData as Record<string, unknown>)
-        : {}
-    await prisma.planningSession.update({
-      where: { id: s.id },
-      data: { partialTripData: { ...base, acknowledgedLongLegs: keys } as any },
-    })
+    await prisma.trip.update({ where: { id: tripId }, data: { acknowledgedLongLegs: keys } })
   } catch (e: any) {
     console.warn('[recheckLongLegs] ack-leg persist failed tripId=%s: %s', tripId, e?.message)
   }

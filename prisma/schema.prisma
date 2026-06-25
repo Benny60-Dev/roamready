@@ -372,6 +372,13 @@ model Trip {
   aiConversation     Json?
   modifyConversation Json?
   itinerary          Json?
+  /// Long legs the user explicitly opted to keep as one drive ("keep the long
+  /// drive" / "remove it anyway" on an over-cap overnight delete). JSON array of
+  /// "fromStopId|toStopId" keys for the two adjacent REAL stops of each acked leg;
+  /// recheckLongLegs skips these (no re-insert) and PRUNES any whose endpoints are
+  /// no longer consecutive real stops. Lives on the Trip (not the planning session)
+  /// so it persists for manual trips too. Null/absent = none.
+  acknowledgedLongLegs Json?
   /// Concise summary of the original PlanningSession transcript, distilled
   /// at promote time (or lazily on first Modify-with-AI open for legacy
   /// trips). Injected into the modify-mode system prompt so the assistant
