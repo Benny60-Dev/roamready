@@ -933,7 +933,12 @@ export default function SessionPage() {
           ? { ...stop, type: 'DESTINATION' }
           : stop
         console.time(`[buildItinerary] createStop[${i}] ${stop.locationName}`)
-        await tripsApi.createStop(tripId, fixedStop)
+        // skipLongLegCheck — the approved plan ALREADY carries its transit stops
+        // (Part 2 step 2 inserted them during planning), so the per-stop drive-time
+        // re-check must NOT run during bulk build assembly: it would fire on the
+        // half-built (partial) stop list and waste Directions calls. This is the
+        // single opt-OUT; every post-build edit re-checks by default.
+        await tripsApi.createStop(tripId, { ...fixedStop, skipLongLegCheck: true })
         console.timeEnd(`[buildItinerary] createStop[${i}] ${stop.locationName}`)
       }
       console.timeEnd('[buildItinerary] createStops')

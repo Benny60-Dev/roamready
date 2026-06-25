@@ -992,14 +992,13 @@ export default function TripSummaryPage() {
     setDeleteError(null)
     try {
       await tripsApi.deleteStop(id, pendingDeleteStop.id)
-      // Renumber remaining stops 1…N in order
-      const remaining = (trip.stops || [])
-        .filter(s => s.id !== pendingDeleteStop.id)
-        .sort((a, b) => a.order - b.order)
-        .map((s, i) => ({ ...s, order: i + 1 }))
-      await Promise.all(remaining.map(s => tripsApi.updateStop(id, s.id, { order: s.order })))
-      // Recascade all dates with the updated stop list
-      await cascadeAndSaveDates(remaining as Stop[])
+      // Server-authoritative now: deleteStop resequences (1…N), recomputes every
+      // stop's dates, AND runs the single drive-time choke point (recheckLongLegs)
+      // on the settled list — which may re-insert a transit stop on the newly
+      // merged over-cap leg. So the old client-side renumber Promise.all and date
+      // cascade are not just redundant, they're harmful: they'd run on a STALE list
+      // (missing any server-inserted transit stop) and re-stamp wrong dates. Drop
+      // both and just reload the server's truth.
       await reloadTrip()
       setPendingDeleteStop(null)
     } catch (err: any) {
@@ -1033,20 +1032,21 @@ export default function TripSummaryPage() {
     if (!id || !trip || addAfterOrder === null) return
     setMutating(true)
     try {
-      // Create stop (server appends at maxOrder+1)
-      const res = await tripsApi.createStop(id, { ...data, bookingStatus: 'NOT_BOOKED' })
-      const newStop: Stop = res.data
-      const sorted = [...(trip.stops || [])].sort((a, b) => a.order - b.order)
+      // Pass the target `order` so the server inserts the stop in its CORRECT
+      // position in one call (createStop shifts everything ≥ order up by 1). This
+      // matters for the drive-time choke point: createStop runs recheckLongLegs on
+      // the SETTLED list with the new stop already in place — no transient "stop at
+      // the end" leg that would leave an orphan overnight. The server also
+      // resequences and recomputes dates (and recheckLongLegs may insert a transit
+      // stop + recompute), so the old client renumber Promise.all + date cascade
+      // are redundant and would run on a stale list — dropped. Just reload.
       const insertOrder = addAfterOrder + 1
-
-      // Build final stop list: shift existing stops ≥ insertOrder up by 1, place new stop
-      const finalStops = [
-        ...sorted.map(s => s.order >= insertOrder ? { ...s, order: s.order + 1 } : s),
-        { ...newStop, order: insertOrder, nights: data.nights || 1 },
-      ].sort((a, b) => a.order - b.order)
-
-      await Promise.all(finalStops.map(s => tripsApi.updateStop(id, s.id, { order: s.order })))
-      await cascadeAndSaveDates(finalStops as Stop[])
+      await tripsApi.createStop(id, {
+        ...data,
+        nights: data.nights || 1,
+        order: insertOrder,
+        bookingStatus: 'NOT_BOOKED',
+      })
       setAddAfterOrder(null)
       await reloadTrip()
     } finally {
