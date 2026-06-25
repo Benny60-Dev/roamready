@@ -2278,9 +2278,9 @@ export default function TripMapPage() {
                           {BOOKED_STATUSES.includes(stop.bookingStatus) &&
                             stop.originalBookedDate && stop.arrivalDate &&
                             parseTripDate(stop.originalBookedDate)?.getTime() !== parseTripDate(stop.arrivalDate)?.getTime() && (
-                              <p className="text-[10px] text-amber-700 flex items-center gap-1">
-                                <AlertTriangle size={10} className="flex-shrink-0" /> Originally booked for {formatTripDate(stop.originalBookedDate, 'MMM d, yyyy')}
-                              </p>
+                              <span className="inline-flex items-center gap-1 mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300" style={{ borderWidth: '0.5px' }}>
+                                <AlertTriangle size={11} className="flex-shrink-0" /> Originally booked for {formatTripDate(stop.originalBookedDate, 'MMM d, yyyy')}
+                              </span>
                             )}
                         </div>
                         <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
