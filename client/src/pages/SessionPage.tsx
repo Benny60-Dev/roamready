@@ -961,12 +961,11 @@ export default function SessionPage() {
       // Together they made built != approved. With both gone the trip on the map
       // is exactly the plan panel.
       //
-      // KNOWN INTERIM STATE (until Part 2): the drive-time safety net is off at
-      // build — a genuinely too-long leg will NOT get a transit stop here. Part 2
-      // relocates expandLongLegs's logic into PLANNING so transit stops appear in
-      // the panel and are approved before build. The server-side expandLongLegs /
-      // reconcileNights controllers are left defined (Part 2 decides their fate);
-      // we simply no longer call them from the build chain.
+      // Part 2 completed this: the deterministic drive-time check now runs DURING
+      // PLANNING (transit stops appear in the panel the user approves) and as the
+      // shared recheckLongLegs choke point on every post-build stop edit. The old
+      // build-time expandLongLegs/reconcileNights controllers + routes were retired;
+      // nights are never reconciled away from explicit per-stop intent.
 
       tripsApi.generateItinerary(tripId).catch(err =>
         console.error('[buildItinerary] generateItinerary failed in background:', err)

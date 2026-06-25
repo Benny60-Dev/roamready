@@ -14,7 +14,7 @@ import {
   generateItinerary, saveItinerary, generateRoutes, generateActivities,
   generateRouteHighlights, getTripMapImage, getTripWeather, reassignPOIs,
   createShareToken, regenerateShareToken, revokeShareToken,
-  getTripFuelEstimate, expandLongLegs, reconcileNights,
+  getTripFuelEstimate,
 } from '../controllers/trips'
 
 export const tripsRouter = Router()
@@ -62,16 +62,13 @@ tripsRouter.put('/:id/packing-list', validateBody(TripPackingListSchema), update
 tripsRouter.post('/:id/packing-list/from-template', requireFeature('packingListGenerator'), validateBody(SeedFromTemplateSchema), seedPackingListFromTemplate as any)
 tripsRouter.post('/:id/packing-list/copy-from', validateBody(CopyPackingFromTripSchema), copyPackingListFromTrip as any)
 tripsRouter.post('/:id/stops/reassign-pois', reassignPOIs as any)
-// Deterministic per-leg max-drive-time guard — breaks over-long legs into
-// OVERNIGHT_ONLY transit stops. Ungated (Google Directions + Geocode, no LLM),
-// same posture as reassign-pois. Called from buildItinerary before generateItinerary.
-tripsRouter.post('/:id/expand-long-legs', expandLongLegs as any)
-// BUILD 3b — deterministic nights reconciler. Makes total nights exactly equal
-// the captured requestedNights (read from the linked session; no migration) by
-// adjusting DESTINATION-stop nights only. Ungated/fail-soft, same posture as
-// expand-long-legs. Called from buildItinerary AFTER expand-long-legs (so
-// transit nights are counted) and BEFORE generateItinerary.
-tripsRouter.post('/:id/reconcile-nights', reconcileNights as any)
+// PLAN-IS-TRUTH (Part 2) — the deterministic per-leg drive-time check no longer
+// has its own route. It now runs as the shared internal choke point
+// recheckLongLegs(), invoked from the stop-mutation controllers (create/update/
+// delete) and from the planning chat splice. The old POST /:id/expand-long-legs
+// and POST /:id/reconcile-nights routes were retired with their controllers:
+// transit stops are inserted during planning (so the user approves them) and on
+// post-build edits, and nights are never reconciled away from explicit per-stop intent.
 // Block 9 — three AI-calling endpoints on the trips router get
 // requireFeature('aiPlannerUnlimited') so non-Pro users hit a 403 → paywall.
 //   /:id/itinerary/generate   → generateTripItineraryAI  (build from chat)
