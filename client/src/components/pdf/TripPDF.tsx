@@ -566,10 +566,11 @@ function StopEntry({ entry }: { entry: TimelineEntry }) {
     : entry.type === 'OVERNIGHT' ? '#5B21B6'
     : '#92400E'
 
-  // Consolidated card → "N-NIGHT STAY" where N is the POST-ARRIVAL night count
-  // (consolidatedNights), matching the web STAY_GROUP which excludes the
-  // arrival night. Non-consolidated stays keep "CHECK-IN" etc.
-  const stayNights = entry.consolidatedNights ?? stop.nights ?? ((entry.endDayNum ?? entry.dayNum) - entry.dayNum + 1)
+  // ITINERARY-STAY-CARD-TRUE-WINDOW (Option 1) — the consolidated card shows the
+  // TRUE booked nights (stop.nights), matching the web STAY_GROUP's badge, not the
+  // post-arrival entry count. Numbers only; collapseSharedStays / the arrival-night
+  // CHECK-IN card are untouched. Non-consolidated stays keep "CHECK-IN" etc.
+  const stayNights = stop.nights ?? entry.consolidatedNights ?? ((entry.endDayNum ?? entry.dayNum) - entry.dayNum + 1)
   const typeLabel = entry.consolidatedStay
     ? `${stayNights}-NIGHT STAY`
     : entry.type === 'STAY' ? 'CHECK-IN'
@@ -580,10 +581,20 @@ function StopEntry({ entry }: { entry: TimelineEntry }) {
   // otherwise. (Absolute numbers stay on the PDF's per-entry scheme — the
   // web-parity day-numbering port is a separate, parked item.) Header date
   // collapses to a range for the consolidated stay.
-  const isDayRange = !!entry.consolidatedStay && entry.endDayNum != null && entry.endDayNum !== entry.dayNum
-  const dayBadgeLabel = isDayRange ? `${entry.dayNum}–${entry.endDayNum}` : String(entry.dayNum)
+  // Full-stay span incl. the arrival day. The consolidated card's dayNum is the
+  // first POST-arrival day, so the arrival day = dayNum - 1 (the CHECK-IN card's
+  // day); span from there across the true nights to match the web's stay card.
+  // True date window = stored arrival → checkout (departureDate ?? arrival +
+  // nights), parsed via parseTripDate (no raw Date() — avoids a TZ off-by-one).
+  const stayStartDayNum = (entry.dayNum ?? 1) - 1
+  const stayEndDayNum = stayStartDayNum + stayNights - 1
+  const stayArrival = parseTripDate(stop.arrivalDate) ?? entry.date
+  const stayDeparture = parseTripDate(stop.departureDate)
+    ?? (stayArrival ? addDays(stayArrival, stayNights) : entry.endDate)
+  const isDayRange = !!entry.consolidatedStay && stayEndDayNum !== stayStartDayNum
+  const dayBadgeLabel = entry.consolidatedStay ? `${stayStartDayNum}–${stayEndDayNum}` : String(entry.dayNum)
   const headerDate = entry.consolidatedStay
-    ? fmtDateRange(entry.date, entry.endDate)
+    ? fmtDateRange(stayArrival, stayDeparture)
     : entry.date ? fmtDate(entry.date) : null
 
   const dayBadgeBg = entry.consolidatedStay ? AMBER_700
