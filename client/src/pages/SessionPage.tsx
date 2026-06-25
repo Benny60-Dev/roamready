@@ -942,31 +942,26 @@ export default function SessionPage() {
       await tripsApi.reassignPOIs(tripId)
       console.timeEnd('[buildItinerary] reassignPOIs')
 
-      // Deterministic per-leg max-drive-time guard: break any leg that exceeds
-      // the user's maxDriveHours into OVERNIGHT_ONLY transit stops at real towns.
-      // AWAITED and BEFORE generateItinerary so the day-by-day narration sees the
-      // corrected stop set. Wrapped so a guard failure never blocks trip creation
-      // (the server controller also fails soft per-leg).
-      console.time('[buildItinerary] expandLongLegs')
-      try {
-        await tripsApi.expandLongLegs(tripId)
-      } catch (e) {
-        console.error('[buildItinerary] expandLongLegs failed (non-fatal):', e)
-      }
-      console.timeEnd('[buildItinerary] expandLongLegs')
-
-      // BUILD 3b — deterministic nights reconciler. Makes total nights exactly
-      // equal the captured requestedNights by adjusting DESTINATION-stop nights.
-      // AWAITED and AFTER expandLongLegs (so transit nights are counted) and
-      // BEFORE generateItinerary (so the day-by-day narration sees final nights).
-      // Fail-soft server-side; wrapped so a reconcile error never blocks the build.
-      console.time('[buildItinerary] reconcileNights')
-      try {
-        await tripsApi.reconcileNights(tripId)
-      } catch (e) {
-        console.error('[buildItinerary] reconcileNights failed (non-fatal):', e)
-      }
-      console.timeEnd('[buildItinerary] reconcileNights')
+      // PLAN-IS-TRUTH (Part 1) — the built trip must equal the approved plan
+      // VERBATIM. createStop above persisted each plan stop exactly as the user
+      // approved it; recomputeStopDates (inside createStop's server path) already
+      // stamped per-stop dates and Trip.totalNights from those persisted nights.
+      //
+      // The two after-approval mutators that used to run HERE are deliberately
+      // removed:
+      //   - expandLongLegs INSERTED OVERNIGHT_ONLY transit stops (phantom stops
+      //     the user never approved), and
+      //   - reconcileNights TRIMMED/PADDED DESTINATION nights to hit a separately
+      //     captured requestedNights total (silently overriding the per-stop plan).
+      // Together they made built != approved. With both gone the trip on the map
+      // is exactly the plan panel.
+      //
+      // KNOWN INTERIM STATE (until Part 2): the drive-time safety net is off at
+      // build — a genuinely too-long leg will NOT get a transit stop here. Part 2
+      // relocates expandLongLegs's logic into PLANNING so transit stops appear in
+      // the panel and are approved before build. The server-side expandLongLegs /
+      // reconcileNights controllers are left defined (Part 2 decides their fate);
+      // we simply no longer call them from the build chain.
 
       tripsApi.generateItinerary(tripId).catch(err =>
         console.error('[buildItinerary] generateItinerary failed in background:', err)
