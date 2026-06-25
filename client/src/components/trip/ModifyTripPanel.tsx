@@ -6,6 +6,7 @@ import { Trip, StopType } from '../../types'
 import { useVoiceInput } from '../../hooks/useVoiceInput'
 import { ChatInput } from '../ChatInput'
 import { parseTripDate } from '../../utils/dates'
+import BookedShiftModal from './BookedShiftModal'
 import { cleanChatText } from '../../utils/cleanChatText'
 import { userFacingStopCount } from '../../utils/userFacingStopCount'
 
@@ -204,6 +205,10 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
   const [bookedShiftWarning, setBookedShiftWarning] = useState<
     { newStop: string; stops: Array<{ stopId: string; name: string; originalBookedDate: string; newArrivalDate: string }> } | null
   >(null)
+  // ADDSTOP-RESLOT — separate open-flag for the center-screen interrupt modal.
+  // Kept distinct from bookedShiftWarning so dismissing the modal ("Got it")
+  // does NOT clear the inline banner, which persists as the chat-history record.
+  const [bookedShiftModalOpen, setBookedShiftModalOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   // MODIFY-RESET-1: number of messages seeded from persisted history when the
@@ -463,6 +468,9 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
         const shifted = createRes.data?.shiftedBookedStops
         if (Array.isArray(shifted) && shifted.length > 0) {
           setBookedShiftWarning({ newStop: cleanName, stops: shifted })
+          // Also fire the center-screen interrupt — grabs attention now while the
+          // banner above persists as the record.
+          setBookedShiftModalOpen(true)
         }
         break
       }
@@ -627,6 +635,17 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
             ))}
           </div>
         </div>
+
+        {/* ADDSTOP-RESLOT — center-screen interrupt. Fires alongside the inline
+            banner below; "Got it" closes only the modal, the banner persists. */}
+        {bookedShiftWarning && (
+          <BookedShiftModal
+            isOpen={bookedShiftModalOpen}
+            newStop={bookedShiftWarning.newStop}
+            stops={bookedShiftWarning.stops}
+            onDismiss={() => setBookedShiftModalOpen(false)}
+          />
+        )}
 
         {/* ADDSTOP-RESLOT Phase B — booked-stop date-shift heads-up (transient,
             set from the createStop response after an add_stop apply). Amber, mirrors
