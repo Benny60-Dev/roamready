@@ -800,6 +800,139 @@ async function planLegSplits(
   return plan
 }
 
+// ─── Transit-insert planner (pure, DB-free) ──────────────────────────────────
+/**
+ * PLAN-IS-TRUTH (Part 2, step 1) — the measurement/splitting CORE extracted out
+ * of expandLongLegs so the SAME deterministic drive-time check can run during
+ * PLANNING (on the AI's city-name itinerary) as well as at build. Single source
+ * of truth: build and planning can never disagree about which legs need a stop.
+ *
+ * Given an ORDERED stop list, the per-user drive cap in HOURS, and a Google Maps
+ * key, it walks each consecutive leg with REAL Google Directions times (via
+ * planLegSplits → fetchLegDetail, which works on lat/lng OR "City, State"
+ * strings — so it does NOT require pre-geocoded coords) and returns:
+ *   - inserts: one entry per leg that needs splitting — the index/order of the
+ *     stop the transit stops go AFTER, the OVERNIGHT_ONLY towns to add, and the
+ *     measured drive time of that leg (legHours) for honest narration.
+ *   - stops:   a NEW array with the OVERNIGHT_ONLY transit stops spliced in and
+ *     `order` renumbered 1..N. The input array is never mutated.
+ *
+ * PURE: no prisma, no req/res, no DB writes. Callers decide how to persist
+ * (build → DB writes; planning → re-serialize into the <itinerary> JSON).
+ * Fail-soft per leg is inherited from planLegSplits (a routing failure leaves
+ * that leg unsplit and is logged, never throws).
+ */
+export interface PlannableStop {
+  locationName: string
+  locationState?: string | null
+  latitude?: number | null
+  longitude?: number | null
+  order?: number
+  type?: string
+  nights?: number
+  [key: string]: any
+}
+export interface TransitInsert {
+  /** 0-based index, in the INPUT array, of the stop the towns go AFTER. */
+  afterIndex: number
+  /** The input stop's `order` if present (build uses it for the order-shift); null otherwise. */
+  afterOrder: number | null
+  /** OVERNIGHT_ONLY towns to insert, in route order. */
+  towns: TransitTown[]
+  /** Measured total drive time of the original (pre-split) leg, in hours. */
+  legHours: number
+}
+export interface PlanTransitResult {
+  stops: PlannableStop[]
+  inserts: TransitInsert[]
+}
+
+export async function planTransitInserts(
+  stops: PlannableStop[],
+  capHours: number,
+  apiKey: string,
+): Promise<PlanTransitResult> {
+  // No key or fewer than two stops → nothing to measure; return the input
+  // unchanged (defensive copy) so callers can treat the result uniformly.
+  if (!apiKey || !Array.isArray(stops) || stops.length < 2) {
+    return { stops: [...(stops ?? [])], inserts: [] }
+  }
+
+  // Cap derivation lives in the caller (it may read the travel profile); here we
+  // only guard a non-positive cap. Mirrors expandLongLegs's final clamp.
+  let maxHours = capHours
+  if (maxHours == null || maxHours <= 0) maxHours = 6
+  const capSec       = maxHours * 3600
+  const graceSec     = LEG_GRACE_HOURS * 3600
+  const minUsefulSec = LEG_MIN_USEFUL_HOURS * 3600
+  const tolSec       = LEG_DRIFT_TOLERANCE_MIN * 60
+  const maxInserts   = MAX_TRANSIT_INSERTS_PER_LEG
+
+  const inserts: TransitInsert[] = []
+
+  for (let i = 1; i < stops.length; i++) {
+    const from: any = stops[i - 1]
+    const to:   any = stops[i]
+    const fromTown: TransitTown = { locationName: from.locationName, locationState: from.locationState, latitude: from.latitude, longitude: from.longitude }
+    const toTown:   TransitTown = { locationName: to.locationName,   locationState: to.locationState,   latitude: to.latitude,   longitude: to.longitude }
+
+    const legPlan = await planLegSplits(fromTown, toTown, apiKey, capSec, graceSec, minUsefulSec, tolSec, maxInserts)
+
+    // Per-leg log: original leg + the resulting sub-leg durations (with any
+    // still-over markers and warnings) so over-cap tails are never hidden.
+    // (Template literals — Node's console.log does NOT support %.1f.)
+    if (legPlan.towns.length > 0 || legPlan.warnings.length > 0) {
+      const subLegStr = legPlan.subLegs
+        .map(sl => `${sl.from}→${sl.to} ${sl.hours.toFixed(1)}h${sl.over ? ' [OVER CAP]' : ''}`)
+        .join(' | ')
+      console.log(
+        `[planTransitInserts] leg ${from.locationName}→${to.locationName} ` +
+        `(cap ${maxHours.toFixed(1)}h): ${legPlan.towns.length} transit stop(s) → ` +
+        `${subLegStr || '(no split)'}`,
+      )
+      for (const w of legPlan.warnings) console.warn('[planTransitInserts] %s', w)
+    }
+
+    if (legPlan.towns.length > 0) {
+      // Measured drive time of the leg = sum of the placed sub-legs (they
+      // partition the real route through the transit towns).
+      const legHours = legPlan.subLegs.reduce((h, sl) => h + sl.hours, 0)
+      inserts.push({
+        afterIndex: i - 1,
+        afterOrder: typeof from.order === 'number' ? from.order : null,
+        towns: legPlan.towns,
+        legHours,
+      })
+    }
+  }
+
+  // Build a NEW spliced stop array with the transit towns inserted and `order`
+  // renumbered 1..N. The input array is never mutated.
+  const townsByAfterIndex = new Map<number, TransitTown[]>()
+  for (const ins of inserts) townsByAfterIndex.set(ins.afterIndex, ins.towns)
+
+  const splicedStops: PlannableStop[] = []
+  for (let i = 0; i < stops.length; i++) {
+    splicedStops.push({ ...stops[i] })
+    const towns = townsByAfterIndex.get(i)
+    if (towns) {
+      for (const t of towns) {
+        splicedStops.push({
+          type: 'OVERNIGHT_ONLY',
+          locationName: t.locationName,
+          locationState: t.locationState,
+          latitude: t.latitude,
+          longitude: t.longitude,
+          nights: 1,
+        })
+      }
+    }
+  }
+  splicedStops.forEach((s, idx) => { s.order = idx + 1 })
+
+  return { stops: splicedStops, inserts }
+}
+
 // ─── POI geocoding helpers ────────────────────────────────────────────────────
 
 function pointToSegmentDistance(
@@ -2105,59 +2238,25 @@ export async function expandLongLegs(req: AuthRequest, res: Response, next: Next
     if (maxHours == null && tp?.maxMilesPerDay != null) maxHours = tp.maxMilesPerDay / 55
     if (maxHours == null || maxHours <= 0) maxHours = 6
 
-    const capSec       = maxHours * 3600
-    const graceSec     = LEG_GRACE_HOURS * 3600
-    const minUsefulSec = LEG_MIN_USEFUL_HOURS * 3600
-    const tolSec       = LEG_DRIFT_TOLERANCE_MIN * 60
-    const maxInserts   = MAX_TRANSIT_INSERTS_PER_LEG
-
     const stops = trip.stops as any[]
     if (stops.length < 2) return res.json({ inserted: 0 })
 
-    // Phase 1 — plan insertions per gap (no DB writes yet). Each plan records the
-    // ORIGINAL order of the stop the transit stops go AFTER, plus the towns.
-    // planLegSplits measures the REAL resulting sub-legs and re-splits until each
-    // is under cap (or the per-leg insert cap is hit), so we never trust the
-    // original-route projection.
-    const plans: { afterOrder: number; towns: TransitTown[] }[] = []
+    // Measurement + splitting is the shared pure core (planTransitInserts); this
+    // controller only translates its `inserts` into DB writes — the SAME check the
+    // planning path will run on the AI's city-name itinerary, so build and
+    // planning can never disagree about which legs need a transit stop.
+    const { inserts } = await planTransitInserts(stops, maxHours, apiKey)
+    if (inserts.length === 0) return res.json({ inserted: 0 })
 
-    for (let i = 1; i < stops.length; i++) {
-      const from = stops[i - 1]
-      const to   = stops[i]
-      const fromTown: TransitTown = { locationName: from.locationName, locationState: from.locationState, latitude: from.latitude, longitude: from.longitude }
-      const toTown:   TransitTown = { locationName: to.locationName,   locationState: to.locationState,   latitude: to.latitude,   longitude: to.longitude }
+    // Apply insertions. Process gaps from HIGHEST afterOrder to LOWEST so each
+    // order-shift only touches stops above an already-processed gap, leaving the
+    // lower gaps' captured afterOrder values valid. (afterOrder is the DB `order`
+    // of the stop the towns go after — always present on persisted rows.)
+    const plans = inserts
+      .map(ins => ({ afterOrder: (ins.afterOrder ?? stops[ins.afterIndex].order) as number, towns: ins.towns }))
+      .sort((a, b) => b.afterOrder - a.afterOrder)
 
-      const legPlan = await planLegSplits(fromTown, toTown, apiKey, capSec, graceSec, minUsefulSec, tolSec, maxInserts)
-
-      // Per-leg log: original leg + the resulting sub-leg durations (with any
-      // still-over markers and warnings) so over-cap tails are never hidden.
-      if (legPlan.towns.length > 0 || legPlan.warnings.length > 0) {
-        const subLegStr = legPlan.subLegs
-          .map(sl => `${sl.from}→${sl.to} ${sl.hours.toFixed(1)}h${sl.over ? ' [OVER CAP]' : ''}`)
-          .join(' | ')
-        // Build the message with template literals — Node's console.log/util.format
-        // does NOT support precision specifiers like %.1f (it printed the literal
-        // "%.1f"); only bare %s/%d/%f are recognized.
-        console.log(
-          `[expandLongLegs] leg ${from.locationName}→${to.locationName} ` +
-          `(cap ${maxHours.toFixed(1)}h): ${legPlan.towns.length} transit stop(s) → ` +
-          `${subLegStr || '(no split)'}`,
-        )
-        for (const w of legPlan.warnings) console.warn('[expandLongLegs] %s', w)
-      }
-
-      if (legPlan.towns.length > 0) {
-        plans.push({ afterOrder: from.order, towns: legPlan.towns })
-      }
-    }
-
-    if (plans.length === 0) return res.json({ inserted: 0 })
-
-    // Phase 2 — apply insertions. Process gaps from HIGHEST afterOrder to LOWEST so
-    // each order-shift only touches stops above an already-processed gap, leaving
-    // the lower gaps' captured afterOrder values valid.
     let inserted = 0
-    plans.sort((a, b) => b.afterOrder - a.afterOrder)
     for (const plan of plans) {
       const k = plan.towns.length
       // Shift everything after the gap up by k to make room.
