@@ -229,21 +229,59 @@ function nightsFromStops(itinerary: any): number {
     : Number(itinerary?.totalNights) || 0
 }
 
+/** Great-circle miles (client copy of the server haversineMiles) — used to pick a
+ *  round trip's turnaround (the stop farthest from origin) when coords are present. */
+function haversineMilesLocal(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const R = 3958.8
+  const dLat = toRad(bLat - aLat)
+  const dLng = toRad(bLng - aLng)
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s))
+}
+
 /** BUG-3 — flexible-until-build title. During planning the displayed title is
- *  DERIVED from the actual final/turnaround DESTINATION ("Trip to {dest}"), not the
- *  AI's free-text itinerary.name (which could be a misheard city or go stale when
- *  the destination changes). At build this derived value is persisted as Trip.name
- *  (the lock); after build the user renames manually. Final/turnaround destination =
- *  the last DESTINATION stop that isn't the 0-night return-home closer. */
+ *  DERIVED from the actual destination ("Trip to {dest}"), not the AI's free-text
+ *  itinerary.name (which could be a misheard city or go stale). At build this is
+ *  persisted as Trip.name (the lock); after build the user renames manually.
+ *  The destination = the TURNAROUND (farthest from origin) on a round trip — NOT
+ *  the last stop in sequence, which is on the return leg — and the last destination
+ *  on a one-way trip. */
 function deriveTripTitle(itinerary: any): string | null {
   const stops: any[] = Array.isArray(itinerary?.stops) ? itinerary.stops : []
   if (!stops.length) return null
   const norm = (v?: string) => (v ?? '').toLowerCase().trim()
   const homeName = norm(stops[0]?.locationName)
-  let dest: any = null
-  for (let i = stops.length - 1; i >= 0; i--) {
-    const s = stops[i]
-    if (s?.type === 'DESTINATION' && !(norm(s.locationName) === homeName && (Number(s.nights) || 0) === 0)) { dest = s; break }
+  // Real destinations = DESTINATION stops, excluding the 0-night return-home closer.
+  const realDests = stops.filter((s, i) =>
+    s?.type === 'DESTINATION' &&
+    !(i === stops.length - 1 && norm(s.locationName) === homeName && (Number(s.nights) || 0) === 0),
+  )
+  if (!realDests.length) return null
+
+  // ROUND TRIP (last stop returns to the origin city): title = the TURNAROUND,
+  // the stop FARTHEST from origin — NOT the last destination in sequence (which is
+  // on the RETURN leg; that was BUG-3 picking e.g. "Indianapolis" over "Bangor").
+  // ONE-WAY: the last destination is the headline (unchanged).
+  const lastStop = stops[stops.length - 1]
+  const isRoundTrip = lastStop !== stops[0] && norm(lastStop?.locationName) === homeName
+
+  let dest: any
+  if (!isRoundTrip) {
+    dest = realDests[realDests.length - 1]
+  } else {
+    const origin = stops[0]
+    const withCoords = realDests.filter(d => d.latitude != null && d.longitude != null)
+    if (origin?.latitude != null && origin?.longitude != null && withCoords.length) {
+      // Best signal: physically farthest from origin = the turnaround.
+      dest = withCoords.reduce((far, d) =>
+        haversineMilesLocal(origin.latitude, origin.longitude, d.latitude, d.longitude) >
+        haversineMilesLocal(origin.latitude, origin.longitude, far.latitude, far.longitude) ? d : far)
+    } else {
+      // Planning has no destination coordinates yet → proxy: the headline
+      // destination is where the traveler stays longest (most nights; tie → first).
+      dest = realDests.reduce((best, d) => ((Number(d.nights) || 0) > (Number(best.nights) || 0)) ? d : best)
+    }
   }
   if (!dest?.locationName) return null
   const loc = dest.locationState ? `${dest.locationName}, ${dest.locationState}` : dest.locationName
