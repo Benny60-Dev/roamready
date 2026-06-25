@@ -878,6 +878,14 @@ export default function TripMapPage() {
       } : prev)
       setGeocoding(false)
     })
+    .catch(err => {
+      // Never leave `geocoding` stuck true: the route-draw effect early-returns
+      // while geocoding, so a stuck flag would freeze the route polyline until a
+      // page reload. Reset it on any failure in the chain (e.g. an updateStop write
+      // rejecting after a modify-added stop).
+      console.warn('[TripMapPage] geocode chain failed — resetting geocoding flag:', err?.message ?? err)
+      setGeocoding(false)
+    })
   }, [isLoaded, trip?.stops, user?.homeLat, user?.homeLng, user?.homeCity])
 
   // ── Pin HOME stops to exact home coordinates ───────────────────────────────────
@@ -2567,6 +2575,15 @@ export default function TripMapPage() {
             isOpen={modifyPanelOpen}
             onClose={() => setModifyPanelOpen(false)}
             onTripUpdated={updatedTrip => {
+              // BUG-MODIFY-GHOST-PATH: a modify apply (e.g. destination change =
+              // remove old stop + add new) updates the stops list/totals, but the
+              // route polyline is drawn by an effect that DEDUPES on a coords key
+              // (directionsCoordsKey). Without invalidating that key, the effect can
+              // short-circuit and leave the OLD route line ("ghost path") drawn
+              // until a manual reload. Reset the key so the route unconditionally
+              // recomputes for the updated stop set on the next effect run (which the
+              // setTrip below triggers via the trip.stops dependency).
+              directionsCoordsKey.current = null
               setTrip(updatedTrip)
               setTripNameInput(updatedTrip.name)
             }}
