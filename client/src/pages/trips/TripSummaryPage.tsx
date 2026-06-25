@@ -2418,17 +2418,32 @@ function DayCard({
   // ── STAY_GROUP (activity days at one stop) ──────────────────────────────────
   if (group.type === 'STAY_GROUP') {
     const firstEntry = group.entries[0]
-    const lastEntry = group.entries[group.entries.length - 1]
     const stop = firstEntry.stop!
     const weather = weatherData[stop.id]
     const cgInfo = getDisplayCampgroundName(stop)
-    const isMulti = group.entries.length > 1
-    const endDay = startDay + group.entries.length - 1
+    // ITINERARY-STAY-CARD-TRUE-WINDOW (Option 1) — badge / date-range / day-span
+    // read the TRUE booked window (stop.nights + stored arrival→checkout) so they
+    // agree with the cost line and the DB, instead of the post-arrival entry count
+    // (the arrival night is folded into the preceding drive card and excluded from
+    // group.entries). Grouping, the per-night entry loop, activities, the drive
+    // card, and the running day counter are intentionally NOT touched (Option 2).
+    const trueNights = stop.nights ?? group.entries.length
+    const stayArrival = parseTripDate(stop.arrivalDate)
+    // departureDate is the checkout day (arrival + nights, stamped by
+    // recomputeStopDates) but is nullable — fall back to arrival + nights.
+    const stayDeparture = parseTripDate(stop.departureDate)
+      ?? (stayArrival ? addDays(stayArrival, trueNights) : null)
+    const isMulti = trueNights > 1
+    // True start day = the arrival day, which sits on the preceding drive card
+    // (startDay - 1). The arrival day legitimately shows on both that drive card
+    // and this stay card — accepted in Option 1. End = arrival day + nights - 1.
+    const stayStartDay = startDay - 1
+    const endDay = stayStartDay + trueNights - 1
 
-    const dayLabel = isMulti ? `Days ${startDay}–${endDay}` : `Day ${startDay}`
-    const dateLabel = isMulti && firstEntry.date && lastEntry.date
-      ? `${format(firstEntry.date, 'MMM d')} – ${format(lastEntry.date, 'MMM d')}`
-      : firstEntry.date ? format(firstEntry.date, 'EEE MMM d') : undefined
+    const dayLabel = isMulti ? `Days ${stayStartDay}–${endDay}` : `Day ${stayStartDay}`
+    const dateLabel = isMulti && stayArrival && stayDeparture
+      ? `${format(stayArrival, 'MMM d')} – ${format(stayDeparture, 'MMM d')}`
+      : stayArrival ? format(stayArrival, 'EEE MMM d') : undefined
 
     // Block 15 — shape detection for the activities section. New trips (and
     // any trip that's been regenerated since Step 2 shipped) carry a single
@@ -2489,7 +2504,7 @@ function DayCard({
               Singular handled with explicit "1-night stay" branch. */}
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-semibold uppercase tracking-wide text-[#854F0B]">
-              {group.entries.length === 1 ? '1-night stay' : `${group.entries.length}-night stay`}
+              {trueNights === 1 ? '1-night stay' : `${trueNights}-night stay`}
             </span>
             <EditDeleteButtons />
           </div>
