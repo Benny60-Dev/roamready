@@ -365,6 +365,20 @@ function extractAssertedOrigin(text: string): string | null {
 //     capital letter (a real named place). This rejects all-lowercase idioms
 //     ("from bad to worse", "from dawn to dusk") while still accepting the
 //     common mixed-case phrasings ("to New Orleans from san jose").
+// Common US city abbreviations → full city name. Applied to a deterministically
+// captured origin so "KC → Bangor" stores "Kansas City", not "KC". Whole-token,
+// case-insensitive; state omitted where ambiguous (the geocoder resolves it). The
+// planner prompt resolves the rest conversationally.
+const CITY_ABBREV: Record<string, string> = {
+  kc: 'Kansas City', nyc: 'New York City', la: 'Los Angeles', sf: 'San Francisco',
+  nola: 'New Orleans', slc: 'Salt Lake City', pdx: 'Portland, OR', dc: 'Washington, DC',
+  vegas: 'Las Vegas', philly: 'Philadelphia',
+}
+function expandCommonAbbrev(s: string): string {
+  const key = s.trim().toLowerCase().replace(/[.,]/g, '')
+  return CITY_ABBREV[key] ?? s
+}
+
 function extractFromXtoY(text: string | undefined | null): string | null {
   if (!text) return null
   const WORD = "[A-Za-z][A-Za-z.'-]*"
@@ -379,6 +393,12 @@ function extractFromXtoY(text: string | undefined | null): string | null {
   else {
     m = text.match(new RegExp(`\\bto\\s+${DEST}\\s+from\\s+${ORIGIN}`, 'i'))      // to Y from X
     if (m) { dest = m[1]; origin = m[2] }
+  }
+  if (!origin || !dest) {
+    // Arrow shorthand: "X → Y" / "X -> Y" / "X —> Y" (route notation, no "from").
+    // The STOP-word + proper-noun guards below still apply, so idioms are rejected.
+    m = text.match(new RegExp(`${ORIGIN}\\s*(?:→|-+>|—+>)\\s*${DEST}`, 'i'))
+    if (m) { origin = m[1]; dest = m[2] }
   }
   if (!origin || !dest) return null
   origin = origin.trim()
@@ -399,7 +419,9 @@ function extractFromXtoY(text: string | undefined | null): string | null {
   // Guard 2 — proper-noun signal: at least one side must be a named place.
   if (!/[A-Z]/.test(origin) && !/[A-Z]/.test(dest)) return null
 
-  return normalizeOriginCase(origin)
+  // Resolve a common abbreviation ("KC" → "Kansas City") before storing, so the
+  // captured origin is a real city the AI/geocoder use directly.
+  return normalizeOriginCase(expandCommonAbbrev(origin))
 }
 
 // Title-case an origin only when the user typed it all-lowercase ("san jose" →
