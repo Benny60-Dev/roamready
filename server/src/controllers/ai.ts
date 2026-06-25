@@ -649,6 +649,10 @@ function buildLiveTripState(trip: any, rigs: any[] = []): string {
     '  Omit afterStopOrder so it appends at the end.',
     '  ROUND-TRIP / RETURN-HOME ON MODIFY — INFER this from the user\'s NATURAL LANGUAGE; do NOT gate it on a fixed exact-phrase list. If the user\'s words mean the trip should END BACK at its starting point — e.g. "make it a round trip", "come home" / "coming home", "head back" / "head home", "and back", "there and back", "out and back", "loop", "round trip it", "back to [origin city]", or ANY plain-English equivalent that expresses returning to the origin — AND the trip is currently one-way (no return-home closer in the stop list), you MUST emit the add_stop HOME tag above, appending the return-home stop at the END (type "HOME", nights 0, locationName = the user\'s home city). Confirm in prose AND emit the tag — saying "I\'ll add the return home" WITHOUT the <modify> tag does nothing (see the top-of-instructions rule). OPPOSITE GUARD: do NOT add a return-home leg when the user explicitly wants a one-way trip ("one way", "no return", "not a round trip", "I\'m moving to [dest]", "relocating to [dest]"), and do NOT invent one when the request is genuinely ambiguous. Dates alone do NOT imply a round trip. Decide from the user\'s MEANING, not from whether an exact phrase appears.',
     '',
+    'Convert a round trip to one-way (remove the return-home leg):',
+    '<modify>{"action":"make_one_way"}</modify>',
+    '  Use when the trip is currently a ROUND TRIP (it ends back at the starting city) and the user wants it ONE-WAY — "make it one-way", "no return", "don\'t go back home", "drop the trip home", "one way", or any plain-English equivalent. This SINGLE action removes the trailing return-home stop AND the return-leg transit overnights in one shot, ending the trip at the farthest destination. Do NOT emit remove_stop for the return-home stop or its transit overnights — use this action instead. No locationName or other fields needed. If the trip is already one-way, do not emit it.',
+    '',
     'Remove a stop:',
     '<modify>{"action":"remove_stop","locationName":"[EXAMPLE_DESTINATION_CITY]"}</modify>',
     '',
@@ -708,6 +712,7 @@ function buildLiveTripState(trip: any, rigs: any[] = []): string {
     '3. If a stop does not appear below, it does NOT exist on this trip — regardless of anything said earlier.',
     `4. If the user asks to add a stop whose name matches one already in the list (${stopNames.join(', ') || 'none'}), do NOT emit a <modify> tag. Instead tell the user it is already on the trip.`,
     '5. Before generating any <modify> tag, verify the requested stop is not already in the list below.',
+    '6. If the user references a stop that is NOT in the list, do NOT guess or substitute a different stop (a wrong swap is worse than asking). Emit ONE short <clarify> naming the closest existing stop — e.g. <clarify>I don\'t see [requested] on this trip — did you mean [closest existing stop]?</clarify> — and nothing else.',
     '',
     `Trip: ${trip.name}`,
     `Route: ${trip.startLocation} → ${trip.endLocation}`,
@@ -789,6 +794,15 @@ function buildGateAsk(whereOk: boolean, whenOk: boolean, lengthOk: boolean): str
         : `${needs.slice(0, -1).join(', ')}, and ${needs[needs.length - 1]}`
   const those = needs.length > 1 ? 'those' : 'that'
   return `Before I map this out, I just need ${list}. Share ${those} and I'll build your itinerary right away.`
+}
+
+/** BUG-2 — refuse-and-ask when mandatory transit overnights blow the user's stated
+ *  total-nights budget. One short question; no itinerary, so nothing builds until
+ *  the user resolves the conflict. */
+function buildBudgetConflictAsk(destName: string, transitNights: number, requestedNights: number): string {
+  const ovn = `${transitNights} overnight driving stop${transitNights === 1 ? '' : 's'}`
+  const nights = `${requestedNights} night${requestedNights === 1 ? '' : 's'}`
+  return `Reaching ${destName} and covering the distance needs about ${ovn} just for the drive — more than the ${nights} you set for the whole trip. Want to give it more nights, or pick somewhere closer so it fits in ${nights}?`
 }
 
 export async function chat(req: AuthRequest, res: Response, next: NextFunction) {
@@ -1530,9 +1544,40 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             transitStops, capHours, process.env.GOOGLE_MAPS_API_KEY,
           )
           if (inserts.length > 0) {
+            const addedNights = inserts.reduce((n, ins) => n + ins.towns.length, 0)
+
+            // BUG-2 — refuse-and-ask on a night-budget conflict. If the user set a
+            // total-nights budget and the MANDATORY transit overnights (plus one
+            // night minimum per real destination) can't fit inside it, do NOT
+            // silently overshoot: discard the itinerary and ask one question.
+            let reqNights: number | null = null
+            if (sessionId) {
+              try {
+                const s = await prisma.planningSession.findUnique({ where: { id: sessionId }, select: { partialTripData: true } })
+                const r = Number((s?.partialTripData as any)?.requestedNights)
+                reqNights = Number.isInteger(r) && r > 0 ? r : null
+              } catch { /* no budget known → no conflict */ }
+            }
+            const normCity = (v?: string | null) => (v ?? '').toLowerCase().trim()
+            const homeCity = normCity(transitStops[0]?.locationName)
+            const realDests = transitStops.filter((s: any, i: number) =>
+              s.type === 'DESTINATION' &&
+              !(i === transitStops.length - 1 && (s.nights ?? 0) === 0 && normCity(s.locationName) === homeCity),
+            )
+            const budgetConflict = reqNights != null && (realDests.length + addedNights) > reqNights
+
+            if (budgetConflict) {
+              const destName = realDests.length
+                ? (realDests[realDests.length - 1].locationName ?? 'your destination')
+                : (transitStops[transitStops.length - 1]?.locationName ?? 'your destination')
+              response = buildBudgetConflictAsk(destName, addedNights, reqNights!)
+              console.warn(
+                '[AI budget-conflict] sessionId=%s refusing — requested=%d realDests=%d transit=%d',
+                sessionId ?? '(none)', reqNights, realDests.length, addedNights,
+              )
+            } else {
             // Bump totalNights by the inserted nights (each OVERNIGHT_ONLY = 1) so
             // the nightsShortfall check below doesn't false-flag our own inserts.
-            const addedNights = inserts.reduce((n, ins) => n + ins.towns.length, 0)
             const prevTotal = typeof transitItin.totalNights === 'number' ? transitItin.totalNights : 0
             const splicedItin = { ...transitItin, stops: splicedStops, totalNights: prevTotal + addedNights }
             const json = JSON.stringify(splicedItin, null, 2)
@@ -1565,6 +1610,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
               '[AI transit-insert] sessionId=%s inserted %d transit stop(s) across %d leg(s) (+%d night(s))',
               sessionId ?? '(none)', addedNights, inserts.length, addedNights,
             )
+            }
           }
         }
       } catch (e: any) {

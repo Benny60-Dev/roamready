@@ -159,6 +159,10 @@ export const tripsApi = {
   // so the confirm modal can show real hours. See controllers/trips.ts.
   longLegPreview: (id: string, stopId: string) =>
     api.post(`/trips/${id}/stops/${stopId}/long-leg-preview`),
+  // Atomic round-trip → one-way conversion (removes the return-home leg + return
+  // transit overnights in one shot). modifyActionId stamps the AI proposal applied.
+  makeOneWay: (id: string, modifyActionId?: string) =>
+    api.post(`/trips/${id}/make-one-way${modifyActionId ? `?modifyActionId=${encodeURIComponent(modifyActionId)}` : ''}`),
   generatePackingList: (id: string) => api.post(`/trips/${id}/packing-list`),
   savePackingList: (id: string, packingList: any[]) => api.put(`/trips/${id}/packing-list`, { packingList }),
   // FR-SAVED-PACKING — seed a trip's packing list from existing data. Both MERGE

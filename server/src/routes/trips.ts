@@ -8,7 +8,7 @@ import {
 } from '../schemas'
 import {
   getTrips, createTrip, getTrip, updateTrip, shiftTripDates, deleteTrip,
-  getStops, createStop, updateStop, deleteStop, longLegPreview,
+  getStops, createStop, updateStop, deleteStop, longLegPreview, makeOneWay,
   getSharedTrip, exportPdf, generatePackingList, updatePackingList,
   seedPackingListFromTemplate, copyPackingListFromTrip,
   generateItinerary, saveItinerary, generateRoutes, generateActivities,
@@ -41,6 +41,9 @@ tripsRouter.delete('/:id/stops/:stopId', deleteStop as any)
 // deleting an OVERNIGHT_ONLY stop, so the "keep the long drive?" confirm modal can
 // show the real hours. Read-only; same ungated posture as the other measure paths.
 tripsRouter.post('/:id/stops/:stopId/long-leg-preview', longLegPreview as any)
+// Atomic round-trip → one-way conversion: truncate everything after the turnaround
+// (return-leg transit overnights + the trailing return-home closer) in one shot.
+tripsRouter.post('/:id/make-one-way', makeOneWay as any)
 
 tripsRouter.post('/:id/share', requireFeature('tripSharing'), createShareToken as any)
 tripsRouter.post('/:id/share/regenerate', requireFeature('tripSharing'), regenerateShareToken as any)

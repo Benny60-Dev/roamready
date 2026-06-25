@@ -23,7 +23,7 @@ const QUICK_CHIPS = [
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ModifyAction {
-  action: 'add_stop' | 'remove_stop' | 'change_nights' | 'suggest_campground' | 'shift_trip_dates' | 'change_rig'
+  action: 'add_stop' | 'remove_stop' | 'change_nights' | 'suggest_campground' | 'shift_trip_dates' | 'change_rig' | 'make_one_way'
   // new schema (server-injected prompt)
   locationName?: string
   locationState?: string
@@ -112,6 +112,8 @@ function getConfirmationText(action: ModifyAction): string {
     }
     case 'change_rig':
       return `Switch this trip's rig to ${action.rigName ?? 'the selected rig'}`
+    case 'make_one_way':
+      return 'Make this trip one-way (drop the return-home leg)'
     default:
       return 'Apply this change'
   }
@@ -127,6 +129,8 @@ function getApplyButtonLabel(action: ModifyAction): string {
       return 'Shift dates'
     case 'change_rig':
       return 'Change rig'
+    case 'make_one_way':
+      return 'Make one-way'
     default:
       return '✓ Apply'
   }
@@ -480,6 +484,13 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
         // Server may have inserted an overnight on an over-cap leg into/out of the
         // new stop — surface the grounded note.
         if (createRes.data?.transitNote) setTransitNote(createRes.data.transitNote)
+        break
+      }
+      case 'make_one_way': {
+        // Atomic server truncation (return-home + return transit) — no stop lookup,
+        // can't half-apply, never trips the departure-home guard. The trailing
+        // refetch below propagates the new (one-way) stop set + route.
+        await tripsApi.makeOneWay(trip.id, modifyActionId)
         break
       }
       case 'remove_stop': {

@@ -229,6 +229,27 @@ function nightsFromStops(itinerary: any): number {
     : Number(itinerary?.totalNights) || 0
 }
 
+/** BUG-3 — flexible-until-build title. During planning the displayed title is
+ *  DERIVED from the actual final/turnaround DESTINATION ("Trip to {dest}"), not the
+ *  AI's free-text itinerary.name (which could be a misheard city or go stale when
+ *  the destination changes). At build this derived value is persisted as Trip.name
+ *  (the lock); after build the user renames manually. Final/turnaround destination =
+ *  the last DESTINATION stop that isn't the 0-night return-home closer. */
+function deriveTripTitle(itinerary: any): string | null {
+  const stops: any[] = Array.isArray(itinerary?.stops) ? itinerary.stops : []
+  if (!stops.length) return null
+  const norm = (v?: string) => (v ?? '').toLowerCase().trim()
+  const homeName = norm(stops[0]?.locationName)
+  let dest: any = null
+  for (let i = stops.length - 1; i >= 0; i--) {
+    const s = stops[i]
+    if (s?.type === 'DESTINATION' && !(norm(s.locationName) === homeName && (Number(s.nights) || 0) === 0)) { dest = s; break }
+  }
+  if (!dest?.locationName) return null
+  const loc = dest.locationState ? `${dest.locationName}, ${dest.locationState}` : dest.locationName
+  return `Trip to ${loc}`
+}
+
 // Client-generated deterministic notice (never model text) shown when the
 // return-leg guard strips anything — the plan and the narration can no
 // longer silently diverge. Tagged _local so it renders as a bubble but is
@@ -868,7 +889,10 @@ export default function SessionPage() {
 
       console.time('[buildItinerary] promoteSession')
       const promoted = await sessionsApi.promote(sessionId, {
-        name: itinerary.name,
+        // BUG-3 — lock the derived destination-tracking title at build (falls back to
+        // the AI's name only if no destination resolved). After this, Trip.name is
+        // user-owned: manual rename only; a later destination change won't rewrite it.
+        name: deriveTripTitle(itinerary) || itinerary.name,
         // DATE-ANCHOR-1: carry the AI-captured departure date through to
         // Trip.startDate so recomputeStopDates anchors stops on it instead of
         // falling back to today. null when the AI emitted no date (no-date
@@ -1910,7 +1934,7 @@ export default function SessionPage() {
                   {/* Info row — name (truncates) + nights/camp stats */}
                   <div className="flex items-center gap-2 min-w-0 w-full">
                     <span className="text-base flex-shrink-0">🗺️</span>
-                    <span className="font-medium text-[#1F6F8B] truncate">{itinerary.name}</span>
+                    <span className="font-medium text-[#1F6F8B] truncate">{deriveTripTitle(itinerary) || itinerary.name}</span>
                     <span className="text-xs text-[#134756] flex-shrink-0">
                       · {nightsFromStops(itinerary)}n · ${Math.round(computeTripTotals(itinerary).campEst).toLocaleString()} camp
                     </span>
@@ -1972,7 +1996,7 @@ export default function SessionPage() {
         <BottomSheet
           isOpen={sheetOpen}
           onClose={() => setSheetOpen(false)}
-          title={itinerary?.name || 'Itinerary'}
+          title={(itinerary && deriveTripTitle(itinerary)) || itinerary?.name || 'Itinerary'}
           locked={creating}
         >
           {itinerary && (
@@ -2012,7 +2036,7 @@ export default function SessionPage() {
           <div className="hidden lg:flex w-80 flex-col">
             <div className="card-lg flex flex-col min-h-0 flex-1">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-medium text-gray-900 text-sm">{itinerary.name}</h3>
+                <h3 className="font-medium text-gray-900 text-sm">{deriveTripTitle(itinerary) || itinerary.name}</h3>
                 <span className="badge-green text-xs">{nightsFromStops(itinerary)}n</span>
               </div>
               <div className="grid grid-cols-2 gap-2 mb-4 text-xs text-gray-500">
