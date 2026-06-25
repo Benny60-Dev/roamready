@@ -1973,10 +1973,17 @@ export async function deleteStop(req: AuthRequest, res: Response, next: NextFunc
     })
     if (!stop) throw new AppError('Stop not found on this trip', 404)
 
-    // Guard 3: HOME stops are structurally required (start of trip, sometimes
-    // also the closing return-home entry). Refuse rather than allow a corrupt
-    // trip shape — the AI modify-mode path can otherwise reach this codepath.
-    if (stop.type === 'HOME') {
+    // Guard 3: protect ONLY the DEPARTURE — the first stop by order (the origin),
+    // regardless of type. A TRAILING return-home stop (the round-trip closer, which
+    // may itself be type HOME) is legitimately removable — e.g. converting a round
+    // trip to one-way. Blocking every HOME-typed stop used to make that impossible
+    // (BUG-1). Only the first stop is structurally protected.
+    const firstStop = await prisma.stop.findFirst({
+      where: { tripId: req.params.id },
+      orderBy: { order: 'asc' },
+      select: { id: true },
+    })
+    if (firstStop && stop.id === firstStop.id) {
       throw new AppError('Cannot delete the home departure stop', 400, {
         code: 'HOME_STOP_PROTECTED',
       })
@@ -2109,6 +2116,72 @@ export async function longLegPreview(req: AuthRequest, res: Response, next: Next
       fromName: prev.locationName,
       toName: next.locationName,
     })
+  } catch (err) { next(err) }
+}
+
+/**
+ * BUG-1 — atomic round-trip → one-way conversion. Truncates everything AFTER the
+ * turnaround (the farthest stop from the origin): removes the return-leg transit
+ * overnights AND the trailing return-home closer in ONE transaction, so it can't
+ * half-apply or trip the departure-home guard. No-op when the trip is already
+ * one-way. The departure (first stop) is never touched.
+ */
+export async function makeOneWay(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const trip = await prisma.trip.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+      include: { stops: { orderBy: { order: 'asc' } } },
+    })
+    if (!trip) throw new AppError('Trip not found', 404)
+    const stops = trip.stops as any[]
+    const stampIfAsked = async () => {
+      if (typeof req.query.modifyActionId === 'string') {
+        await stampModifyActionApplied(req.params.id, req.query.modifyActionId)
+      }
+    }
+
+    if (computeTripShape(stops) !== 'ROUND_TRIP') {
+      await stampIfAsked()
+      return res.json({ removed: 0, alreadyOneWay: true })
+    }
+
+    const origin = stops[0]
+    const norm = (v?: string | null) => (v ?? '').toLowerCase().trim()
+    const homeName = norm(origin?.locationName)
+
+    // Turnaround = farthest stop from the origin. The return-home closer sits at the
+    // origin city (~0 mi), so it is never the max. Prefer real Haversine when coords
+    // exist; fall back to the last DESTINATION not at the home city.
+    let turnaroundIdx = -1
+    if (origin?.latitude != null && origin?.longitude != null) {
+      let maxD = -1
+      for (let i = 1; i < stops.length; i++) {
+        const s = stops[i]
+        if (s.latitude == null || s.longitude == null) continue
+        const d = haversineMiles(origin.latitude, origin.longitude, s.latitude, s.longitude)
+        if (d > maxD) { maxD = d; turnaroundIdx = i }
+      }
+    }
+    if (turnaroundIdx < 0) {
+      for (let i = stops.length - 1; i >= 1; i--) {
+        if (stops[i].type === 'DESTINATION' && norm(stops[i].locationName) !== homeName) { turnaroundIdx = i; break }
+      }
+    }
+    if (turnaroundIdx < 0 || turnaroundIdx >= stops.length - 1) {
+      // No turnaround found, or nothing after it — leave as-is.
+      await stampIfAsked()
+      return res.json({ removed: 0 })
+    }
+
+    const turnaround = stops[turnaroundIdx]
+    const toRemove = stops.slice(turnaroundIdx + 1)
+    await prisma.stop.deleteMany({ where: { tripId: trip.id, id: { in: toRemove.map(s => s.id) } } })
+    await resequenceStops(trip.id)
+    try { await syncTripEndpoints(trip.id) } catch (e: any) { console.warn('[makeOneWay] syncTripEndpoints failed: %s', e?.message) }
+    try { await recomputeStopDates(trip.id) } catch (e: any) { console.warn('[makeOneWay] recomputeStopDates failed: %s', e?.message) }
+    await stampIfAsked()
+    console.log('[makeOneWay] tripId=%s removed %d stop(s) after turnaround "%s"', trip.id, toRemove.length, turnaround.locationName)
+    res.json({ removed: toRemove.length, endpoint: turnaround.locationName })
   } catch (err) { next(err) }
 }
 
