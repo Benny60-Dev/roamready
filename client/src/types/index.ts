@@ -284,6 +284,11 @@ export interface Stop {
   bookedForRigHeight?: number | null
   bookedForRigWeight?: number | null
   bookedForRigAt?: string | null
+  // ADDSTOP-RESLOT Phase A/B — the arrivalDate captured when this stop was booked.
+  // When a later modify-insert shifts the itinerary, arrivalDate moves but this
+  // stays, so a booked stop with arrivalDate !== originalBookedDate is showing a
+  // shifted date (reservation unchanged) — surfaced as a per-stop note.
+  originalBookedDate?: string | null
   alternates?: any[]
   weatherForecast?: WeatherDay[]
   highwayRoute?: string | null

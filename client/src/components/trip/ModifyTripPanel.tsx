@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { X, Wand2 } from 'lucide-react'
+import { X, Wand2, AlertTriangle } from 'lucide-react'
 import { format } from 'date-fns'
 import { aiApi, tripsApi } from '../../services/api'
 import { Trip, StopType } from '../../types'
@@ -198,6 +198,12 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
   // Per-action in-session overlay (applying spinner / failed error). Reset on
   // every history load — persisted `applied` flags are the durable state.
   const [actionUi, setActionUi] = useState<Record<string, ActionUiState>>({})
+  // ADDSTOP-RESLOT Phase B — transient "your insert shifted a booked stop's
+  // itinerary date" heads-up, set from the createStop response after an add_stop
+  // apply. The reservation itself is unchanged; this just flags the date move.
+  const [bookedShiftWarning, setBookedShiftWarning] = useState<
+    { newStop: string; stops: Array<{ stopId: string; name: string; originalBookedDate: string; newArrivalDate: string }> } | null
+  >(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   // MODIFY-RESET-1: number of messages seeded from persisted history when the
@@ -441,7 +447,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
         const newOrder = afterOrder + 1
         console.log('[applyMod] add_stop position — after_stop:', action.after_stop, '| afterStop:', afterStop?.locationName, '| newOrder:', newOrder)
 
-        await tripsApi.createStop(trip.id, {
+        const createRes = await tripsApi.createStop(trip.id, {
           locationName: cleanName,
           locationState: resolvedState || undefined,
           nights: action.nights ?? 1,
@@ -451,6 +457,13 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
           isCompatible: true,
           modifyActionId, // server stamps the proposal applied=true after the insert
         })
+        // ADDSTOP-RESLOT Phase B — the server may have re-slotted the new stop ahead
+        // of a booked stop, shifting that booked stop's itinerary date. Surface the
+        // heads-up (reservation unchanged; only the trip date moved).
+        const shifted = createRes.data?.shiftedBookedStops
+        if (Array.isArray(shifted) && shifted.length > 0) {
+          setBookedShiftWarning({ newStop: cleanName, stops: shifted })
+        }
         break
       }
       case 'remove_stop': {
@@ -507,6 +520,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
    *  success so applyAll can stop on the first failure. */
   async function applyAction(msgIndex: number, sa: ServerModifyAction): Promise<boolean> {
     setApplying(true)
+    setBookedShiftWarning(null) // clear any prior heads-up; executeAction re-sets it if this add shifts a booking
     setActionUi(prev => ({ ...prev, [sa.id]: { status: 'applying' } }))
     try {
       await executeAction(sa.action, sa.id)
@@ -613,6 +627,31 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
             ))}
           </div>
         </div>
+
+        {/* ADDSTOP-RESLOT Phase B — booked-stop date-shift heads-up (transient,
+            set from the createStop response after an add_stop apply). Amber, mirrors
+            the rig warning tokens. The reservation is unchanged — only the trip date. */}
+        {bookedShiftWarning && (
+          <div className="px-3 py-2 border-b border-amber-200 bg-amber-50 flex-shrink-0" style={{ borderBottomWidth: '0.5px' }}>
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-[11px] font-semibold text-amber-800 flex items-center gap-1">
+                <AlertTriangle size={12} className="flex-shrink-0" /> Booked-stop date shifted
+              </p>
+              <button onClick={() => setBookedShiftWarning(null)} className="text-amber-700 hover:text-amber-900 flex-shrink-0">
+                <X size={12} />
+              </button>
+            </div>
+            {bookedShiftWarning.stops.map(s => {
+              const orig = parseTripDate(s.originalBookedDate)
+              const next = parseTripDate(s.newArrivalDate)
+              return (
+                <p key={s.stopId} className="text-[11px] text-amber-800 leading-snug mt-0.5">
+                  Adding {bookedShiftWarning.newStop} shifted the itinerary date for your booked stop {s.name}. Your reservation is unchanged (still booked for {orig ? format(orig, 'MMM d, yyyy') : s.originalBookedDate}), but its trip date is now {next ? format(next, 'MMM d, yyyy') : s.newArrivalDate}. Verify your booked dates still work, or contact the campground.
+                </p>
+              )
+            })}
+          </div>
+        )}
 
         {/* Messages — flex-1 absorbs available vertical space, min-h-0 lets
             this child shrink below its content's intrinsic height (without it
