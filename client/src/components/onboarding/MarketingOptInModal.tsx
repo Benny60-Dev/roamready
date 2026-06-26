@@ -45,11 +45,11 @@ export default function MarketingOptInModal({ onDecided }: { onDecided: () => vo
           <div className="flex items-center justify-center w-9 h-9 rounded-full bg-[#E0F0F4]">
             <Mail size={18} className="text-[#1F6F8B]" />
           </div>
-          <h2 className="text-lg font-medium text-gray-900">Trip tips in your inbox?</h2>
+          <h2 className="text-lg font-medium text-gray-900">Stay in the loop</h2>
         </div>
         <p className="text-sm text-gray-500 mb-4">
-          Get occasional emails with trip-planning tips, new features, and seasonal RV deals.
-          You can change this anytime in your profile.
+          Get trip-planning tips, new feature announcements, and the occasional good deal.
+          No spam, unsubscribe anytime.
         </p>
 
         {error && (
@@ -66,7 +66,7 @@ export default function MarketingOptInModal({ onDecided }: { onDecided: () => vo
             onChange={e => setChecked(e.target.checked)}
           />
           <span className="text-sm text-gray-700">
-            Yes, send me RoamReady trip tips and offers by email.
+            Yes, send me trip tips and updates
           </span>
         </label>
 
