@@ -159,6 +159,30 @@ export async function deleteMe(req: AuthRequest, res: Response, next: NextFuncti
   } catch (err) { next(err) }
 }
 
+// PATCH /users/me/marketing-consent (FR-MARKETING-OPTIN). Records the user's
+// explicit marketing-email decision. marketingConsentAt is stamped on EITHER
+// answer (opt-in OR "No thanks") so the onboarding modal fires exactly once and
+// the in-app toggle can flip the flag later. Body validated by
+// MarketingConsentSchema (a single boolean). Returns the safe user so the client
+// can update its store with the new flag + timestamp in one round trip.
+export async function updateMarketingConsent(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { consent } = req.body as { consent: boolean }
+    const user = await prisma.user.update({
+      where: { id: req.user!.id },
+      data: { marketingConsent: consent, marketingConsentAt: new Date() } as any,
+    })
+    // Strip sensitive / server-only fields — same set as getMe/updateMe above.
+    const {
+      passwordHash: _ph,
+      emailVerificationToken: _evt,
+      emailVerificationSentAt: _evsa,
+      ...safe
+    } = user as any
+    res.json(safe)
+  } catch (err) { next(err) }
+}
+
 export async function getRigs(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     // Default rig pinned to the top via `isDefault: 'desc'` (true sorts above

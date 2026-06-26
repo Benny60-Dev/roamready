@@ -51,6 +51,11 @@ export interface User {
    *  bypass both regardless of this value. */
   emailVerified?: boolean
   isOwner?: boolean
+  /** Marketing email opt-in (FR-MARKETING-OPTIN). marketingConsentAt is stamped
+   *  on ANY decision (opt-in OR "No thanks"); a null/undefined timestamp means
+   *  "not yet asked" and is what gates the onboarding opt-in modal. */
+  marketingConsent?: boolean
+  marketingConsentAt?: string | null
   createdAt: string
   rigs?: Rig[]
   travelProfile?: TravelProfile

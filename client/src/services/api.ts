@@ -103,6 +103,10 @@ export const authApi = {
 export const usersApi = {
   getMe: () => api.get('/users/me'),
   updateMe: (data: any) => api.put('/users/me', data),
+  // FR-MARKETING-OPTIN — record the explicit marketing-email decision (true =
+  // opt in, false = "No thanks"). Server stamps marketingConsentAt either way and
+  // returns the updated safe user.
+  updateMarketingConsent: (consent: boolean) => api.patch('/users/me/marketing-consent', { consent }),
   deleteMe: () => api.delete('/users/me'),
   getRigs: () => api.get('/users/me/rigs'),
   createRig: (data: any) => api.post('/users/me/rigs', data),
@@ -357,6 +361,8 @@ export const adminApi = {
   getMetrics: () => api.get('/admin/metrics'),
   getSubscribers: (params?: { status?: 'active' | 'suspended' | 'all' }) =>
     api.get('/admin/subscribers', { params }),
+  // FR-MARKETING-OPTIN — the opted-in marketing-email list (marketingConsent = true).
+  getMarketingSubscribers: () => api.get('/admin/marketing-subscribers'),
   suspendUser: (id: string, reason: string) =>
     api.post(`/admin/users/${id}/suspend`, { reason }),
   reactivateUser: (id: string) => api.post(`/admin/users/${id}/reactivate`),

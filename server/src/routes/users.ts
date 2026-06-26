@@ -2,10 +2,11 @@ import { Router } from 'express'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 import { requireVerifiedEmail } from '../middleware/requireVerifiedEmail'
 import { validateBody } from '../middleware/validate'
-import { MembershipCreateSchema, MembershipUpdateSchema, TravelProfileUpsertSchema } from '../schemas'
+import { MembershipCreateSchema, MembershipUpdateSchema, TravelProfileUpsertSchema, MarketingConsentSchema } from '../schemas'
 import {
   getMe,
   updateMe,
+  updateMarketingConsent,
   deleteMe,
   getRigs,
   createRig,
@@ -30,6 +31,13 @@ export const usersRouter = Router()
 // happens to duplicate it. Both are exempt for this same reason — see
 // the duplicate-endpoint backlog item flagged in prior commits.)
 usersRouter.get('/me', requireAuth, getMe as any)
+
+// PATCH /me/marketing-consent is EXEMPT from the email-verification gate (same
+// rationale as GET /me): the onboarding opt-in modal fires immediately after
+// signup, BEFORE the user verifies their email, so gating it here would 403 the
+// modal's submit for every brand-new user — exactly the user it targets. Auth is
+// still required, and the body is a single validated boolean.
+usersRouter.patch('/me/marketing-consent', requireAuth, validateBody(MarketingConsentSchema), updateMarketingConsent as any)
 
 // Everything below is gated. requireAuth + requireVerifiedEmail apply
 // to all subsequent routes registered on this router.

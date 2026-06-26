@@ -87,6 +87,14 @@ model User {
   compReason          String?
   compGrantedBy       String?
   compGrantedAt       DateTime?
+  /// Marketing email opt-in (FR-MARKETING-OPTIN) — the CAN-SPAM consent basis for
+  /// FR-WINBACK and any promotional sends. Captured by an explicit, separate
+  /// opt-in modal at onboarding (NOT bundled with ToS acceptance). Default false =
+  /// no consent. marketingConsentAt is stamped when the user makes ANY decision
+  /// (opt-in OR "No thanks"), so a null timestamp means "not yet asked" — that is
+  /// what gates whether the opt-in modal shows. Never assume consent from silence.
+  marketingConsent    Boolean              @default(false)
+  marketingConsentAt  DateTime?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   rigs                Rig[]

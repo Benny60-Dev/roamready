@@ -167,6 +167,12 @@ export async function register(req: Request, res: Response, next: NextFunction) 
         isOwner: user.isOwner,
         founderPricing: (user as any).founderPricing,
         emailVerified: false,
+        // Marketing opt-in (FR-MARKETING-OPTIN). A fresh signup is always
+        // false / null — null marketingConsentAt is what makes the onboarding
+        // opt-in modal show. Surfaced here (in lockstep with login) so the
+        // client has it immediately, though rehydrateUser → /users/me also fills it.
+        marketingConsent: (user as any).marketingConsent,
+        marketingConsentAt: (user as any).marketingConsentAt,
         // createdAt powers the 1-hour grace window the Phase 3b
         // verification banner computes against — surface it on the
         // initial signup response so the client doesn't need to wait
@@ -224,6 +230,11 @@ export async function login(req: Request, res: Response, next: NextFunction) {
         // doesn't yet know about emailVerified, but the column exists
         // in the DB and `findUnique` with no `select` returns it.
         emailVerified: (user as any).emailVerified,
+        // Marketing opt-in (FR-MARKETING-OPTIN) — in lockstep with register so
+        // the client state shape matches. Drives the in-app toggle + (for a user
+        // who never answered) the onboarding modal.
+        marketingConsent: (user as any).marketingConsent,
+        marketingConsentAt: (user as any).marketingConsentAt,
         // createdAt powers the 1-hour grace window computation on the
         // Phase 3b client banner (now - createdAt < 1h → in-grace).
         createdAt: user.createdAt,
