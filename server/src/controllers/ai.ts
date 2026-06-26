@@ -379,7 +379,7 @@ function expandCommonAbbrev(s: string): string {
   return CITY_ABBREV[key] ?? s
 }
 
-function extractFromXtoY(text: string | undefined | null): string | null {
+export function extractFromXtoY(text: string | undefined | null): string | null {
   if (!text) return null
   const WORD = "[A-Za-z][A-Za-z.'-]*"
   const NOT_KW = "(?!(?:to|from)\\b)"            // a route keyword is never a city token
@@ -388,6 +388,7 @@ function extractFromXtoY(text: string | undefined | null): string | null {
 
   let origin: string | null = null
   let dest: string | null = null
+  let bareMatch = false                          // true only for the bare "X to Y" fallback
   let m = text.match(new RegExp(`\\bfrom\\s+${ORIGIN}\\s+to\\s+${DEST}`, 'i'))   // from X to Y
   if (m) { origin = m[1]; dest = m[2] }
   else {
@@ -399,6 +400,18 @@ function extractFromXtoY(text: string | undefined | null): string | null {
     // The STOP-word + proper-noun guards below still apply, so idioms are rejected.
     m = text.match(new RegExp(`${ORIGIN}\\s*(?:→|-+>|—+>)\\s*${DEST}`, 'i'))
     if (m) { origin = m[1]; dest = m[2] }
+  }
+  if (!origin || !dest) {
+    // Bare "X to Y" — no "from", no arrow (e.g. "Kansas City to Bangor 3 nights
+    // july7"). BUG-PLAN-ORIGIN-LOOP: clean route openers like this carry no route
+    // keyword, so the deterministic net missed them and the planner re-asked for
+    // the origin. This form is far more idiom-prone than the keyword forms ("I
+    // want to go to Paris"), so it is gated hard: it must be the OPENING clause of
+    // the message (^), and BOTH endpoints must carry a proper-noun capital
+    // (enforced via bareMatch in Guard 2 below). The STOP-word guard rejects
+    // verb/pronoun-led idioms ("Take me to Paris", "plan a trip to Miami").
+    m = text.match(new RegExp(`^\\s*${ORIGIN}\\s+to\\s+${DEST}`, 'i'))
+    if (m) { origin = m[1]; dest = m[2]; bareMatch = true }
   }
   if (!origin || !dest) return null
   origin = origin.trim()
@@ -412,12 +425,22 @@ function extractFromXtoY(text: string | undefined | null): string | null {
     'home','work','here','there','point','to','from','the','a','an','my','our','your',
     'now','time','start','finish','scratch','nowhere','everywhere','anywhere','somewhere',
     'it','this','that','bad','worse','dawn','dusk',
+    // Idiom leading words — guard the bare "X to Y" fallback against verb/pronoun
+    // openers and destination-only phrasings ("plan a trip to Miami", "Trip to
+    // Miami"). Harmless to the keyword forms (none are real origins).
+    'go','going','get','take','fly','flying','drive','driving','head','heading',
+    'want','need','me','us','back','plan','travel','trip','flight','road',
   ])
   const firstTok = origin.split(/[\s,]+/)[0].toLowerCase()
   if (STOP.has(firstTok)) return null
 
-  // Guard 2 — proper-noun signal: at least one side must be a named place.
-  if (!/[A-Z]/.test(origin) && !/[A-Z]/.test(dest)) return null
+  // Guard 2 — proper-noun signal. The keyword/arrow forms accept a capital on
+  // EITHER side. The bare "X to Y" form has no "from"/arrow keyword anchoring it
+  // as a route, so it is stricter: BOTH endpoints must carry a proper-noun
+  // capital (rejects "I want to go to Paris", "san jose to jacksonville").
+  if (bareMatch) {
+    if (!/[A-Z]/.test(origin) || !/[A-Z]/.test(dest)) return null
+  } else if (!/[A-Z]/.test(origin) && !/[A-Z]/.test(dest)) return null
 
   // Resolve a common abbreviation ("KC" → "Kansas City") before storing, so the
   // captured origin is a real city the AI/geocoder use directly.
