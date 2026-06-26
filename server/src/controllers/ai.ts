@@ -11,6 +11,7 @@ import {
 } from '../services/modifyActions'
 import { parseTripDate } from '../utils/dates'
 import { computeTripShape } from '../utils/tripShape'
+import { hasRoundTripIntent } from '../utils/roundTripIntent'
 // PLAN-IS-TRUTH (Part 2, step 2) — the deterministic drive-time check, shared
 // with build's expandLongLegs. trips.ts already imports enforcePerUserDailyCap
 // from this module; both exports are only ever CALLED inside request handlers
@@ -379,7 +380,7 @@ function expandCommonAbbrev(s: string): string {
   return CITY_ABBREV[key] ?? s
 }
 
-export function extractFromXtoY(text: string | undefined | null): string | null {
+export function extractFromXtoY(text: string | undefined | null): { origin: string; dest: string } | null {
   if (!text) return null
   const WORD = "[A-Za-z][A-Za-z.'-]*"
   const NOT_KW = "(?!(?:to|from)\\b)"            // a route keyword is never a city token
@@ -416,6 +417,11 @@ export function extractFromXtoY(text: string | undefined | null): string | null 
   if (!origin || !dest) return null
   origin = origin.trim()
   dest = dest.trim()
+  // The DEST capture is greedy (up to 3 trailing words), so round-trip / filler
+  // phrasing leaks in: "Bangor and back" / "Bangor for 3 nights" → the dest must
+  // be just "Bangor" for the geocoder (and the pre-build budget check). Cut at the
+  // first trailing connective — no US city name continues past one of these words.
+  dest = dest.replace(/\s+(?:and|&|for|with|on|in|next|this|then|after|before|via)\b[\s\S]*$/i, '').trim()
 
   // Guard 1 — first origin token must not be a non-place word.
   const STOP = new Set([
@@ -443,8 +449,13 @@ export function extractFromXtoY(text: string | undefined | null): string | null 
   } else if (!/[A-Z]/.test(origin) && !/[A-Z]/.test(dest)) return null
 
   // Resolve a common abbreviation ("KC" → "Kansas City") before storing, so the
-  // captured origin is a real city the AI/geocoder use directly.
-  return normalizeOriginCase(expandCommonAbbrev(origin))
+  // captured origin/destination are real cities the AI/geocoder use directly.
+  // Both endpoints are returned: origin feeds capturedOrigin (BUG-PLAN-ORIGIN-LOOP),
+  // dest feeds the deterministic destination capture (pre-build budget check).
+  return {
+    origin: normalizeOriginCase(expandCommonAbbrev(origin)),
+    dest: normalizeOriginCase(expandCommonAbbrev(dest)),
+  }
 }
 
 // Title-case an origin only when the user typed it all-lowercase ("san jose" →
@@ -1108,6 +1119,11 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       console.log('[AI surprise] excluding=%j vibe=%s', recentSurpriseDestinations, surpriseVibe)
     }
 
+    // Prior persisted budget inputs, snapshotted BEFORE this turn's route/tag writes
+    // below — the pre-build budget COST GATE compares against these so a settled
+    // conversation never re-routes the same leg (no wasted Directions call / latency).
+    let priorDestination: string | null = null
+    let priorRequestedNights: number | null = null
     // ORIGIN-FIX — read any starting location captured on a PRIOR turn (persisted
     // to PlanningSession.partialTripData after the AI emitted an <origin> tag) and
     // fold it onto userProfile so services/ai.ts can suppress the no-home re-ask
@@ -1120,6 +1136,9 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       })
       const ptd = (sess?.partialTripData as any) ?? null
       ;(userProfile as any).capturedOrigin = ptd?.origin ?? null
+      // Snapshot prior budget inputs for the cost gate (see pre-build check below).
+      priorDestination = typeof ptd?.destination === 'string' ? ptd.destination : null
+      priorRequestedNights = typeof ptd?.requestedNights === 'number' ? ptd.requestedNights : null
       // BUILD 3a — surface the confirmed requested trip length (nights) captured
       // on a PRIOR turn (via the <requestedNights> tag below) so the DURATION
       // CONFIRMATION rule in services/ai.ts sees it in the profile context and
@@ -1154,14 +1173,37 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     // capturedOrigin (a deliberately-provided origin wins). Persist for future
     // turns best-effort; a write failure must not break the turn. Coexists with
     // the AI's <origin> tag (last-write-wins; different cases).
-    if (!(userProfile as any).capturedOrigin) {
-      const detected = extractFromXtoY(lastUserMsg?.content)
-      if (detected) {
-        ;(userProfile as any).capturedOrigin = detected
-        if (sessionId) {
-          await mergePartialTripData(sessionId, { origin: detected })
-            .catch((e: any) => console.error('[AI origin-capture:from-x-to-y] persist failed for sessionId=%s: %s', sessionId, e?.message))
-        }
+    // Run the deterministic route parser ONCE; it now yields BOTH origin and dest.
+    const detectedRoute = extractFromXtoY(lastUserMsg?.content)
+    if (detectedRoute && !(userProfile as any).capturedOrigin) {
+      ;(userProfile as any).capturedOrigin = detectedRoute.origin
+      if (sessionId) {
+        await mergePartialTripData(sessionId, { origin: detectedRoute.origin })
+          .catch((e: any) => console.error('[AI origin-capture:from-x-to-y] persist failed for sessionId=%s: %s', sessionId, e?.message))
+      }
+    }
+    // DESTINATION (deterministic primary for the pre-build budget check) — persist
+    // whenever the route parser found one, so the headline "KC to Bangor" case has a
+    // destination WITHOUT depending on the model emitting <destination> that run (the
+    // determinism guarantee). Coexists with the AI's <destination> tag (last-write-
+    // wins). The downstream cost gate compares prior vs new before any Directions call.
+    if (detectedRoute && sessionId) {
+      await mergePartialTripData(sessionId, { destination: detectedRoute.dest })
+        .catch((e: any) => console.error('[AI dest-capture:from-x-to-y] persist failed for sessionId=%s: %s', sessionId, e?.message))
+    }
+    // REQUESTED-NIGHTS (deterministic FIRST-capture for the pre-build budget check).
+    // The existing <requestedNights> tag + the build-time parseExplicitNights fallback
+    // only land a length once the model emits a tag or an <itinerary> — neither is
+    // guaranteed on a no-itinerary OPENING turn ("KC to Bangor, 3 nights"). To make
+    // the pre-build budget DETERMINISTIC (not a per-run tag gamble), parse an EXPLICIT
+    // integer length from THIS turn's message and persist it — but ONLY when none is
+    // locked yet (priorRequestedNights null), so a later change still flows through the
+    // tag/lock path unchanged. Explicit digits only; fuzzy lengths stay the model's job.
+    if (sessionId && priorRequestedNights == null) {
+      const earlyNights = parseExplicitNights(lastUserMsg?.content)
+      if (earlyNights) {
+        await mergePartialTripData(sessionId, { requestedNights: earlyNights })
+          .catch((e: any) => console.error('[AI nights-capture:early] persist failed for sessionId=%s: %s', sessionId, e?.message))
       }
     }
 
@@ -1381,6 +1423,25 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
           await mergePartialTripData(sessionId, { origin: captured })
         } catch (e: any) {
           console.error('[AI origin-capture] persist failed for sessionId=%s: %s', sessionId, e?.message)
+        }
+      }
+    }
+
+    // DESTINATION-CAPTURE — capture the AI's structured <destination> tag (emitted on
+    // the turn the destination first becomes settled), mirroring <origin>. Strip it
+    // from the displayed message and persist to partialTripData.destination so the
+    // pre-build budget check has a destination even for phrasings the deterministic
+    // route parser (extractFromXtoY) does not catch ("trip to Bangor"). Guarded on
+    // sessionId; last-write-wins with the deterministic write above.
+    const destinationMatch = response.match(/<destination>([\s\S]*?)<\/destination>/)
+    if (destinationMatch) {
+      response = response.replace(/<destination>[\s\S]*?<\/destination>/g, '').trim()
+      const capturedDest = destinationMatch[1].trim()
+      if (sessionId && capturedDest) {
+        try {
+          await mergePartialTripData(sessionId, { destination: capturedDest })
+        } catch (e: any) {
+          console.error('[AI destination-capture] persist failed for sessionId=%s: %s', sessionId, e?.message)
         }
       }
     }
@@ -1651,6 +1712,60 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
               '[AI transit-insert] sessionId=%s inserted %d transit stop(s) across %d leg(s) (+%d night(s))',
               sessionId ?? '(none)', addedNights, inserts.length, addedNights,
             )
+            }
+          }
+        } else {
+          // PRE-BUILD BUDGET GATE (BUG-MILEAGE-OPENING-TURN, structural). No
+          // <itinerary> this turn → the model has NOT built (e.g. the opening
+          // "KC to Bangor, 3 nights" turn, before a start date). The app — not the
+          // model — owns the minimum-nights number, so compute it deterministically
+          // here from {origin, destination, length} the moment both destination and
+          // length are known (NO start date required), and on a conflict overwrite
+          // the reply with the SAME authoritative question the post-build gate uses.
+          // This makes the budget behaviour identical across runs instead of a
+          // per-run prompt gamble. Mutually exclusive with the post-build gate above
+          // (that runs ONLY when an itinerary exists; this ONLY when it does not).
+          if (sessionId) {
+            const s = await prisma.planningSession.findUnique({ where: { id: sessionId }, select: { partialTripData: true } })
+            const pb = (s?.partialTripData as any) ?? null
+            const destination: string | null = typeof pb?.destination === 'string' ? pb.destination : null
+            const rn = Number(pb?.requestedNights)
+            const reqNights: number | null = Number.isInteger(rn) && rn > 0 ? rn : null
+            // Origin: captured this/prior turn, else the profile home city.
+            const originName: string | null =
+              ((userProfile as any).capturedOrigin as string | null) ??
+              (userProfile?.homeCity
+                ? `${userProfile.homeCity}${userProfile.homeState ? ', ' + userProfile.homeState : ''}`
+                : null)
+
+            // COST GATE — only spend a Directions call when destination OR the
+            // requested length CHANGED vs the prior persisted values (snapshotted
+            // before this turn's writes). A settled conversation ("why so many
+            // nights?", small talk) re-uses the prior answer and skips the call.
+            const changed = destination !== priorDestination || reqNights !== priorRequestedNights
+
+            if (originName && destination && reqNights != null && changed) {
+              const capHours = deriveCapHours(user?.travelProfile)
+              const userMsgs = (messages as any[])
+                .filter(m => m?.role === 'user')
+                .map(m => String(m?.content ?? ''))
+              const roundTrip = hasRoundTripIntent(userMsgs, [originName])
+              // Synthetic minimal name-stops; minimalTripBudget routes by name.
+              const home = { locationName: originName, type: 'HOME', nights: 0 }
+              const dest = { locationName: destination, type: 'DESTINATION', nights: reqNights }
+              const synthetic = roundTrip
+                ? [home, dest, { locationName: originName, type: 'DESTINATION', nights: 0 }]
+                : [home, dest]
+              const conflict = await minimalTripBudget(synthetic as any, capHours, reqNights, process.env.GOOGLE_MAPS_API_KEY)
+              if (conflict) {
+                response = buildBudgetConflictAsk(conflict.turnaroundName, conflict.minNeeded, reqNights)
+                console.warn(
+                  '[AI budget-conflict:pre-build] sessionId=%s shape=%s turnaround=%s minNeeded=%d requested=%d',
+                  sessionId, roundTrip ? 'ROUND_TRIP' : 'ONE_WAY', conflict.turnaroundName, conflict.minNeeded, reqNights,
+                )
+              }
+            } else if (!changed) {
+              console.log('[AI budget-conflict:pre-build] sessionId=%s skipped (cost gate — destination/length unchanged)', sessionId)
             }
           }
         }
