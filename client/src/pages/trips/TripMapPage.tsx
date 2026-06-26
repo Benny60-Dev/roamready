@@ -857,6 +857,22 @@ export default function TripMapPage() {
       'NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV',
       'WI','WY','DC',
     ])
+    // Full US state names — this data stores some states as full names ("Arizona",
+    // "Montana", "Utah", "Wyoming") rather than the 2-letter code, so the code set
+    // alone would route them to the unrestricted branch. Critically this also
+    // closes the "Georgia" hole: the full name "Georgia" is a US-state-vs-COUNTRY
+    // collision, so a stop stored as "Georgia" must force US, not go unrestricted.
+    // Compared upper-cased (matches the stateUC normalization below).
+    const US_STATE_NAMES = new Set([
+      'ALABAMA','ALASKA','ARIZONA','ARKANSAS','CALIFORNIA','COLORADO','CONNECTICUT',
+      'DELAWARE','FLORIDA','GEORGIA','HAWAII','IDAHO','ILLINOIS','INDIANA','IOWA',
+      'KANSAS','KENTUCKY','LOUISIANA','MAINE','MARYLAND','MASSACHUSETTS','MICHIGAN',
+      'MINNESOTA','MISSISSIPPI','MISSOURI','MONTANA','NEBRASKA','NEVADA',
+      'NEW HAMPSHIRE','NEW JERSEY','NEW MEXICO','NEW YORK','NORTH CAROLINA',
+      'NORTH DAKOTA','OHIO','OKLAHOMA','OREGON','PENNSYLVANIA','RHODE ISLAND',
+      'SOUTH CAROLINA','SOUTH DAKOTA','TENNESSEE','TEXAS','UTAH','VERMONT','VIRGINIA',
+      'WASHINGTON','WEST VIRGINIA','WISCONSIN','WYOMING','DISTRICT OF COLUMBIA',
+    ])
 
     Promise.all(toGeocode.map(stop =>
       new Promise<{ stop: Stop; lat: number; lng: number } | null>(resolve => {
@@ -869,7 +885,10 @@ export default function TripMapPage() {
         // itself. No per-country enumeration — Mexico et al. just work.
         const stateUC = stop.locationState?.trim().toUpperCase() || ''
         const isCanadian = CA_PROVINCES.has(stateUC)
-        const isUS = US_STATES.has(stateUC) || stateUC === '' // blank state → US default
+        // US when the state is a 2-letter code, a full state name, OR blank (the
+        // blank-state US default). Full-name match is what forces "Arizona" and,
+        // critically, "Georgia" to the US rather than letting them go unrestricted.
+        const isUS = US_STATES.has(stateUC) || US_STATE_NAMES.has(stateUC) || stateUC === ''
         // restrictCountry null = unrestricted (genuinely-foreign, non-US/CA stop).
         const restrictCountry = isCanadian ? 'CA' : isUS ? 'US' : null
         const countryWord = isCanadian ? 'Canada' : isUS ? 'USA' : null
