@@ -26,8 +26,16 @@ const cases: Case[] = [
   ['the RR49 regression: "come home"', ['round rock texas july 5th for 6 days and come home'], [], true],
   ['"head back home"', ['then head back home to mesa'], [], true],
   ['"loop trip"', ['a loop trip through the rockies'], [], true],
+  // BUG-RT-ASSUME-ROUNDTRIP — the SAME prod trip WITH return language must KEEP the
+  // leg, proving the one-way tightening didn't break legitimate round-trips.
+  ['the prod regression WITH "and back" → round trip', ['plan a trip to Rocky Point Mexico from Mesa Arizona and back'], [], true],
 
   // ── strip return leg (one-way) ──
+  // BUG-RT-ASSUME-ROUNDTRIP — the prod failure: ambiguous "to X from Y" with NO
+  // return language. The model assumed round-trip + the backstop kept it; now this
+  // resolves ONE-WAY (hasRoundTripIntent=false → the build backstop strips the leg).
+  ['the prod regression: "to X from Y" ambiguous → one-way', ['plan a trip to Rocky Point Mexico from Mesa Arizona'], [], false],
+  ['ambiguous one-way even with date+nights (unanswered direction Q)', ['plan a trip to Rocky Point Mexico from Mesa Arizona', 'july 1st for 6 days'], [], false],
   ['plain one-way ask', ['plan a trip from Phoenix to Portland'], [], false],
   ['plain destination ask stays one-way', ['plan me a trip to Denver, 4 days'], [], false],
   ['"backpacking" must not match "back"-phrases', ['a backpacking trip to the Sierras'], [], false],

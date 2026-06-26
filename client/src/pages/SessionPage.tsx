@@ -14,7 +14,7 @@ import { useSessionAutosave } from '../hooks/useSessionAutosave'
 import { useVoiceInput } from '../hooks/useVoiceInput'
 import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
 import { useMediaQuery } from '../hooks/useMediaQuery'
-import { hasRoundTripIntent, hasOneWayIntent } from '../utils/roundTripIntent'
+import { hasRoundTripIntent } from '../utils/roundTripIntent'
 import { cleanChatText } from '../utils/cleanChatText'
 import { ChatInput } from '../components/ChatInput'
 import { selectGreeting } from '../utils/greeting'
@@ -154,25 +154,24 @@ function stripUnrequestedReturnLeg(
   const stops: any[] = itinerary?.stops
   if (!Array.isArray(stops) || stops.length < 2) return { itinerary, stripped: false }
 
-  // AI-RT-2 — the MODEL is now the primary round-trip decider; this guard is a
-  // BACKSTOP, not the override. Two gates, in order:
-  //   1. Round-trip intent (inclusive — "come home", "back home", "and back",
-  //      "return", "loop", "back to <origin>", etc.) → the model's return leg is
-  //      correct, KEEP it.
-  //   2. Otherwise, only strip when there is POSITIVE one-way evidence
-  //      (hasOneWayIntent). When the request is genuinely AMBIGUOUS (no return
-  //      signal either way), KEEP whatever the model built — we no longer
-  //      amputate a return leg just because the round-trip phrase test missed.
-  // This stops both failure modes: rejecting "come home" (gate 1) AND nuking a
-  // legitimate model-built return leg on an ambiguous prompt (gate 2).
-  // Regression-checked by npm run check:round-trip-intent.
+  // BUG-RT-ASSUME-ROUNDTRIP — KEEP the return leg ONLY when the user's language
+  // carries POSITIVE round-trip intent (hasRoundTripIntent: "come home", "back
+  // home", "and back", "return", "loop", "back to <origin>", etc.). Everything
+  // else — explicit one-way AND genuinely AMBIGUOUS ("trip to X from Y", no return
+  // signal) — defaults to ONE-WAY and the model's return leg is stripped. This
+  // aligns the BUILD path with the prompt's stated one-way default AND with the
+  // pre-build BUDGET gate (server/src/controllers/ai.ts), which already resolves
+  // ambiguous → ONE_WAY via this SAME hasRoundTripIntent recognizer — so build and
+  // budget no longer disagree. (Prior AI-RT-2 logic "trusted the model" on
+  // ambiguous and KEPT the leg, which let the model assume a round trip the user
+  // never stated — e.g. "Rocky Point from Mesa" became Mesa→Rocky Point→Mesa.) The
+  // user adds a return via modify if they want one. Regression-checked by
+  // npm run check:round-trip-intent.
   const userMessages = messages.filter(m => m.role === 'user').map(m => m.content)
   if (hasRoundTripIntent(userMessages, [homeCity, stops[0]?.locationName])) {
-    return { itinerary, stripped: false }  // genuine round trip — no-op
+    return { itinerary, stripped: false }  // positive round-trip intent — KEEP the return leg
   }
-  if (!hasOneWayIntent(userMessages)) {
-    return { itinerary, stripped: false }  // ambiguous — trust the model, keep its build
-  }
+  // No positive round-trip intent (one-way OR ambiguous) → strip the return leg.
 
   // Find turnaround: last DESTINATION-typed stop with nights > 0 that isn't
   // the home city. Requiring type='DESTINATION' is critical: transit stops
