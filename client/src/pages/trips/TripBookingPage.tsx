@@ -461,6 +461,7 @@ function BookedRowCard({
   altCount,
   altsExpanded,
   onToggleAlts,
+  autoOpenEdit,
 }: {
   stop: Stop
   // The booked campground — comes from renderStopContent's bookedCg lookup
@@ -473,11 +474,26 @@ function BookedRowCard({
   altCount: number
   altsExpanded: boolean
   onToggleAlts: () => void
+  // True when this card is the deep-link target (?stopId=<this stop>). Opens the
+  // Edit panel ONCE on landing so the reservation lands fully expanded.
+  autoOpenEdit?: boolean
 }) {
   // Edit expansion local state. Independent from altsExpanded — the user can
   // open Edit, browse alternates, and close Edit, leaving alternates visible
-  // below the card; or vice versa.
-  const [editOpen, setEditOpen] = useState(false)
+  // below the card; or vice versa. Seeded from autoOpenEdit so a deep-link lands
+  // expanded even if the card renders with the prop already true on first paint.
+  const [editOpen, setEditOpen] = useState(autoOpenEdit ?? false)
+  // ONE-SHOT deep-link auto-open. If the card mounts BEFORE the ?stopId= param
+  // resolves (autoOpenEdit flips false→true after mount), open the panel then —
+  // but strictly once. After this fires, the user owns the toggle: closing the
+  // panel keeps it closed, and re-renders / navigation never re-open it.
+  const autoOpenedRef = useRef(autoOpenEdit ?? false)
+  useEffect(() => {
+    if (autoOpenEdit && !autoOpenedRef.current) {
+      autoOpenedRef.current = true
+      setEditOpen(true)
+    }
+  }, [autoOpenEdit])
   const isOvernight = stop.type === 'OVERNIGHT_ONLY'
   const arr = stop.arrivalDate ? formatTripDate(stop.arrivalDate, 'MMM d') : null
   const dep = stop.departureDate ? formatTripDate(stop.departureDate, 'MMM d') : null
@@ -1062,6 +1078,11 @@ function TowingNoteModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
 export default function TripBookingPage() {
   const { id } = useParams<{ id: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
+  // Deep-link target captured ONCE at mount. scrollToStop rewrites ?stopId= on
+  // in-page navigation, so the live param can't tell "landed here" from "clicked
+  // here" — this lazy-initialized snapshot is the landing target and never changes,
+  // so the Edit panel auto-opens only on the deep-link landing, not on navigation.
+  const [deepLinkStopId] = useState(() => searchParams.get('stopId'))
   const [trip, setTrip] = useState<Trip | null>(null)
   const [campgrounds, setCampgrounds] = useState<Record<string, Campground[]>>({})
   const [loading, setLoading] = useState(true)
@@ -1420,6 +1441,7 @@ export default function TripBookingPage() {
             altCount={altOptions.length}
             altsExpanded={showAlts}
             onToggleAlts={() => setExpandedAlts(prev => ({ ...prev, [stop.id]: !(prev[stop.id] ?? false) }))}
+            autoOpenEdit={stop.id === deepLinkStopId}
           />
         ) : recommended ? (
           <RecommendedCampgroundCard
