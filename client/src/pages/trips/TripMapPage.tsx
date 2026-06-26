@@ -214,7 +214,7 @@ const BOOKING_BADGE: Record<MarkerKind, { cls: string; label: string }> = {
 }
 
 function StopPopup({
-  stop, kind, weather, displayNum, onClose, onUpdateNights,
+  stop, kind, weather, displayNum, onClose, onUpdateNights, tripId,
 }: {
   stop: Stop
   kind: MarkerKind
@@ -222,6 +222,9 @@ function StopPopup({
   displayNum?: 'S' | 'H' | 'F' | 'S/H' | number
   onClose: () => void
   onUpdateNights: (id: string, nights: number) => void
+  // Trip id so a CONFIRMED ("Booked") stop's badge can deep-link to its
+  // reservation panel, matching the stops-list pill. Optional: absent → plain badge.
+  tripId?: string
 }) {
   const badge  = BOOKING_BADGE[kind]
   const alerts = stopAlerts(weather)
@@ -276,7 +279,20 @@ function StopPopup({
           <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
             {displayNum === 'S/H' ? 'Start · Finish' : displayNum !== undefined ? formatStopBadgeLabel(displayNum) : ''}
           </span>
-          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${badge.cls}`}>{badge.label}</span>
+          {kind === 'booked' && tripId ? (
+            // CONFIRMED → deep-link the "Confirmed" badge to this stop's reservation
+            // panel, parity with the stops-list "Booked" pill. stopPropagation keeps
+            // the popup's own handlers from firing; booking page handles ?stopId=.
+            <Link
+              to={`/trips/${tripId}/booking?stopId=${stop.id}`}
+              onClick={e => e.stopPropagation()}
+              className={`text-[10px] font-medium px-1.5 py-0.5 rounded hover:underline transition-colors ${badge.cls}`}
+            >
+              {badge.label}
+            </Link>
+          ) : (
+            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${badge.cls}`}>{badge.label}</span>
+          )}
         </div>
         <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded ml-2"><X size={14} /></button>
       </div>
@@ -2244,8 +2260,14 @@ export default function TripMapPage() {
                     const ctaEl = isEndpoint ? (
                       <span className="text-[9px] text-gray-400">{formatStopBadgeLabel(badge)}</span>
                     ) : stop.bookingStatus === 'CONFIRMED' ? (
-                      <span
-                        className="rounded-md font-medium whitespace-nowrap"
+                      // Deep-link to this stop's reservation panel, mirroring the
+                      // sibling status links below. stopPropagation so the click
+                      // opens booking and does NOT also fire the row's setSelectedStop.
+                      // The booking page already handles ?stopId= (active + scroll).
+                      <Link
+                        to={`/trips/${id}/booking?stopId=${stop.id}`}
+                        onClick={e => e.stopPropagation()}
+                        className="rounded-md font-medium whitespace-nowrap hover:underline transition-colors"
                         style={{
                           background: '#DCE5D5',
                           color: '#2F4030',
@@ -2254,7 +2276,7 @@ export default function TripMapPage() {
                         }}
                       >
                         Booked
-                      </span>
+                      </Link>
                     ) : (
                       <Link
                         to={`/trips/${id}/booking?stopId=${stop.id}`}
@@ -2585,6 +2607,7 @@ export default function TripMapPage() {
                     }
                     onClose={() => setSelectedStop(null)}
                     onUpdateNights={handleUpdateNights}
+                    tripId={id}
                   />
                 </OverlayViewF>
               )}
