@@ -61,6 +61,86 @@ function formatMembershipNudge(labels: string[]): string {
   return `You have ${joined} — ask if any save you money here.`
 }
 
+// ─── Check-in / check-out time picker (BUG-PDF-TOSTRING root-cure) ────────────
+// Stored format is 24-hour "HH:MM" — the canonical format the PDF parser
+// (TripPDF fmtTime), the trip summary, and the AI defaults already use. The
+// free-text inputs this replaces let a user type "3pm" (no colon), which made
+// the PDF's `m.toString()` throw and crashed the ENTIRE @react-pdf render. Three
+// constrained selects mean the form can only ever emit parser-safe "HH:MM".
+const pad2 = (n: number) => String(n).padStart(2, '0')
+const MINUTE_OPTS = ['00', '15', '30', '45']
+const HOUR12_OPTS = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+
+// Snap an arbitrary minute to the nearest 15-min option (legacy odd minutes).
+function snap15(min: number): string {
+  const opts = [0, 15, 30, 45]
+  return pad2(opts.reduce((a, b) => (Math.abs(b - min) < Math.abs(a - min) ? b : a), 0))
+}
+
+// Coerce any stored time — canonical "HH:MM", "H:MM AM/PM", bare "Hpm" / "H am",
+// etc. — to canonical 24-hour "HH:MM". Unparseable values ("noon", junk, empty)
+// fall back to the supplied default. This is the lazy self-heal: a legacy
+// free-text row is normalized when the form loads and rewritten canonical on the
+// next Save — NO DB migration. Minutes snap to the 15-min grid.
+function toHHMM(raw: string | null | undefined, fallback: string): string {
+  if (!raw) return fallback
+  const s = raw.trim().toLowerCase()
+  let m = s.match(/^(\d{1,2}):(\d{2})$/)            // 24-hour "HH:MM" / "H:MM"
+  if (m) {
+    const h = +m[1], min = +m[2]
+    if (h <= 23 && min <= 59) return `${pad2(h)}:${snap15(min)}`
+  }
+  m = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/) // 12-hour "H:MM am" / "Hpm"
+  if (m) {
+    let h = +m[1] % 12
+    const min = m[2] ? +m[2] : 0
+    if (m[3] === 'pm') h += 12
+    if (h <= 23 && min <= 59) return `${pad2(h)}:${snap15(min)}`
+  }
+  return fallback
+}
+
+// Canonical "HH:MM" → friendly "3:00 PM" for the collapsed summary line.
+function fmt12(hhmm: string): string {
+  const m = hhmm.match(/^(\d{1,2}):(\d{2})$/)
+  if (!m) return hhmm
+  const h = +m[1]
+  return `${h % 12 === 0 ? 12 : h % 12}:${m[2]} ${h >= 12 ? 'PM' : 'AM'}`
+}
+
+// Three selects (hour 1–12, minute 00/15/30/45, AM/PM) that read/write canonical
+// 24-hour "HH:MM". `value` is always canonical (form state is canonicalized at
+// init via toHHMM), so parsing here is trivial; emit converts 12h+period → 24h.
+function TimePicker({ value, onChange }: { value: string; onChange: (hhmm: string) => void }) {
+  const [hStr, mStr] = (value || '00:00').split(':')
+  const h24 = Number(hStr) || 0
+  const min = Number(mStr) || 0
+  const period: 'AM' | 'PM' = h24 >= 12 ? 'PM' : 'AM'
+  const hour12 = h24 % 12 === 0 ? 12 : h24 % 12
+  const minOpt = MINUTE_OPTS.includes(pad2(min)) ? pad2(min) : snap15(min)
+
+  const emit = (h12: number, mm: string, p: 'AM' | 'PM') => {
+    const h = p === 'PM' ? (h12 % 12) + 12 : h12 % 12
+    onChange(`${pad2(h)}:${mm}`)
+  }
+  const selCls = 'input text-xs px-1.5 py-1'
+  return (
+    <div className="flex items-center gap-1">
+      <select className={selCls} value={hour12} onChange={e => emit(Number(e.target.value), minOpt, period)}>
+        {HOUR12_OPTS.map(h => <option key={h} value={h}>{h}</option>)}
+      </select>
+      <span className="text-gray-400 text-xs">:</span>
+      <select className={selCls} value={minOpt} onChange={e => emit(hour12, e.target.value, period)}>
+        {MINUTE_OPTS.map(mm => <option key={mm} value={mm}>{mm}</option>)}
+      </select>
+      <select className={selCls} value={period} onChange={e => emit(hour12, minOpt, e.target.value as 'AM' | 'PM')}>
+        <option value="AM">AM</option>
+        <option value="PM">PM</option>
+      </select>
+    </div>
+  )
+}
+
 // ─── Reservation & Notes collapsible section ─────────────────────────────────
 
 interface ReservationForm {
@@ -95,8 +175,12 @@ function ReservationSection({
   const [form, setForm] = useState<ReservationForm>({
     confirmationNum: stop.confirmationNum || '',
     siteNumber: stop.siteNumber || '',
-    checkInTime: stop.checkInTime || '',
-    checkOutTime: stop.checkOutTime || '',
+    // Canonicalize the stored time to "HH:MM" on load: a legacy free-text value
+    // (e.g. "3pm") parses into the picker AND self-heals on the next Save; an
+    // empty/unparseable value falls back to the standard default (check-in PM
+    // 3:00, check-out AM 11:00). The picker then reads/writes canonical "HH:MM".
+    checkInTime: toHHMM(stop.checkInTime, '15:00'),
+    checkOutTime: toHHMM(stop.checkOutTime, '11:00'),
     notes: stop.notes || '',
     // Pre-fill from prior actuals so editing a booking shows the values
     // already recorded. Number → string via `?? ''` because the inputs are
@@ -129,8 +213,8 @@ function ReservationSection({
       setForm({
         confirmationNum: stop.confirmationNum || '',
         siteNumber: stop.siteNumber || '',
-        checkInTime: stop.checkInTime || '',
-        checkOutTime: stop.checkOutTime || '',
+        checkInTime: toHHMM(stop.checkInTime, '15:00'),
+        checkOutTime: toHHMM(stop.checkOutTime, '11:00'),
         notes: stop.notes || '',
         actualRate: stop.actualRate != null ? String(stop.actualRate) : '',
         actualFees: stop.actualFees != null ? String(stop.actualFees) : '',
@@ -200,7 +284,7 @@ function ReservationSection({
   const summaryParts: string[] = []
   if (form.confirmationNum) summaryParts.push(`Confirmation: ${form.confirmationNum}`)
   if (form.siteNumber) summaryParts.push(`Site: ${form.siteNumber}`)
-  if (form.checkInTime) summaryParts.push(`Check-in: ${form.checkInTime}`)
+  if (form.checkInTime) summaryParts.push(`Check-in: ${fmt12(form.checkInTime)}`)
   const collapsedSummary = summaryParts.length > 0
     ? summaryParts.join(' · ')
     : 'Click to add confirmation #, site number, and notes'
@@ -256,21 +340,11 @@ function ReservationSection({
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Check-in time</label>
-              <input
-                className="input text-xs w-full"
-                placeholder="2:00 PM"
-                value={form.checkInTime}
-                onChange={e => set('checkInTime', e.target.value)}
-              />
+              <TimePicker value={form.checkInTime} onChange={v => set('checkInTime', v)} />
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Check-out time</label>
-              <input
-                className="input text-xs w-full"
-                placeholder="11:00 AM"
-                value={form.checkOutTime}
-                onChange={e => set('checkOutTime', e.target.value)}
-              />
+              <TimePicker value={form.checkOutTime} onChange={v => set('checkOutTime', v)} />
             </div>
             {/* Block 13 — actual cost capture. The campground's published rate
                 (stop.siteRate) is the pre-booking estimate; what users
