@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { Autocomplete, useJsApiLoader } from '@react-google-maps/api'
-import { Truck, Map, CreditCard, Shield, ChevronRight, ChevronDown, Save, MapPin, Accessibility, User, Users } from 'lucide-react'
+import { Truck, Map, CreditCard, Shield, ChevronRight, ChevronDown, Save, MapPin, Accessibility, User, Users, Mail } from 'lucide-react'
 import { usersApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 import HomePinDropModal from '../../components/profile/HomePinDropModal'
@@ -20,6 +20,21 @@ export default function ProfilePage() {
   // HOME-ADDRESS rung 2 — pin-drop fallback shown when geocode-on-save fails.
   const [pinDropOpen, setPinDropOpen] = useState(false)
   const [pinDropAddress, setPinDropAddress] = useState<string | null>(null)
+  // FR-MARKETING-OPTIN — in-app marketing-email toggle (the change-anytime opt-out,
+  // foundation for unsubscribe). Writes the same flag/endpoint as the onboarding
+  // modal; setUser keeps the store in sync so the switch reflects the saved state.
+  const [mktSaving, setMktSaving] = useState(false)
+  async function toggleMarketing(next: boolean) {
+    setMktSaving(true)
+    try {
+      const res = await usersApi.updateMarketingConsent(next)
+      if (user) setUser({ ...user, ...res.data })
+    } catch {
+      /* leave the switch as-is on failure; the user can retry */
+    } finally {
+      setMktSaving(false)
+    }
+  }
   const { register, handleSubmit, reset, setValue, watch } = useForm({ defaultValues: user || {} })
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null)
 
@@ -290,6 +305,34 @@ export default function ProfilePage() {
             <ChevronRight size={16} className="text-gray-400" />
           </Link>
         ))}
+
+        {/* FR-MARKETING-OPTIN — marketing-email preference toggle. Reads/writes the
+            same consent flag as the onboarding modal; flip anytime (in-app opt-out). */}
+        <div className="card flex items-center gap-3">
+          <div className="w-8 h-8 bg-[#E0F0F4] rounded-lg flex items-center justify-center">
+            <Mail size={16} className="text-[#1F6F8B]" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-gray-900">Marketing emails</p>
+            <p className="text-xs text-gray-500">Trip tips, new features, and seasonal deals</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={!!user?.marketingConsent}
+            disabled={mktSaving}
+            onClick={() => toggleMarketing(!user?.marketingConsent)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${
+              user?.marketingConsent ? 'bg-[#1F6F8B]' : 'bg-gray-300'
+            }`}
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                user?.marketingConsent ? 'translate-x-5' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </div>
       </div>
 
       <HomePinDropModal

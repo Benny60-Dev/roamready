@@ -58,6 +58,7 @@ import AdminDashboardPage from './pages/admin/AdminDashboardPage'
 import AdminFeedbackPage from './pages/admin/AdminFeedbackPage'
 import AdminRevenuePage from './pages/admin/AdminRevenuePage'
 import AdminSubscribersPage from './pages/admin/AdminSubscribersPage'
+import AdminMarketingSubscribersPage from './pages/admin/AdminMarketingSubscribersPage'
 import AdminLinkHealthPage from './pages/admin/AdminLinkHealthPage'
 import AdminSessionInspectorPage from './pages/admin/AdminSessionInspectorPage'
 
@@ -195,6 +196,7 @@ export default function App() {
           <Route path="/admin/feedback" element={<OwnerRoute><AdminFeedbackPage /></OwnerRoute>} />
           <Route path="/admin/revenue" element={<OwnerRoute><AdminRevenuePage /></OwnerRoute>} />
           <Route path="/admin/subscribers" element={<OwnerRoute><AdminSubscribersPage /></OwnerRoute>} />
+          <Route path="/admin/marketing-subscribers" element={<OwnerRoute><AdminMarketingSubscribersPage /></OwnerRoute>} />
           <Route path="/admin/link-health" element={<OwnerRoute><AdminLinkHealthPage /></OwnerRoute>} />
           <Route path="/admin/session-inspector" element={<OwnerRoute><AdminSessionInspectorPage /></OwnerRoute>} />
         </Route>

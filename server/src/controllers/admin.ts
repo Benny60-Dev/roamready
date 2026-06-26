@@ -145,6 +145,26 @@ export async function getSubscribers(req: AuthRequest, res: Response, next: Next
   } catch (err) { next(err) }
 }
 
+// GET /admin/marketing-subscribers (FR-MARKETING-OPTIN). The CAN-SPAM "who we may
+// email" list: every user who explicitly opted in (marketingConsent = true).
+// Read-only; deactivated accounts are excluded (can't market to a disabled
+// account). marketingConsentAt is the consent audit timestamp. `any` args for the
+// same stale-Prisma-client reason as getSubscribers above.
+export async function getMarketingSubscribers(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const args: any = {
+      where: { marketingConsent: true, deactivatedAt: null },
+      select: {
+        id: true, email: true, firstName: true, lastName: true,
+        marketingConsentAt: true, createdAt: true,
+      },
+      orderBy: { marketingConsentAt: 'desc' },
+    }
+    const subscribers = await prisma.user.findMany(args)
+    res.json(subscribers)
+  } catch (err) { next(err) }
+}
+
 // ── Account suspend / reactivate (admin UI) ──────────────────────────────────
 // Owner-gated by the adminRouter.use(requireAuth + requireVerifiedEmail +
 // requireOwner) mount. Both delegate the deactivatedAt + AdminActionLog write to

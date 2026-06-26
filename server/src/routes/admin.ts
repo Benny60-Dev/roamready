@@ -4,7 +4,7 @@ import { requireVerifiedEmail } from '../middleware/requireVerifiedEmail'
 import { validateBody } from '../middleware/validate'
 import { AdminFeedbackUpdateSchema } from '../schemas/feedback'
 import { AdminSuspendSchema, AdminGrantProSchema } from '../schemas/admin'
-import { getMetrics, getSubscribers, getRevenue, getAdminFeedback, updateFeedback, analyzeFeedback, getLinkHealth, inspectSession, suspendUser, reactivateUser, getUserHistory, grantProUser, revokeProUser } from '../controllers/admin'
+import { getMetrics, getSubscribers, getMarketingSubscribers, getRevenue, getAdminFeedback, updateFeedback, analyzeFeedback, getLinkHealth, inspectSession, suspendUser, reactivateUser, getUserHistory, grantProUser, revokeProUser } from '../controllers/admin'
 
 export const adminRouter = Router()
 // requireVerifiedEmail before requireOwner — owners always bypass the
@@ -15,6 +15,7 @@ adminRouter.use(requireAuth, requireVerifiedEmail, requireOwner as any)
 
 adminRouter.get('/metrics', getMetrics as any)
 adminRouter.get('/subscribers', getSubscribers as any)
+adminRouter.get('/marketing-subscribers', getMarketingSubscribers as any)
 adminRouter.get('/revenue', getRevenue as any)
 
 // Account suspend / reactivate + per-account moderation history. All inherit

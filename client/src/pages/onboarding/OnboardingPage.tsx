@@ -6,6 +6,7 @@ import { usersApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 import { VehicleType, TowedType } from '../../types'
 import RangeSelect from '../../components/forms/RangeSelect'
+import MarketingOptInModal from '../../components/onboarding/MarketingOptInModal'
 import { YEARS, LENGTHS, HEIGHTS, MPG_OPTIONS, TANK_OPTIONS } from '../../constants/rigOptions'
 
 // Local UI shape — 'NONE' is the implicit default; serialized into
@@ -32,7 +33,12 @@ export default function OnboardingPage() {
   const [towingChoice, setTowingChoice] = useState<TowingChoice>('NONE')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
-  useAuthStore()
+  const { user } = useAuthStore()
+  // FR-MARKETING-OPTIN — show the opt-in modal once, gated on "no decision yet"
+  // (marketingConsentAt == null). The local dismiss flag closes it instantly after
+  // a choice (setUser also flips the timestamp, but this avoids a re-render flash).
+  const [optInDismissed, setOptInDismissed] = useState(false)
+  const showMarketingOptIn = !optInDismissed && user != null && user.marketingConsentAt == null
 
   const rigForm = useForm()
   const styleForm = useForm({
@@ -107,6 +113,7 @@ export default function OnboardingPage() {
 
   return (
     <div className="min-h-screen bg-rr-bg flex items-center justify-center p-4">
+      {showMarketingOptIn && <MarketingOptInModal onDecided={() => setOptInDismissed(true)} />}
       <div className="w-full max-w-xl">
         {/* Progress */}
         <div className="flex items-center justify-center gap-2 mb-8">
