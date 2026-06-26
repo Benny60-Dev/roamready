@@ -847,13 +847,36 @@ export default function TripMapPage() {
     // The Alaska route runs through BC + YT, so this is a real route, not an
     // edge case. locationState is a 2-letter code in this data (e.g. "BC").
     const CA_PROVINCES = new Set(['AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT'])
+    // US states + DC. Clean 2-letter codes, the dominant case. A stop whose state
+    // is one of these — OR whose state is blank (overwhelmingly a US stop; keeping
+    // the US default avoids "Paris" → Paris, France for a state-less row) — is
+    // FORCED to the US, identical to the prior behavior (zero regression).
+    const US_STATES = new Set([
+      'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS',
+      'KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY',
+      'NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV',
+      'WI','WY','DC',
+    ])
 
     Promise.all(toGeocode.map(stop =>
       new Promise<{ stop: Stop; lat: number; lng: number } | null>(resolve => {
-        const isCanadian = !!stop.locationState && CA_PROVINCES.has(stop.locationState.trim().toUpperCase())
-        const country = isCanadian ? 'Canada' : 'USA'
-        const q = [stop.locationName, stop.locationState, country].filter(Boolean).join(', ')
-        geocoder.geocode({ address: q, componentRestrictions: { country: isCanadian ? 'CA' : 'US' } }, (results, status) => {
+        // BUG-TRIP-MAPPINS (general) — the prior logic forced "USA" + a US
+        // component restriction onto EVERY non-Canadian stop, so foreign cities
+        // (Vancouver pre-RR47, now Mexico, and any future country) resolved to a
+        // wrong US fallback. Only FORCE a country for the known-clean code sets;
+        // for any other PRESENT state, geocode the raw "City, State" with NO
+        // appended country and NO restriction, letting Google resolve the country
+        // itself. No per-country enumeration — Mexico et al. just work.
+        const stateUC = stop.locationState?.trim().toUpperCase() || ''
+        const isCanadian = CA_PROVINCES.has(stateUC)
+        const isUS = US_STATES.has(stateUC) || stateUC === '' // blank state → US default
+        // restrictCountry null = unrestricted (genuinely-foreign, non-US/CA stop).
+        const restrictCountry = isCanadian ? 'CA' : isUS ? 'US' : null
+        const countryWord = isCanadian ? 'Canada' : isUS ? 'USA' : null
+        const q = [stop.locationName, stop.locationState, countryWord].filter(Boolean).join(', ')
+        const geocodeReq: google.maps.GeocoderRequest = { address: q }
+        if (restrictCountry) geocodeReq.componentRestrictions = { country: restrictCountry }
+        geocoder.geocode(geocodeReq, (results, status) => {
           if (status === 'OK' && results?.[0]) {
             const loc = results[0].geometry.location
             console.log('[TripMapPage] geocoded', stop.locationName, '→', loc.lat(), loc.lng())
