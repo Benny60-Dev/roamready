@@ -820,3 +820,57 @@ model AdminActionLog {
 
   @@index([targetUserId])
 }
+
+enum HazardType {
+  GRADE
+  LENGTH_BAN
+  HEIGHT_BAN
+  WIDTH_BAN
+  WEIGHT_BAN
+  PROPANE_TUNNEL
+  VEHICLE_BAN
+}
+
+// Gates which hazards fire live warnings. Native enum (not String) so a typo
+// can't silently downgrade a hazard out of the live-warning set.
+enum HazardConfidence {
+  HIGH
+  MED
+  LOW
+}
+
+// RV routing hazard store (Phase 1 — TABLE ONLY; seeding + match logic land in
+// Phase 2, after this table is live and the Prisma client is regenerated).
+// Each row is a known hazard a planned leg is tested against during planning
+// (geocoded-endpoint corridor test + stop-name match, rig-dimension-gated); a
+// hit surfaces via the existing RouteAdvisory banner (stop.violationNotes).
+//   • lat/lng           — geocoded ONCE at seed time; the corridor test input.
+//   • max*/gradePct/propaneBanned — rig-aware gating so a compliant rig isn't
+//                         warned (only the dimensions a given hazard limits are set).
+//   • confidence        — gates which hazards fire live warnings.
+//   • roadDesignation / detourWaypoint / segmentPolyline — NULLABLE future-proofing,
+//                         UNUSED in slice 1; included now so the later Strategy-A
+//                         road-name match + auto-reroute don't need a 2nd migration.
+model Hazard {
+  id              String           @id @default(cuid())
+  name            String
+  state           String
+  lat             Float
+  lng             Float
+  hazardType      HazardType
+  maxLengthFt     Float?
+  maxHeightFt     Float?
+  maxWidthFt      Float?
+  maxWeightLbs    Int?
+  gradePct        Float?
+  propaneBanned   Boolean          @default(false)
+  confidence      HazardConfidence
+  source          String
+  roadDesignation String?
+  detourWaypoint  String?
+  segmentPolyline String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([state])
+}
