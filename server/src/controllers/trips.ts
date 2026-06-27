@@ -3212,9 +3212,15 @@ export async function saveItinerary(req: AuthRequest, res: Response, next: NextF
 }
 
 /** Max HERE corridor waypoints returned per leg for display (map line +
- *  directions link). 8 keeps the directions-link URL under the 2048-char cap and
- *  stays at/under Google's standard waypoint ceiling — see the build constraints. */
-const HERE_DISPLAY_MAX_WAYPOINTS = 8
+ *  directions link). Kept SMALL (3) on purpose: these are raw HERE polyline
+ *  vertices, not road-snapped, so each via:true waypoint Google routes through
+ *  sits slightly off the centerline and adds a detour spur ("to the point and
+ *  back") plus inflated mileage. Over-sampling a near-straight corridor (8 points
+ *  → 8 wobbles, 118mi→143mi on NYC→Montauk) was the jitter cause. 3 pins the
+ *  corridor at its most-significant decision points (RDP keeps the biggest bends,
+ *  collapses straightaways) — enough to force HERE's road choice, few enough to
+ *  stay smooth. Comfortably under the 2048-char directions-URL cap too. */
+const HERE_DISPLAY_MAX_WAYPOINTS = 3
 
 export async function generateRoutes(req: AuthRequest, res: Response, next: NextFunction) {
   try {
