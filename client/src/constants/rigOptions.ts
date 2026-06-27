@@ -32,3 +32,10 @@ export const HEIGHTS: number[] = buildRange(8, 14, 0.5)
 // Whole numbers, emitted as `number` (the columns are Float? but accept ints).
 export const MPG_OPTIONS: number[] = buildRange(5, 30, 1)
 export const TANK_OPTIONS: number[] = buildRange(10, 200, 5)
+
+// Pounds (lbs), GVWR — gross vehicle weight rating. Float? column; emitted as a
+// whole number (use `integer` on RangeSelect). 6,000–60,000 lb covers light
+// camper vans up through Class A motorhomes; 500-lb steps mirror the fine
+// granularity of LENGTHS/HEIGHTS. RangeSelect injects any saved between-steps
+// value as a selectable option, so an exact GVWR off the grid is never lost.
+export const GVWR_OPTIONS: number[] = buildRange(6000, 60000, 500)
