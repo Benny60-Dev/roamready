@@ -5,11 +5,12 @@ import {
   Layers, X, Plus, Minus, DollarSign, Calendar, AlertTriangle,
   Wind, Droplets, Snowflake, Thermometer, ExternalLink,
   Pencil, Trash2, Check, BookOpen, Package, Share2, Download, CheckCircle, CloudRain, Wand2,
-  Maximize2, Minimize2, Tent, Bed, CalendarPlus,
+  Maximize2, Minimize2, Tent, Bed, CalendarPlus, MapPin,
 } from 'lucide-react'
 import { DayPicker } from 'react-day-picker'
 import 'react-day-picker/style.css'
 import { formatTripDate, lifecycleDate, parseTripDate, toYmd } from '../../utils/dates'
+import { directionsUrl } from '../../utils/directions'
 import { tripsApi, usersApi } from '../../services/api'
 import { Trip, Stop, Rig, StopWeather, LiveForecast, TripFuelEstimate } from '../../types'
 import { computeTripTotals } from '../../utils/tripTotals'
@@ -214,7 +215,7 @@ const BOOKING_BADGE: Record<MarkerKind, { cls: string; label: string }> = {
 }
 
 function StopPopup({
-  stop, kind, weather, displayNum, onClose, onUpdateNights, tripId,
+  stop, kind, weather, displayNum, onClose, onUpdateNights, tripId, nextStop,
 }: {
   stop: Stop
   kind: MarkerKind
@@ -225,6 +226,9 @@ function StopPopup({
   // Trip id so a CONFIRMED ("Booked") stop's badge can deep-link to its
   // reservation panel, matching the stops-list pill. Optional: absent → plain badge.
   tripId?: string
+  // The next stop by order, so the popup can offer driving directions for this
+  // leg. Absent on the last stop (no next leg) → no directions link.
+  nextStop?: Stop
 }) {
   const badge  = BOOKING_BADGE[kind]
   const alerts = stopAlerts(weather)
@@ -354,6 +358,19 @@ function StopPopup({
         {stop.hookupType && <span className="badge-green text-[10px]">{stop.hookupType}</span>}
         {stop.isPetFriendly && <span className="text-[#0F766E]">🐾 Pet-friendly</span>}
       </div>
+
+      {/* Driving directions to the next stop (omitted on the last stop). */}
+      {nextStop && (
+        <a
+          href={directionsUrl(stop, nextStop)}
+          target="_blank"
+          rel="noreferrer"
+          title={`Driving directions to ${nextStop.locationName}`}
+          className="inline-flex items-center gap-1 mt-2 text-xs text-[#185FA5] hover:underline"
+        >
+          <MapPin size={11} className="flex-shrink-0" /> Directions to {nextStop.locationName}
+        </a>
+      )}
 
       {/* Badge-based gate: only real bookable destinations get the button.
           'S' / 'H' / 'F' / 'S/H' are endpoints (no campground card on the
@@ -2402,6 +2419,21 @@ export default function TripMapPage() {
                                 <AlertTriangle size={11} className="flex-shrink-0" /> Originally booked for {formatTripDate(stop.originalBookedDate, 'MMM d, yyyy')}
                               </span>
                             )}
+                          {/* Directions to the NEXT stop (omitted on the last stop —
+                              no next leg). stopPropagation so the link opens Maps
+                              instead of firing the row's focusStop. */}
+                          {i < sortedStops.length - 1 && (
+                            <a
+                              href={directionsUrl(stop, sortedStops[i + 1])}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              title={`Driving directions to ${sortedStops[i + 1].locationName}`}
+                              className="inline-flex items-center gap-1 mt-0.5 text-[10px] text-[#185FA5] hover:underline"
+                            >
+                              <MapPin size={10} className="flex-shrink-0" /> Directions to {sortedStops[i + 1].locationName}
+                            </a>
+                          )}
                         </div>
                         <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
                           {ctaEl}
@@ -2608,6 +2640,12 @@ export default function TripMapPage() {
                     onClose={() => setSelectedStop(null)}
                     onUpdateNights={handleUpdateNights}
                     tripId={id}
+                    nextStop={(() => {
+                      // Next stop by order in the full itinerary (omitted on the last).
+                      const sorted = trip?.stops?.slice().sort((a, b) => a.order - b.order) ?? []
+                      const idx = sorted.findIndex(s => s.id === selectedStop.id)
+                      return idx >= 0 && idx < sorted.length - 1 ? sorted[idx + 1] : undefined
+                    })()}
                   />
                 </OverlayViewF>
               )}
