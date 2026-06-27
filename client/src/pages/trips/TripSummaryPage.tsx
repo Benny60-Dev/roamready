@@ -15,6 +15,7 @@ import { useAuthStore } from '../../store/authStore'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge, StopBadge } from '../../utils/stopBadge'
 import { format, addDays } from 'date-fns'
 import { parseTripDate, toYmd } from '../../utils/dates'
+import { directionsUrl } from '../../utils/directions'
 import { computeTripTotals } from '../../utils/tripTotals'
 import { userFacingStopCount } from '../../utils/userFacingStopCount'
 import { StopWeatherCard } from '../../components/weather/StopWeatherCard'
@@ -2882,6 +2883,19 @@ function DriveContent({
 
   return (
     <div>
+      {/* Driving directions for this leg (prevStop → stop). The DRIVE row IS the
+          leg, so there's naturally no row after the final destination. */}
+      {entry.prevStop && entry.stop && (
+        <a
+          href={directionsUrl(entry.prevStop, entry.stop)}
+          target="_blank"
+          rel="noreferrer"
+          title={`Driving directions from ${entry.prevStop.locationName} to ${entry.stop.locationName}`}
+          className="inline-flex items-center gap-1 mb-1.5 ml-4 text-xs text-[#185FA5] hover:underline"
+        >
+          <MapPin size={12} className="flex-shrink-0" /> Directions
+        </a>
+      )}
       {entry.highwayRoute && (
         <p className="text-xs text-gray-400 mb-1.5 ml-4">{entry.highwayRoute}</p>
       )}
