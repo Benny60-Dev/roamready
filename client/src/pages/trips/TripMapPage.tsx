@@ -32,9 +32,6 @@ const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 
 // directions links through them. Off (default) → Google-only display, no extra
 // fetch, byte-identical to before. Benny sets BOTH server + client flags together.
 const USE_HERE_ROUTING_DISPLAY = import.meta.env.VITE_USE_HERE_ROUTING === 'true'
-// Total HERE via-waypoints injected into the whole-trip map polyline call. Kept
-// small (≤10) to avoid the Directions Advanced-SKU billing tier / waypoint ceiling.
-const HERE_MAP_VIA_BUDGET = 10
 
 // ─── Marker colors ──────────────────────────────────────────────────────────────
 const MC = {
@@ -529,11 +526,15 @@ export default function TripMapPage() {
   const [weatherLoading, setWeatherLoading] = useState(false)
   const [geocoding, setGeocoding]           = useState(false)
   const [routePath, setRoutePath]           = useState<google.maps.LatLng[] | null>(null)
-  // FEAT-HERE-ROUTING (display) — HERE's RV-safe corridor waypoints per leg,
-  // keyed by the DESTINATION stop id (robust against coord-filtering). Populated
-  // only when VITE_USE_HERE_ROUTING is on; empty otherwise → Google-only display,
-  // byte-identical to before. Feeds both the map line (via:true intermediates)
-  // and the directions links (&waypoints=).
+  // FEAT-HERE-ROUTING (display) — per-leg HERE data, keyed by DESTINATION stop id
+  // (robust against coord-filtering). Populated only when VITE_USE_HERE_ROUTING is
+  // on; empty otherwise → Google-only display, byte-identical to before.
+  //   • hereLine     : HERE's FULL decoded polyline → drawn DIRECTLY as the map
+  //                    line (no Google via-reconstruction, so no hooks).
+  //   • hereDist     : HERE's measured leg distance (meters) → shown mileage.
+  //   • hereWaypoints: ≤3 snapped corridor points → directions-link URLs ONLY.
+  const [hereLine, setHereLine]             = useState<Map<string, Array<[number, number]>>>(new Map())
+  const [hereDist, setHereDist]             = useState<Map<string, number>>(new Map())
   const [hereWaypoints, setHereWaypoints]   = useState<Map<string, DirectionsWaypoint[]>>(new Map())
   const hereRoutesKey = useRef<string | null>(null)
   // Imperative handle to the underlying google.maps.Polyline. Captured via
@@ -1058,22 +1059,66 @@ export default function TripMapPage() {
     tripsApi.generateRoutes(id)
       .then(res => {
         const rows: any[] = Array.isArray(res.data) ? res.data : []
-        const map = new Map<string, DirectionsWaypoint[]>()
+        const lineMap = new Map<string, Array<[number, number]>>()
+        const distMap = new Map<string, number>()
+        const wpMap = new Map<string, DirectionsWaypoint[]>()
         for (const r of rows) {
-          if (r?.toStopId && Array.isArray(r.hereWaypoints) && r.hereWaypoints.length > 0) {
-            map.set(r.toStopId, r.hereWaypoints
+          if (!r?.toStopId) continue
+          // FULL HERE polyline → the map line.
+          if (Array.isArray(r.herePolyline) && r.herePolyline.length >= 2) {
+            const pts = r.herePolyline.filter(
+              (p: any) => Array.isArray(p) && typeof p[0] === 'number' && typeof p[1] === 'number',
+            ) as Array<[number, number]>
+            if (pts.length >= 2) lineMap.set(r.toStopId, pts)
+          }
+          // HERE measured distance → mileage.
+          if (typeof r.hereDistanceMeters === 'number' && r.hereDistanceMeters > 0) {
+            distMap.set(r.toStopId, r.hereDistanceMeters)
+          }
+          // ≤3 snapped waypoints → directions-link URLs only.
+          if (Array.isArray(r.hereWaypoints) && r.hereWaypoints.length > 0) {
+            wpMap.set(r.toStopId, r.hereWaypoints
               .filter((w: any) => typeof w?.lat === 'number' && typeof w?.lng === 'number')
               .map((w: any) => ({ lat: w.lat, lng: w.lng })))
           }
         }
-        setHereWaypoints(map)
-        console.log('[TripMapPage] HERE corridor waypoints for', map.size, 'leg(s)')
+        setHereLine(lineMap)
+        setHereDist(distMap)
+        setHereWaypoints(wpMap)
+        console.log('[TripMapPage] HERE display data: line for', lineMap.size, 'leg(s),',
+          wpMap.size, 'leg(s) with link waypoints')
       })
       .catch(err => {
-        console.warn('[TripMapPage] HERE waypoint fetch failed (Google-only display):', err?.message)
-        setHereWaypoints(new Map())
+        console.warn('[TripMapPage] HERE display fetch failed (Google-only display):', err?.message)
+        setHereLine(new Map()); setHereDist(new Map()); setHereWaypoints(new Map())
       })
   }, [id, trip?.stops])
+
+  // FEAT-HERE-ROUTING (display) — the map line built DIRECTLY from HERE's full
+  // per-leg polylines, concatenated in stop order. Null unless the flag is on, the
+  // Maps SDK is loaded, AND every leg has a HERE polyline (an all-or-nothing guard
+  // so we never draw a Frankenstein line with straight-line gaps where a leg is
+  // missing). When non-null it OWNS routePath; null → Google computeRoutes draws
+  // the line (unchanged). Keyed off hereLine + the coord-stop set.
+  const hereLinePath = useMemo<google.maps.LatLng[] | null>(() => {
+    if (!USE_HERE_ROUTING_DISPLAY || !isLoaded || !window.google?.maps) return null
+    const cs = (trip?.stops ?? [])
+      .filter(s => s.latitude && s.longitude)
+      .sort((a, b) => a.order - b.order)
+    if (cs.length < 2) return null
+    if (!cs.slice(1).every(s => (hereLine.get(s.id)?.length ?? 0) >= 2)) return null
+    const pts: google.maps.LatLng[] = []
+    for (let i = 1; i < cs.length; i++) {
+      for (const [lat, lng] of hereLine.get(cs[i].id)!) pts.push(new window.google.maps.LatLng(lat, lng))
+    }
+    return pts.length >= 2 ? pts : null
+  }, [hereLine, trip?.stops, isLoaded])
+
+  // When HERE owns the line, push it to routePath. (A separate effect, so it
+  // re-asserts over any late-resolving Google computeRoutes setRoutePath below.)
+  useEffect(() => {
+    if (hereLinePath) setRoutePath(hereLinePath)
+  }, [hereLinePath])
 
   // ── Routes API (replaces deprecated DirectionsService) ────────────────────────
   useEffect(() => {
@@ -1083,43 +1128,23 @@ export default function TripMapPage() {
       .sort((a, b) => a.order - b.order)
     if (coordStops.length < 2) return
 
-    // FEAT-HERE-ROUTING (display): when HERE corridor waypoints are available,
-    // route the map line through them (via:true intermediates — they pin the
-    // corridor WITHOUT splitting legs, so per-leg highway/duration/distance
-    // attribution below stays 1:1 with stops). The key includes the HERE marker
-    // so the line redraws when waypoints arrive after the first (coords-only) run.
-    const useHereLine = USE_HERE_ROUTING_DISPLAY && hereWaypoints.size > 0
+    // The map LINE is no longer drawn from this Google route when HERE owns it
+    // (hereLinePath set) — see the guard on setRoutePath below. This call still
+    // runs for the per-leg highway NAMES + durations (HERE doesn't provide those),
+    // and as the line FALLBACK when HERE geometry is absent. Intermediates are the
+    // plain middle stops again (the via-waypoint approach caused the hooks this
+    // build removes). `here:` in the key re-runs it once when HERE data lands so
+    // the distance below switches to HERE's measurement.
+    const useHereLine = !!hereLinePath
     const key = coordStops.map(s => `${s.latitude},${s.longitude}`).join('|') +
-      (useHereLine ? `|here:${hereWaypoints.size}` : '')
+      (useHereLine ? `|here:${hereDist.size}` : '')
     if (directionsCoordsKey.current === key) return
     directionsCoordsKey.current = key
 
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string
-    let intermediates: Array<{ location: { latLng: { latitude: number; longitude: number } }; via?: boolean }>
-    if (useHereLine) {
-      // Interleave, in route order: each leg's HERE corridor waypoints (via:true —
-      // pass-through, no leg split) followed by the leg's destination stop as a
-      // real (non-via) boundary, except the final destination (sent separately
-      // below). Distribute the via budget across legs so the whole-trip line stays
-      // small. Hard-cap total intermediates at Google's 25 ceiling.
-      const legCount = coordStops.length - 1
-      const perLeg = Math.max(1, Math.floor(HERE_MAP_VIA_BUDGET / legCount))
-      intermediates = []
-      for (let i = 0; i < coordStops.length - 1; i++) {
-        const dest = coordStops[i + 1]
-        for (const w of (hereWaypoints.get(dest.id) ?? []).slice(0, perLeg)) {
-          intermediates.push({ location: { latLng: { latitude: w.lat, longitude: w.lng } }, via: true })
-        }
-        if (i + 1 <= coordStops.length - 2) {
-          intermediates.push({ location: { latLng: { latitude: dest.latitude!, longitude: dest.longitude! } } })
-        }
-      }
-      intermediates = intermediates.slice(0, 25)
-    } else {
-      intermediates = coordStops.slice(1, -1).slice(0, 25).map(s => ({
-        location: { latLng: { latitude: s.latitude!, longitude: s.longitude! } },
-      }))
-    }
+    const intermediates = coordStops.slice(1, -1).slice(0, 25).map(s => ({
+      location: { latLng: { latitude: s.latitude!, longitude: s.longitude! } },
+    }))
 
     console.log('[TripMapPage] Calling Routes API for', coordStops.length, 'stops, key:', key)
 
@@ -1147,10 +1172,12 @@ export default function TripMapPage() {
         const route = data.routes?.[0]
         if (!route) { console.warn('[TripMapPage] Routes API: no route in response', data); return }
 
-        // Decode the overall polyline and draw the route line
+        // Decode the overall polyline and draw the route line — ONLY when HERE
+        // isn't drawing it. When useHereLine, the HERE-polyline effect owns
+        // routePath; skipping here avoids a flash of Google's line + a race.
         const encoded: string = route.polyline?.encodedPolyline
         console.log('[TripMapPage] encoded polyline length:', encoded?.length ?? 0)
-        if (encoded && window.google.maps.geometry?.encoding) {
+        if (!useHereLine && encoded && window.google.maps.geometry?.encoding) {
           setRoutePath(window.google.maps.geometry.encoding.decodePath(encoded))
         }
 
@@ -1164,7 +1191,9 @@ export default function TripMapPage() {
           const label = `leg[${i}] → ${destStop.locationName}`
           const highways      = parseHighwaysFromRouteSteps(leg.steps ?? [], label)
           const driveDuration = formatDuration(leg.duration ?? '')
-          const distMeters: number = leg.distanceMeters ?? 0
+          // Prefer HERE's measured distance (matches the HERE line being drawn);
+          // fall back to Google's leg distance when HERE has none for this leg.
+          const distMeters: number = (useHereLine ? hereDist.get(destStop.id) : undefined) ?? leg.distanceMeters ?? 0
           const driveDistanceMiles = distMeters > 0 ? Math.round(distMeters / 1609.34) : undefined
           totalDistanceMeters += distMeters
           console.log('[TripMapPage]', label, '| highways:', highways || '(none)', '| duration:', driveDuration || '(none)', '| miles:', driveDistanceMiles ?? '(none)')
@@ -1217,7 +1246,7 @@ export default function TripMapPage() {
         }
       })
       .catch(err => console.warn('[TripMapPage] Routes API fetch error:', err))
-  }, [isLoaded, geocoding, trip?.stops, hereWaypoints])
+  }, [isLoaded, geocoding, trip?.stops, hereLinePath, hereDist])
 
   // ── Derived values ─────────────────────────────────────────────────────────────
   const stopsWithCoords = useMemo(
