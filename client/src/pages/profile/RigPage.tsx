@@ -7,7 +7,7 @@ import { useAuthStore } from '../../store/authStore'
 import { Rig, VehicleType, TowedType } from '../../types'
 import { deriveSecondVehicle, VEHICLE_LABELS } from '../../utils/rigs'
 import RangeSelect from '../../components/forms/RangeSelect'
-import { YEARS, LENGTHS, HEIGHTS, MPG_OPTIONS, TANK_OPTIONS } from '../../constants/rigOptions'
+import { YEARS, LENGTHS, HEIGHTS, MPG_OPTIONS, TANK_OPTIONS, GVWR_OPTIONS } from '../../constants/rigOptions'
 
 // VEHICLE_LABELS now lives in utils/rigs (so utils can reuse it without a
 // circular import). Re-exported here so existing `import { VEHICLE_LABELS }
@@ -432,6 +432,20 @@ export default function RigPage() {
                   )}
                 />
               </div>
+            </div>
+            {/* Weight — GVWR in POUNDS (US units, matching Length/Height in feet).
+                Optional. Feeds vehicle[grossWeight] in HERE truck routing for
+                weight-restricted bridge/road avoidance. */}
+            <div>
+              <label className="label">Weight – GVWR (lbs)</label>
+              <Controller
+                control={control}
+                name="gvwr"
+                render={({ field }) => (
+                  <RangeSelect options={GVWR_OPTIONS} integer placeholder="Select GVWR" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+                )}
+              />
+              <p className="text-xs text-gray-400 mt-1">Optional. Gross Vehicle Weight Rating in pounds — used for weight-restricted routing.</p>
             </div>
             {/* ── Fuel / MPG section — adapts to rig type (Pass 2 of towing-
                 aware fuel estimate, May 2026). TRAILERS get ONE MPG bound

@@ -519,13 +519,34 @@ const POUNDS_TO_KG = 0.453592
  *  carries no usable dimension (so callers can omit vehicle[*] entirely and let
  *  HERE route as a generic truck rather than a fabricated 0-size vehicle). */
 export function rigDimsFromRig(
-  rig: { length?: number | null; height?: number | null; gvwr?: number | null } | null | undefined,
+  rig:
+    | {
+        length?: number | null
+        height?: number | null
+        gvwr?: number | null
+        isTowing?: boolean | null
+        towedWeight?: number | null
+      }
+    | null
+    | undefined,
 ): RigDims | null {
   if (!rig) return null
   const dims: RigDims = {}
   if (rig.height != null && rig.height > 0) dims.heightCm = rig.height * FEET_TO_CM
   if (rig.length != null && rig.length > 0) dims.lengthCm = rig.length * FEET_TO_CM
-  if (rig.gvwr != null && rig.gvwr > 0) dims.grossWeightKg = rig.gvwr * POUNDS_TO_KG
+
+  // Gross weight HERE routes on = coach GVWR PLUS the toad's weight WHEN towing —
+  // the rig + toad cross weight-limited bridges/roads as one combined mass
+  // (mirrors the towing-aware MPG pattern). towedWeight is MIGRATION-GATED: the
+  // Rig.towedWeight column does NOT exist yet, so until that migration runs this
+  // term is always undefined and we send coach GVWR alone — byte-identical to
+  // today. Once the column + form input land, combined weight activates here
+  // automatically with no further change. lb→kg conversion unchanged.
+  const coachLbs = rig.gvwr != null && rig.gvwr > 0 ? rig.gvwr : 0
+  const towedLbs = rig.isTowing && rig.towedWeight != null && rig.towedWeight > 0 ? rig.towedWeight : 0
+  const totalLbs = coachLbs + towedLbs
+  if (totalLbs > 0) dims.grossWeightKg = totalLbs * POUNDS_TO_KG
+
   return dims.heightCm || dims.lengthCm || dims.grossWeightKg ? dims : null
 }
 
@@ -2941,7 +2962,9 @@ export async function recheckLongLegs(tripId: string, userId: string): Promise<{
     // FEAT-HERE-ROUTING — rig dims for the truck-routing measurement. Prefer the
     // trip's OWN rig (what it was planned for); fall back to the user's default.
     // Only consumed when USE_HERE_ROUTING is on; ignored on the Google path.
-    let rigForRouting: { length?: number | null; height?: number | null; gvwr?: number | null } | null =
+    let rigForRouting:
+      | { length?: number | null; height?: number | null; gvwr?: number | null; isTowing?: boolean | null; towedWeight?: number | null }
+      | null =
       user?.rigs?.[0] ?? null
     if (trip.rigId) {
       const tripRig = await prisma.rig.findFirst({ where: { id: trip.rigId, userId } })

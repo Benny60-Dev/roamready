@@ -8,7 +8,7 @@ import { VEHICLE_LABELS } from './RigPage'
 import { deriveSecondVehicle } from '../../utils/rigs'
 import { useScrollResetOnReady } from '../../hooks/useScrollResetOnReady'
 import RangeSelect from '../../components/forms/RangeSelect'
-import { YEARS, LENGTHS, HEIGHTS, MPG_OPTIONS, TANK_OPTIONS } from '../../constants/rigOptions'
+import { YEARS, LENGTHS, HEIGHTS, MPG_OPTIONS, TANK_OPTIONS, GVWR_OPTIONS } from '../../constants/rigOptions'
 
 type TowingChoice = 'NONE' | 'VEHICLE' | 'TRAILER'
 
@@ -61,6 +61,7 @@ export default function EditRigPage() {
         model: found.model,
         length: found.length,
         height: found.height,
+        gvwr: found.gvwr,
         fuelType: found.fuelType,
         mpg: found.mpg,
         // Pre-fill the new towing-mpg field (Pass 2 of towing-aware fuel
@@ -237,6 +238,20 @@ export default function EditRigPage() {
                 )}
               />
             </div>
+          </div>
+          {/* Weight — GVWR in POUNDS (US units, matching Length/Height in feet).
+              Optional. Feeds vehicle[grossWeight] in HERE truck routing for
+              weight-restricted bridge/road avoidance. */}
+          <div>
+            <label className="label">Weight – GVWR (lbs)</label>
+            <Controller
+              control={control}
+              name="gvwr"
+              render={({ field }) => (
+                <RangeSelect options={GVWR_OPTIONS} integer placeholder="Select GVWR" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+              )}
+            />
+            <p className="text-xs text-gray-400 mt-1">Optional. Gross Vehicle Weight Rating in pounds — used for weight-restricted routing.</p>
           </div>
           {/* ── Fuel / MPG section — adapts to rig type (Pass 2 of towing-
               aware fuel estimate, May 2026). Mirrors the same conditional
