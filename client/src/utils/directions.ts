@@ -12,6 +12,13 @@ interface DirectionsPoint {
   longitude?: number | null
 }
 
+// A stop as a directions DESTINATION also carries booking data — used to route to
+// the booked campground (path A) instead of the city. Structurally satisfied by Stop.
+interface DestinationStop extends DirectionsPoint {
+  bookingStatus?: string | null
+  campgroundName?: string | null
+}
+
 // One endpoint → "lat,lng" when BOTH coords are present (most precise), else the
 // URL-encoded "City, State" (readable fallback for a stop without coords).
 function point(p: DirectionsPoint): string {
@@ -19,9 +26,28 @@ function point(p: DirectionsPoint): string {
   return encodeURIComponent(`${p.locationName}${p.locationState ? `, ${p.locationState}` : ''}`)
 }
 
-/** Google Maps driving-directions URL from one stop to the next. Open in a new
- *  tab (target="_blank" rel="noreferrer"). Coords-preferred, name-fallback, per
- *  endpoint independently. */
-export function directionsUrl(from: DirectionsPoint, to: DirectionsPoint): string {
-  return `https://www.google.com/maps/dir/?api=1&origin=${point(from)}&destination=${point(to)}&travelmode=driving`
+/** Directions DESTINATION for a stop. When the stop is BOOKED (CONFIRMED with a
+ *  campgroundName), route to the named campground ("<campground>, <city>, <state>")
+ *  so Maps lands on the resort, not the city center — using on-stop data, NO fetch.
+ *  Otherwise the stop's own coords/name. Nulled coords force the name path in
+ *  point() so the campground name is what gets geocoded. */
+export function destinationForStop(stop: DestinationStop): DirectionsPoint {
+  if (stop.bookingStatus === 'CONFIRMED' && stop.campgroundName) {
+    return {
+      locationName: `${stop.campgroundName}, ${stop.locationName}`,
+      locationState: stop.locationState,
+      latitude: null,
+      longitude: null,
+    }
+  }
+  return stop
+}
+
+/** Google Maps driving-directions URL. `from === null` OMITS the origin param so
+ *  Maps uses the device's current location; otherwise routes from that point.
+ *  Open in a new tab (target="_blank" rel="noreferrer"). Coords-preferred,
+ *  name-fallback, per endpoint independently. */
+export function directionsUrl(from: DirectionsPoint | null, to: DirectionsPoint): string {
+  const originParam = from ? `&origin=${point(from)}` : ''
+  return `https://www.google.com/maps/dir/?api=1${originParam}&destination=${point(to)}&travelmode=driving`
 }

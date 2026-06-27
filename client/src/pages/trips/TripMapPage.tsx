@@ -10,7 +10,7 @@ import {
 import { DayPicker } from 'react-day-picker'
 import 'react-day-picker/style.css'
 import { formatTripDate, lifecycleDate, parseTripDate, toYmd } from '../../utils/dates'
-import { directionsUrl } from '../../utils/directions'
+import { directionsUrl, destinationForStop } from '../../utils/directions'
 import { tripsApi, usersApi } from '../../services/api'
 import { Trip, Stop, Rig, StopWeather, LiveForecast, TripFuelEstimate } from '../../types'
 import { computeTripTotals } from '../../utils/tripTotals'
@@ -359,17 +359,25 @@ function StopPopup({
         {stop.isPetFriendly && <span className="text-[#0F766E]">🐾 Pet-friendly</span>}
       </div>
 
-      {/* Driving directions to the next stop (omitted on the last stop). */}
+      {/* Driving directions to the next stop (omitted on the last stop). Two
+          origins: current location (origin omitted) or the previous stop (this
+          one). Destination routes to the booked campground when next is booked. */}
       {nextStop && (
-        <a
-          href={directionsUrl(stop, nextStop)}
-          target="_blank"
-          rel="noreferrer"
-          title={`Driving directions to ${nextStop.locationName}`}
-          className="inline-flex items-center gap-1 mt-2 text-xs text-[#185FA5] hover:underline"
-        >
-          <MapPin size={11} className="flex-shrink-0" /> Directions to {nextStop.locationName}
-        </a>
+        <div className="mt-2 text-xs text-gray-500 flex items-center gap-1 flex-wrap">
+          <MapPin size={11} className="flex-shrink-0 text-[#185FA5]" />
+          <span>Directions to {nextStop.locationName}:</span>
+          <a
+            href={directionsUrl(null, destinationForStop(nextStop))}
+            target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+            className="text-[#185FA5] hover:underline"
+          >from my location</a>
+          <span aria-hidden>·</span>
+          <a
+            href={directionsUrl(stop, destinationForStop(nextStop))}
+            target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+            className="text-[#185FA5] hover:underline"
+          >from previous stop</a>
+        </div>
       )}
 
       {/* Badge-based gate: only real bookable destinations get the button.
@@ -2420,19 +2428,27 @@ export default function TripMapPage() {
                               </span>
                             )}
                           {/* Directions to the NEXT stop (omitted on the last stop —
-                              no next leg). stopPropagation so the link opens Maps
-                              instead of firing the row's focusStop. */}
+                              no next leg). Two origins: current location (origin
+                              omitted) or the previous stop (this row's stop).
+                              Destination routes to the booked campground when the
+                              next stop is booked. stopPropagation so a link opens
+                              Maps instead of firing the row's focusStop. */}
                           {i < sortedStops.length - 1 && (
-                            <a
-                              href={directionsUrl(stop, sortedStops[i + 1])}
-                              target="_blank"
-                              rel="noreferrer"
-                              onClick={e => e.stopPropagation()}
-                              title={`Driving directions to ${sortedStops[i + 1].locationName}`}
-                              className="inline-flex items-center gap-1 mt-0.5 text-[10px] text-[#185FA5] hover:underline"
-                            >
-                              <MapPin size={10} className="flex-shrink-0" /> Directions to {sortedStops[i + 1].locationName}
-                            </a>
+                            <div className="mt-0.5 text-[10px] text-gray-400 flex items-center gap-1 flex-wrap">
+                              <MapPin size={10} className="flex-shrink-0 text-[#185FA5]" />
+                              <span>Directions to {sortedStops[i + 1].locationName}:</span>
+                              <a
+                                href={directionsUrl(null, destinationForStop(sortedStops[i + 1]))}
+                                target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                                className="text-[#185FA5] hover:underline"
+                              >from my location</a>
+                              <span aria-hidden>·</span>
+                              <a
+                                href={directionsUrl(stop, destinationForStop(sortedStops[i + 1]))}
+                                target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                                className="text-[#185FA5] hover:underline"
+                              >from previous stop</a>
+                            </div>
                           )}
                         </div>
                         <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
