@@ -9,7 +9,7 @@ const TIPS: ReadonlyArray<{ kind: Kind; text: string }> = [
   { kind: 'try', text: 'Try this: "Plan a long weekend somewhere I can swim with my dog."' },
   { kind: 'try', text: 'Try this: "Find me a 4-night trip with no rough roads and full hookups."' },
   { kind: 'try', text: 'Try this: "I want to see the stars — pick a dark-sky destination."' },
-  { kind: 'capability', text: 'RoamReady knows your rig — we route around low bridges and tight switchbacks automatically.' },
+  { kind: 'knowledge', text: "Routes don't yet check rig restrictions — always verify height, length, weight, and grade limits for your vehicle before driving." },
   { kind: 'knowledge', text: 'Heads up: most national park campgrounds book 6 months out. Ask me about timing.' },
   { kind: 'knowledge', text: "Boondocking? Tell me your solar setup and I'll find sites without hookups." },
   { kind: 'knowledge', text: 'Tip: rest stops and Walmarts vary by state — ask before relying on them for overnights.' },
