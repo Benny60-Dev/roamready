@@ -582,6 +582,23 @@ async function fetchLegDetailHERE(
   rigDims: RigDims | null | undefined,
   googleKey: string,
 ): Promise<LegDetail | null> {
+  // ── TEMP DIAGNOSTIC (FEAT-HERE-ROUTING) — remove after San Jose→Zephyr Cove
+  //    diagnosis. Throwaway instrumentation, no behavior change. ──────────────
+  // (1) Exact rigDims received, with units, BEFORE building the request — so we
+  //     can see whether dims are populated or arriving null/zero (which would
+  //     make HERE route as a dimensionless truck ≈ a car, matching Google).
+  console.log(
+    '[HERE-DIAG] rigDims for %s → %s: %s',
+    `${from?.locationName ?? '?'}${from?.locationState ? ', ' + from.locationState : ''}`,
+    `${to?.locationName ?? '?'}${to?.locationState ? ', ' + to.locationState : ''}`,
+    rigDims
+      ? `height=${rigDims.heightCm != null ? rigDims.heightCm.toFixed(1) + 'cm' : 'null'} ` +
+        `length=${rigDims.lengthCm != null ? rigDims.lengthCm.toFixed(1) + 'cm' : 'null'} ` +
+        `grossWeight=${rigDims.grossWeightKg != null ? rigDims.grossWeightKg.toFixed(1) + 'kg' : 'null'}`
+      : '<null/undefined — NO rig dims passed to HERE>',
+  )
+  // ── END TEMP DIAGNOSTIC ────────────────────────────────────────────────────
+
   const hereKey = process.env.HERE_API_KEY
   if (!hereKey) {
     console.warn('[fetchLegDetailHERE] HERE_API_KEY not set — falling back to Google')
@@ -607,6 +624,22 @@ async function fetchLegDetailHERE(
   if (rigDims?.lengthCm) params['vehicle[length]'] = String(Math.round(rigDims.lengthCm))
   if (rigDims?.grossWeightKg) params['vehicle[grossWeight]'] = String(Math.round(rigDims.grossWeightKg))
 
+  // ── TEMP DIAGNOSTIC (FEAT-HERE-ROUTING) — remove after diagnosis. ──────────
+  // (2)/(4) The EXACT query params sent to HERE (apiKey redacted), so we can
+  //         confirm transportMode=truck and see which vehicle[*] params (if any)
+  //         actually went out. If no vehicle[*] keys appear, HERE got no dims.
+  {
+    const redacted = { ...params, apiKey: '<redacted>' }
+    const vehicleKeys = Object.keys(params).filter(k => k.startsWith('vehicle['))
+    console.log('[HERE-DIAG] request params: %s', JSON.stringify(redacted))
+    console.log(
+      '[HERE-DIAG] transportMode=%s | vehicle params present: %s',
+      params.transportMode,
+      vehicleKeys.length ? vehicleKeys.map(k => `${k}=${params[k]}`).join(', ') : '<NONE — dimensionless truck>',
+    )
+  }
+  // ── END TEMP DIAGNOSTIC ────────────────────────────────────────────────────
+
   let res: any
   try {
     res = await axios.get('https://router.hereapi.com/v8/routes', { params, timeout: 10000 })
@@ -624,6 +657,33 @@ async function fetchLegDetailHERE(
 
   const durationSec = section.summary.duration ?? 0
   const distanceMeters = section.summary.length ?? 0
+
+  // ── TEMP DIAGNOSTIC (FEAT-HERE-ROUTING) — remove after diagnosis. ──────────
+  // (3) HERE's chosen route: total distance + duration, plus the first/last few
+  //     action 'instruction' strings (these name the major roads HERE picked,
+  //     e.g. "Continue onto US-50") so Benny can compare HERE's road choice
+  //     against Google's for San Jose → Zephyr Cove.
+  {
+    const acts: any[] = Array.isArray(section.actions) ? section.actions : []
+    const instr = acts.map(a => a?.instruction).filter(Boolean) as string[]
+    const head = instr.slice(0, 4)
+    const tail = instr.length > 4 ? instr.slice(-3) : []
+    console.log(
+      '[HERE-DIAG] response: distance=%skm duration=%smin | %d actions',
+      (distanceMeters / 1000).toFixed(1),
+      (durationSec / 60).toFixed(0),
+      acts.length,
+    )
+    console.log('[HERE-DIAG] first actions: %s', head.length ? head.join(' || ') : '<none>')
+    if (tail.length) console.log('[HERE-DIAG] last actions: %s', tail.join(' || '))
+    // Distinct road-ish tokens pulled from instruction text (rough, for a quick
+    // road-name comparison without decoding the polyline against a map).
+    const roads = Array.from(new Set(
+      instr.flatMap(s => s.match(/\b(I-\d+|US-\d+|CA-\d+|SR-\d+|Highway \d+|Route \d+)\b/g) ?? []),
+    ))
+    console.log('[HERE-DIAG] road tokens in instructions: %s', roads.length ? roads.join(', ') : '<none extractable>')
+  }
+  // ── END TEMP DIAGNOSTIC ────────────────────────────────────────────────────
 
   // Rebuild steps[] from actions[] + decoded polyline (see doc comment).
   const coords = section.polyline ? decodeFlexiblePolyline(section.polyline) : []
