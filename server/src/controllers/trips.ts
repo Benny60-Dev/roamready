@@ -739,6 +739,58 @@ async function fetchHereLegPolyline(
   }
 }
 
+/**
+ * FEAT-HERE-ROUTING (display) — snap the sampled HERE corridor waypoints to the
+ * road centerline via Google Roads API (snapToRoads). The raw HERE vertices sit a
+ * few metres off Google's roads, so feeding them as via:true waypoints made Google
+ * detour "to the point and back" (a visible hook + inflated mileage). Snapping puts
+ * each via-point exactly on the centerline so the line stays smooth.
+ *
+ * Returns the same number of points in the same order. Each input is matched to
+ * its snapped result BY originalIndex (snapToRoads can reorder / drop points), and
+ * any input with no snapped match keeps its original (unsnapped) coordinate.
+ * `interpolate=false` so snapToRoads returns only the snapped inputs (no extra
+ * interpolated points to filter out).
+ *
+ * FAIL-SOFT: any failure — no key, network error, non-200 / 403 block, empty or
+ * malformed response, timeout — returns the ORIGINAL unsnapped points so the map
+ * line never breaks. `snapped` tells the caller which path was used (for logging).
+ * A 200 with a `warningMessage` (e.g. "Input path is too sparse") still carries
+ * valid snappedPoints and is treated as success, NOT a failure.
+ */
+async function snapWaypointsToRoads(
+  points: LatLng[],
+  apiKey: string,
+): Promise<{ waypoints: LatLng[]; snapped: boolean }> {
+  if (!apiKey || points.length === 0) return { waypoints: points, snapped: false }
+  const path = points.map(p => `${p.lat},${p.lng}`).join('|')
+  try {
+    const res = await axios.get('https://roads.googleapis.com/v1/snapToRoads', {
+      params: { path, interpolate: false, key: apiKey },
+      timeout: 10000,
+    })
+    const snappedPoints: any[] = Array.isArray(res.data?.snappedPoints) ? res.data.snappedPoints : []
+    if (snappedPoints.length === 0) return { waypoints: points, snapped: false }
+
+    // Match each snapped result to its INPUT by originalIndex (not array position).
+    const byIndex = new Map<number, LatLng>()
+    for (const sp of snappedPoints) {
+      const idx = sp?.originalIndex
+      const loc = sp?.location
+      if (typeof idx === 'number' && loc && typeof loc.latitude === 'number' && typeof loc.longitude === 'number') {
+        if (!byIndex.has(idx)) byIndex.set(idx, { lat: loc.latitude, lng: loc.longitude })
+      }
+    }
+    if (byIndex.size === 0) return { waypoints: points, snapped: false }
+    // Snapped where matched, original coordinate where a given index wasn't returned.
+    const waypoints = points.map((p, i) => byIndex.get(i) ?? p)
+    return { waypoints, snapped: true }
+  } catch (err: any) {
+    console.warn('[snapWaypointsToRoads] failed (using unsnapped waypoints): %s', err?.message)
+    return { waypoints: points, snapped: false }
+  }
+}
+
 async function fetchLegDetail(
   from: any,
   to: any,
@@ -3263,9 +3315,13 @@ export async function generateRoutes(req: AuthRequest, res: Response, next: Next
           const coords = await fetchHereLegPolyline(ordered[i - 1], ordered[i], rigDims, apiKey)
           const wp = sampleCorridorWaypoints(coords, HERE_DISPLAY_MAX_WAYPOINTS)
           if (wp.length) {
-            seg.hereWaypoints = wp
-            console.log('[generateRoutes] leg %d (%s→%s): %d HERE corridor waypoint(s)',
-              i - 1, ordered[i - 1].locationName, ordered[i].locationName, wp.length)
+            // Snap the via-waypoints to the road centerline so Google's via:true
+            // doesn't detour off-and-back (Fix B). Fail-soft → unsnapped points.
+            const { waypoints, snapped } = await snapWaypointsToRoads(wp, apiKey)
+            seg.hereWaypoints = waypoints
+            console.log('[generateRoutes] leg %d (%s→%s): %d HERE corridor waypoint(s) [%s]',
+              i - 1, ordered[i - 1].locationName, ordered[i].locationName, waypoints.length,
+              snapped ? 'snapped' : 'unsnapped-fallback')
           }
         }
       }
