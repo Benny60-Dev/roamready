@@ -215,7 +215,7 @@ const BOOKING_BADGE: Record<MarkerKind, { cls: string; label: string }> = {
 }
 
 function StopPopup({
-  stop, kind, weather, displayNum, onClose, onUpdateNights, tripId, nextStop,
+  stop, kind, weather, displayNum, onClose, onUpdateNights, tripId, prevStop,
 }: {
   stop: Stop
   kind: MarkerKind
@@ -226,9 +226,9 @@ function StopPopup({
   // Trip id so a CONFIRMED ("Booked") stop's badge can deep-link to its
   // reservation panel, matching the stops-list pill. Optional: absent → plain badge.
   tripId?: string
-  // The next stop by order, so the popup can offer driving directions for this
-  // leg. Absent on the last stop (no next leg) → no directions link.
-  nextStop?: Stop
+  // The previous stop by order, so the popup can offer driving directions TO
+  // this stop. Absent on the first stop (no prior leg) → no directions link.
+  prevStop?: Stop
 }) {
   const badge  = BOOKING_BADGE[kind]
   const alerts = stopAlerts(weather)
@@ -359,21 +359,21 @@ function StopPopup({
         {stop.isPetFriendly && <span className="text-[#0F766E]">🐾 Pet-friendly</span>}
       </div>
 
-      {/* Driving directions to the next stop (omitted on the last stop). Two
-          origins: current location (origin omitted) or the previous stop (this
-          one). Destination routes to the booked campground when next is booked. */}
-      {nextStop && (
+      {/* Driving directions TO this stop (omitted on the first stop). Two
+          origins: current location (origin omitted) or the previous stop.
+          Destination routes to the booked campground when this stop is booked. */}
+      {prevStop && (
         <div className="mt-2 text-xs text-gray-500 flex items-center gap-1 flex-wrap">
           <MapPin size={11} className="flex-shrink-0 text-[#185FA5]" />
-          <span>Directions to {nextStop.locationName}:</span>
+          <span>Directions to {stop.locationName}:</span>
           <a
-            href={directionsUrl(null, destinationForStop(nextStop))}
+            href={directionsUrl(null, destinationForStop(stop))}
             target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
             className="text-[#185FA5] hover:underline"
           >from my location</a>
           <span aria-hidden>·</span>
           <a
-            href={directionsUrl(stop, destinationForStop(nextStop))}
+            href={directionsUrl(prevStop, destinationForStop(stop))}
             target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
             className="text-[#185FA5] hover:underline"
           >from previous stop</a>
@@ -2427,24 +2427,24 @@ export default function TripMapPage() {
                                 <AlertTriangle size={11} className="flex-shrink-0" /> Originally booked for {formatTripDate(stop.originalBookedDate, 'MMM d, yyyy')}
                               </span>
                             )}
-                          {/* Directions to the NEXT stop (omitted on the last stop —
-                              no next leg). Two origins: current location (origin
-                              omitted) or the previous stop (this row's stop).
-                              Destination routes to the booked campground when the
-                              next stop is booked. stopPropagation so a link opens
-                              Maps instead of firing the row's focusStop. */}
-                          {i < sortedStops.length - 1 && (
+                          {/* Directions TO this stop (omitted on the FIRST stop —
+                              you don't navigate to where you begin). Two origins:
+                              current location (origin omitted) or the previous stop
+                              (sortedStops[i - 1]). Destination routes to the booked
+                              campground when this stop is booked. stopPropagation so
+                              a link opens Maps instead of firing the row's focusStop. */}
+                          {i > 0 && (
                             <div className="mt-0.5 text-[10px] text-gray-400 flex items-center gap-1 flex-wrap">
                               <MapPin size={10} className="flex-shrink-0 text-[#185FA5]" />
-                              <span>Directions to {sortedStops[i + 1].locationName}:</span>
+                              <span>Directions to {sortedStops[i].locationName}:</span>
                               <a
-                                href={directionsUrl(null, destinationForStop(sortedStops[i + 1]))}
+                                href={directionsUrl(null, destinationForStop(sortedStops[i]))}
                                 target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
                                 className="text-[#185FA5] hover:underline"
                               >from my location</a>
                               <span aria-hidden>·</span>
                               <a
-                                href={directionsUrl(stop, destinationForStop(sortedStops[i + 1]))}
+                                href={directionsUrl(sortedStops[i - 1], destinationForStop(sortedStops[i]))}
                                 target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
                                 className="text-[#185FA5] hover:underline"
                               >from previous stop</a>
@@ -2656,11 +2656,11 @@ export default function TripMapPage() {
                     onClose={() => setSelectedStop(null)}
                     onUpdateNights={handleUpdateNights}
                     tripId={id}
-                    nextStop={(() => {
-                      // Next stop by order in the full itinerary (omitted on the last).
+                    prevStop={(() => {
+                      // Previous stop by order in the full itinerary (omitted on the first).
                       const sorted = trip?.stops?.slice().sort((a, b) => a.order - b.order) ?? []
                       const idx = sorted.findIndex(s => s.id === selectedStop.id)
-                      return idx >= 0 && idx < sorted.length - 1 ? sorted[idx + 1] : undefined
+                      return idx > 0 ? sorted[idx - 1] : undefined
                     })()}
                   />
                 </OverlayViewF>
