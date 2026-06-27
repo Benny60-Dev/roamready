@@ -16,7 +16,7 @@ import { hasRoundTripIntent } from '../utils/roundTripIntent'
 // with build's expandLongLegs. trips.ts already imports enforcePerUserDailyCap
 // from this module; both exports are only ever CALLED inside request handlers
 // (never at module load), so the two-way import resolves cleanly at call time.
-import { planTransitInserts, deriveCapHours, buildTransitNote, minimalTripBudget } from './trips'
+import { planTransitInserts, deriveCapHours, buildTransitNote, minimalTripBudget, rigDimsFromRig } from './trips'
 
 // Soft cap: inject a "wrap up" system message and let Claude actually respond
 // (so it has a chance to emit the <itinerary> JSON block).
@@ -1646,6 +1646,12 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
         const transitStops = Array.isArray(transitItin?.stops) ? (transitItin!.stops as any[]) : null
         if (transitItin && transitStops && transitStops.length >= 2) {
           const capHours = deriveCapHours(user?.travelProfile)
+          // FEAT-HERE-ROUTING — rig dims for the truck-routing measurement, taken
+          // from the rig the user is planning FOR (canvas-selected / default /
+          // ad-hoc, already resolved into userProfile.rigs above). Only consumed
+          // when USE_HERE_ROUTING is on; on the Google path it's ignored, so the
+          // measured plan is unchanged when the flag is off.
+          const rigDims = rigDimsFromRig(userProfile.rigs?.[0] as any)
 
           // BUG-2 — DETERMINISTIC minimal-trip night-budget gate (refuse-and-ask).
           // Anchored on the MINIMAL trip (origin → turnaround → origin), NOT the AI's
@@ -1660,7 +1666,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             } catch { /* no budget known → no conflict */ }
           }
           const conflict = reqNights != null
-            ? await minimalTripBudget(transitStops, capHours, reqNights, process.env.GOOGLE_MAPS_API_KEY)
+            ? await minimalTripBudget(transitStops, capHours, reqNights, process.env.GOOGLE_MAPS_API_KEY, rigDims)
             : null
 
           if (conflict) {
@@ -1674,7 +1680,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
           } else {
             // No budget conflict → run the normal transit splice on the AI's full route.
             const { stops: splicedStops, inserts } = await planTransitInserts(
-              transitStops, capHours, process.env.GOOGLE_MAPS_API_KEY,
+              transitStops, capHours, process.env.GOOGLE_MAPS_API_KEY, rigDims,
             )
             if (inserts.length > 0) {
             const addedNights = inserts.reduce((n, ins) => n + ins.towns.length, 0)
@@ -1746,6 +1752,9 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
 
             if (originName && destination && reqNights != null && changed) {
               const capHours = deriveCapHours(user?.travelProfile)
+              // FEAT-HERE-ROUTING — same rig-dims threading as the main splice
+              // path; ignored when USE_HERE_ROUTING is off.
+              const rigDims = rigDimsFromRig(userProfile.rigs?.[0] as any)
               const userMsgs = (messages as any[])
                 .filter(m => m?.role === 'user')
                 .map(m => String(m?.content ?? ''))
@@ -1756,7 +1765,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
               const synthetic = roundTrip
                 ? [home, dest, { locationName: originName, type: 'DESTINATION', nights: 0 }]
                 : [home, dest]
-              const conflict = await minimalTripBudget(synthetic as any, capHours, reqNights, process.env.GOOGLE_MAPS_API_KEY)
+              const conflict = await minimalTripBudget(synthetic as any, capHours, reqNights, process.env.GOOGLE_MAPS_API_KEY, rigDims)
               if (conflict) {
                 response = buildBudgetConflictAsk(conflict.turnaroundName, conflict.minNeeded, reqNights)
                 console.warn(

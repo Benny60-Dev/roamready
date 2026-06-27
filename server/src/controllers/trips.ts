@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { randomBytes } from 'crypto'
 import axios from 'axios'
 import { Prisma } from '@prisma/client'
+import { decodeFlexiblePolyline } from '../utils/flexiblePolyline'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
@@ -475,13 +476,221 @@ interface LegDetail {
   durationSec: number
   distanceMeters: number
   steps: LegStep[]
+  /** HERE-only: restriction notices for this leg (e.g. a violated height/weight
+   *  limit on the returned route). Absent/empty on the Google path and on a clean
+   *  HERE route. Surfaced so a caller can flag a route that HERE could only
+   *  satisfy by violating a restriction — never silently treated as clean. */
+  violationNotes?: string[]
+}
+
+// ─── HERE truck/RV routing (FEAT-HERE-ROUTING) ───────────────────────────────
+// Optional rig dimensions threaded into the drive-time measurement so the
+// approved plan is built on the real RV-safe path. Off by default behind
+// USE_HERE_ROUTING; when off, the Google path below runs byte-identical.
+
+/** Rig dimensions in HERE's native units, ready to drop into vehicle[*] params.
+ *  Built by rigDimsFromRig from the US-unit Rig record. Any field omitted when
+ *  the rig lacks it — we never send a fabricated/zero dimension. */
+export interface RigDims {
+  /** vehicle[height] — centimeters */
+  heightCm?: number
+  /** vehicle[length] — centimeters */
+  lengthCm?: number
+  /** vehicle[grossWeight] — kilograms */
+  grossWeightKg?: number
+}
+
+// UNIT CONVERSION (safety-critical). Rig dims are stored in US units:
+//   · Rig.length / Rig.height — FEET (client constants/rigOptions.ts: LENGTHS
+//     10–65 ft, HEIGHTS 8–14 ft, "Feet, 0.5-ft steps").
+//   · Rig.gvwr — POUNDS (UI shows weight deltas as "lb"; bookedForRigWeight =
+//     rig.gvwr in pounds).
+// HERE Routing API v8 wants vehicle[height]/[length]/[width] in CENTIMETERS and
+// vehicle[grossWeight] in KILOGRAMS (confirmed against HERE's v8 OpenAPI spec).
+// NOTE: this deviates from the build ticket, which said "meters" — HERE actually
+// uses centimeters. Sending meters would be 100× too small (an 11 ft RV → 3.35
+// "cm"), so HERE would treat the rig as tiny and skip every height/weight
+// restriction — the exact opposite of this feature's safety purpose. Centimeters
+// is correct and is what's used here.
+const FEET_TO_CM = 30.48
+const POUNDS_TO_KG = 0.453592
+
+/** Convert a Rig (US units) to HERE-native RigDims. Returns null when the rig
+ *  carries no usable dimension (so callers can omit vehicle[*] entirely and let
+ *  HERE route as a generic truck rather than a fabricated 0-size vehicle). */
+export function rigDimsFromRig(
+  rig: { length?: number | null; height?: number | null; gvwr?: number | null } | null | undefined,
+): RigDims | null {
+  if (!rig) return null
+  const dims: RigDims = {}
+  if (rig.height != null && rig.height > 0) dims.heightCm = rig.height * FEET_TO_CM
+  if (rig.length != null && rig.length > 0) dims.lengthCm = rig.length * FEET_TO_CM
+  if (rig.gvwr != null && rig.gvwr > 0) dims.grossWeightKg = rig.gvwr * POUNDS_TO_KG
+  return dims.heightCm || dims.lengthCm || dims.grossWeightKg ? dims : null
+}
+
+/** True only when the HERE routing engine is explicitly enabled. Default FALSE —
+ *  any value other than the literal 'true' keeps the Google path. Read at call
+ *  time so a restart picks up a flipped flag without a code change. */
+function useHereRouting(): boolean {
+  return process.env.USE_HERE_ROUTING === 'true'
+}
+
+/** Resolve an endpoint to coordinates. HERE v8 requires lat,lng origins; plan-
+ *  time stops are frequently name-only (the AI emits city names), so a missing
+ *  coord is forward-geocoded via Google (geocoding stays Google by design). A
+ *  miss returns null → caller falls back to the Google routing path. */
+async function resolveCoords(
+  p: any,
+  googleKey: string,
+): Promise<{ lat: number; lng: number } | null> {
+  if (p?.latitude != null && p?.longitude != null) {
+    return { lat: p.latitude, lng: p.longitude }
+  }
+  const q = `${p?.locationName ?? ''}${p?.locationState ? ', ' + p.locationState : ''}`.trim()
+  if (!q) return null
+  try {
+    const res = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
+      params: { address: q, key: googleKey },
+      timeout: 10000,
+    })
+    const loc = res.data?.results?.[0]?.geometry?.location
+    if (res.data?.status === 'OK' && loc) return { lat: loc.lat, lng: loc.lng }
+    return null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * HERE v8 sibling of fetchLegDetail — measures a leg with TRUCK routing (rig-
+ * aware: height/length/weight), returning the SAME LegDetail shape so the rest
+ * of the split engine is unchanged. Returns null on ANY failure (no key, coord
+ * resolution miss, HTTP/timeout error, empty route) so the caller transparently
+ * falls back to Google — a HERE outage never blocks planning.
+ *
+ * steps[] is rebuilt from the section's actions[] (each carries duration + an
+ * offset into the section polyline) by decoding the flexible polyline and taking
+ * the coord at each action's offset as that step's start, the next action's
+ * offset as its end. That reproduces the {durationSec, startLat/Lng, endLat/Lng}
+ * partition interpolateSplitPoint walks. If actions/polyline are missing, a
+ * single whole-leg step is synthesized so split interpolation still has endpoints.
+ */
+async function fetchLegDetailHERE(
+  from: any,
+  to: any,
+  rigDims: RigDims | null | undefined,
+  googleKey: string,
+): Promise<LegDetail | null> {
+  const hereKey = process.env.HERE_API_KEY
+  if (!hereKey) {
+    console.warn('[fetchLegDetailHERE] HERE_API_KEY not set — falling back to Google')
+    return null
+  }
+
+  const o = await resolveCoords(from, googleKey)
+  const d = await resolveCoords(to, googleKey)
+  if (!o || !d) {
+    console.warn('[fetchLegDetailHERE] could not resolve coords for one endpoint — falling back to Google')
+    return null
+  }
+
+  const params: Record<string, string> = {
+    transportMode: 'truck',
+    origin: `${o.lat},${o.lng}`,
+    destination: `${d.lat},${d.lng}`,
+    return: 'summary,polyline,actions',
+    apiKey: hereKey,
+  }
+  // Only include a dimension the rig actually has — never a fabricated 0.
+  if (rigDims?.heightCm) params['vehicle[height]'] = String(Math.round(rigDims.heightCm))
+  if (rigDims?.lengthCm) params['vehicle[length]'] = String(Math.round(rigDims.lengthCm))
+  if (rigDims?.grossWeightKg) params['vehicle[grossWeight]'] = String(Math.round(rigDims.grossWeightKg))
+
+  let res: any
+  try {
+    res = await axios.get('https://router.hereapi.com/v8/routes', { params, timeout: 10000 })
+  } catch (err: any) {
+    console.error('[fetchLegDetailHERE] request error for %s → %s — falling back to Google: %s',
+      params.origin, params.destination, err?.message)
+    return null
+  }
+
+  const section = res.data?.routes?.[0]?.sections?.[0]
+  if (!section?.summary) {
+    console.warn('[fetchLegDetailHERE] no usable route section — falling back to Google')
+    return null
+  }
+
+  const durationSec = section.summary.duration ?? 0
+  const distanceMeters = section.summary.length ?? 0
+
+  // Rebuild steps[] from actions[] + decoded polyline (see doc comment).
+  const coords = section.polyline ? decodeFlexiblePolyline(section.polyline) : []
+  const actions: any[] = Array.isArray(section.actions) ? section.actions : []
+  const steps: LegStep[] = []
+  if (coords.length >= 2 && actions.length > 0) {
+    for (let i = 0; i < actions.length; i++) {
+      const startIdx = Math.min(actions[i].offset ?? 0, coords.length - 1)
+      const endIdx = Math.min(
+        i + 1 < actions.length ? (actions[i + 1].offset ?? coords.length - 1) : coords.length - 1,
+        coords.length - 1,
+      )
+      const s = coords[startIdx]
+      const e = coords[endIdx]
+      if (!s || !e) continue
+      steps.push({
+        durationSec: actions[i].duration ?? 0,
+        startLat: s[0], startLng: s[1],
+        endLat: e[0], endLng: e[1],
+      })
+    }
+  }
+  // Fallback: no per-action steps → one whole-leg step so interpolateSplitPoint
+  // still has start/end coords to interpolate between.
+  if (steps.length === 0 && coords.length >= 2) {
+    const s = coords[0]
+    const e = coords[coords.length - 1]
+    steps.push({ durationSec, startLat: s[0], startLng: s[1], endLat: e[0], endLng: e[1] })
+  }
+
+  // Surface restriction notices honestly — a route HERE could only build by
+  // violating a limit must NOT look clean to the caller.
+  const violationNotes: string[] = []
+  if (Array.isArray(section.notices)) {
+    for (const n of section.notices) {
+      const label = n?.title ?? n?.code ?? null
+      if (label) violationNotes.push(String(label))
+    }
+    if (violationNotes.length) {
+      console.warn('[fetchLegDetailHERE] %d restriction notice(s) on %s → %s: %s',
+        violationNotes.length, params.origin, params.destination, violationNotes.join('; '))
+    }
+  }
+
+  return {
+    durationSec, distanceMeters, steps,
+    ...(violationNotes.length ? { violationNotes } : {}),
+  }
 }
 
 async function fetchLegDetail(
   from: any,
   to: any,
   apiKey: string,
+  rigDims?: RigDims | null,
 ): Promise<LegDetail | null> {
+  // FEAT-HERE-ROUTING — single measurement branch point. When the flag is on,
+  // measure with HERE truck/RV routing (rig-aware). A null result (HERE down,
+  // coord miss, etc.) falls THROUGH to the Google path below — fail-soft, so a
+  // HERE outage never blocks planning. When the flag is off this whole block is
+  // skipped and the Google path runs byte-identical to before.
+  if (useHereRouting()) {
+    const here = await fetchLegDetailHERE(from, to, rigDims, apiKey)
+    if (here) return here
+    console.warn('[fetchLegDetail] HERE returned no route — using Google for this leg')
+  }
+
   const origin = from.latitude && from.longitude
     ? `${from.latitude},${from.longitude}`
     : `${from.locationName}${from.locationState ? ', ' + from.locationState : ''}`
@@ -710,6 +919,7 @@ async function planLegSplits(
   minUsefulSec: number,
   tolSec: number,
   maxInserts: number,
+  rigDims?: RigDims | null,
 ): Promise<LegPlan> {
   const plan: LegPlan = { towns: [], subLegs: [], warnings: [] }
   let frontier = from
@@ -721,7 +931,7 @@ async function planLegSplits(
       break
     }
 
-    const detail = await fetchLegDetail(frontier, to, apiKey)
+    const detail = await fetchLegDetail(frontier, to, apiKey, rigDims)
     if (!detail) {
       plan.warnings.push(`routing failed ${frontier.locationName}→${to.locationName}; leaving leg as-is`)
       // Record nothing for this tail (unknown) — fail soft.
@@ -776,7 +986,7 @@ async function planLegSplits(
         town.locationName.toLowerCase() === to.locationName.toLowerCase()
       ) { tryTarget *= 0.8; continue }
 
-      const sub = await fetchLegDetail(frontier, town, apiKey)
+      const sub = await fetchLegDetail(frontier, town, apiKey, rigDims)
       if (!sub) { tryTarget *= 0.8; continue }
       if (sub.durationSec <= capSec + tolSec) {
         plan.towns.push(town)
@@ -882,6 +1092,7 @@ export async function planTransitInserts(
   stops: PlannableStop[],
   capHours: number,
   apiKey: string,
+  rigDims?: RigDims | null,
   ackKeys: Set<string> = new Set(),
 ): Promise<PlanTransitResult> {
   // No key or fewer than two stops → nothing to measure; return the input
@@ -928,7 +1139,7 @@ export async function planTransitInserts(
     const fromTown: TransitTown = { locationName: from.locationName, locationState: from.locationState, latitude: from.latitude, longitude: from.longitude }
     const toTown:   TransitTown = { locationName: to.locationName,   locationState: to.locationState,   latitude: to.latitude,   longitude: to.longitude }
 
-    const legPlan = await planLegSplits(fromTown, toTown, apiKey, capSec, graceSec, minUsefulSec, tolSec, maxInserts)
+    const legPlan = await planLegSplits(fromTown, toTown, apiKey, capSec, graceSec, minUsefulSec, tolSec, maxInserts, rigDims)
 
     // Per-leg log: original leg + the resulting sub-leg durations (with any
     // still-over markers and warnings) so over-cap tails are never hidden.
@@ -1007,6 +1218,7 @@ export async function minimalTripBudget(
   capHours: number,
   requestedNights: number,
   apiKey: string,
+  rigDims?: RigDims | null,
 ): Promise<{ minNeeded: number; turnaroundName: string } | null> {
   try {
     if (!apiKey || !Array.isArray(stops) || stops.length < 2) return null
@@ -1032,7 +1244,7 @@ export async function minimalTripBudget(
       } else {
         let maxSec = -1
         for (const d of realDests) {
-          const detail = await fetchLegDetail(origin, d, apiKey)
+          const detail = await fetchLegDetail(origin, d, apiKey, rigDims)
           if (detail && detail.durationSec > maxSec) { maxSec = detail.durationSec; turnaround = d }
         }
       }
@@ -1040,7 +1252,7 @@ export async function minimalTripBudget(
 
     // Mandatory transit for the CORE route (origin → turnaround, one leg). The return
     // leg is the same road reversed, so ×2 for a round trip.
-    const { inserts } = await planTransitInserts([origin, turnaround], capHours, apiKey)
+    const { inserts } = await planTransitInserts([origin, turnaround], capHours, apiKey, rigDims)
     const oneWayTransit = inserts.reduce((n, ins) => n + ins.towns.length, 0)
     const roundTrip = computeTripShape(stops as any[]) === 'ROUND_TRIP'
     const coreTransit = oneWayTransit * (roundTrip ? 2 : 1)
@@ -2164,9 +2376,15 @@ export async function longLegPreview(req: AuthRequest, res: Response, next: Next
 
     const apiKey = process.env.GOOGLE_MAPS_API_KEY
     if (!apiKey) return res.json({ exceeds: false })
-    const user = await prisma.user.findUnique({ where: { id: req.user!.id }, include: { travelProfile: true } })
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      include: { travelProfile: true, rigs: { where: { isDefault: true } } },
+    })
     const cap = deriveCapHours(user?.travelProfile)
-    const detail = await fetchLegDetail(prev, next, apiKey)
+    // FEAT-HERE-ROUTING — default-rig dims for the truck-routing measurement;
+    // ignored on the Google path (flag off).
+    const rigDims = rigDimsFromRig(user?.rigs?.[0])
+    const detail = await fetchLegDetail(prev, next, apiKey, rigDims)
     if (!detail) return res.json({ exceeds: false })
     const legHours = detail.durationSec / 3600
     const exceeds = legHours > cap + LEG_GRACE_HOURS
@@ -2655,10 +2873,21 @@ export async function recheckLongLegs(tripId: string, userId: string): Promise<{
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: { travelProfile: true },
+      include: { travelProfile: true, rigs: { where: { isDefault: true } } },
     })
     // Shared single source of truth for the per-leg cap (see deriveCapHours).
     const maxHours = deriveCapHours(user?.travelProfile)
+
+    // FEAT-HERE-ROUTING — rig dims for the truck-routing measurement. Prefer the
+    // trip's OWN rig (what it was planned for); fall back to the user's default.
+    // Only consumed when USE_HERE_ROUTING is on; ignored on the Google path.
+    let rigForRouting: { length?: number | null; height?: number | null; gvwr?: number | null } | null =
+      user?.rigs?.[0] ?? null
+    if (trip.rigId) {
+      const tripRig = await prisma.rig.findFirst({ where: { id: trip.rigId, userId } })
+      if (tripRig) rigForRouting = tripRig
+    }
+    const rigDims = rigDimsFromRig(rigForRouting)
 
     const stops = trip.stops as any[]
     if (stops.length < 2) {
@@ -2681,7 +2910,7 @@ export async function recheckLongLegs(tripId: string, userId: string): Promise<{
     if (effectiveAcks.size !== storedAcks.size) await setAckLegKeys(tripId, [...effectiveAcks])
 
     console.log('[recheckLongLegs] tripId=%s checking %d stop(s) against cap=%sh (%d acknowledged leg(s))', tripId, stops.length, maxHours, effectiveAcks.size)
-    const { inserts } = await planTransitInserts(stops, maxHours, apiKey, effectiveAcks)
+    const { inserts } = await planTransitInserts(stops, maxHours, apiKey, rigDims, effectiveAcks)
     if (inserts.length === 0) {
       console.log('[recheckLongLegs] tripId=%s no over-cap leg found — inserted 0', tripId)
       return { inserted: 0, note: null }
