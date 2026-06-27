@@ -615,6 +615,12 @@ function BookedRowCard({
               {' · '}{stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
             </span>
           </p>
+          {/* Booked stops keep the campground's full street address visible
+              (same field/format as the unbooked RecommendedCampgroundCard) so
+              the user can confirm directions land on the right place. */}
+          {cg.address && (
+            <p className="text-gray-500" style={{ fontSize: 12, marginTop: 2 }}>{cg.address}</p>
+          )}
           <p className="text-gray-500" style={{ fontSize: 12, marginTop: 2 }}>
             {dateLabel && <>{dateLabel}{' · '}</>}
             {nightsLabel}
