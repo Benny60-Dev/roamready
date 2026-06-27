@@ -654,6 +654,13 @@ function BookedRowCard({
               borderTop: '0.5px solid #9FBF8A',
             }}
           >
+            {/* Address inside the edit/update panel too — this is where the
+                user confirms directions land on the right place while updating
+                the reservation. Same field/format as the collapsed row and the
+                unbooked RecommendedCampgroundCard. */}
+            {cg.address && (
+              <p className="text-gray-500" style={{ fontSize: 12, marginBottom: 4 }}>{cg.address}</p>
+            )}
             {/* Pre-filled reservation form — same component, same save path
                 (tripsApi.updateStop). draftMode=editOpen forces the form to
                 open as the expansion opens; the save logic skips the
