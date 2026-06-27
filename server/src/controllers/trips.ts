@@ -603,23 +603,6 @@ async function fetchLegDetailHERE(
   rigDims: RigDims | null | undefined,
   googleKey: string,
 ): Promise<LegDetail | null> {
-  // ── TEMP DIAGNOSTIC (FEAT-HERE-ROUTING) — remove after San Jose→Zephyr Cove
-  //    diagnosis. Throwaway instrumentation, no behavior change. ──────────────
-  // (1) Exact rigDims received, with units, BEFORE building the request — so we
-  //     can see whether dims are populated or arriving null/zero (which would
-  //     make HERE route as a dimensionless truck ≈ a car, matching Google).
-  console.log(
-    '[HERE-DIAG] rigDims for %s → %s: %s',
-    `${from?.locationName ?? '?'}${from?.locationState ? ', ' + from.locationState : ''}`,
-    `${to?.locationName ?? '?'}${to?.locationState ? ', ' + to.locationState : ''}`,
-    rigDims
-      ? `height=${rigDims.heightCm != null ? rigDims.heightCm.toFixed(1) + 'cm' : 'null'} ` +
-        `length=${rigDims.lengthCm != null ? rigDims.lengthCm.toFixed(1) + 'cm' : 'null'} ` +
-        `grossWeight=${rigDims.grossWeightKg != null ? rigDims.grossWeightKg.toFixed(1) + 'kg' : 'null'}`
-      : '<null/undefined — NO rig dims passed to HERE>',
-  )
-  // ── END TEMP DIAGNOSTIC ────────────────────────────────────────────────────
-
   const hereKey = process.env.HERE_API_KEY
   if (!hereKey) {
     console.warn('[fetchLegDetailHERE] HERE_API_KEY not set — falling back to Google')
@@ -645,22 +628,6 @@ async function fetchLegDetailHERE(
   if (rigDims?.lengthCm) params['vehicle[length]'] = String(Math.round(rigDims.lengthCm))
   if (rigDims?.grossWeightKg) params['vehicle[grossWeight]'] = String(Math.round(rigDims.grossWeightKg))
 
-  // ── TEMP DIAGNOSTIC (FEAT-HERE-ROUTING) — remove after diagnosis. ──────────
-  // (2)/(4) The EXACT query params sent to HERE (apiKey redacted), so we can
-  //         confirm transportMode=truck and see which vehicle[*] params (if any)
-  //         actually went out. If no vehicle[*] keys appear, HERE got no dims.
-  {
-    const redacted = { ...params, apiKey: '<redacted>' }
-    const vehicleKeys = Object.keys(params).filter(k => k.startsWith('vehicle['))
-    console.log('[HERE-DIAG] request params: %s', JSON.stringify(redacted))
-    console.log(
-      '[HERE-DIAG] transportMode=%s | vehicle params present: %s',
-      params.transportMode,
-      vehicleKeys.length ? vehicleKeys.map(k => `${k}=${params[k]}`).join(', ') : '<NONE — dimensionless truck>',
-    )
-  }
-  // ── END TEMP DIAGNOSTIC ────────────────────────────────────────────────────
-
   let res: any
   try {
     res = await axios.get('https://router.hereapi.com/v8/routes', { params, timeout: 10000 })
@@ -678,33 +645,6 @@ async function fetchLegDetailHERE(
 
   const durationSec = section.summary.duration ?? 0
   const distanceMeters = section.summary.length ?? 0
-
-  // ── TEMP DIAGNOSTIC (FEAT-HERE-ROUTING) — remove after diagnosis. ──────────
-  // (3) HERE's chosen route: total distance + duration, plus the first/last few
-  //     action 'instruction' strings (these name the major roads HERE picked,
-  //     e.g. "Continue onto US-50") so Benny can compare HERE's road choice
-  //     against Google's for San Jose → Zephyr Cove.
-  {
-    const acts: any[] = Array.isArray(section.actions) ? section.actions : []
-    const instr = acts.map(a => a?.instruction).filter(Boolean) as string[]
-    const head = instr.slice(0, 4)
-    const tail = instr.length > 4 ? instr.slice(-3) : []
-    console.log(
-      '[HERE-DIAG] response: distance=%skm duration=%smin | %d actions',
-      (distanceMeters / 1000).toFixed(1),
-      (durationSec / 60).toFixed(0),
-      acts.length,
-    )
-    console.log('[HERE-DIAG] first actions: %s', head.length ? head.join(' || ') : '<none>')
-    if (tail.length) console.log('[HERE-DIAG] last actions: %s', tail.join(' || '))
-    // Distinct road-ish tokens pulled from instruction text (rough, for a quick
-    // road-name comparison without decoding the polyline against a map).
-    const roads = Array.from(new Set(
-      instr.flatMap(s => s.match(/\b(I-\d+|US-\d+|CA-\d+|SR-\d+|Highway \d+|Route \d+)\b/g) ?? []),
-    ))
-    console.log('[HERE-DIAG] road tokens in instructions: %s', roads.length ? roads.join(', ') : '<none extractable>')
-  }
-  // ── END TEMP DIAGNOSTIC ────────────────────────────────────────────────────
 
   // Rebuild steps[] from actions[] + decoded polyline (see doc comment).
   const coords = section.polyline ? decodeFlexiblePolyline(section.polyline) : []
@@ -961,6 +901,10 @@ interface LegPlan {
   /** Ordered resulting sub-leg durations (hours) for logging — last entry is the tail. */
   subLegs: { from: string; to: string; hours: number; over: boolean }[]
   warnings: string[]
+  /** HERE restriction notices observed while measuring this leg (e.g. "Route
+   *  goes through a seasonal closure"). Distinct notices kept; identical ones
+   *  collapsed to one entry. Empty on the Google path / a clean HERE route. */
+  violationNotes: string[]
 }
 
 // ─── Split policy (module-level constants — easy to tune) ─────────────────────
@@ -1002,9 +946,18 @@ async function planLegSplits(
   maxInserts: number,
   rigDims?: RigDims | null,
 ): Promise<LegPlan> {
-  const plan: LegPlan = { towns: [], subLegs: [], warnings: [] }
+  const plan: LegPlan = { towns: [], subLegs: [], warnings: [], violationNotes: [] }
   let frontier = from
   let iterations = 0
+
+  // Collect a measured leg's HERE restriction notices, collapsing identical
+  // strings (distinct ones are kept). Each iteration's `detail` covers
+  // frontier→to (the whole remaining route), so accumulating across iterations
+  // captures notices anywhere along the leg without double-counting duplicates.
+  const collectNotices = (d: LegDetail | null) => {
+    if (!d?.violationNotes) return
+    for (const n of d.violationNotes) if (!plan.violationNotes.includes(n)) plan.violationNotes.push(n)
+  }
 
   while (true) {
     if (++iterations > maxInserts + 5) {  // hard backstop against any pathological loop
@@ -1018,6 +971,7 @@ async function planLegSplits(
       // Record nothing for this tail (unknown) — fail soft.
       break
     }
+    collectNotices(detail)
 
     // Fits in one comfortable day (within grace) → final sub-leg, done. This
     // covers both "already short" legs and "barely over" legs (no stub split).
@@ -1164,9 +1118,24 @@ export interface TransitInsert {
   /** Measured total drive time of the original (pre-split) leg, in hours. */
   legHours: number
 }
+/** A measured drive leg that came back from HERE with restriction notice(s).
+ *  Indices are into the INPUT (pre-splice) stop array; the notice is attached
+ *  to the destination stop (`toIndex`) in the spliced output for per-leg display
+ *  (the drive ARRIVING at that stop is the affected leg). */
+export interface LegNotice {
+  afterIndex: number
+  toIndex: number
+  fromName: string
+  toName: string
+  notes: string[]
+}
 export interface PlanTransitResult {
   stops: PlannableStop[]
   inserts: TransitInsert[]
+  /** Per-leg HERE restriction notices (empty on the Google path / clean routes).
+   *  The same notes are also attached as `violationNotes` on the affected
+   *  destination stop in `stops`, for the itinerary/plan view to render. */
+  legNotices: LegNotice[]
 }
 
 export async function planTransitInserts(
@@ -1179,7 +1148,7 @@ export async function planTransitInserts(
   // No key or fewer than two stops → nothing to measure; return the input
   // unchanged (defensive copy) so callers can treat the result uniformly.
   if (!apiKey || !Array.isArray(stops) || stops.length < 2) {
-    return { stops: [...(stops ?? [])], inserts: [] }
+    return { stops: [...(stops ?? [])], inserts: [], legNotices: [] }
   }
 
   // Cap derivation lives in the caller (it may read the travel profile); here we
@@ -1193,6 +1162,7 @@ export async function planTransitInserts(
   const maxInserts   = MAX_TRANSIT_INSERTS_PER_LEG
 
   const inserts: TransitInsert[] = []
+  const legNotices: LegNotice[] = []
 
   // Walk SEGMENTS between consecutive REAL (non-OVERNIGHT_ONLY) stops. A segment
   // that already has an overnight between its endpoints is answered → skipped; an
@@ -1239,6 +1209,21 @@ export async function planTransitInserts(
     )
     for (const w of legPlan.warnings) console.warn('[planTransitInserts] %s', w)
 
+    // Carry HERE restriction notices up for honest per-leg display. Independent
+    // of whether this leg got a transit insert — an UNDER-cap leg can still
+    // cross a seasonal closure and must surface it.
+    if (legPlan.violationNotes.length > 0) {
+      console.warn('[planTransitInserts] leg %s→%s restriction notice(s): %s',
+        from.locationName, to.locationName, legPlan.violationNotes.join('; '))
+      legNotices.push({
+        afterIndex: a,
+        toIndex: b,
+        fromName: from.locationName,
+        toName: to.locationName,
+        notes: legPlan.violationNotes,
+      })
+    }
+
     if (legPlan.towns.length > 0) {
       // Measured drive time of the leg = sum of the placed sub-legs (they
       // partition the real route through the transit towns).
@@ -1257,9 +1242,19 @@ export async function planTransitInserts(
   const townsByAfterIndex = new Map<number, TransitTown[]>()
   for (const ins of inserts) townsByAfterIndex.set(ins.afterIndex, ins.towns)
 
+  // Restriction notes keyed by the affected leg's DESTINATION input index, so we
+  // can attach them to that stop's spliced copy below.
+  const notesByDestIndex = new Map<number, string[]>()
+  for (const ln of legNotices) notesByDestIndex.set(ln.toIndex, ln.notes)
+
   const splicedStops: PlannableStop[] = []
   for (let i = 0; i < stops.length; i++) {
-    splicedStops.push({ ...stops[i] })
+    const copy: PlannableStop = { ...stops[i] }
+    // Attach this leg's HERE restriction notice(s) to its destination stop (the
+    // drive arriving here is the affected leg) for the itinerary/plan advisory.
+    const notes = notesByDestIndex.get(i)
+    if (notes && notes.length) (copy as any).violationNotes = notes
+    splicedStops.push(copy)
     const towns = townsByAfterIndex.get(i)
     if (towns) {
       for (const t of towns) {
@@ -1276,7 +1271,7 @@ export async function planTransitInserts(
   }
   splicedStops.forEach((s, idx) => { s.order = idx + 1 })
 
-  return { stops: splicedStops, inserts }
+  return { stops: splicedStops, inserts, legNotices }
 }
 
 /**
@@ -2856,6 +2851,21 @@ export function buildTransitNote(
     return `The ${from} → ${to} drive is about ${ins.legHours.toFixed(1)} hours, over your ${capLabel} limit, so I added ${added}.`
   })
   return sentences.join(' ')
+}
+
+/**
+ * Honest, non-alarmist prose advisory for HERE restriction notices, surfaced in
+ * the reply ALONGSIDE the drive-time note (same plumbing). Uses HERE's actual
+ * notice text — never invents a severity HERE didn't report — and always frames
+ * it as "verify yourself," consistent with the ToS / MESA honesty principle.
+ * Returns null when there are no notices. One line per affected leg; distinct
+ * notices on a leg are joined, identical ones were already collapsed upstream.
+ */
+export function buildViolationAdvisory(legNotices: LegNotice[]): string | null {
+  if (!legNotices.length) return null
+  return legNotices
+    .map(ln => `Heads up: the ${ln.fromName} → ${ln.toName} drive may cross a routing restriction (${ln.notes.join('; ')}) — verify the road is open for your dates and rig before driving.`)
+    .join(' ')
 }
 
 /**

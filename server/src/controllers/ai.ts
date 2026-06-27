@@ -16,7 +16,7 @@ import { hasRoundTripIntent } from '../utils/roundTripIntent'
 // with build's expandLongLegs. trips.ts already imports enforcePerUserDailyCap
 // from this module; both exports are only ever CALLED inside request handlers
 // (never at module load), so the two-way import resolves cleanly at call time.
-import { planTransitInserts, deriveCapHours, buildTransitNote, minimalTripBudget, rigDimsFromRig } from './trips'
+import { planTransitInserts, deriveCapHours, buildTransitNote, buildViolationAdvisory, minimalTripBudget, rigDimsFromRig } from './trips'
 
 // Soft cap: inject a "wrap up" system message and let Claude actually respond
 // (so it has a chance to emit the <itinerary> JSON block).
@@ -1679,10 +1679,16 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             )
           } else {
             // No budget conflict → run the normal transit splice on the AI's full route.
-            const { stops: splicedStops, inserts } = await planTransitInserts(
+            const { stops: splicedStops, inserts, legNotices } = await planTransitInserts(
               transitStops, capHours, process.env.GOOGLE_MAPS_API_KEY, rigDims,
             )
-            if (inserts.length > 0) {
+            // Re-serialize when EITHER a transit stop was inserted OR a leg came
+            // back with a HERE restriction notice (an under-cap leg can have a
+            // closure with no insert — the splicedStops still carry the per-leg
+            // violationNotes that must reach the plan view). No inserts AND no
+            // notices → untouched, byte-identical to before (and to the Google
+            // path, which never produces notices).
+            if (inserts.length > 0 || legNotices.length > 0) {
             const addedNights = inserts.reduce((n, ins) => n + ins.towns.length, 0)
             // Bump totalNights by the inserted nights (each OVERNIGHT_ONLY = 1) so
             // the nightsShortfall check below doesn't false-flag our own inserts.
@@ -1693,7 +1699,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             // PLAN-IS-TRUTH (Part 2, step 3) — GROUNDED drive-time note. Built ONLY
             // from inserts MADE THIS TURN, using the REAL measured legHours from the
             // Directions check — no 2nd AI call, no fabrication. A re-emit that
-            // inserts nothing produces NO note (prior overnights are never
+            // inserts nothing produces NO transit note (prior overnights are never
             // re-announced — they're "answered" segments the check skipped). The AI
             // itself stays silent on drive-time compliance (planner prompt, step 4),
             // so this server note is the single authoritative statement about why a
@@ -1701,22 +1707,27 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             // empty adjacent real→real segments ever yield an insert).
             // Shared phrasing with the post-build recheck (recheckLongLegs) so a
             // transit note reads identically whether it came from planning or a
-            // later edit. inserts is non-empty here (guarded above), so non-null.
-            const note = buildTransitNote(inserts, transitStops, capHours) ?? ''
+            // later edit. The HERE restriction advisory (buildViolationAdvisory)
+            // rides alongside it — same plumbing — using HERE's actual notice text.
+            const transitNote = buildTransitNote(inserts, transitStops, capHours) ?? ''
+            const violationAdvisory = buildViolationAdvisory(legNotices) ?? ''
+            const note = [transitNote, violationAdvisory].filter(Boolean).join(' ')
 
             // Re-serialize the <itinerary> block AND prepend the grounded note to the
             // prose (immediately before the block = the end of the visible reply;
             // cleanChatText strips the tags but keeps the note). Handle the closed
             // form and the truncated/unclosed form (mirrors parseItineraryBlock).
-            const replacement = `${note}\n\n<itinerary>\n${json}\n</itinerary>`
+            const replacement = note
+              ? `${note}\n\n<itinerary>\n${json}\n</itinerary>`
+              : `<itinerary>\n${json}\n</itinerary>`
             if (/<itinerary>[\s\S]*?<\/itinerary>/.test(response)) {
               response = response.replace(/<itinerary>[\s\S]*?<\/itinerary>/, replacement)
             } else {
               response = response.replace(/<itinerary>[\s\S]*/, replacement)
             }
             console.log(
-              '[AI transit-insert] sessionId=%s inserted %d transit stop(s) across %d leg(s) (+%d night(s))',
-              sessionId ?? '(none)', addedNights, inserts.length, addedNights,
+              '[AI transit-insert] sessionId=%s inserted %d transit stop(s) across %d leg(s) (+%d night(s)); %d leg(s) with restriction notice(s)',
+              sessionId ?? '(none)', addedNights, inserts.length, addedNights, legNotices.length,
             )
             }
           }
