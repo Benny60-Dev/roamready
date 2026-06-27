@@ -698,29 +698,31 @@ async function fetchLegDetailHERE(
 
 /**
  * FEAT-HERE-ROUTING (display) — fetch the FULL decoded HERE route geometry for a
- * leg, for the map line + directions-link waypoints. Separate from the
- * measurement path (fetchLegDetailHERE) on purpose: this is display-only and the
- * measurement path is done + proven, so we never touch it. Returns the decoded
- * [lat,lng] polyline (hundreds of points — the caller samples it down) or [] on
- * ANY failure so the caller falls back to Google-only display silently.
+ * leg: the complete [lat,lng] polyline (hundreds of points) AND HERE's measured
+ * leg distance. The client draws the map line DIRECTLY from this polyline (no
+ * Google via-reconstruction), and shows this distance so the mileage matches the
+ * line. Separate from the measurement path (fetchLegDetailHERE) on purpose —
+ * display-only, measurement untouched. Returns { points: [], distanceMeters: 0 }
+ * on ANY failure so the caller falls back to Google-only display silently.
  */
 async function fetchHereLegPolyline(
   from: any,
   to: any,
   rigDims: RigDims | null | undefined,
   googleKey: string,
-): Promise<Array<[number, number]>> {
+): Promise<{ points: Array<[number, number]>; distanceMeters: number }> {
+  const EMPTY = { points: [] as Array<[number, number]>, distanceMeters: 0 }
   const hereKey = process.env.HERE_API_KEY
-  if (!hereKey) return []
+  if (!hereKey) return EMPTY
   const o = await resolveCoords(from, googleKey)
   const d = await resolveCoords(to, googleKey)
-  if (!o || !d) return []
+  if (!o || !d) return EMPTY
 
   const params: Record<string, string> = {
     transportMode: 'truck',
     origin: `${o.lat},${o.lng}`,
     destination: `${d.lat},${d.lng}`,
-    return: 'polyline',
+    return: 'summary,polyline',
     apiKey: hereKey,
   }
   if (rigDims?.heightCm) params['vehicle[height]'] = String(Math.round(rigDims.heightCm))
@@ -730,12 +732,15 @@ async function fetchHereLegPolyline(
   try {
     const res = await axios.get('https://router.hereapi.com/v8/routes', { params, timeout: 10000 })
     const section = res.data?.routes?.[0]?.sections?.[0]
-    if (!section?.polyline) return []
-    return decodeFlexiblePolyline(section.polyline)
+    if (!section?.polyline) return EMPTY
+    return {
+      points: decodeFlexiblePolyline(section.polyline),
+      distanceMeters: typeof section.summary?.length === 'number' ? section.summary.length : 0,
+    }
   } catch (err: any) {
     console.warn('[fetchHereLegPolyline] %s → %s failed (Google-only display): %s',
       params.origin, params.destination, err?.message)
-    return []
+    return EMPTY
   }
 }
 
@@ -3281,8 +3286,14 @@ export async function generateRoutes(req: AuthRequest, res: Response, next: Next
       include: { stops: { orderBy: { order: 'asc' } } },
     })
     if (!trip) throw new AppError('Trip not found', 404)
-    const routes: Array<{ segmentIdx: number; route: string; toStopId?: string; hereWaypoints?: LatLng[] }> =
-      await fetchAllSegmentRoutes(trip)
+    const routes: Array<{
+      segmentIdx: number
+      route: string
+      toStopId?: string
+      hereWaypoints?: LatLng[]          // ≤3 snapped — directions-link URLs only
+      herePolyline?: Array<[number, number]>  // FULL HERE geometry — the map line
+      hereDistanceMeters?: number       // HERE's measured leg distance (matches the line)
+    }> = await fetchAllSegmentRoutes(trip)
 
     // FEAT-HERE-ROUTING (display) — when the flag is on, attach HERE's RV-safe
     // corridor as ≤N sampled waypoints per leg, KEYED BY DESTINATION STOP ID so
@@ -3312,16 +3323,24 @@ export async function generateRoutes(req: AuthRequest, res: Response, next: Next
           const seg = routes.find(r => r.segmentIdx === i - 1)
           if (!seg) continue
           seg.toStopId = ordered[i].id
-          const coords = await fetchHereLegPolyline(ordered[i - 1], ordered[i], rigDims, apiKey)
-          const wp = sampleCorridorWaypoints(coords, HERE_DISPLAY_MAX_WAYPOINTS)
-          if (wp.length) {
-            // Snap the via-waypoints to the road centerline so Google's via:true
-            // doesn't detour off-and-back (Fix B). Fail-soft → unsnapped points.
-            const { waypoints, snapped } = await snapWaypointsToRoads(wp, apiKey)
-            seg.hereWaypoints = waypoints
-            console.log('[generateRoutes] leg %d (%s→%s): %d HERE corridor waypoint(s) [%s]',
-              i - 1, ordered[i - 1].locationName, ordered[i].locationName, waypoints.length,
-              snapped ? 'snapped' : 'unsnapped-fallback')
+          const { points, distanceMeters } = await fetchHereLegPolyline(ordered[i - 1], ordered[i], rigDims, apiKey)
+          if (points.length) {
+            // The MAP LINE uses HERE's FULL polyline directly (drawn client-side,
+            // no Google via-reconstruction → no hooks) + HERE's measured distance.
+            seg.herePolyline = points
+            if (distanceMeters > 0) seg.hereDistanceMeters = distanceMeters
+            // The ≤3 sampled+snapped waypoints are now ONLY for the directions-link
+            // URLs (Google Maps maps/dir needs few points for the 2048-char cap).
+            const wp = sampleCorridorWaypoints(points, HERE_DISPLAY_MAX_WAYPOINTS)
+            let linkNote = 'no link waypoints'
+            if (wp.length) {
+              const { waypoints, snapped } = await snapWaypointsToRoads(wp, apiKey)
+              seg.hereWaypoints = waypoints
+              linkNote = `${waypoints.length} link waypoint(s) [${snapped ? 'snapped' : 'unsnapped-fallback'}]`
+            }
+            console.log('[generateRoutes] leg %d (%s→%s): %d-pt HERE polyline, %dmi; %s',
+              i - 1, ordered[i - 1].locationName, ordered[i].locationName,
+              points.length, Math.round((distanceMeters || 0) / 1609.34), linkNote)
           }
         }
       }
