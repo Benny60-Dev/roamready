@@ -10,7 +10,7 @@ import {
 import { DayPicker } from 'react-day-picker'
 import 'react-day-picker/style.css'
 import { formatTripDate, lifecycleDate, parseTripDate, toYmd } from '../../utils/dates'
-import { directionsUrl, destinationForStop } from '../../utils/directions'
+import { directionsUrl, destinationForStop, type DirectionsWaypoint } from '../../utils/directions'
 import { tripsApi, usersApi } from '../../services/api'
 import { Trip, Stop, Rig, StopWeather, LiveForecast, TripFuelEstimate } from '../../types'
 import { computeTripTotals } from '../../utils/tripTotals'
@@ -26,6 +26,15 @@ import { userFacingStopCount } from '../../utils/userFacingStopCount'
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' }
 const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 'geometry', 'places']
+
+// FEAT-HERE-ROUTING (display) — client mirror of the server USE_HERE_ROUTING flag.
+// Only when this is on do we fetch HERE corridor waypoints and route the map line +
+// directions links through them. Off (default) → Google-only display, no extra
+// fetch, byte-identical to before. Benny sets BOTH server + client flags together.
+const USE_HERE_ROUTING_DISPLAY = import.meta.env.VITE_USE_HERE_ROUTING === 'true'
+// Total HERE via-waypoints injected into the whole-trip map polyline call. Kept
+// small (≤10) to avoid the Directions Advanced-SKU billing tier / waypoint ceiling.
+const HERE_MAP_VIA_BUDGET = 10
 
 // ─── Marker colors ──────────────────────────────────────────────────────────────
 const MC = {
@@ -215,7 +224,7 @@ const BOOKING_BADGE: Record<MarkerKind, { cls: string; label: string }> = {
 }
 
 function StopPopup({
-  stop, kind, weather, displayNum, onClose, onUpdateNights, tripId, prevStop,
+  stop, kind, weather, displayNum, onClose, onUpdateNights, tripId, prevStop, waypoints,
 }: {
   stop: Stop
   kind: MarkerKind
@@ -229,6 +238,10 @@ function StopPopup({
   // The previous stop by order, so the popup can offer driving directions TO
   // this stop. Absent on the first stop (no prior leg) → no directions link.
   prevStop?: Stop
+  // FEAT-HERE-ROUTING — HERE corridor waypoints for the prevStop→stop leg, applied
+  // to the "from previous stop" link so it follows HERE's RV-safe path. Only valid
+  // for that origin (not "from my location", whose origin is the device).
+  waypoints?: DirectionsWaypoint[]
 }) {
   const badge  = BOOKING_BADGE[kind]
   const alerts = stopAlerts(weather)
@@ -373,7 +386,7 @@ function StopPopup({
           >from my location</a>
           <span aria-hidden>·</span>
           <a
-            href={directionsUrl(prevStop, destinationForStop(stop))}
+            href={directionsUrl(prevStop, destinationForStop(stop), waypoints)}
             target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
             className="text-[#185FA5] hover:underline"
           >from previous stop</a>
@@ -516,6 +529,13 @@ export default function TripMapPage() {
   const [weatherLoading, setWeatherLoading] = useState(false)
   const [geocoding, setGeocoding]           = useState(false)
   const [routePath, setRoutePath]           = useState<google.maps.LatLng[] | null>(null)
+  // FEAT-HERE-ROUTING (display) — HERE's RV-safe corridor waypoints per leg,
+  // keyed by the DESTINATION stop id (robust against coord-filtering). Populated
+  // only when VITE_USE_HERE_ROUTING is on; empty otherwise → Google-only display,
+  // byte-identical to before. Feeds both the map line (via:true intermediates)
+  // and the directions links (&waypoints=).
+  const [hereWaypoints, setHereWaypoints]   = useState<Map<string, DirectionsWaypoint[]>>(new Map())
+  const hereRoutesKey = useRef<string | null>(null)
   // Imperative handle to the underlying google.maps.Polyline. Captured via
   // <Polyline onLoad>; used by the useEffect below to push setRoutePath
   // changes directly to the on-map polyline. Bypasses the declarative
@@ -1021,6 +1041,40 @@ export default function TripMapPage() {
     }
   }, [routePath])
 
+  // ── FEAT-HERE-ROUTING (display): fetch HERE corridor waypoints per leg ────────
+  // One call per stop set (coords-keyed), gated on the client flag. Fail-soft —
+  // any error leaves hereWaypoints empty so the map line + links fall back to
+  // Google-only display. Keyed by destination stop id (see server generateRoutes).
+  useEffect(() => {
+    if (!USE_HERE_ROUTING_DISPLAY || !id || !trip?.stops?.length) return
+    const coordStops = trip.stops
+      .filter(s => s.latitude && s.longitude)
+      .sort((a, b) => a.order - b.order)
+    if (coordStops.length < 2) return
+    const key = coordStops.map(s => `${s.id}:${s.latitude},${s.longitude}`).join('|')
+    if (hereRoutesKey.current === key) return
+    hereRoutesKey.current = key
+
+    tripsApi.generateRoutes(id)
+      .then(res => {
+        const rows: any[] = Array.isArray(res.data) ? res.data : []
+        const map = new Map<string, DirectionsWaypoint[]>()
+        for (const r of rows) {
+          if (r?.toStopId && Array.isArray(r.hereWaypoints) && r.hereWaypoints.length > 0) {
+            map.set(r.toStopId, r.hereWaypoints
+              .filter((w: any) => typeof w?.lat === 'number' && typeof w?.lng === 'number')
+              .map((w: any) => ({ lat: w.lat, lng: w.lng })))
+          }
+        }
+        setHereWaypoints(map)
+        console.log('[TripMapPage] HERE corridor waypoints for', map.size, 'leg(s)')
+      })
+      .catch(err => {
+        console.warn('[TripMapPage] HERE waypoint fetch failed (Google-only display):', err?.message)
+        setHereWaypoints(new Map())
+      })
+  }, [id, trip?.stops])
+
   // ── Routes API (replaces deprecated DirectionsService) ────────────────────────
   useEffect(() => {
     if (!isLoaded || geocoding || !trip?.stops?.length) return
@@ -1029,14 +1083,43 @@ export default function TripMapPage() {
       .sort((a, b) => a.order - b.order)
     if (coordStops.length < 2) return
 
-    const key = coordStops.map(s => `${s.latitude},${s.longitude}`).join('|')
+    // FEAT-HERE-ROUTING (display): when HERE corridor waypoints are available,
+    // route the map line through them (via:true intermediates — they pin the
+    // corridor WITHOUT splitting legs, so per-leg highway/duration/distance
+    // attribution below stays 1:1 with stops). The key includes the HERE marker
+    // so the line redraws when waypoints arrive after the first (coords-only) run.
+    const useHereLine = USE_HERE_ROUTING_DISPLAY && hereWaypoints.size > 0
+    const key = coordStops.map(s => `${s.latitude},${s.longitude}`).join('|') +
+      (useHereLine ? `|here:${hereWaypoints.size}` : '')
     if (directionsCoordsKey.current === key) return
     directionsCoordsKey.current = key
 
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string
-    const intermediates = coordStops.slice(1, -1).slice(0, 25).map(s => ({
-      location: { latLng: { latitude: s.latitude!, longitude: s.longitude! } },
-    }))
+    let intermediates: Array<{ location: { latLng: { latitude: number; longitude: number } }; via?: boolean }>
+    if (useHereLine) {
+      // Interleave, in route order: each leg's HERE corridor waypoints (via:true —
+      // pass-through, no leg split) followed by the leg's destination stop as a
+      // real (non-via) boundary, except the final destination (sent separately
+      // below). Distribute the via budget across legs so the whole-trip line stays
+      // small. Hard-cap total intermediates at Google's 25 ceiling.
+      const legCount = coordStops.length - 1
+      const perLeg = Math.max(1, Math.floor(HERE_MAP_VIA_BUDGET / legCount))
+      intermediates = []
+      for (let i = 0; i < coordStops.length - 1; i++) {
+        const dest = coordStops[i + 1]
+        for (const w of (hereWaypoints.get(dest.id) ?? []).slice(0, perLeg)) {
+          intermediates.push({ location: { latLng: { latitude: w.lat, longitude: w.lng } }, via: true })
+        }
+        if (i + 1 <= coordStops.length - 2) {
+          intermediates.push({ location: { latLng: { latitude: dest.latitude!, longitude: dest.longitude! } } })
+        }
+      }
+      intermediates = intermediates.slice(0, 25)
+    } else {
+      intermediates = coordStops.slice(1, -1).slice(0, 25).map(s => ({
+        location: { latLng: { latitude: s.latitude!, longitude: s.longitude! } },
+      }))
+    }
 
     console.log('[TripMapPage] Calling Routes API for', coordStops.length, 'stops, key:', key)
 
@@ -1134,7 +1217,7 @@ export default function TripMapPage() {
         }
       })
       .catch(err => console.warn('[TripMapPage] Routes API fetch error:', err))
-  }, [isLoaded, geocoding, trip?.stops])
+  }, [isLoaded, geocoding, trip?.stops, hereWaypoints])
 
   // ── Derived values ─────────────────────────────────────────────────────────────
   const stopsWithCoords = useMemo(
@@ -2444,7 +2527,7 @@ export default function TripMapPage() {
                               >from my location</a>
                               <span aria-hidden>·</span>
                               <a
-                                href={directionsUrl(sortedStops[i - 1], destinationForStop(sortedStops[i]))}
+                                href={directionsUrl(sortedStops[i - 1], destinationForStop(sortedStops[i]), hereWaypoints.get(sortedStops[i].id))}
                                 target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
                                 className="text-[#185FA5] hover:underline"
                               >from previous stop</a>
@@ -2662,6 +2745,7 @@ export default function TripMapPage() {
                       const idx = sorted.findIndex(s => s.id === selectedStop.id)
                       return idx > 0 ? sorted[idx - 1] : undefined
                     })()}
+                    waypoints={hereWaypoints.get(selectedStop.id)}
                   />
                 </OverlayViewF>
               )}

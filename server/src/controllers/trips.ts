@@ -4,6 +4,7 @@ import { randomBytes } from 'crypto'
 import axios from 'axios'
 import { Prisma } from '@prisma/client'
 import { decodeFlexiblePolyline } from '../utils/flexiblePolyline'
+import { sampleCorridorWaypoints, type LatLng } from '../utils/polylineSample'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
@@ -692,6 +693,49 @@ async function fetchLegDetailHERE(
   return {
     durationSec, distanceMeters, steps,
     ...(violationNotes.length ? { violationNotes } : {}),
+  }
+}
+
+/**
+ * FEAT-HERE-ROUTING (display) — fetch the FULL decoded HERE route geometry for a
+ * leg, for the map line + directions-link waypoints. Separate from the
+ * measurement path (fetchLegDetailHERE) on purpose: this is display-only and the
+ * measurement path is done + proven, so we never touch it. Returns the decoded
+ * [lat,lng] polyline (hundreds of points — the caller samples it down) or [] on
+ * ANY failure so the caller falls back to Google-only display silently.
+ */
+async function fetchHereLegPolyline(
+  from: any,
+  to: any,
+  rigDims: RigDims | null | undefined,
+  googleKey: string,
+): Promise<Array<[number, number]>> {
+  const hereKey = process.env.HERE_API_KEY
+  if (!hereKey) return []
+  const o = await resolveCoords(from, googleKey)
+  const d = await resolveCoords(to, googleKey)
+  if (!o || !d) return []
+
+  const params: Record<string, string> = {
+    transportMode: 'truck',
+    origin: `${o.lat},${o.lng}`,
+    destination: `${d.lat},${d.lng}`,
+    return: 'polyline',
+    apiKey: hereKey,
+  }
+  if (rigDims?.heightCm) params['vehicle[height]'] = String(Math.round(rigDims.heightCm))
+  if (rigDims?.lengthCm) params['vehicle[length]'] = String(Math.round(rigDims.lengthCm))
+  if (rigDims?.grossWeightKg) params['vehicle[grossWeight]'] = String(Math.round(rigDims.grossWeightKg))
+
+  try {
+    const res = await axios.get('https://router.hereapi.com/v8/routes', { params, timeout: 10000 })
+    const section = res.data?.routes?.[0]?.sections?.[0]
+    if (!section?.polyline) return []
+    return decodeFlexiblePolyline(section.polyline)
+  } catch (err: any) {
+    console.warn('[fetchHereLegPolyline] %s → %s failed (Google-only display): %s',
+      params.origin, params.destination, err?.message)
+    return []
   }
 }
 
@@ -3167,6 +3211,11 @@ export async function saveItinerary(req: AuthRequest, res: Response, next: NextF
   } catch (err) { next(err) }
 }
 
+/** Max HERE corridor waypoints returned per leg for display (map line +
+ *  directions link). 8 keeps the directions-link URL under the 2048-char cap and
+ *  stays at/under Google's standard waypoint ceiling — see the build constraints. */
+const HERE_DISPLAY_MAX_WAYPOINTS = 8
+
 export async function generateRoutes(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const trip = await prisma.trip.findFirst({
@@ -3174,7 +3223,48 @@ export async function generateRoutes(req: AuthRequest, res: Response, next: Next
       include: { stops: { orderBy: { order: 'asc' } } },
     })
     if (!trip) throw new AppError('Trip not found', 404)
-    const routes = await fetchAllSegmentRoutes(trip)
+    const routes: Array<{ segmentIdx: number; route: string; toStopId?: string; hereWaypoints?: LatLng[] }> =
+      await fetchAllSegmentRoutes(trip)
+
+    // FEAT-HERE-ROUTING (display) — when the flag is on, attach HERE's RV-safe
+    // corridor as ≤N sampled waypoints per leg, KEYED BY DESTINATION STOP ID so
+    // the client can align them even if it filtered out coordless stops. Purely
+    // additive: the existing `route` highway-name strings are untouched, and any
+    // HERE failure leaves a leg with no hereWaypoints → client falls back to
+    // Google-only display for that leg. Display-only; measurement is unchanged.
+    if (useHereRouting()) {
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY
+      if (apiKey) {
+        const user = await prisma.user.findUnique({
+          where: { id: req.user!.id },
+          include: { rigs: { where: { isDefault: true } } },
+        })
+        let rigForRouting: { length?: number | null; height?: number | null; gvwr?: number | null; isTowing?: boolean | null; towedWeight?: number | null } | null =
+          user?.rigs?.[0] ?? null
+        if (trip.rigId) {
+          const tripRig = await prisma.rig.findFirst({ where: { id: trip.rigId, userId: req.user!.id } })
+          if (tripRig) rigForRouting = tripRig
+        }
+        const rigDims = rigDimsFromRig(rigForRouting)
+
+        const ordered = [...trip.stops].sort((a: any, b: any) => a.order - b.order)
+        // Segment i-1 is ordered[i-1] → ordered[i]; matches fetchAllSegmentRoutes's
+        // segmentIdx so we merge by index, then add toStopId for robust client keying.
+        for (let i = 1; i < ordered.length; i++) {
+          const seg = routes.find(r => r.segmentIdx === i - 1)
+          if (!seg) continue
+          seg.toStopId = ordered[i].id
+          const coords = await fetchHereLegPolyline(ordered[i - 1], ordered[i], rigDims, apiKey)
+          const wp = sampleCorridorWaypoints(coords, HERE_DISPLAY_MAX_WAYPOINTS)
+          if (wp.length) {
+            seg.hereWaypoints = wp
+            console.log('[generateRoutes] leg %d (%s→%s): %d HERE corridor waypoint(s)',
+              i - 1, ordered[i - 1].locationName, ordered[i].locationName, wp.length)
+          }
+        }
+      }
+    }
+
     res.json(routes)
   } catch (err) { next(err) }
 }
