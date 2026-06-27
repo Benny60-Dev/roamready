@@ -179,6 +179,14 @@ export default function AppLayout() {
                 <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl border border-gray-200 shadow-sm py-1 z-50"
                   style={{ borderWidth: '0.5px' }}
                 >
+                  {/* Account header — full name + email so the active test
+                      account is identifiable at a glance. Pure display; email
+                      truncates if it overflows the 192px panel. */}
+                  <div className="px-3 py-2">
+                    <p className="text-sm text-gray-700 font-medium truncate">{user?.firstName} {user?.lastName}</p>
+                    <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                  </div>
+                  <hr className="my-1" style={{ borderWidth: '0.5px' }} />
                   <NavLink to="/profile" className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => setProfileOpen(false)}>
                     <User size={15} /> Profile
                   </NavLink>
