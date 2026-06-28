@@ -387,6 +387,14 @@ model Trip {
   /// no longer consecutive real stops. Lives on the Trip (not the planning session)
   /// so it persists for manual trips too. Null/absent = none.
   acknowledgedLongLegs Json?
+  /// Build-time RV-safety acknowledgment. The user confirmed (via the blocking
+  /// modal at Build Itinerary) that destinations/routes are NOT verified RV-safe
+  /// and that checking clearance/weight/length/grade is their responsibility.
+  /// Shape: { acknowledgedAt: <ISO string> }. Null/absent = not acknowledged
+  /// (the modal re-prompts on the next build). RESET to null by syncTripEndpoints
+  /// whenever the route changes via any modify (add/remove/change-destination,
+  /// one-way/round-trip), so a route change forces a fresh acknowledgment.
+  acknowledgedRvSafety Json?
   /// Concise summary of the original PlanningSession transcript, distilled
   /// at promote time (or lazily on first Modify-with-AI open for legacy
   /// trips). Injected into the modify-mode system prompt so the assistant

@@ -14,7 +14,7 @@ import {
   generateItinerary, saveItinerary, generateRoutes, generateActivities,
   generateRouteHighlights, getTripMapImage, getTripWeather, reassignPOIs,
   createShareToken, regenerateShareToken, revokeShareToken,
-  getTripFuelEstimate, getTripHazards,
+  getTripFuelEstimate, getTripHazards, acknowledgeRvSafety,
 } from '../controllers/trips'
 
 export const tripsRouter = Router()
@@ -44,6 +44,10 @@ tripsRouter.post('/:id/stops/:stopId/long-leg-preview', longLegPreview as any)
 // Atomic round-trip → one-way conversion: truncate everything after the turnaround
 // (return-leg transit overnights + the trailing return-home closer) in one shot.
 tripsRouter.post('/:id/make-one-way', makeOneWay as any)
+// RV-SAFETY-ACK — persist the build-time RV-safety acknowledgment ({ acknowledgedAt }).
+// Called once after a fresh build's stop loop finishes; reset to null by
+// syncTripEndpoints whenever a later modify changes the route. Owner-gated.
+tripsRouter.post('/:id/acknowledge-rv-safety', acknowledgeRvSafety as any)
 
 tripsRouter.post('/:id/share', requireFeature('tripSharing'), createShareToken as any)
 tripsRouter.post('/:id/share/regenerate', requireFeature('tripSharing'), regenerateShareToken as any)
