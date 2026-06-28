@@ -585,6 +585,48 @@ async function resolveCoords(
 }
 
 /**
+ * FEAT-ORIGIN-RESOLVER — geocode-validate a FREE-FORM trip-origin answer ("I'm
+ * starting at the Suncoast Casino", "Summerlin", "Denver") and return a
+ * normalized "City, ST" origin string. Used by the planning controller's
+ * resolveTripOrigin so ANY origin phrasing the user gives (not just the "X to Y"
+ * route form) is accepted. Returns { resolved:false, origin:null } when Google
+ * cannot place the text — the caller then asks ONCE more rather than storing
+ * garbage. Geocoding stays Google (same endpoint resolveCoords uses).
+ */
+export async function geocodeOriginText(
+  text: string | null | undefined,
+  googleKey: string | undefined,
+): Promise<{ resolved: boolean; origin: string | null }> {
+  const q = (text ?? '').trim()
+  if (!q || !googleKey) return { resolved: false, origin: null }
+  try {
+    const res = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
+      params: { address: q, key: googleKey },
+      timeout: 10000,
+    })
+    const result = res.data?.results?.[0]
+    if (res.data?.status !== 'OK' || !result) return { resolved: false, origin: null }
+    // Prefer a clean "City, ST" from the components (an origin is a planning city,
+    // not a full street address); fall back to the formatted address.
+    const comps: any[] = Array.isArray(result.address_components) ? result.address_components : []
+    const pick = (type: string, key: 'long_name' | 'short_name') =>
+      comps.find(c => Array.isArray(c.types) && c.types.includes(type))?.[key] ?? null
+    const city =
+      pick('locality', 'long_name') ??
+      pick('postal_town', 'long_name') ??
+      pick('administrative_area_level_3', 'long_name') ??
+      pick('administrative_area_level_2', 'long_name')
+    const state = pick('administrative_area_level_1', 'short_name')
+    const origin = city
+      ? (state ? `${city}, ${state}` : city)
+      : (typeof result.formatted_address === 'string' ? result.formatted_address : null)
+    return origin ? { resolved: true, origin } : { resolved: false, origin: null }
+  } catch {
+    return { resolved: false, origin: null }
+  }
+}
+
+/**
  * HERE v8 sibling of fetchLegDetail — measures a leg with TRUCK routing (rig-
  * aware: height/length/weight), returning the SAME LegDetail shape so the rest
  * of the split engine is unchanged. Returns null on ANY failure (no key, coord

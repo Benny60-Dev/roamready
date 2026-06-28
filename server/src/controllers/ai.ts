@@ -16,7 +16,7 @@ import { hasRoundTripIntent } from '../utils/roundTripIntent'
 // with build's expandLongLegs. trips.ts already imports enforcePerUserDailyCap
 // from this module; both exports are only ever CALLED inside request handlers
 // (never at module load), so the two-way import resolves cleanly at call time.
-import { planTransitInserts, deriveCapHours, buildTransitNote, buildViolationAdvisory, minimalTripBudget, rigDimsFromRig, detectStopHazards } from './trips'
+import { planTransitInserts, deriveCapHours, buildTransitNote, buildViolationAdvisory, minimalTripBudget, rigDimsFromRig, detectStopHazards, geocodeOriginText } from './trips'
 
 // Soft cap: inject a "wrap up" system message and let Claude actually respond
 // (so it has a chance to emit the <itinerary> JSON block).
@@ -208,6 +208,28 @@ const NO_ORIGIN_RESPONSE =
   "starting from home, or somewhere else this trip? If it's home, share your address and " +
   "I'll help you save it for future trips; otherwise just give me your starting location " +
   "and I'll get going."
+
+// FEAT-ORIGIN-RESOLVER — shown ONLY when the user answered the origin question but
+// the answer could not be geocoded (resolveTripOrigin's safeguard: never store an
+// ungeocodable origin). Acknowledges the miss and asks once more — no infinite loop.
+const NO_ORIGIN_RETRY_RESPONSE =
+  "Hmm, I couldn't find that location on the map. Could you give me the city (and state) " +
+  "you're starting from — for example \"Las Vegas, NV\" — and I'll get going."
+
+// FEAT-ORIGIN-RESOLVER — strip conversational lead-in from a free-form origin
+// ANSWER so the remainder geocodes cleanly ("I'm starting at the Suncoast Casino"
+// → "the Suncoast Casino"; "leaving from Summerlin" → "Summerlin"; "from Denver"
+// → "Denver"). Conservative: only peels known opener phrases, never mangles a
+// bare place name.
+function stripOriginLeadIn(text: string): string {
+  return text
+    .trim()
+    .replace(/^(?:i['’]?m|i am|we['’]?re|we are|it['’]?s|its)\s+/i, '')
+    .replace(/^(?:currently\s+)?(?:starting|leaving|departing|coming|driving|heading(?:\s+out)?|setting\s+out)\s+(?:from|at|in|out\s+of)\s+/i, '')
+    .replace(/^(?:start|leave|depart)\s+(?:from|at|in)\s+/i, '')
+    .replace(/^(?:from|at|in|near)\s+/i, '')
+    .trim()
+}
 
 // isOriginAsk — concept-based detection of an origin/home/departure-address ask,
 // used by the INVERTED origin guard below to catch a redundant ask when the
@@ -1175,11 +1197,59 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     // the AI's <origin> tag (last-write-wins; different cases).
     // Run the deterministic route parser ONCE; it now yields BOTH origin and dest.
     const detectedRoute = extractFromXtoY(lastUserMsg?.content)
-    if (detectedRoute && !(userProfile as any).capturedOrigin) {
-      ;(userProfile as any).capturedOrigin = detectedRoute.origin
-      if (sessionId) {
-        await mergePartialTripData(sessionId, { origin: detectedRoute.origin })
-          .catch((e: any) => console.error('[AI origin-capture:from-x-to-y] persist failed for sessionId=%s: %s', sessionId, e?.message))
+
+    // ── FEAT-ORIGIN-RESOLVER — ONE authoritative origin resolver ──────────────
+    // Fill the origin slot from ALL sources, in priority order, BEFORE the model
+    // call so the model AND the hard gate both see it. First non-null wins and is
+    // written back to ptd.origin + userProfile.capturedOrigin. Priority:
+    //   (a) an already-stored ptd.origin (read into capturedOrigin above) — wins.
+    //   (b) FREE-FORM ANSWER — if the PRIOR assistant turn asked for the origin,
+    //       treat THIS user message as the answer (ANY phrasing, not just "X to
+    //       Y"): "home" → saved home; otherwise geocode-validate it. Accept on a
+    //       successful geocode; NEVER store an ungeocodable answer (the safeguard).
+    //   (c) the deterministic "X to Y" route form.
+    //   (d) the AI <origin> tag — captured post-response (below) for NEXT turn.
+    //   (e) saved home — the GATE's fallback, only when genuinely asking.
+    let originResolutionFailed = false
+    if (!(userProfile as any).capturedOrigin) {
+      const priorAssistant = [...messages].reverse().find((m: any) => m.role === 'assistant')
+      const answeringOriginAsk = isOriginAsk(priorAssistant?.content) && !!lastUserMsg?.content
+      if (answeringOriginAsk) {
+        // (b) free-form answer to the origin question.
+        const ans = (lastUserMsg!.content as string).trim()
+        const saysHome = /^(?:home|yes+|yep|yeah|sure|from home|my home|starting from home|same as usual|the usual)\b[.!]?$/i.test(ans)
+        const homeStr = userProfile.homeCity
+          ? `${userProfile.homeCity}${userProfile.homeState ? ', ' + userProfile.homeState : ''}`
+          : (userProfile.homeLocation || null)
+        if (saysHome && homeStr) {
+          ;(userProfile as any).capturedOrigin = homeStr
+          if (sessionId) {
+            await mergePartialTripData(sessionId, { origin: homeStr })
+              .catch((e: any) => console.error('[AI origin-resolver:home-answer] persist failed for sessionId=%s: %s', sessionId, e?.message))
+          }
+        } else {
+          const { resolved, origin } = await geocodeOriginText(stripOriginLeadIn(ans), process.env.GOOGLE_MAPS_API_KEY)
+          if (resolved && origin) {
+            ;(userProfile as any).capturedOrigin = origin
+            if (sessionId) {
+              await mergePartialTripData(sessionId, { origin })
+                .catch((e: any) => console.error('[AI origin-resolver:free-form] persist failed for sessionId=%s: %s', sessionId, e?.message))
+            }
+            console.log('[AI origin-resolver] free-form answer geocoded → "%s" sessionId=%s', origin, sessionId ?? '(none)')
+          } else {
+            // Ungeocodable answer → do NOT store; the gate below asks once more.
+            originResolutionFailed = true
+            console.warn('[AI origin-resolver] answer "%s" could not be geocoded — asking again. sessionId=%s', ans.slice(0, 60), sessionId ?? '(none)')
+          }
+        }
+      }
+      // (c) deterministic "X to Y" route form, only if still unresolved.
+      if (!(userProfile as any).capturedOrigin && detectedRoute) {
+        ;(userProfile as any).capturedOrigin = detectedRoute.origin
+        if (sessionId) {
+          await mergePartialTripData(sessionId, { origin: detectedRoute.origin })
+            .catch((e: any) => console.error('[AI origin-capture:from-x-to-y] persist failed for sessionId=%s: %s', sessionId, e?.message))
+        }
       }
     }
     // DESTINATION (deterministic primary for the pre-build budget check) — persist
@@ -1305,10 +1375,17 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     // Fires ONLY when ALL hold:
     //   - context !== 'modify'  (never touch modify-mode, which edits an existing trip)
     //   - hasHomeOnFile === false  (home-on-file users keep their existing behavior)
+    //   - NO resolved trip origin yet (FEAT-ORIGIN-RESOLVER hard gate): once
+    //     capturedOrigin is set — from ANY source: a free-form answer, "X to Y", a
+    //     prior <origin> capture, or a "home" answer — the origin question is
+    //     STRUCTURALLY unreachable. The controller never emits NO_ORIGIN_RESPONSE
+    //     and never runs the MESA-7/9 fabrication-replace below, so a known origin
+    //     can never be re-asked, and a no-home user with a captured origin is never
+    //     asked merely because home is unsaved.
     //   - response contains a parseable <itinerary> whose stops[0].type === 'HOME'
     //   - the HOME city appears in NONE of the user's own messages
     const hasHomeOnFile = !!(userProfile.homeCity || userProfile.homeLocation)
-    if (context !== 'modify' && !hasHomeOnFile) {
+    if (context !== 'modify' && !hasHomeOnFile && !(userProfile as any).capturedOrigin) {
       const itin = parseItineraryBlock(response)
       const homeStop = itin?.stops?.[0]
       if (itin && homeStop?.type === 'HOME') {
@@ -1377,6 +1454,15 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
         }
       }
 
+    }
+
+    // FEAT-ORIGIN-RESOLVER safeguard — the user ANSWERED the origin question but the
+    // answer could not be geocoded (resolveTripOrigin set originResolutionFailed and
+    // stored nothing). Replace the reply with a deterministic acknowledging re-ask
+    // so we never loop on a settled-but-unplaceable answer and never store garbage.
+    // Wins over the model's own output (which may be a fabricated itinerary).
+    if (context !== 'modify' && originResolutionFailed && !(userProfile as any).capturedOrigin) {
+      response = NO_ORIGIN_RETRY_RESPONSE
     }
 
     // INVERTED ORIGIN GUARD — origin is KNOWN but the model re-asked anyway. Runs
@@ -1844,6 +1930,24 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
           }
         }
       }
+    }
+
+    // FEAT-ORIGIN-RESOLVER — CATCH-ALL TAG STRIP. The known handlers above each
+    // consume one expected machine tag; anything they didn't consume (e.g. a
+    // hallucinated <requestedDestination>) would otherwise leak to visible chat.
+    // Final sweep BEFORE persist + send so both the stored history and the reply
+    // are clean. Scoped to the machine-tag SHAPE — a single lower/camelCase word,
+    // matching open+close (no spaces/attributes) — so it can NEVER eat legitimate
+    // prose like "5 < 10", "x<y", or "a < b". <itinerary> is preserved (the client
+    // parses it); every metadata tag was already stripped by its handler above.
+    if (context !== 'modify') {
+      response = response
+        // matched pairs <name>…</name>, name ≠ itinerary
+        .replace(/<(?!\/?itinerary\b)([a-z][a-zA-Z0-9]*)>[\s\S]*?<\/\1>/g, '')
+        // any stray opener/closer of the same shape, name ≠ itinerary
+        .replace(/<\/?(?!itinerary\b)[a-z][a-zA-Z0-9]*>/g, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
     }
 
     // Persist conversation to the appropriate field based on context.
