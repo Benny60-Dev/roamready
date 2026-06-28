@@ -16,7 +16,7 @@ import { hasRoundTripIntent } from '../utils/roundTripIntent'
 // with build's expandLongLegs. trips.ts already imports enforcePerUserDailyCap
 // from this module; both exports are only ever CALLED inside request handlers
 // (never at module load), so the two-way import resolves cleanly at call time.
-import { planTransitInserts, deriveCapHours, buildTransitNote, buildViolationAdvisory, minimalTripBudget, rigDimsFromRig } from './trips'
+import { planTransitInserts, deriveCapHours, buildTransitNote, buildViolationAdvisory, minimalTripBudget, rigDimsFromRig, detectStopHazards } from './trips'
 
 // Soft cap: inject a "wrap up" system message and let Claude actually respond
 // (so it has a chance to emit the <itinerary> JSON block).
@@ -1682,13 +1682,19 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             const { stops: splicedStops, inserts, legNotices } = await planTransitInserts(
               transitStops, capHours, process.env.GOOGLE_MAPS_API_KEY, rigDims,
             )
-            // Re-serialize when EITHER a transit stop was inserted OR a leg came
-            // back with a HERE restriction notice (an under-cap leg can have a
-            // closure with no insert — the splicedStops still carry the per-leg
-            // violationNotes that must reach the plan view). No inserts AND no
-            // notices → untouched, byte-identical to before (and to the Google
-            // path, which never produces notices).
-            if (inserts.length > 0 || legNotices.length > 0) {
+            // FEAT-HAZARD-WARN — DB-driven hazard check on the (spliced) plan.
+            // Mutates firing-hazard text onto the arriving stop's violationNotes
+            // (same channel as HERE notices → RouteAdvisory) and returns a prose
+            // advisory. Independent of USE_HERE_ROUTING (DB + Google geocode only),
+            // and fully fail-soft inside detectStopHazards — never blocks emission.
+            const hazardResult = await detectStopHazards(
+              splicedStops, userProfile.rigs?.[0] as any, process.env.GOOGLE_MAPS_API_KEY,
+            )
+            // Re-serialize when a transit stop was inserted, OR a leg carried a HERE
+            // restriction notice, OR a DB hazard fired — any of these means
+            // splicedStops now carry per-leg violationNotes that must reach the plan
+            // view. None of them → untouched, byte-identical to before.
+            if (inserts.length > 0 || legNotices.length > 0 || hazardResult.hitCount > 0) {
             const addedNights = inserts.reduce((n, ins) => n + ins.towns.length, 0)
             // Bump totalNights by the inserted nights (each OVERNIGHT_ONLY = 1) so
             // the nightsShortfall check below doesn't false-flag our own inserts.
@@ -1711,7 +1717,8 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             // rides alongside it — same plumbing — using HERE's actual notice text.
             const transitNote = buildTransitNote(inserts, transitStops, capHours) ?? ''
             const violationAdvisory = buildViolationAdvisory(legNotices) ?? ''
-            const note = [transitNote, violationAdvisory].filter(Boolean).join(' ')
+            const hazardAdvisory = hazardResult.advisory ?? ''
+            const note = [transitNote, violationAdvisory, hazardAdvisory].filter(Boolean).join(' ')
 
             // Re-serialize the <itinerary> block AND prepend the grounded note to the
             // prose (immediately before the block = the end of the visible reply;
