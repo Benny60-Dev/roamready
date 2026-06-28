@@ -1362,6 +1362,72 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       response = stripAppliedClaims(response)
     }
 
+    // ── FEAT-AI-TAG-PRIMARY — the AI's structured tags are the PRIMARY origin/
+    // destination source. The model understands messy/glued/typo'd/voice input that
+    // the deterministic extractFromXtoY regex (now the pre-model FALLBACK) misses,
+    // and emits <origin>/<destination> in THIS reply. Capture them HERE — BEFORE the
+    // origin gate below — so a turn-1 tagged origin sets capturedOrigin and the gate
+    // is suppressed in the SAME turn. Each tag is GEOCODE-VALIDATED (a mis-tag can't
+    // store garbage). The ORIGIN tag additionally requires its city's first token to
+    // appear as a token in the user's OWN messages (anti-fabrication — preserves the
+    // MESA no-home protection: origin must be user-grounded, never invented). The
+    // DESTINATION tag is geocode-validated but NOT user-gated, because the AI
+    // legitimately CHOOSES the destination on surprise / "pick somewhere" trips.
+    // Tags are stripped from the reply here (so the old post-gate handlers are gone).
+    if (context !== 'modify') {
+      const normTok = (s: unknown) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+      const userTokens = new Set(
+        messages
+          .filter((m: any) => m.role === 'user')
+          .flatMap((m: any) => normTok(m.content).split(' '))
+          .filter(Boolean),
+      )
+
+      // ORIGIN tag → PRIMARY capture. Only when not already resolved pre-model
+      // (stored ptd.origin / free-form answer / regex). Geocode + user-grounded.
+      const oTag = response.match(/<origin>([\s\S]*?)<\/origin>/)
+      if (oTag) {
+        response = response.replace(/<origin>[\s\S]*?<\/origin>/g, '').trim()
+        const tagged = oTag[1].trim()
+        if (tagged && !(userProfile as any).capturedOrigin) {
+          const cityFirstTok = normTok(tagged.split(',')[0]).split(' ').filter(Boolean)[0] ?? ''
+          if (cityFirstTok && userTokens.has(cityFirstTok)) {
+            const { resolved, origin } = await geocodeOriginText(tagged, process.env.GOOGLE_MAPS_API_KEY)
+            if (resolved && origin) {
+              ;(userProfile as any).capturedOrigin = origin
+              if (sessionId) {
+                await mergePartialTripData(sessionId, { origin })
+                  .catch((e: any) => console.error('[AI origin-capture:ai-tag] persist failed for sessionId=%s: %s', sessionId, e?.message))
+              }
+              console.log('[AI origin-resolver] AI <origin> "%s" → "%s" (user-grounded + geocoded) sessionId=%s', tagged, origin, sessionId ?? '(none)')
+            } else {
+              console.warn('[AI origin-resolver] AI <origin> "%s" did not geocode — ignored. sessionId=%s', tagged, sessionId ?? '(none)')
+            }
+          } else {
+            console.warn('[AI origin-guard] AI <origin> "%s" not present in any user message — treating as fabricated, ignored. sessionId=%s', tagged, sessionId ?? '(none)')
+          }
+        }
+      }
+
+      // DESTINATION tag → PRIMARY capture (geocode-validated; AI may choose it on
+      // surprise trips, so NO user-mention gate). Stores the model's exact wording
+      // when it validates, for the pre-build budget check (minimalTripBudget).
+      const dTag = response.match(/<destination>([\s\S]*?)<\/destination>/)
+      if (dTag) {
+        response = response.replace(/<destination>[\s\S]*?<\/destination>/g, '').trim()
+        const taggedDest = dTag[1].trim()
+        if (taggedDest && sessionId) {
+          const { resolved } = await geocodeOriginText(taggedDest, process.env.GOOGLE_MAPS_API_KEY)
+          if (resolved) {
+            await mergePartialTripData(sessionId, { destination: taggedDest })
+              .catch((e: any) => console.error('[AI destination-capture:ai-tag] persist failed for sessionId=%s: %s', sessionId, e?.message))
+          } else {
+            console.warn('[AI destination-capture] AI <destination> "%s" did not geocode — not persisted. sessionId=%s', taggedDest, sessionId ?? '(none)')
+          }
+        }
+      }
+    }
+
     // AI-MESA-7 — DETERMINISTIC ORIGIN GUARD (no-home users, planning mode only).
     // Prompt-level fixes (AI-MESA-4/5/6) cannot reliably stop the model fabricating
     // an origin to satisfy the mandatory order-1 HOME stop (7 runs → 6 fabricated).
@@ -1496,41 +1562,10 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       }
     }
 
-    // ORIGIN-FIX — capture the AI's structured <origin> tag (emitted on the turn
-    // it confirms the user's starting location). Strip it from the displayed
-    // message (mirrors the <clarify> unwrap) and persist it to the session so the
-    // no-home directive stops re-firing on later turns. Guarded on sessionId.
-    const originMatch = response.match(/<origin>([\s\S]*?)<\/origin>/)
-    if (originMatch) {
-      response = response.replace(/<origin>[\s\S]*?<\/origin>/g, '').trim()
-      const captured = originMatch[1].trim()
-      if (sessionId && captured) {
-        try {
-          await mergePartialTripData(sessionId, { origin: captured })
-        } catch (e: any) {
-          console.error('[AI origin-capture] persist failed for sessionId=%s: %s', sessionId, e?.message)
-        }
-      }
-    }
-
-    // DESTINATION-CAPTURE — capture the AI's structured <destination> tag (emitted on
-    // the turn the destination first becomes settled), mirroring <origin>. Strip it
-    // from the displayed message and persist to partialTripData.destination so the
-    // pre-build budget check has a destination even for phrasings the deterministic
-    // route parser (extractFromXtoY) does not catch ("trip to Bangor"). Guarded on
-    // sessionId; last-write-wins with the deterministic write above.
-    const destinationMatch = response.match(/<destination>([\s\S]*?)<\/destination>/)
-    if (destinationMatch) {
-      response = response.replace(/<destination>[\s\S]*?<\/destination>/g, '').trim()
-      const capturedDest = destinationMatch[1].trim()
-      if (sessionId && capturedDest) {
-        try {
-          await mergePartialTripData(sessionId, { destination: capturedDest })
-        } catch (e: any) {
-          console.error('[AI destination-capture] persist failed for sessionId=%s: %s', sessionId, e?.message)
-        }
-      }
-    }
+    // ORIGIN / DESTINATION tag capture moved EARLIER (FEAT-AI-TAG-PRIMARY, right
+    // after the model call, before the origin gate) so a turn-1 tagged origin
+    // suppresses the gate in the same turn and both tags are geocode-validated.
+    // The tags are already extracted + stripped there, so no handler is needed here.
 
     // RIG-CAPTURE (FR-RIG-MISMATCH, Approach B) — capture the AI's structured <rig>
     // tag, emitted only when the user states THEIR OWN current rig in chat (the model
