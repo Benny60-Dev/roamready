@@ -14,6 +14,7 @@
     "db:migrate:deploy": "prisma migrate deploy --schema=../prisma/schema.prisma",
     "db:generate": "prisma generate --schema=../prisma/schema.prisma",
     "db:seed": "tsx --env-file=../.env ../prisma/seed.ts",
+    "db:seed-hazards": "tsx --env-file=../.env src/scripts/seedHazards.ts",
     "db:studio": "prisma studio --schema=../prisma/schema.prisma",
     "db:backfill-party": "tsx --env-file=../.env src/scripts/backfillTravelParty.ts",
     "db:backfill-candidates": "tsx --env-file=../.env src/scripts/backfillCampgroundCandidates.ts",

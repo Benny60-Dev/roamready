@@ -2969,6 +2969,217 @@ export function buildViolationAdvisory(legNotices: LegNotice[]): string | null {
     .join(' ')
 }
 
+// ─── FEAT-HAZARD-WARN — RV hazard detection (DB-driven, NO route geometry) ─────
+// Warning-only. A planned leg is tested against known hazards (the Hazard table)
+// by a COARSE corridor test (hazard point within a buffer of the straight line
+// between the two GEOCODED endpoints) PLUS a stop-name match, then gated by the
+// user's rig dimensions. A firing hazard's text is attached to the ARRIVING
+// stop's violationNotes — the SAME channel HERE detection used → RouteAdvisory
+// banner. Independent of USE_HERE_ROUTING: this uses only the DB + Google
+// geocoding (resolveCoords), so it works with the abandoned HERE display off.
+
+/** Corridor half-width (miles) around the straight line between leg endpoints. A
+ *  hazard whose point falls within this buffer counts as "on/near the leg".
+ *  Generous on purpose — real roads wind far from the straight line, especially
+ *  in the mountains where length/grade hazards cluster, so we favor recall and
+ *  frame the warning as "verify". Named constant for easy tuning. */
+const HAZARD_CORRIDOR_BUFFER_MI = 25
+
+/** Minimal rig shape the gating reads. Works for a real Rig OR an ad-hoc
+ *  { length } object (no vehicleType → treated as an RV, per Phase-2 decision). */
+interface HazardRig {
+  vehicleType?: string | null
+  length?: number | null
+  height?: number | null
+  gvwr?: number | null
+  isTowing?: boolean | null
+  towedLength?: number | null
+  towedHeight?: number | null
+}
+
+/** Subset of the Hazard row the matcher needs. */
+interface HazardRow {
+  name: string
+  state: string
+  lat: number
+  lng: number
+  hazardType: string
+  maxLengthFt: number | null
+  maxHeightFt: number | null
+  maxWidthFt: number | null
+  maxWeightLbs: number | null
+  propaneBanned: boolean
+  roadDesignation: string | null
+}
+
+/** Great-circle distance (miles) from point P to the SEGMENT A→B (closest point
+ *  on the segment, via a local equirectangular projection — adequate at leg
+ *  scale). Reuses haversineMiles for the final point-to-point distance. */
+function pointToSegmentMiles(
+  pLat: number, pLng: number,
+  aLat: number, aLng: number,
+  bLat: number, bLng: number,
+): number {
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const latRef = toRad((aLat + bLat) / 2)
+  // Local planar coords (x east, y north), A at origin.
+  const bx = toRad(bLng - aLng) * Math.cos(latRef), by = toRad(bLat - aLat)
+  const px = toRad(pLng - aLng) * Math.cos(latRef), py = toRad(pLat - aLat)
+  const segLen2 = bx * bx + by * by
+  let t = segLen2 > 0 ? (px * bx + py * by) / segLen2 : 0
+  t = Math.max(0, Math.min(1, t)) // clamp to the segment
+  const cx = t * bx, cy = t * by
+  const cLng = aLng + (cx / Math.cos(latRef)) * (180 / Math.PI)
+  const cLat = aLat + cy * (180 / Math.PI)
+  return haversineMiles(pLat, pLng, cLat, cLng)
+}
+
+/** Combined driving length (rig + towed when towing) — what parkway/pass length
+ *  bans actually limit. */
+function rigEffectiveLengthFt(rig: HazardRig): number {
+  return (rig.length ?? 0) + (rig.isTowing && rig.towedLength ? rig.towedLength : 0)
+}
+/** Taller of the rig and any towed unit. */
+function rigEffectiveHeightFt(rig: HazardRig): number {
+  return Math.max(rig.height ?? 0, rig.towedHeight ?? 0)
+}
+/** Counts as an RV (has propane / subject to blanket RV bans). No rig propane
+ *  flag exists yet (P3 follow-on) → assume YES for anything that isn't a tent/
+ *  car-camping setup; an ad-hoc rig (no vehicleType) is treated as an RV. */
+function rigIsRv(rig: HazardRig): boolean {
+  return rig.vehicleType !== 'CAR_CAMPING'
+}
+
+/** Rig-gating: does this hazard actually affect THIS rig? Fires ONLY when the
+ *  rig's real dimension trips the stored numeric limit — never a generic "big
+ *  rig" note. WIDTH_BAN / VEHICLE_BAN / PROPANE_TUNNEL have no measurable rig
+ *  field, so they fire for any non-CAR_CAMPING rig (Phase-2 decisions 1/2/3). */
+function hazardFiresForRig(h: HazardRow, rig: HazardRig): boolean {
+  const rv = rigIsRv(rig)
+  switch (h.hazardType) {
+    case 'LENGTH_BAN':    return h.maxLengthFt != null && rigEffectiveLengthFt(rig) > h.maxLengthFt
+    case 'HEIGHT_BAN':    return h.maxHeightFt != null && rigEffectiveHeightFt(rig) > h.maxHeightFt
+    case 'WEIGHT_BAN':    return h.maxWeightLbs != null && (rig.gvwr ?? 0) > h.maxWeightLbs
+    case 'WIDTH_BAN':     return rv  // no rig width field — fire for any RV
+    case 'VEHICLE_BAN':   return rv  // RVs + trailers
+    case 'PROPANE_TUNNEL': return rv && h.propaneBanned // assume propane aboard any RV
+    case 'GRADE':         return false // advisory grades not seeded in slice 1
+    default:              return false
+  }
+}
+
+/** Compose the user-facing warning from the hazard row + the rig that tripped it.
+ *  Honest and specific (names the road + the real limit); always "verify
+ *  yourself" framing, never a guarantee. */
+function composeHazardNote(h: HazardRow, rig: HazardRig): string {
+  const where = h.roadDesignation ? `${h.name} (${h.roadDesignation})` : h.name
+  switch (h.hazardType) {
+    case 'LENGTH_BAN':
+      return `${where} has a ${h.maxLengthFt}-ft vehicle-length limit and your rig (about ${Math.round(rigEffectiveLengthFt(rig))} ft${rig.isTowing ? ' combined' : ''}) exceeds it — verify before driving or plan an alternate.`
+    case 'HEIGHT_BAN':
+      return `${where} has a ${h.maxHeightFt}-ft height limit and your rig (about ${rigEffectiveHeightFt(rig)} ft) exceeds it — verify clearance before driving.`
+    case 'WIDTH_BAN':
+      return `${where} has a ${h.maxWidthFt ?? '8'}-ft width limit that RVs typically exceed — verify before driving or plan an alternate.`
+    case 'WEIGHT_BAN':
+      return `${where} has a ${h.maxWeightLbs}-lb weight limit your rig exceeds — verify before driving.`
+    case 'VEHICLE_BAN':
+      return `${where} prohibits RVs/trailers — verify before driving and plan an alternate route.`
+    case 'PROPANE_TUNNEL':
+      return `${where} restricts vehicles carrying propane/LP, which RVs typically do — verify the crossing's rules or plan an alternate.`
+    default:
+      return `${where} has a posted restriction for your rig — verify before driving.`
+  }
+}
+
+/** Normalize for the stop-name match. */
+function normHazardStr(s: string | null | undefined): string {
+  return (s ?? '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()
+}
+/** Stop-name (landmark) match: the user routed TO/FROM the hazard by name. High
+ *  precision — hazard names are specific — so a substring hit is safe. */
+function stopNamesHazard(stop: any, h: HazardRow): boolean {
+  const sn = normHazardStr(stop?.locationName)
+  if (!sn) return false
+  const hn = normHazardStr(h.name)
+  return hn.length >= 4 && sn.includes(hn)
+}
+
+/**
+ * Per-planning-turn hazard detection. Loads HIGH-confidence hazards once, walks
+ * consecutive stop pairs, geocodes endpoints (resolveCoords), runs the corridor
+ * test + stop-name match, gates by rig, and MUTATES each firing hazard's text
+ * onto the ARRIVING stop's violationNotes (merging with any HERE notes already
+ * there). Returns a grounded prose advisory + a hit count for the caller's
+ * re-serialize gate. FAIL-SOFT: any DB/geocode error is caught and skipped so
+ * itinerary emission is NEVER blocked. DB + Google geocode only — independent of
+ * USE_HERE_ROUTING.
+ */
+export async function detectStopHazards(
+  stops: any[],
+  rig: HazardRig | null | undefined,
+  googleKey: string | undefined,
+): Promise<{ advisory: string | null; hitCount: number }> {
+  try {
+    if (!rig || !Array.isArray(stops) || stops.length < 2) return { advisory: null, hitCount: 0 }
+    // Only HIGH-confidence hazards fire live warnings in slice 1 (MED rows are
+    // seeded but dormant). Small table → one findMany per turn, not per leg.
+    const hazards = (await prisma.hazard.findMany({
+      where: { confidence: 'HIGH' },
+      select: {
+        name: true, state: true, lat: true, lng: true, hazardType: true,
+        maxLengthFt: true, maxHeightFt: true, maxWidthFt: true, maxWeightLbs: true,
+        propaneBanned: true, roadDesignation: true,
+      },
+    })) as HazardRow[]
+    if (!hazards.length) return { advisory: null, hitCount: 0 }
+
+    // Geocode cache so a repeated city isn't geocoded twice in one turn.
+    const coordCache = new Map<string, { lat: number; lng: number } | null>()
+    const geocode = async (s: any) => {
+      const key = `${s?.locationName ?? ''}|${s?.locationState ?? ''}`
+      if (!coordCache.has(key)) coordCache.set(key, await resolveCoords(s, googleKey ?? ''))
+      return coordCache.get(key)!
+    }
+
+    const advisories: string[] = []
+    let hitCount = 0
+    for (let i = 1; i < stops.length; i++) {
+      const from = stops[i - 1], to = stops[i]
+      // (B) stop-name landmark match — fires regardless of corridor geometry.
+      const nameHits = hazards.filter(h => stopNamesHazard(to, h) || stopNamesHazard(from, h))
+      // (C) corridor match — geocode both endpoints, point-to-segment distance.
+      let corridorHits: HazardRow[] = []
+      const a = await geocode(from), b = await geocode(to)
+      if (a && b) {
+        corridorHits = hazards.filter(h =>
+          pointToSegmentMiles(h.lat, h.lng, a.lat, a.lng, b.lat, b.lng) <= HAZARD_CORRIDOR_BUFFER_MI)
+      }
+      // Dedupe (name+state) and rig-gate.
+      const seen = new Set<string>()
+      const firing = [...nameHits, ...corridorHits].filter(h => {
+        const k = `${h.name}|${h.state}`
+        if (seen.has(k)) return false
+        seen.add(k)
+        return hazardFiresForRig(h, rig)
+      })
+      if (!firing.length) continue
+
+      const notes = firing.map(h => composeHazardNote(h, rig))
+      const existing = Array.isArray((to as any).violationNotes) ? (to as any).violationNotes : []
+      ;(to as any).violationNotes = [...existing, ...notes]
+      advisories.push(...notes)
+      hitCount += firing.length
+      console.warn('[detectStopHazards] leg %s→%s: %d hazard(s) fired: %s',
+        from?.locationName, to?.locationName, firing.length, firing.map(h => h.name).join('; '))
+    }
+
+    return { advisory: advisories.length ? advisories.join(' ') : null, hitCount }
+  } catch (err: any) {
+    console.warn('[detectStopHazards] failed (skipped, itinerary unaffected): %s', err?.message)
+    return { advisory: null, hitCount: 0 }
+  }
+}
+
 /**
  * Acknowledged-long-leg store ("keep the long drive"). Persisted on the TRIP
  * (Trip.acknowledgedLongLegs, JSONB) so it works for EVERY trip — including manual
