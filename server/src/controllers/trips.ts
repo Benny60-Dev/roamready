@@ -193,6 +193,13 @@ async function syncTripEndpoints(tripId: string): Promise<void> {
       startLocation: stops[0].locationName,
       endLocation: stops[stops.length - 1].locationName,
       tripType: computeTripShape(stops),
+      // RV-SAFETY-ACK reset — this is the single choke point every route-changing
+      // controller passes through (create/update/delete stop, makeOneWay,
+      // recheckLongLegs), so NULLing the ack here re-prompts the RV-safety modal on
+      // the next build whenever the route changes via any modify. Safe at build time:
+      // the build writes the ack AFTER its stop-creation loop (acknowledgeRvSafety),
+      // so the loop's syncTripEndpoints calls have nothing to clear yet.
+      acknowledgedRvSafety: null,
     },
   })
 }
@@ -1762,6 +1769,28 @@ export async function getTrip(req: AuthRequest, res: Response, next: NextFunctio
     }
 
     res.json({ ...trip, stops: trip.stops.map(collapseJournal), packingContext })
+  } catch (err) { next(err) }
+}
+
+/**
+ * RV-SAFETY-ACK — persist the build-time RV-safety acknowledgment on a trip.
+ *
+ * Called by the client AFTER the build's stop-creation loop completes (see
+ * SessionPage.buildItinerary), never during it. That ordering is load-bearing:
+ * every createStop in the build loop runs syncTripEndpoints, which NULLs this
+ * field — so writing the ack here, once the loop is done, is the last write and
+ * survives. Stored as { acknowledgedAt: <ISO> }; presence = acknowledged,
+ * null/absent = not (the modal re-prompts on the next build). Owner-gated like
+ * the other trip endpoints. The reset on later route changes is handled in
+ * syncTripEndpoints, not here.
+ */
+export async function acknowledgeRvSafety(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const trip = await prisma.trip.findFirst({ where: { id: req.params.id, userId: req.user!.id } })
+    if (!trip) throw new AppError('Trip not found', 404)
+    const acknowledgedRvSafety = { acknowledgedAt: new Date().toISOString() }
+    await prisma.trip.update({ where: { id: req.params.id }, data: { acknowledgedRvSafety } })
+    res.json({ acknowledgedRvSafety })
   } catch (err) { next(err) }
 }
 

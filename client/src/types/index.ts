@@ -231,6 +231,11 @@ export interface Trip {
   //   the user's profile/rigs.
   bringingTowed?: boolean | null
   adHocVehicle?: { year?: number; make?: string; model?: string; length?: number } | null
+  // RV-SAFETY-ACK — build-time acknowledgment that destinations/routes are NOT
+  // verified RV-safe. { acknowledgedAt: ISO } once acknowledged; null/absent =
+  // not acknowledged (re-prompts on next build). Reset to null server-side by
+  // syncTripEndpoints whenever a modify changes the route.
+  acknowledgedRvSafety?: { acknowledgedAt: string } | null
   createdAt: string
   updatedAt: string
 }

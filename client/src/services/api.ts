@@ -167,6 +167,11 @@ export const tripsApi = {
   // transit overnights in one shot). modifyActionId stamps the AI proposal applied.
   makeOneWay: (id: string, modifyActionId?: string) =>
     api.post(`/trips/${id}/make-one-way${modifyActionId ? `?modifyActionId=${encodeURIComponent(modifyActionId)}` : ''}`),
+  // RV-SAFETY-ACK — persist the build-time RV-safety acknowledgment on a freshly
+  // built trip. Called by SessionPage.buildItinerary AFTER the createStop loop so
+  // the build's own syncTripEndpoints calls (which NULL the field) can't wipe it.
+  acknowledgeRvSafety: (id: string) =>
+    api.post<{ acknowledgedRvSafety: { acknowledgedAt: string } }>(`/trips/${id}/acknowledge-rv-safety`),
   generatePackingList: (id: string) => api.post(`/trips/${id}/packing-list`),
   savePackingList: (id: string, packingList: any[]) => api.put(`/trips/${id}/packing-list`, { packingList }),
   // FR-SAVED-PACKING — seed a trip's packing list from existing data. Both MERGE
