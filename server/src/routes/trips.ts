@@ -14,7 +14,7 @@ import {
   generateItinerary, saveItinerary, generateRoutes, generateActivities,
   generateRouteHighlights, getTripMapImage, getTripWeather, reassignPOIs,
   createShareToken, regenerateShareToken, revokeShareToken,
-  getTripFuelEstimate,
+  getTripFuelEstimate, getTripHazards,
 } from '../controllers/trips'
 
 export const tripsRouter = Router()
@@ -56,6 +56,9 @@ tripsRouter.get('/:id/weather', requireFeature('weatherAlerts'), getTripWeather 
 // (the underlying EIA fetch is cheap + cached 7-day) so all trip surfaces
 // can show a live regional estimate. See controllers/trips.ts → getTripFuelEstimate.
 tripsRouter.get('/:id/fuel-estimate', getTripFuelEstimate as any)
+// RV hazard warnings for the built trip — recomputed on demand (not persisted on
+// the Stop row). See controllers/trips.ts → getTripHazards.
+tripsRouter.get('/:id/hazards', getTripHazards as any)
 tripsRouter.post('/:id/packing-list', requireFeature('packingListGenerator'), generatePackingList as any)
 // Save the curated list (checked toggles + removals). Deliberately NOT
 // Pro-gated: generation is the gated feature; persisting your own checkmarks

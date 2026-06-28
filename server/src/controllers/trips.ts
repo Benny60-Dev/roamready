@@ -3050,6 +3050,7 @@ interface HazardRow {
   maxHeightFt: number | null
   maxWidthFt: number | null
   maxWeightLbs: number | null
+  gradePct: number | null
   propaneBanned: boolean
   roadDesignation: string | null
 }
@@ -3105,17 +3106,55 @@ function hazardFiresForRig(h: HazardRow, rig: HazardRig): boolean {
     case 'WIDTH_BAN':     return rv  // no rig width field — fire for any RV
     case 'VEHICLE_BAN':   return rv  // RVs + trailers
     case 'PROPANE_TUNNEL': return rv && h.propaneBanned // assume propane aboard any RV
-    case 'GRADE':         return false // advisory grades not seeded in slice 1
+    case 'GRADE':
+      // Steep passes have no universal legal limit. Fire for a large/heavy RV.
+      // If the row carries an exact dimensional limit (some passes post one), use
+      // it; otherwise the generic "big rig" threshold (≥30 ft combined OR ≥26k lb).
+      if (!rv) return false
+      if (h.maxLengthFt != null) return rigEffectiveLengthFt(rig) > h.maxLengthFt
+      if (h.maxWeightLbs != null) return (rig.gvwr ?? 0) > h.maxWeightLbs
+      return rigEffectiveLengthFt(rig) >= 30 || (rig.gvwr ?? 0) >= 26000
     default:              return false
   }
 }
 
+/** Deterministic slug for a hazard — MUST match seedHazards.ts hazardId()
+ *  (`${name}-${state}` lowercased, non-alphanumerics → '-', trimmed). Used to look
+ *  up a curated verbatim warning message below. */
+function hazardSlug(name: string, state: string): string {
+  return `${name}-${state}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+// Curated VERBATIM warning text per hazard, keyed by hazardSlug. The Hazard model
+// has no message column, so per-row wording (alternates, runaway ramps, exact
+// phrasing) lives here in code and is preferred by composeHazardNote over the
+// generated fallback. Keys MUST match the seed rows' name+state exactly. Currently
+// the 11 GRADE rows (GH-W); the legal RESTRICTIONS still use the generated text.
+// (Future: a Hazard.message column would move these to the DB — see P3 note.)
+const HAZARD_MESSAGES: Record<string, string> = {
+  'sonora-pass-ca': "DANGER: Sonora Pass (CA-108) reaches ~26% grade with tight switchbacks. NOT recommended for vehicles over 25 ft. Your rig should avoid this pass — seek an alternate route.",
+  'ebbetts-pass-ca': "DANGER: Ebbetts Pass (CA-4) hits ~23-25% grade, is under 2 lanes wide in spots with hairpins. Signs advise vehicles over 28 ft find an alternate route. Avoid in a large rig.",
+  'million-dollar-highway-red-mountain-pass-co': "CAUTION: US-550 (Million Dollar Highway / Red Mountain Pass) runs ~8-9% with sheer drop-offs and NO guardrails. Narrow and notoriously dangerous. Drive northbound to stay off the cliff edge; use engine braking.",
+  'slumgullion-pass-co': "CAUTION: Slumgullion Pass (CO-149) is ~9.5% — Colorado's steepest paved road. Sustained grade; use low gear and watch brake heat.",
+  'us-14-bighorn-granite-pass-wy': "DANGER: US-14 over the Bighorns averages ~10% and peaks near 13.5% — semis avoid it entirely. Severe for a large RV. Strongly consider an alternate route.",
+  'teton-pass-wy': "DANGER: Teton Pass (WY-22) is a sustained 10% grade on BOTH sides (eases to 6-7% lower down), peaks 8,429 ft, with a posted 60,000 lb weight limit and runaway ramps that require crossing oncoming traffic. Trailers banned in winter. Demanding/dangerous for a heavy coach — the Hwy 26/89 via Alpine is the safer alternate.",
+  'i-84-cabbage-hill-emigrant-hill-or': "CAUTION: I-84 Cabbage Hill gains 2,000 ft in 6 miles at 6%. Manage engine/transmission heat carefully both directions.",
+  'ut-143-ut': "DANGER: UT-143 reaches over 13% climbing toward the ski resort; trucks avoid it to keep brakes from catching fire. Not advised for a large motorhome.",
+  'moki-dugway-ut': "DANGER: Moki Dugway (UT-261) is a series of steep UNPAVED switchbacks carved into a cliff. Large RVs and trailers should not attempt it — use the paved alternate.",
+  'apache-trail-az': "DANGER: AZ-88 (Apache Trail) between Tortilla Flat and Roosevelt Lake is winding gravel/dirt, sometimes a single lane. Do NOT attempt in a big rig.",
+  'cajon-pass-ca': "CAUTION: Cajon Pass (I-15 south of Victorville) descends ~6% with a 12-mile downgrade, 45 mph truck limit, and a runaway ramp. Heavy truck traffic. Low gear and engine braking — watch brake temps the whole way down.",
+}
+
 /** Compose the user-facing warning from the hazard row + the rig that tripped it.
- *  Honest and specific (names the road + the real limit); always "verify
- *  yourself" framing, never a guarantee. */
+ *  Prefers a curated VERBATIM message (HAZARD_MESSAGES) when one exists for this
+ *  hazard; otherwise generates honest, specific "verify yourself" text. */
 function composeHazardNote(h: HazardRow, rig: HazardRig): string {
+  const verbatim = HAZARD_MESSAGES[hazardSlug(h.name, h.state)]
+  if (verbatim) return verbatim
   const where = h.roadDesignation ? `${h.name} (${h.roadDesignation})` : h.name
   switch (h.hazardType) {
+    case 'GRADE':
+      return `${where} is a steep${h.gradePct != null ? ` ~${h.gradePct}%` : ''} grade — not recommended for large or heavy rigs. Verify before driving or plan an alternate.`
     case 'LENGTH_BAN':
       return `${where} has a ${h.maxLengthFt}-ft vehicle-length limit and your rig (about ${Math.round(rigEffectiveLengthFt(rig))} ft${rig.isTowing ? ' combined' : ''}) exceeds it — verify before driving or plan an alternate.`
     case 'HEIGHT_BAN':
@@ -3170,7 +3209,7 @@ export async function detectStopHazards(
       select: {
         name: true, state: true, lat: true, lng: true, hazardType: true,
         maxLengthFt: true, maxHeightFt: true, maxWidthFt: true, maxWeightLbs: true,
-        propaneBanned: true, roadDesignation: true,
+        gradePct: true, propaneBanned: true, roadDesignation: true,
       },
     })) as HazardRow[]
     if (!hazards.length) return { advisory: null, hitCount: 0 }
@@ -4126,5 +4165,56 @@ export async function getTripFuelEstimate(req: AuthRequest, res: Response, next:
     }
 
     res.json(estimate)
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /trips/:id/hazards — RV hazard warnings for the BUILT trip, RECOMPUTED on
+ * demand (the warning is computed during planning and is NOT persisted on the
+ * Stop row, so the map page has nothing to read otherwise). Loads the trip's
+ * ordered stops + its rig (trip rig → user default, same resolution as the fuel
+ * estimate), runs the shared detectStopHazards (corridor + name match, rig-gated)
+ * which mutates each affected stop's violationNotes, and returns them keyed by
+ * stopId. Recomputing keeps the result correct if the rig changes. Fail-soft:
+ * detectStopHazards swallows its own errors and returns no hits.
+ */
+export async function getTripHazards(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const trip = await prisma.trip.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+      include: { stops: { orderBy: { order: 'asc' } } },
+    })
+    if (!trip) throw new AppError('Trip not found', 404)
+
+    // Rig resolution mirrors getTripFuelEstimate (trip-assigned → user default),
+    // both scoped by userId. Full row → structurally satisfies the hazard rig shape.
+    let rig = null
+    if (trip.rigId) {
+      rig = await prisma.rig.findFirst({ where: { id: trip.rigId, userId: req.user!.id } })
+    }
+    if (!rig) {
+      rig = await prisma.rig.findFirst({ where: { userId: req.user!.id, isDefault: true } })
+    }
+
+    // Working copy carrying id (to key the result) + the fields detectStopHazards
+    // reads (locationName/locationState for geocode + name match; lat/lng to skip
+    // geocoding when coords already exist). detectStopHazards mutates violationNotes
+    // onto the affected (arriving) stops, which we then read back per stop.
+    const working: any[] = trip.stops.map(s => ({
+      id: s.id,
+      order: s.order,
+      type: s.type,
+      locationName: s.locationName,
+      locationState: s.locationState,
+      latitude: s.latitude,
+      longitude: s.longitude,
+    }))
+    await detectStopHazards(working, rig as any, process.env.GOOGLE_MAPS_API_KEY)
+
+    const hazards = working
+      .filter(s => Array.isArray(s.violationNotes) && s.violationNotes.length > 0)
+      .map(s => ({ stopId: s.id as string, violationNotes: s.violationNotes as string[] }))
+
+    res.json({ hazards })
   } catch (err) { next(err) }
 }
