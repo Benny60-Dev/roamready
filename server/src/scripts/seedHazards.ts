@@ -112,6 +112,46 @@ const HAZARDS: SeedHazard[] = [
   { name: 'Hampton Roads & Chesapeake Bay Bridge-Tunnels', state: 'VA', lat: 37.0000, lng: -76.1500, // VERIFY (multi-crossing; propane allowed WITH shutoff — see P3 message-field note)
     hazardType: HazardType.PROPANE_TUNNEL, propaneBanned: true,
     confidence: HazardConfidence.MED, source: 'advisory' },
+
+  // ── GRADE hazards (steep passes), West, GH-W set — all HIGH (fire live) ─────
+  // Verbatim warning text lives in HAZARD_MESSAGES (controllers/trips.ts), keyed
+  // by the same name+state slug. GRADE gating: fires for a non-CAR_CAMPING rig
+  // that exceeds a posted limit (Sonora 25 ft, Ebbetts 28 ft, Teton 60k lb) or
+  // the generic large/heavy threshold (≥30 ft combined OR ≥26k lb). SKIPPED here:
+  // GH-W-007 Independence Pass + GH-W-023 Beartooth — already seeded as LENGTH_BAN.
+  { name: 'Sonora Pass', state: 'CA', lat: 38.3280, lng: -119.6360, // VERIFY (summit)
+    hazardType: HazardType.GRADE, gradePct: 26, maxLengthFt: 25,
+    confidence: HazardConfidence.HIGH, source: 'Caltrans / Mountain Directory', roadDesignation: 'CA-108' },
+  { name: 'Ebbetts Pass', state: 'CA', lat: 38.5460, lng: -119.8060, // VERIFY (summit)
+    hazardType: HazardType.GRADE, gradePct: 24, maxLengthFt: 28,
+    confidence: HazardConfidence.HIGH, source: 'Caltrans / Mountain Directory', roadDesignation: 'CA-4' },
+  { name: 'Million Dollar Highway / Red Mountain Pass', state: 'CO', lat: 37.8990, lng: -107.7110, // VERIFY (Red Mountain Pass)
+    hazardType: HazardType.GRADE, gradePct: 9,
+    confidence: HazardConfidence.HIGH, source: 'CDOT / Mountain Directory', roadDesignation: 'US-550' },
+  { name: 'Slumgullion Pass', state: 'CO', lat: 37.9870, lng: -107.2010, // VERIFY (summit)
+    hazardType: HazardType.GRADE, gradePct: 9.5,
+    confidence: HazardConfidence.HIGH, source: 'CDOT / Mountain Directory', roadDesignation: 'CO-149' },
+  { name: 'US-14 Bighorn / Granite Pass', state: 'WY', lat: 44.7800, lng: -107.5000, // VERIFY (Granite Pass)
+    hazardType: HazardType.GRADE, gradePct: 13.5,
+    confidence: HazardConfidence.HIGH, source: 'WYDOT / Mountain Directory', roadDesignation: 'US-14' },
+  { name: 'Teton Pass', state: 'WY', lat: 43.4990, lng: -110.9610, // VERIFY (summit)
+    hazardType: HazardType.GRADE, gradePct: 10, maxWeightLbs: 60000,
+    confidence: HazardConfidence.HIGH, source: 'WYDOT / Mountain Directory', roadDesignation: 'WY-22' },
+  { name: 'I-84 Cabbage Hill / Emigrant Hill', state: 'OR', lat: 45.6600, lng: -118.6200, // VERIFY (Emigrant Hill, near Pendleton)
+    hazardType: HazardType.GRADE, gradePct: 6,
+    confidence: HazardConfidence.HIGH, source: 'ODOT / Mountain Directory', roadDesignation: 'I-84' },
+  { name: 'UT-143', state: 'UT', lat: 37.7000, lng: -112.8400, // VERIFY (Cedar Breaks / Brian Head climb)
+    hazardType: HazardType.GRADE, gradePct: 13,
+    confidence: HazardConfidence.HIGH, source: 'UDOT / Mountain Directory', roadDesignation: 'UT-143' },
+  { name: 'Moki Dugway', state: 'UT', lat: 37.2730, lng: -109.9270, // VERIFY (switchbacks)
+    hazardType: HazardType.GRADE, gradePct: 10,
+    confidence: HazardConfidence.HIGH, source: 'UDOT / Mountain Directory', roadDesignation: 'UT-261' },
+  { name: 'Apache Trail', state: 'AZ', lat: 33.4800, lng: -111.3700, // VERIFY (Tortilla Flat → Roosevelt)
+    hazardType: HazardType.GRADE, gradePct: null,
+    confidence: HazardConfidence.HIGH, source: 'ADOT / Mountain Directory', roadDesignation: 'AZ-88' },
+  { name: 'Cajon Pass', state: 'CA', lat: 34.3400, lng: -117.4500, // VERIFY (Cajon Summit, I-15)
+    hazardType: HazardType.GRADE, gradePct: 6,
+    confidence: HazardConfidence.HIGH, source: 'Caltrans / Mountain Directory', roadDesignation: 'I-15' },
 ]
 
 /** Deterministic id so re-runs upsert in place (mirrors prisma/seed.ts RigDatabase). */

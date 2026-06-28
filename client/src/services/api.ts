@@ -189,6 +189,10 @@ export const tripsApi = {
   // of the fuel-budget feature). Returns total + perLeg + freshness metadata;
   // see TripFuelEstimate in types/index.ts.
   getFuelEstimate: (id: string) => api.get<import('../types').TripFuelEstimate>(`/trips/${id}/fuel-estimate`),
+  // RV hazard warnings for the built trip, recomputed on demand (not persisted on
+  // the Stop row). { hazards: [{ stopId, violationNotes }] }.
+  getHazards: (id: string) =>
+    api.get<{ hazards: Array<{ stopId: string; violationNotes: string[] }> }>(`/trips/${id}/hazards`),
 }
 
 // Saved packing templates (FR-SAVED-PACKING) — USER-level, Pro-gated CRUD.

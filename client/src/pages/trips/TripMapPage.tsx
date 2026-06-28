@@ -220,6 +220,41 @@ const BOOKING_BADGE: Record<MarkerKind, { cls: string; label: string }> = {
   unbooked: { cls: 'bg-gray-100 text-gray-500',   label: 'Not booked' },
 }
 
+/** FEAT-HAZARD-MAP-PILL — clickable red "Rig warning" pill on a sidebar stop that
+ *  carries hazard notes (from GET /trips/:id/hazards, recomputed on load). Click
+ *  toggles an inline reveal of the full advisory text — the same violationNotes the
+ *  planning-page RouteAdvisory shows. Red/coral DANGER styling (never pine — pine is
+ *  reserved for booked/confirmed). Renders nothing when there are no notes. */
+function RigWarningPill({ notes }: { notes?: string[] | null }) {
+  const [open, setOpen] = useState(false)
+  if (!Array.isArray(notes)) return null
+  const unique = Array.from(new Set(notes.filter(n => typeof n === 'string' && n.trim() !== '')))
+  if (unique.length === 0) return null
+  return (
+    <div className="mt-0.5">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen(o => !o) }}
+        aria-expanded={open}
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-800 hover:bg-red-200 border border-red-300"
+        style={{ borderWidth: '0.5px' }}
+      >
+        <AlertTriangle size={11} className="flex-shrink-0" /> Rig warning
+      </button>
+      {open && (
+        <div className="mt-1 space-y-1" onClick={(e) => e.stopPropagation()}>
+          {unique.map((vn, k) => (
+            <div key={k} className="flex items-start gap-1 rounded bg-red-50 px-1.5 py-1 border border-red-200" style={{ borderWidth: '0.5px' }}>
+              <AlertTriangle size={11} className="text-red-600 flex-shrink-0 mt-0.5" />
+              <span className="text-[11px] leading-snug text-red-800">{vn}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function StopPopup({
   stop, kind, weather, displayNum, onClose, onUpdateNights, tripId, prevStop, waypoints,
 }: {
@@ -526,6 +561,10 @@ export default function TripMapPage() {
   const [weatherLoading, setWeatherLoading] = useState(false)
   const [geocoding, setGeocoding]           = useState(false)
   const [routePath, setRoutePath]           = useState<google.maps.LatLng[] | null>(null)
+  // FEAT-HAZARD-MAP-PILL — RV hazard warnings for this built trip, recomputed on
+  // load via GET /trips/:id/hazards (violationNotes are NOT persisted on the Stop
+  // row). Keyed by stopId → the red "Rig warning" pill renders on matching stops.
+  const [hazardsByStop, setHazardsByStop]   = useState<Map<string, string[]>>(new Map())
   // FEAT-HERE-ROUTING (display) — per-leg HERE data, keyed by DESTINATION stop id
   // (robust against coord-filtering). Populated only when VITE_USE_HERE_ROUTING is
   // on; empty otherwise → Google-only display, byte-identical to before.
@@ -1093,6 +1132,28 @@ export default function TripMapPage() {
         setHereLine(new Map()); setHereDist(new Map()); setHereWaypoints(new Map())
       })
   }, [id, trip?.stops])
+
+  // FEAT-HAZARD-MAP-PILL — fetch recomputed hazard warnings for this trip and key
+  // them by stopId. Re-runs when the stop set or the assigned rig changes (gating
+  // is rig-dependent). Fail-soft: any error → no pills, map otherwise unchanged.
+  useEffect(() => {
+    if (!id || !trip?.stops?.length) { setHazardsByStop(new Map()); return }
+    tripsApi.getHazards(id)
+      .then(res => {
+        const m = new Map<string, string[]>()
+        for (const h of res.data?.hazards ?? []) {
+          if (h?.stopId && Array.isArray(h.violationNotes) && h.violationNotes.length > 0) {
+            m.set(h.stopId, h.violationNotes.filter(n => typeof n === 'string'))
+          }
+        }
+        setHazardsByStop(m)
+        console.log('[TripMapPage] hazard warnings for', m.size, 'stop(s)')
+      })
+      .catch(err => {
+        console.warn('[TripMapPage] hazard fetch failed (no pills):', err?.message)
+        setHazardsByStop(new Map())
+      })
+  }, [id, trip?.stops?.length, trip?.rigId])
 
   // FEAT-HERE-ROUTING (display) — the map line built DIRECTLY from HERE's full
   // per-leg polylines, concatenated in stop order. Null unless the flag is on, the
@@ -2506,6 +2567,9 @@ export default function TripMapPage() {
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium text-gray-900 truncate">{stop.locationName}</p>
+                          {/* FEAT-HAZARD-MAP-PILL — red rig-warning pill + reveal,
+                              only on stops carrying recomputed hazard notes. */}
+                          <RigWarningPill notes={hazardsByStop.get(stop.id)} />
                           <p className="text-[10px] text-gray-400 truncate">{subtitleLine1}</p>
                           {subtitleLine2 && (
                             <p className="text-[10px] text-gray-400 truncate">{subtitleLine2}</p>
