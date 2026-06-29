@@ -18,7 +18,7 @@ import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { hasRoundTripIntent } from '../utils/roundTripIntent'
 import { cleanChatText } from '../utils/cleanChatText'
-import { initChatAudio, playSentTone, playReplyTone } from '../utils/chatSounds'
+import { initChatAudio } from '../utils/chatSounds'
 import { ChatInput } from '../components/ChatInput'
 import { selectGreeting } from '../utils/greeting'
 import { relativeTime } from '../utils/dates'
@@ -797,9 +797,6 @@ export default function SessionPage() {
     const safeOverride = typeof overrideText === 'string' ? overrideText : undefined
     const text = (safeOverride ?? input).trim()
     if (!text || typing) return
-    // Rising "message sent" cue. Runs inside the click/Enter gesture, so it also
-    // resumes the AudioContext (autoplay policy) for the reply cue that follows.
-    playSentTone()
     const userMsg: ChatMessage = { role: 'user', content: text }
     // _local messages are client-generated notices (one-way strip, truncation)
     // — display-only, never posted to the AI or persisted as conversation.
@@ -843,9 +840,6 @@ export default function SessionPage() {
         if (stripped) shown.push({ role: 'assistant', content: ONE_WAY_NOTICE, _local: true } as any)
       }
       setMessages(shown)
-      // Falling "reply arrived" cue — distinct from the send tone. Only on the
-      // successful reply path; error/cap bubbles below don't chime.
-      playReplyTone()
       // FR-RIG-MISMATCH — re-read the server-owned partialTripData so a rig the
       // user just stated this turn surfaces the advisory banner without a reload.
       // Best-effort, non-fatal; never affects the chat turn itself.
