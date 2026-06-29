@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { playSentTone, playReplyTone } from '../utils/chatSounds'
 
 interface UseVoiceInputOptions {
   /** Called when interim or final transcript is available. Replaces the input value. */
@@ -81,7 +82,8 @@ export function useVoiceInput({ onTranscript, onStart, lang = 'en-US' }: UseVoic
     rec.interimResults = true
     rec.lang = lang
 
-    rec.onstart = () => setListening(true)
+    // Rising cue when the mic activates / recognition begins.
+    rec.onstart = () => { setListening(true); playSentTone() }
 
     rec.onresult = (e: SpeechRecognitionEvent) => {
       // Drop any trailing result that arrives after stopListening() — otherwise
@@ -103,10 +105,13 @@ export function useVoiceInput({ onTranscript, onStart, lang = 'en-US' }: UseVoic
     }
 
     // onend fires when the user taps stop OR the browser ends the session.
-    // We only update listening state — don't try to auto-restart.
+    // We only update listening state — don't try to auto-restart. Falling cue
+    // (distinct from the start tone) marks that recording has stopped; fires
+    // for both the tap-stop path (stopListening → rec.stop()) and a natural end.
     rec.onend = () => {
       setListening(false)
       recognitionRef.current = null
+      playReplyTone()
     }
 
     recognitionRef.current = rec
