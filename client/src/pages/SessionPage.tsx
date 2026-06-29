@@ -18,6 +18,7 @@ import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { hasRoundTripIntent } from '../utils/roundTripIntent'
 import { cleanChatText } from '../utils/cleanChatText'
+import { initChatAudio, playSentTone, playReplyTone } from '../utils/chatSounds'
 import { ChatInput } from '../components/ChatInput'
 import { selectGreeting } from '../utils/greeting'
 import { relativeTime } from '../utils/dates'
@@ -422,6 +423,11 @@ export default function SessionPage() {
     inputRef.current?.focus()
   }, [hydrating, typing])
 
+  // Warm up the chat notification AudioContext on the first user gesture so the
+  // send/reply cues work for the rest of the session (browser autoplay policy
+  // blocks audio until the page is interacted with). Mount-once; idempotent.
+  useEffect(() => { initChatAudio() }, [])
+
   // Mark this session as the last one the user actively visited. SessionNewPage's
   // resume-detection uses this to skip the "Resume your last session?" prompt for
   // in-app navigation (e.g. user taps Profile then Plan). Tab close clears
@@ -791,6 +797,9 @@ export default function SessionPage() {
     const safeOverride = typeof overrideText === 'string' ? overrideText : undefined
     const text = (safeOverride ?? input).trim()
     if (!text || typing) return
+    // Rising "message sent" cue. Runs inside the click/Enter gesture, so it also
+    // resumes the AudioContext (autoplay policy) for the reply cue that follows.
+    playSentTone()
     const userMsg: ChatMessage = { role: 'user', content: text }
     // _local messages are client-generated notices (one-way strip, truncation)
     // — display-only, never posted to the AI or persisted as conversation.
@@ -834,6 +843,9 @@ export default function SessionPage() {
         if (stripped) shown.push({ role: 'assistant', content: ONE_WAY_NOTICE, _local: true } as any)
       }
       setMessages(shown)
+      // Falling "reply arrived" cue — distinct from the send tone. Only on the
+      // successful reply path; error/cap bubbles below don't chime.
+      playReplyTone()
       // FR-RIG-MISMATCH — re-read the server-owned partialTripData so a rig the
       // user just stated this turn surfaces the advisory banner without a reload.
       // Best-effort, non-fatal; never affects the chat turn itself.
