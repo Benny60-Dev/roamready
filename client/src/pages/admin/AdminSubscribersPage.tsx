@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { MoreVertical, Ban, RotateCcw, Star, StarOff, Clock } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { adminApi } from '../../services/api'
 import { format } from 'date-fns'
@@ -68,6 +69,14 @@ export default function AdminSubscribersPage() {
   const [historyRows, setHistoryRows] = useState<HistoryRow[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
 
+  // Per-row actions kebab. The menu is rendered once, fixed-positioned from the
+  // trigger button's rect — the table lives in an overflow-x-auto card (which
+  // also clips overflow-y), so an absolutely-positioned dropdown would be cut
+  // off. menuFor holds the row; menuPos is the viewport anchor (top + right).
+  const [menuFor, setMenuFor] = useState<User | null>(null)
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 })
+  const menuRef = useRef<HTMLDivElement>(null)
+
   // Grant / revoke complimentary Pro.
   const [grantTarget, setGrantTarget] = useState<User | null>(null)
   const [grantDuration, setGrantDuration] = useState<DurationKind>('MONTH')
@@ -84,6 +93,38 @@ export default function AdminSubscribersPage() {
   }, [])
 
   useEffect(() => { fetchUsers(status) }, [status, fetchUsers])
+
+  // Open the actions menu anchored under its kebab trigger. Right-aligned to
+  // the button so the panel hangs to the left and never runs off-screen.
+  function openRowMenu(u: User, e: React.MouseEvent<HTMLButtonElement>) {
+    const r = e.currentTarget.getBoundingClientRect()
+    setMenuPos({ top: r.bottom + 4, right: window.innerWidth - r.right })
+    setMenuFor(u)
+  }
+
+  // Close on outside click, and on any scroll/resize (the menu is fixed and
+  // doesn't track its anchor, so dismissing is simpler than repositioning).
+  // Trigger buttons carry data-row-menu-trigger so their click — which toggles
+  // via openRowMenu — isn't also treated as an outside dismiss. Mirrors the
+  // app's existing click-away pattern (components/layout/AppLayout.tsx).
+  useEffect(() => {
+    if (!menuFor) return
+    const onDown = (ev: MouseEvent) => {
+      const t = ev.target as HTMLElement
+      if (menuRef.current?.contains(t)) return
+      if (t.closest('[data-row-menu-trigger]')) return
+      setMenuFor(null)
+    }
+    const onDismiss = () => setMenuFor(null)
+    document.addEventListener('mousedown', onDown)
+    window.addEventListener('resize', onDismiss)
+    window.addEventListener('scroll', onDismiss, true)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      window.removeEventListener('resize', onDismiss)
+      window.removeEventListener('scroll', onDismiss, true)
+    }
+  }, [menuFor])
 
   const proCount = useMemo(() => users.filter(u => u.subscriptionTier === 'PRO').length, [users])
   const freeCount = users.length - proCount
@@ -318,7 +359,9 @@ export default function AdminSubscribersPage() {
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{u.email}</td>
+                    <td className="px-3 py-2 text-gray-600">
+                      <div className="max-w-[220px] truncate" title={u.email}>{u.email}</div>
+                    </td>
                     <td className="px-3 py-2">
                       <span className={`badge text-xs ${u.subscriptionTier === 'PRO' ? 'badge-green' : 'bg-gray-100 text-gray-500'}`}>
                         {u.subscriptionTier}
@@ -326,40 +369,17 @@ export default function AdminSubscribersPage() {
                     </td>
                     <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{fmtDate(u.createdAt)}</td>
                     <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{fmtDate(u.subscriptionEndsAt)}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        {isSuspended(u) ? (
-                          <button
-                            onClick={() => { setActionError(null); setReactivateTarget(u) }}
-                            className="text-xs px-2.5 py-1 rounded-md bg-[#1F6F8B] text-white hover:bg-[#185a72] transition-colors"
-                          >
-                            Reactivate
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => { setActionError(null); setSuspendReason(''); setSuspendTarget(u) }}
-                            className="text-xs px-2.5 py-1 rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors"
-                          >
-                            Suspend
-                          </button>
-                        )}
-                        {hasComp(u) ? (
-                          <button
-                            onClick={() => { setActionError(null); setRevokeProTarget(u) }}
-                            className="text-xs px-2.5 py-1 rounded-md border border-[#1F6F8B] text-[#1F6F8B] hover:bg-[#1F6F8B]/10 transition-colors"
-                          >
-                            Revoke Pro
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => { setActionError(null); setGrantReason(''); setGrantCustomDate(''); setGrantDuration('MONTH'); setGrantTarget(u) }}
-                            className="text-xs px-2.5 py-1 rounded-md bg-[#1F6F8B] text-white hover:bg-[#185a72] transition-colors"
-                          >
-                            Grant Pro
-                          </button>
-                        )}
-                        <button onClick={() => openHistory(u)} className="btn-ghost text-xs">History</button>
-                      </div>
+                    <td className="px-3 py-2 whitespace-nowrap text-right">
+                      <button
+                        data-row-menu-trigger
+                        onClick={e => (menuFor?.id === u.id ? setMenuFor(null) : openRowMenu(u, e))}
+                        aria-label={`Actions for ${fullName(u)}`}
+                        aria-haspopup="menu"
+                        aria-expanded={menuFor?.id === u.id}
+                        className="p-1.5 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                      >
+                        <MoreVertical size={16} />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -370,6 +390,59 @@ export default function AdminSubscribersPage() {
             </table>
           </div>
         </>
+      )}
+
+      {/* ── Per-row actions menu (fixed, anchored under the kebab) ────────── */}
+      {menuFor && (
+        <div
+          ref={menuRef}
+          role="menu"
+          className="fixed z-50 w-44 rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+          style={{ top: menuPos.top, right: menuPos.right }}
+        >
+          {isSuspended(menuFor) ? (
+            <button
+              role="menuitem"
+              onClick={() => { setActionError(null); setReactivateTarget(menuFor); setMenuFor(null) }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+            >
+              <RotateCcw size={14} /> Reactivate
+            </button>
+          ) : (
+            <button
+              role="menuitem"
+              onClick={() => { setActionError(null); setSuspendReason(''); setSuspendTarget(menuFor); setMenuFor(null) }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+            >
+              <Ban size={14} /> Suspend
+            </button>
+          )}
+          {hasComp(menuFor) ? (
+            <button
+              role="menuitem"
+              onClick={() => { setActionError(null); setRevokeProTarget(menuFor); setMenuFor(null) }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+            >
+              <StarOff size={14} /> Revoke Pro
+            </button>
+          ) : (
+            <button
+              role="menuitem"
+              onClick={() => { setActionError(null); setGrantReason(''); setGrantCustomDate(''); setGrantDuration('MONTH'); setGrantTarget(menuFor); setMenuFor(null) }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#1F6F8B] hover:bg-[#1F6F8B]/10"
+            >
+              <Star size={14} /> Grant Pro
+            </button>
+          )}
+          <div className="my-1 border-t border-gray-100" />
+          <button
+            role="menuitem"
+            onClick={() => { openHistory(menuFor); setMenuFor(null) }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+          >
+            <Clock size={14} /> History
+          </button>
+        </div>
       )}
 
       {/* ── Suspend dialog (required reason) ──────────────────────────────── */}
