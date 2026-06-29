@@ -1,6 +1,6 @@
 import { useCallback, useState, useRef, useEffect, useLayoutEffect, type CSSProperties } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { MapPin, Tent, Users, Loader, Plus, X, Sparkles, ChevronDown, ChevronUp, ChevronRight, Check, Info, AlertTriangle } from 'lucide-react'
+import { MapPin, Tent, Users, Loader, Plus, X, Sparkles, ChevronDown, ChevronUp, ChevronRight, Check, Info } from 'lucide-react'
 import { aiApi, sessionsApi, tripsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import { ChatMessage, Trip, Rig } from '../types'
@@ -8,6 +8,7 @@ import { VEHICLE_LABELS, rigDisplayName } from '../utils/rigs'
 import BottomSheet from '../components/ui/BottomSheet'
 import ConfirmModal from '../components/ui/ConfirmModal'
 import ConfirmVehiclesModal, { type ConfirmVehiclesResult } from '../components/trip/ConfirmVehiclesModal'
+import RigWarningPill from '../components/trip/RigWarningPill'
 import HomeBaseCard from '../components/trip/HomeBaseCard'
 import TripCard from '../components/trip/TripCard'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
@@ -96,29 +97,6 @@ function TypingIndicator() {
   )
 }
 
-/** Per-leg routing-restriction advisory on an itinerary stop. `notes` are the
- *  HERE restriction notices the server attached to the stop the drive ARRIVES at
- *  (planTransitInserts → stop.violationNotes). Caution styling (amber), NOT an
- *  error — this is a "verify it yourself" heads-up, never a guarantee either way.
- *  Uses HERE's actual notice text; identical notices on a leg are collapsed to
- *  one line, distinct ones each get their own. Renders nothing when absent. */
-function RouteAdvisory({ notes }: { notes?: unknown }) {
-  if (!Array.isArray(notes) || notes.length === 0) return null
-  const unique = Array.from(new Set(notes.filter((n): n is string => typeof n === 'string' && n.trim() !== '')))
-  if (unique.length === 0) return null
-  return (
-    <div className="mt-1 space-y-1">
-      {unique.map((vn, k) => (
-        <div key={k} className="flex items-start gap-1 rounded bg-amber-50 px-1.5 py-1">
-          <AlertTriangle size={11} className="text-amber-600 flex-shrink-0 mt-0.5" />
-          <span className="text-[11px] leading-snug text-amber-800">
-            Heads up: {vn} — verify the road is open for your dates and rig before driving.
-          </span>
-        </div>
-      ))}
-    </div>
-  )
-}
 
 /** RV-SAFETY-ACK — inline acknowledgment shown directly above the Build button
  *  (replaces the former blocking modal). The user must check this box before the
@@ -2124,7 +2102,7 @@ export default function SessionPage() {
                       <p className="text-xs font-medium text-gray-800 truncate">{stop.locationName}, {stop.locationState}</p>
                       {stop.campgroundName && <p className="text-xs text-gray-500 truncate">{stop.campgroundName}</p>}
                       <p className="text-xs text-gray-400">{stop.nights} night{stop.nights !== 1 ? 's' : ''}</p>
-                      <RouteAdvisory notes={stop.violationNotes} />
+                      <RigWarningPill notes={stop.violationNotes} />
                     </div>
                   </div>
                 ))}
@@ -2167,7 +2145,7 @@ export default function SessionPage() {
                       <p className="text-xs font-medium text-gray-800">{stop.locationName}, {stop.locationState}</p>
                       {stop.campgroundName && <p className="text-xs text-gray-500">{stop.campgroundName}</p>}
                       <p className="text-xs text-gray-400">{stop.nights} night{stop.nights !== 1 ? 's' : ''}</p>
-                      <RouteAdvisory notes={stop.violationNotes} />
+                      <RigWarningPill notes={stop.violationNotes} />
                     </div>
                   </div>
                 ))}
