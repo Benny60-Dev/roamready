@@ -1838,7 +1838,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             // rides alongside it — same plumbing — using HERE's actual notice text.
             const transitNote = buildTransitNote(inserts, transitStops, capHours) ?? ''
             const violationAdvisory = buildViolationAdvisory(legNotices) ?? ''
-            const hazardAdvisory = hazardResult.advisory ?? ''
+            const hazardAdvisory = hazardResult.hitCount > 0 ? 'One or more roads on this route may not suit your rig — check the warning pill on the affected stops before you go.' : ''
             const note = [transitNote, violationAdvisory, hazardAdvisory].filter(Boolean).join(' ')
 
             // Re-serialize the <itinerary> block AND prepend the grounded note to the

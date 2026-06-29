@@ -17,6 +17,7 @@ import { computeTripTotals } from '../../utils/tripTotals'
 import { StopWeatherCard, ALERT_STYLES } from '../../components/weather/StopWeatherCard'
 const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel'))
 import TripRigSelector from '../../components/trip/TripRigSelector'
+import RigWarningPill from '../../components/trip/RigWarningPill'
 import ConfirmModal from '../../components/ui/ConfirmModal'
 import ShareModal from '../../components/trip/ShareModal'
 import { useAuthStore } from '../../store/authStore'
@@ -220,40 +221,6 @@ const BOOKING_BADGE: Record<MarkerKind, { cls: string; label: string }> = {
   unbooked: { cls: 'bg-gray-100 text-gray-500',   label: 'Not booked' },
 }
 
-/** FEAT-HAZARD-MAP-PILL — clickable red "Rig warning" pill on a sidebar stop that
- *  carries hazard notes (from GET /trips/:id/hazards, recomputed on load). Click
- *  toggles an inline reveal of the full advisory text — the same violationNotes the
- *  planning-page RouteAdvisory shows. Red/coral DANGER styling (never pine — pine is
- *  reserved for booked/confirmed). Renders nothing when there are no notes. */
-function RigWarningPill({ notes }: { notes?: string[] | null }) {
-  const [open, setOpen] = useState(false)
-  if (!Array.isArray(notes)) return null
-  const unique = Array.from(new Set(notes.filter(n => typeof n === 'string' && n.trim() !== '')))
-  if (unique.length === 0) return null
-  return (
-    <div className="mt-0.5">
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); setOpen(o => !o) }}
-        aria-expanded={open}
-        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-800 hover:bg-red-200 border border-red-300"
-        style={{ borderWidth: '0.5px' }}
-      >
-        <AlertTriangle size={11} className="flex-shrink-0" /> Rig warning
-      </button>
-      {open && (
-        <div className="mt-1 space-y-1" onClick={(e) => e.stopPropagation()}>
-          {unique.map((vn, k) => (
-            <div key={k} className="flex items-start gap-1 rounded bg-red-50 px-1.5 py-1 border border-red-200" style={{ borderWidth: '0.5px' }}>
-              <AlertTriangle size={11} className="text-red-600 flex-shrink-0 mt-0.5" />
-              <span className="text-[11px] leading-snug text-red-800">{vn}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
 
 function StopPopup({
   stop, kind, weather, displayNum, onClose, onUpdateNights, tripId, prevStop, waypoints,
