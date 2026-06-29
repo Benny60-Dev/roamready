@@ -8,7 +8,6 @@ import { VEHICLE_LABELS, rigDisplayName } from '../utils/rigs'
 import BottomSheet from '../components/ui/BottomSheet'
 import ConfirmModal from '../components/ui/ConfirmModal'
 import ConfirmVehiclesModal, { type ConfirmVehiclesResult } from '../components/trip/ConfirmVehiclesModal'
-import RvSafetyAckModal from '../components/trip/RvSafetyAckModal'
 import HomeBaseCard from '../components/trip/HomeBaseCard'
 import TripCard from '../components/trip/TripCard'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
@@ -118,6 +117,33 @@ function RouteAdvisory({ notes }: { notes?: unknown }) {
         </div>
       ))}
     </div>
+  )
+}
+
+/** RV-SAFETY-ACK — inline acknowledgment shown directly above the Build button
+ *  (replaces the former blocking modal). The user must check this box before the
+ *  Build button is enabled. The acknowledgment is still PERSISTED server-side after
+ *  the build's stop-creation loop (tripsApi.acknowledgeRvSafety in buildItinerary) —
+ *  this checkbox only gates the click; it does not change the build or ack-write flow. */
+function RvSafetyInlineAck({ checked, onChange, disabled }: {
+  checked: boolean
+  onChange: (v: boolean) => void
+  disabled?: boolean
+}) {
+  return (
+    <label className="flex items-start gap-2 mb-3 cursor-pointer select-none">
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={e => onChange(e.target.checked)}
+        className="mt-0.5 h-4 w-4 flex-shrink-0 accent-[#F7A829] cursor-pointer disabled:cursor-not-allowed"
+      />
+      <span className="text-[11px] leading-snug text-gray-500">
+        <span className="font-medium text-gray-800">I'm responsible for checking clearance, weight, length &amp; grade for my rig.</span>{' '}
+        RoamReady plans the trip; it doesn't guarantee RV-safe roads.
+      </span>
+    </label>
   )
 }
 
@@ -364,10 +390,11 @@ export default function SessionPage() {
   // Skipped entirely when the user has no rigs — promote runs straight
   // through with the pre-Block-8 behavior in that case.
   const [confirmVehiclesOpen, setConfirmVehiclesOpen] = useState(false)
-  // RV-SAFETY-ACK — blocking acknowledgment shown first on a Build click, before
-  // the rig/vehicle branches. Acknowledging once per click is enough; it then
-  // hands off to proceedToVehicleStep (the original branch logic).
-  const [rvSafetyAckOpen, setRvSafetyAckOpen] = useState(false)
+  // RV-SAFETY-ACK — inline acknowledgment checkbox shown above the Build button
+  // (replaces the former blocking modal). Starts UNCHECKED each fresh planning
+  // session; the Build button stays disabled until it's checked. The ack is still
+  // persisted server-side after the build's stop loop (unchanged).
+  const [rvSafetyAcked, setRvSafetyAcked] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -864,25 +891,17 @@ export default function SessionPage() {
     if (!itinerary || !sessionId || creating) return
     // Close the mobile itinerary bottom sheet the moment the user commits to
     // building. On the phone the Build button lives INSIDE that sheet (z-81);
-    // without this, opening the modals (z-50) below would leave them buried
-    // behind the still-open sheet. One overlay at a time — the sheet steps aside
-    // so the RV-safety modal (and then the vehicle picker) is reachable. Harmless
-    // on the no-rig / ad-hoc paths and a no-op on desktop, where the Build button
-    // is an in-flow sidebar control.
+    // without this, opening the vehicle-confirmation modal (z-50) below would
+    // leave it buried behind the still-open sheet. One overlay at a time — the
+    // sheet steps aside so the vehicle picker is reachable. Harmless on the
+    // no-rig / ad-hoc paths and a no-op on desktop, where the Build button is an
+    // in-flow sidebar control.
+    //
+    // RV-SAFETY-ACK is gated by the INLINE checkbox above this button (the Build
+    // button is disabled until it's checked), so by the time this handler runs the
+    // user has already acknowledged — no modal step. Go straight into the rig
+    // branches below.
     setSheetOpen(false)
-    // RV-SAFETY-ACK — gate the ENTIRE build behind the acknowledgment modal. It
-    // shows first (before any rig branch); only "I understand" advances to
-    // proceedToVehicleStep, which runs the original no-rig / ad-hoc / real-rig
-    // logic. Cancel aborts. Acknowledging once per click covers all three
-    // branches — no per-branch re-prompt.
-    setRvSafetyAckOpen(true)
-  }
-
-  // The original build-entry branch logic, reached only AFTER the RV-safety
-  // acknowledgment. Picks the path by rig type, ending in either a direct
-  // buildItinerary call (no-rig / ad-hoc) or the ConfirmVehiclesModal (real rig).
-  function proceedToVehicleStep() {
-    if (!itinerary || !sessionId || creating) return
     // No rig at all → no toad question to ask, no rigId to attach, no
     // ad-hoc vehicle UI useful (the user hasn't set up their profile yet).
     // Promote with empty vehicle data — matches pre-Block-8 behavior so
@@ -2111,13 +2130,17 @@ export default function SessionPage() {
                 ))}
               </div>
               {buildError && <p className="text-xs text-red-600 mb-3 text-center">{buildError}</p>}
+              <RvSafetyInlineAck checked={rvSafetyAcked} onChange={setRvSafetyAcked} disabled={creating} />
               <button
                 onClick={onBuildItineraryClick}
-                disabled={creating}
-                className="btn-primary w-full text-sm flex items-center justify-center gap-2"
+                disabled={creating || !rvSafetyAcked}
+                className="btn-primary w-full text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {creating ? <><Loader size={15} className="animate-spin" /> Building...</> : 'Build full itinerary'}
               </button>
+              {!rvSafetyAcked && !creating && (
+                <p className="text-[11px] text-gray-400 text-center mt-1.5">Check the box above to continue</p>
+              )}
             </div>
           )}
         </BottomSheet>
@@ -2150,13 +2173,19 @@ export default function SessionPage() {
                 ))}
               </div>
               {buildError && <p className="text-xs text-red-600 mt-3 text-center">{buildError}</p>}
-              <button
-                onClick={onBuildItineraryClick}
-                disabled={creating}
-                className="btn-primary w-full mt-4 text-sm flex items-center justify-center gap-2 flex-shrink-0"
-              >
-                {creating ? <><Loader size={15} className="animate-spin" /> Building...</> : 'Build full itinerary'}
-              </button>
+              <div className="mt-4 flex-shrink-0">
+                <RvSafetyInlineAck checked={rvSafetyAcked} onChange={setRvSafetyAcked} disabled={creating} />
+                <button
+                  onClick={onBuildItineraryClick}
+                  disabled={creating || !rvSafetyAcked}
+                  className="btn-primary w-full text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {creating ? <><Loader size={15} className="animate-spin" /> Building...</> : 'Build full itinerary'}
+                </button>
+                {!rvSafetyAcked && !creating && (
+                  <p className="text-[11px] text-gray-400 text-center mt-1.5">Check the box above to continue</p>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -2172,19 +2201,6 @@ export default function SessionPage() {
         onCancel={() => setShowCancelConfirm(false)}
         danger
         isConfirming={isProcessing}
-      />
-
-      {/* RV-SAFETY-ACK — blocking acknowledgment, shown first on a Build click.
-          "I understand" closes it and hands off to proceedToVehicleStep (the
-          original rig branches); Cancel aborts the build entirely. */}
-      <RvSafetyAckModal
-        isOpen={rvSafetyAckOpen}
-        isConfirming={creating}
-        onCancel={() => setRvSafetyAckOpen(false)}
-        onConfirm={() => {
-          setRvSafetyAckOpen(false)
-          proceedToVehicleStep()
-        }}
       />
 
       {/* Block 8 — confirm-vehicles modal. Renders only when the per-trip
