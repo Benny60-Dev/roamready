@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { useState } from 'react'
+import FieldError from '../../components/forms/FieldError'
 import { authApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 
@@ -80,9 +81,9 @@ export default function LoginPage() {
               <input
                 type="email"
                 className="input"
-                {...register('email', { required: true })}
+                {...register('email', { required: 'Email is required' })}
               />
-              {errors.email && <p className="text-xs text-red-500 mt-1">Email is required</p>}
+              <FieldError error={errors.email} />
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -92,8 +93,9 @@ export default function LoginPage() {
               <input
                 type="password"
                 className="input"
-                {...register('password', { required: true })}
+                {...register('password', { required: 'Password is required' })}
               />
+              <FieldError error={errors.password} />
             </div>
             <button type="submit" disabled={loading} className="btn-primary w-full py-2.5">
               {loading ? 'Signing in...' : 'Sign in'}

@@ -208,7 +208,6 @@ export default function EditRigPage() {
               <Controller
                 control={control}
                 name="year"
-                rules={{ required: true }}
                 render={({ field }) => (
                   <RangeSelect options={YEARS} integer placeholder="Select year" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
                 )}
@@ -438,7 +437,6 @@ export default function EditRigPage() {
                           <Controller
                             control={control}
                             name="towedYear"
-                            rules={{ required: true }}
                             render={({ field }) => (
                               <RangeSelect options={YEARS} integer placeholder="Select year" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
                             )}
@@ -514,7 +512,6 @@ export default function EditRigPage() {
                   <Controller
                     control={control}
                     name="towedYear"
-                    rules={{ required: true }}
                     render={({ field }) => (
                       <RangeSelect options={YEARS} integer placeholder="Select year" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
                     )}

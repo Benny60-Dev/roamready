@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { X, Star, ImagePlus } from 'lucide-react'
 import { useForm } from 'react-hook-form'
+import FieldError from '../forms/FieldError'
 import { feedbackApi } from '../../services/api'
 import { FeedbackType } from '../../types'
 import { useUIStore } from '../../store/uiStore'
@@ -57,7 +58,7 @@ export default function FeedbackModal({ onClose }: Props) {
   // default per-open; a plain no-arg open leaves prefill undefined → the
   // FEATURE_REQUEST fallback below.
   const prefillType = useUIStore(s => s.feedbackPrefillType)
-  const { register, handleSubmit } = useForm<FormData>({
+  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     defaultValues: { type: prefillType ?? 'FEATURE_REQUEST' }
   })
 
@@ -187,8 +188,9 @@ export default function FeedbackModal({ onClose }: Props) {
               <textarea
                 className="input min-h-[80px] resize-none"
                 placeholder="Tell us more..."
-                {...register('body', { required: true })}
+                {...register('body', { required: 'Feedback is required' })}
               />
+              <FieldError error={errors.body} />
             </div>
 
             <div>

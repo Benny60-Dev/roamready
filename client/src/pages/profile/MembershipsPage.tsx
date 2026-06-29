@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { PlusCircle, Trash2, CheckCircle } from 'lucide-react'
+import FieldError from '../../components/forms/FieldError'
 import { usersApi } from '../../services/api'
 import { Membership } from '../../types'
 import { MEMBERSHIP_TYPES } from '../../constants/memberships'
@@ -18,7 +19,9 @@ export default function MembershipsPage() {
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [selectedType, setSelectedType] = useState<string>('')
-  const { register, handleSubmit, reset } = useForm()
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<{
+    type: string; memberNumber?: string; planTier?: string
+  }>()
   const formRef = useRef<HTMLDivElement>(null)
 
   // The add form renders at the bottom of the page, below both membership
@@ -197,10 +200,11 @@ export default function MembershipsPage() {
               <select
                 className="input"
                 defaultValue={selectedType || MEMBERSHIP_TYPES[0].id}
-                {...register('type', { required: true })}
+                {...register('type', { required: 'Please select a membership type' })}
               >
                 {MEMBERSHIP_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
               </select>
+              <FieldError error={errors.type} />
             </div>
             <div>
               <label className="label">Member number (optional)</label>

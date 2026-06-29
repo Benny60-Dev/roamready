@@ -1,12 +1,13 @@
 import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { useState } from 'react'
+import FieldError from '../../components/forms/FieldError'
 import { authApi } from '../../services/api'
 
 export default function ForgotPasswordPage() {
   const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
-  const { register, handleSubmit } = useForm<{ email: string }>()
+  const { register, handleSubmit, formState: { errors } } = useForm<{ email: string }>()
 
   async function onSubmit({ email }: { email: string }) {
     setLoading(true)
@@ -37,7 +38,8 @@ export default function ForgotPasswordPage() {
               <p className="text-sm text-gray-500">Enter your email and we'll send a reset link.</p>
               <div>
                 <label className="label">Email</label>
-                <input type="email" className="input" {...register('email', { required: true })} />
+                <input type="email" className="input" {...register('email', { required: 'Email is required' })} />
+                <FieldError error={errors.email} />
               </div>
               <button type="submit" disabled={loading} className="btn-primary w-full py-2.5">
                 {loading ? 'Sending...' : 'Send reset link'}
