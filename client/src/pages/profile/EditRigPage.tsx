@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useForm, Controller } from 'react-hook-form'
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { usersApi } from '../../services/api'
 import { Rig, TowedType, VehicleType } from '../../types'
@@ -21,6 +21,7 @@ type TowingChoice = 'NONE' | 'VEHICLE' | 'TRAILER'
 export default function EditRigPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [rig, setRig] = useState<Rig | null>(null)
   const [notFound, setNotFound] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -149,7 +150,12 @@ export default function EditRigPage() {
         isTowing,
         ...towedFields,
       })
-      navigate('/profile/rig')
+      // RIG-COMPLETENESS round-trip: when launched from the build-time notice the
+      // URL carries ?returnTo=/sessions/:id — land the user back on their planning
+      // session (now with a complete rig) instead of the rig list. Only honor an
+      // internal path (leading '/') to avoid an open-redirect; otherwise default.
+      const returnTo = searchParams.get('returnTo')
+      navigate(returnTo && returnTo.startsWith('/') ? returnTo : '/profile/rig')
     } finally {
       setSaving(false)
     }

@@ -92,3 +92,41 @@ export function rigDisplayName(rig: {
   if (ymm) return ymm
   return rig.vehicleType ? VEHICLE_LABELS[rig.vehicleType] : ''
 }
+
+// ── Rig completeness (FR-RIGINFO, build-time notice) ────────────────────────
+// The safety dimensions the hazard matcher reads server-side (controllers/
+// trips.ts hazardFiresForRig): length (rig.length), height (rig.height), and
+// weight (rig.gvwr). A rig missing any of these gets NO low-bridge / tunnel /
+// weight-limit warnings on its trips. MPG drives the fuel-cost estimate; absent
+// → the estimate is approximate. A field is "missing" when null/undefined.
+export type RigSafetyDim = 'length' | 'height' | 'gvwr'
+
+/** Which of the hazard-relevant safety dims (length, height, gvwr) are unset on
+ *  this rig. Empty array = all three present. Structural param so it accepts a
+ *  full Rig or any partial carrying these fields. */
+export function missingSafetyDims(rig: {
+  length?: number | null
+  height?: number | null
+  gvwr?: number | null
+}): RigSafetyDim[] {
+  const missing: RigSafetyDim[] = []
+  if (rig.length == null) missing.push('length')
+  if (rig.height == null) missing.push('height')
+  if (rig.gvwr == null) missing.push('gvwr')
+  return missing
+}
+
+/** MPG unset → fuel-cost estimates are approximate. */
+export function missingMpg(rig: { mpg?: number | null }): boolean {
+  return rig.mpg == null
+}
+
+/** Convenience: all safety dims present AND mpg set. */
+export function isRigComplete(rig: {
+  length?: number | null
+  height?: number | null
+  gvwr?: number | null
+  mpg?: number | null
+}): boolean {
+  return missingSafetyDims(rig).length === 0 && !missingMpg(rig)
+}
