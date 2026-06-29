@@ -5,9 +5,13 @@ export interface RangeSelectProps {
   options: number[]
   /** Current value. number when set, undefined/null when empty. */
   value: number | null | undefined
-  /** Emits a real number on select, or undefined when "Select…" is chosen.
-   *  NEVER emits 0, NaN, or a string — so empty saves as null, not 0. */
-  onChange: (value: number | undefined) => void
+  /** Emits a real number on select, or NULL when "Select…" is chosen.
+   *  Null (not undefined) is required so the cleared value survives
+   *  JSON.stringify and reaches the server, which sets the column NULL —
+   *  undefined would be dropped from the payload and Prisma would keep the old
+   *  value (the clear-to-placeholder revert, RIGINFO-2). NEVER emits 0, NaN, or
+   *  a string — so empty saves as null, not 0. */
+  onChange: (value: number | null) => void
   onBlur?: () => void
   name?: string
   id?: string
@@ -61,7 +65,10 @@ export default function RangeSelect({
       onChange={e => {
         const raw = e.target.value
         if (raw === '') {
-          onChange(undefined)
+          // Emit null (not undefined) on clear: undefined is dropped by
+          // JSON.stringify and ignored by Prisma (clear never persists); null
+          // reaches the server and sets the column NULL. See RIGINFO-2.
+          onChange(null)
           return
         }
         const num = Number(raw)
