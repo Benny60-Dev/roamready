@@ -180,6 +180,21 @@ async function geoReslotModifyStop(
  *  and self-corrects across a multi-action batch (nothing reads tripType
  *  mid-batch). On the initial-build createStop loop it converges to the same
  *  value Phase 2 wrote at promote time — no conflict. */
+/**
+ * Ordered route signature — the (type:locationName) of every stop in trip order.
+ * This is the authoritative "did the route change" key for the RV-safety ack: it
+ * changes on a genuine route mutation (add/remove/reorder/rename, destination swap,
+ * one-way↔round-trip, AND an intermediate add/remove that leaves the endpoints
+ * unchanged) but does NOT change on a metadata-only stop write (highwayRoute /
+ * driveDuration / driveDistanceMiles / coord / geocode backfill). Captured into
+ * acknowledgedRvSafety when the ack is recorded (acknowledgeRvSafety) and diffed in
+ * syncTripEndpoints, so a valid ack survives the map page's route-metadata backfills
+ * yet still resets the moment the route actually changes.
+ */
+function routeSignature(stops: Array<{ locationName: string; type: string }>): string {
+  return stops.map(s => `${s.type}:${s.locationName}`).join('|')
+}
+
 async function syncTripEndpoints(tripId: string): Promise<void> {
   const stops = await prisma.stop.findMany({
     where: { tripId },
@@ -187,19 +202,36 @@ async function syncTripEndpoints(tripId: string): Promise<void> {
     select: { locationName: true, type: true },
   })
   if (stops.length === 0) return
+
+  // RV-SAFETY-ACK reset — CONDITIONAL on a genuine route change. syncTripEndpoints is
+  // the single choke point every stop write funnels through (create/update/delete stop,
+  // makeOneWay, recheckLongLegs), but MOST of those writes are NOT route changes — the
+  // map page persists per-leg highwayRoute/driveDuration/driveDistanceMiles and backfills
+  // coords via updateStop on load, and an unconditional reset here wiped a just-built ack
+  // within ~1s. So we only NULL the ack when the ORDERED (type:locationName) signature
+  // differs from the one captured when the ack was recorded (stored inside
+  // acknowledgedRvSafety). Endpoints alone are insufficient — an intermediate stop
+  // add/remove changes the route without moving start/end — hence the full signature.
+  // A non-null ack always carries routeSig (written by acknowledgeRvSafety); a mismatch
+  // (incl. a missing routeSig from any pre-fix ack) counts as a route change → reset.
+  const existing = await prisma.trip.findUnique({
+    where: { id: tripId },
+    select: { acknowledgedRvSafety: true },
+  })
+  const ack = existing?.acknowledgedRvSafety as { acknowledgedAt?: string; routeSig?: string } | null
+  const routeChanged = !!ack && ack.routeSig !== routeSignature(stops)
+
   await prisma.trip.update({
     where: { id: tripId },
     data: {
+      // Endpoints + shape stay UNCONDITIONAL — they must track the current stops on
+      // every write, route change or not.
       startLocation: stops[0].locationName,
       endLocation: stops[stops.length - 1].locationName,
       tripType: computeTripShape(stops),
-      // RV-SAFETY-ACK reset — this is the single choke point every route-changing
-      // controller passes through (create/update/delete stop, makeOneWay,
-      // recheckLongLegs), so NULLing the ack here re-prompts the RV-safety modal on
-      // the next build whenever the route changes via any modify. Safe at build time:
-      // the build writes the ack AFTER its stop-creation loop (acknowledgeRvSafety),
-      // so the loop's syncTripEndpoints calls have nothing to clear yet.
-      acknowledgedRvSafety: null,
+      // Only touch the ack on a real route change; omit the key entirely otherwise so
+      // metadata-only writes leave a valid acknowledgment in place.
+      ...(routeChanged ? { acknowledgedRvSafety: null } : {}),
     },
   })
 }
@@ -1788,7 +1820,15 @@ export async function acknowledgeRvSafety(req: AuthRequest, res: Response, next:
   try {
     const trip = await prisma.trip.findFirst({ where: { id: req.params.id, userId: req.user!.id } })
     if (!trip) throw new AppError('Trip not found', 404)
-    const acknowledgedRvSafety = { acknowledgedAt: new Date().toISOString() }
+    // Capture the route signature the user is acknowledging, so syncTripEndpoints can
+    // later distinguish a genuine route change (reset the ack) from a metadata-only stop
+    // write (preserve it). Same ordered (type:locationName) key syncTripEndpoints diffs.
+    const stops = await prisma.stop.findMany({
+      where: { tripId: req.params.id },
+      orderBy: { order: 'asc' },
+      select: { locationName: true, type: true },
+    })
+    const acknowledgedRvSafety = { acknowledgedAt: new Date().toISOString(), routeSig: routeSignature(stops) }
     await prisma.trip.update({ where: { id: req.params.id }, data: { acknowledgedRvSafety } })
     res.json({ acknowledgedRvSafety })
   } catch (err) { next(err) }
