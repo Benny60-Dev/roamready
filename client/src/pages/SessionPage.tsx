@@ -4,10 +4,11 @@ import { MapPin, Tent, Users, Loader, Plus, X, Sparkles, ChevronDown, ChevronUp,
 import { aiApi, sessionsApi, tripsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import { ChatMessage, Trip, Rig } from '../types'
-import { VEHICLE_LABELS, rigDisplayName } from '../utils/rigs'
+import { VEHICLE_LABELS, rigDisplayName, missingSafetyDims, missingMpg } from '../utils/rigs'
 import BottomSheet from '../components/ui/BottomSheet'
 import ConfirmModal from '../components/ui/ConfirmModal'
 import ConfirmVehiclesModal, { type ConfirmVehiclesResult } from '../components/trip/ConfirmVehiclesModal'
+import RigCompletenessNotice from '../components/trip/RigCompletenessNotice'
 import RigWarningPill from '../components/trip/RigWarningPill'
 import HomeBaseCard from '../components/trip/HomeBaseCard'
 import TripCard from '../components/trip/TripCard'
@@ -373,6 +374,10 @@ export default function SessionPage() {
   // session; the Build button stays disabled until it's checked. The ack is still
   // persisted server-side after the build's stop loop (unchanged).
   const [rvSafetyAcked, setRvSafetyAcked] = useState(false)
+  // RIG-COMPLETENESS NOTICE — non-blocking build-time nudge when the SAVED rig
+  // lacks safety dims (no hazard warnings) and/or MPG (approximate fuel cost).
+  // Opened in onBuildItineraryClick; independent of the RV-safety ack above.
+  const [showRigNotice, setShowRigNotice] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -880,6 +885,28 @@ export default function SessionPage() {
     // user has already acknowledged — no modal step. Go straight into the rig
     // branches below.
     setSheetOpen(false)
+    // RIG-COMPLETENESS NOTICE — non-blocking nudge for a SAVED rig that's missing
+    // safety dims (no low-bridge/tunnel/weight-limit warnings) and/or MPG
+    // (approximate fuel cost). Skipped for ad-hoc rigs (deliberately minimal —
+    // year/make/model/length only) and for complete rigs. Fires AFTER the inline
+    // RV-safety ack (the Build button is disabled until rvSafetyAcked is checked),
+    // so it never touches the ack state/write/reset — it only defers the rig
+    // branches until the user picks Add-details / Build-anyway. "Build anyway"
+    // calls the SAME proceedToBuild() so the build + ack-write run unchanged.
+    if (
+      selectedRig && !isAdHocRig(selectedRig) &&
+      (missingSafetyDims(selectedRig).length > 0 || missingMpg(selectedRig))
+    ) {
+      setShowRigNotice(true)
+      return
+    }
+    proceedToBuild()
+  }
+
+  // The rig-branch logic, reached either directly from onBuildItineraryClick (rig
+  // complete or ad-hoc) or from the completeness notice's "Build anyway". Kept as
+  // ONE code path so the ack-write inside buildItinerary always runs the same way.
+  function proceedToBuild() {
     // No rig at all → no toad question to ask, no rigId to attach, no
     // ad-hoc vehicle UI useful (the user hasn't set up their profile yet).
     // Promote with empty vehicle data — matches pre-Block-8 behavior so
@@ -2180,6 +2207,26 @@ export default function SessionPage() {
         danger
         isConfirming={isProcessing}
       />
+
+      {/* RIG-COMPLETENESS NOTICE — build-time nudge. Only when a SAVED (non-ad-hoc)
+          rig is missing safety dims and/or MPG. "Add details" round-trips to the rig
+          editor with a returnTo back to this session; "Build anyway" proceeds via the
+          shared proceedToBuild(); dismiss leaves the user on the plan (no build). */}
+      {showRigNotice && selectedRig && !isAdHocRig(selectedRig) && (
+        <RigCompletenessNotice
+          missingDims={missingSafetyDims(selectedRig)}
+          missingMpg={missingMpg(selectedRig)}
+          onAddDetails={() => {
+            setShowRigNotice(false)
+            navigate(`/profile/rig/${selectedRig.id}/edit?returnTo=${encodeURIComponent(`/sessions/${sessionId}`)}`)
+          }}
+          onBuildAnyway={() => {
+            setShowRigNotice(false)
+            proceedToBuild()
+          }}
+          onClose={() => setShowRigNotice(false)}
+        />
+      )}
 
       {/* Block 8 — confirm-vehicles modal. Renders only when the per-trip
           selectedRig is a real Rig on file. For users without a rig the
