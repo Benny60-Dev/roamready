@@ -171,7 +171,7 @@ export const tripsApi = {
   // built trip. Called by SessionPage.buildItinerary AFTER the createStop loop so
   // the build's own syncTripEndpoints calls (which NULL the field) can't wipe it.
   acknowledgeRvSafety: (id: string) =>
-    api.post<{ acknowledgedRvSafety: { acknowledgedAt: string } }>(`/trips/${id}/acknowledge-rv-safety`),
+    api.post<{ acknowledgedRvSafety: { acknowledgedAt: string; routeSig?: string } }>(`/trips/${id}/acknowledge-rv-safety`),
   generatePackingList: (id: string) => api.post(`/trips/${id}/packing-list`),
   savePackingList: (id: string, packingList: any[]) => api.put(`/trips/${id}/packing-list`, { packingList }),
   // FR-SAVED-PACKING — seed a trip's packing list from existing data. Both MERGE

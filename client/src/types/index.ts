@@ -235,7 +235,10 @@ export interface Trip {
   // verified RV-safe. { acknowledgedAt: ISO } once acknowledged; null/absent =
   // not acknowledged (re-prompts on next build). Reset to null server-side by
   // syncTripEndpoints whenever a modify changes the route.
-  acknowledgedRvSafety?: { acknowledgedAt: string } | null
+  // routeSig: ordered (type:locationName) signature captured at acknowledge time so
+  // the server can preserve the ack across metadata-only stop writes and reset it
+  // only on a genuine route change. The client gates on presence; routeSig is internal.
+  acknowledgedRvSafety?: { acknowledgedAt: string; routeSig?: string } | null
   createdAt: string
   updatedAt: string
 }
