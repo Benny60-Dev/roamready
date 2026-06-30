@@ -5,6 +5,7 @@ import { validateBody } from '../middleware/validate'
 import { AdminFeedbackUpdateSchema } from '../schemas/feedback'
 import { AdminSuspendSchema, AdminGrantProSchema } from '../schemas/admin'
 import { getMetrics, getSubscribers, getMarketingSubscribers, getRevenue, getAdminFeedback, updateFeedback, analyzeFeedback, getLinkHealth, inspectSession, suspendUser, reactivateUser, getUserHistory, grantProUser, revokeProUser } from '../controllers/admin'
+import { runDiagnostic } from '../controllers/diagnostics'
 
 export const adminRouter = Router()
 // requireVerifiedEmail before requireOwner — owners always bypass the
@@ -36,3 +37,6 @@ adminRouter.get('/link-health', getLinkHealth as any)
 // Read-only session inspector — ?tripId= or ?email=. Owner-gated by the
 // adminRouter.use mount above (requireAuth + requireVerifiedEmail + requireOwner).
 adminRouter.get('/session-inspector', inspectSession as any)
+// Read-only Diagnostics console — fixed menu of SELECT-only queries run through
+// a dedicated read-only Postgres role. Owner-gated by the adminRouter.use mount.
+adminRouter.get('/diagnostics', runDiagnostic as any)

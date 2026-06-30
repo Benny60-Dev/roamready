@@ -391,4 +391,7 @@ export const adminApi = {
   // Read-only session inspector — pass { tripId } OR { sessionId } OR { email }.
   inspectSession: (params: { tripId?: string; sessionId?: string; email?: string }) =>
     api.get('/admin/session-inspector', { params }),
+  // Read-only diagnostics — canned SELECT-only queries; `query` is a fixed key.
+  diagnostics: (params: { query: string; tripId?: string; userId?: string; email?: string }) =>
+    api.get('/admin/diagnostics', { params }),
 }

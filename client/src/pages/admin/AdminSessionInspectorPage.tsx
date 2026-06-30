@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
-import { Search, AlertTriangle, User as UserIcon, ChevronLeft, Copy, Check } from 'lucide-react'
+import { Search, AlertTriangle, User as UserIcon, ChevronLeft } from 'lucide-react'
 import { adminApi } from '../../services/api'
 import { parseTripDate } from '../../utils/dates'
+import { CopyIcon, CopyForSupport } from '../../components/admin/Copy'
 
 // ── Types (loose — mirrors the read-only admin envelope) ─────────────────────
 interface Msg { role: string; content: string }
@@ -110,53 +111,6 @@ const tripClass = (s: string) => {
     case 'COMPLETED': return 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'
     default:          return 'bg-gray-100 text-gray-500 ring-1 ring-inset ring-gray-200'
   }
-}
-
-// Copy a single value (id / email / name) to the clipboard. The icon flips to a
-// check for ~1s to confirm. Renders nothing for an empty value.
-function CopyIcon({ value, title }: { value: string; title?: string }) {
-  const [copied, setCopied] = useState(false)
-  if (!value) return null
-  return (
-    <button
-      type="button"
-      title={title ?? 'Copy'}
-      aria-label={title ?? 'Copy'}
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(value)
-          setCopied(true)
-          setTimeout(() => setCopied(false), 1000)
-        } catch { /* clipboard unavailable (insecure context / denied) — no-op */ }
-      }}
-      className="inline-flex items-center justify-center text-gray-400 hover:text-[#1F6F8B] transition-colors flex-shrink-0"
-    >
-      {copied ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
-    </button>
-  )
-}
-
-// "Copy for support" — copies a multi-line labeled diagnostic block, briefly
-// showing a "Copied" state. Styled as a small btn-outline to match the app.
-function CopyForSupport({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
-  return (
-    <button
-      type="button"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text)
-          setCopied(true)
-          setTimeout(() => setCopied(false), 1500)
-        } catch { /* clipboard unavailable — no-op */ }
-      }}
-      className="btn-outline text-xs flex items-center gap-1.5 flex-shrink-0"
-    >
-      {copied
-        ? <><Check size={13} className="text-emerald-600" /> Copied</>
-        : <><Copy size={13} /> Copy for support</>}
-    </button>
-  )
 }
 
 // A labeled, copyable identifier row (user / session / trip id, trip name).

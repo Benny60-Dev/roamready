@@ -61,6 +61,7 @@ import AdminSubscribersPage from './pages/admin/AdminSubscribersPage'
 import AdminMarketingSubscribersPage from './pages/admin/AdminMarketingSubscribersPage'
 import AdminLinkHealthPage from './pages/admin/AdminLinkHealthPage'
 import AdminSessionInspectorPage from './pages/admin/AdminSessionInspectorPage'
+import AdminDiagnosticsPage from './pages/admin/AdminDiagnosticsPage'
 
 // Global modals
 import FeedbackModal from './components/feedback/FeedbackModal'
@@ -199,6 +200,7 @@ export default function App() {
           <Route path="/admin/marketing-subscribers" element={<OwnerRoute><AdminMarketingSubscribersPage /></OwnerRoute>} />
           <Route path="/admin/link-health" element={<OwnerRoute><AdminLinkHealthPage /></OwnerRoute>} />
           <Route path="/admin/session-inspector" element={<OwnerRoute><AdminSessionInspectorPage /></OwnerRoute>} />
+          <Route path="/admin/diagnostics" element={<OwnerRoute><AdminDiagnosticsPage /></OwnerRoute>} />
         </Route>
       </Routes>
       </Suspense>
