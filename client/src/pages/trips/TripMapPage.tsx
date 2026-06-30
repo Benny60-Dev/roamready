@@ -22,6 +22,7 @@ import ConfirmModal from '../../components/ui/ConfirmModal'
 import ShareModal from '../../components/trip/ShareModal'
 import { useAuthStore } from '../../store/authStore'
 import { useUIStore } from '../../store/uiStore'
+import { sharePdfBlob } from '../../utils/sharePdf'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge } from '../../utils/stopBadge'
 import { deriveTripStatus } from '../../utils/tripStatus'
 import { userFacingStopCount } from '../../utils/userFacingStopCount'
@@ -1754,14 +1755,9 @@ export default function TripMapPage() {
       ])
       const blob = await pdf(<TripPDF trip={trip} mapImageBase64={mapBlobUrl} fuelEstimate={fuelEstimate} />).toBlob()
       if (mapBlobUrl) URL.revokeObjectURL(mapBlobUrl)
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `RoamReady-${trip.name || 'Trip'}-Itinerary.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      // Deliver: file-only Web Share on mobile (no blob URL leaks into the share
+      // sheet as a phantom roamready.ai/<uuid> link), anchor-download on desktop.
+      await sharePdfBlob(blob, `RoamReady-${trip.name || 'Trip'}-Itinerary.pdf`)
     } catch (err: any) {
       // FEATURE_GATED 403 → paywall already opened by the central interceptor;
       // skip the generic alert so the user isn't double-narrated.

@@ -16,6 +16,7 @@ import { useUIStore } from '../../store/uiStore'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge, StopBadge } from '../../utils/stopBadge'
 import { format, addDays } from 'date-fns'
 import { parseTripDate, toYmd, formatTripDate } from '../../utils/dates'
+import { sharePdfBlob } from '../../utils/sharePdf'
 import { directionsUrl, destinationForStop } from '../../utils/directions'
 import { computeTripTotals } from '../../utils/tripTotals'
 import { userFacingStopCount } from '../../utils/userFacingStopCount'
@@ -864,14 +865,9 @@ export default function TripSummaryPage() {
       ])
       const blob = await pdf(<TripPDF trip={tripWithEntries} mapImageBase64={mapBlobUrl} fuelEstimate={fuelEstimate} />).toBlob()
       if (mapBlobUrl) URL.revokeObjectURL(mapBlobUrl)
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `RoamReady-${trip.name.replace(/[^a-zA-Z0-9]+/g, '-')}-Itinerary.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      // Deliver: file-only Web Share on mobile (no blob URL leaks into the share
+      // sheet as a phantom roamready.ai/<uuid> link), anchor-download on desktop.
+      await sharePdfBlob(blob, `RoamReady-${trip.name.replace(/[^a-zA-Z0-9]+/g, '-')}-Itinerary.pdf`)
     } catch (err: any) {
       // FEATURE_GATED 403 → paywall already opened by the central interceptor;
       // skip the generic alert so the user isn't double-narrated.
