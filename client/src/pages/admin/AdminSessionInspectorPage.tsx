@@ -127,17 +127,32 @@ function IdRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+// Session-list view filter. Most sessions are empty zero-message stubs, so the
+// list defaults to "trips" and lets the admin widen to see the rest.
+type SessionFilter = 'trips' | 'untitled' | 'all'
+
+// A "trip" session built a trip (has a tripId). An "empty/untitled" session
+// never built a trip AND has zero messages — the stub clutter hidden by default.
+// (A no-trip session that DOES have messages is an in-progress chat — it shows
+// only under "All", by design.)
+const sessionMsgCount = (s: Session) => (Array.isArray(s.messages) ? s.messages.length : 0)
+const isTripSession = (s: Session) => !!s.tripId
+const isEmptySession = (s: Session) => !s.tripId && sessionMsgCount(s) === 0
+
 export default function AdminSessionInspectorPage() {
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<InspectEnvelope | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  // Session-list view filter. Defaults to 'trips' (the de-cluttered view) on
+  // every fresh lookup — most sessions are empty zero-message stubs.
+  const [sessionFilter, setSessionFilter] = useState<SessionFilter>('trips')
   const [searchParams] = useSearchParams()
 
   // Shared fetch — used by both the manual search box and the deep-link entry.
   async function runParams(params: { tripId?: string; sessionId?: string; email?: string }, displayLabel?: string) {
-    setLoading(true); setError(null); setData(null); setSelectedId(null)
+    setLoading(true); setError(null); setData(null); setSelectedId(null); setSessionFilter('trips')
     if (displayLabel != null) setQuery(displayLabel)
     try {
       const res = await adminApi.inspectSession(params)
@@ -241,6 +256,20 @@ export default function AdminSessionInspectorPage() {
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
   }, [suggestOpen])
+
+  // Per-bucket counts (shown on the filter pills) + the filtered list. Computed
+  // over the already-fetched sessions — no refetch, presentation only.
+  const sessionCounts = useMemo(() => {
+    const all = data?.sessions ?? []
+    return { trips: all.filter(isTripSession).length, untitled: all.filter(isEmptySession).length, all: all.length }
+  }, [data])
+
+  const filteredSessions = useMemo(() => {
+    const all = data?.sessions ?? []
+    if (sessionFilter === 'trips') return all.filter(isTripSession)
+    if (sessionFilter === 'untitled') return all.filter(isEmptySession)
+    return all
+  }, [data, sessionFilter])
 
   const selected = useMemo(
     () => data?.sessions.find(s => s.id === selectedId) ?? null,
@@ -405,7 +434,31 @@ export default function AdminSessionInspectorPage() {
               <p className="text-sm text-gray-500">No planning sessions found.</p>
             ) : (
               <div className="space-y-2">
-                <p className="text-xs text-gray-500">{data.sessions.length} session{data.sessions.length === 1 ? '' : 's'} — select one:</p>
+                {/* View filter — de-clutter the empty zero-message stubs without
+                    deleting them. Counts come from the loaded sessions (no refetch);
+                    'All' keeps the full chronological, interleaved history. */}
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <p className="text-xs text-gray-500">Select a session:</p>
+                  <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
+                    {([
+                      ['trips', 'Trips', sessionCounts.trips],
+                      ['untitled', 'Untitled', sessionCounts.untitled],
+                      ['all', 'All', sessionCounts.all],
+                    ] as [SessionFilter, string, number][]).map(([key, label, n]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setSessionFilter(key)}
+                        className={`px-3 py-1.5 transition-colors ${sessionFilter === key ? 'bg-[#1F6F8B] text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+                      >
+                        {label} <span className={sessionFilter === key ? 'text-white/80' : 'text-gray-400'}>{n}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {filteredSessions.length === 0 ? (
+                  <p className="text-sm text-gray-400">No sessions in this view.</p>
+                ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -418,7 +471,7 @@ export default function AdminSessionInspectorPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {data.sessions.map(s => {
+                      {filteredSessions.map(s => {
                         const count = Array.isArray(s.messages) ? s.messages.length : 0
                         const isSel = s.id === selectedId
                         const trip = s.tripId ? data.trips.find(t => t.id === s.tripId) ?? null : null
@@ -455,6 +508,7 @@ export default function AdminSessionInspectorPage() {
                     </tbody>
                   </table>
                 </div>
+                )}
 
                 {/* Legend — explains every term so the two status families aren't conflated. */}
                 <div className="text-[11px] text-gray-500 leading-relaxed border-t border-gray-100 pt-2 space-y-1">
