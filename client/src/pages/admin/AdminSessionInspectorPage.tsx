@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { Search, AlertTriangle, User as UserIcon, ChevronLeft } from 'lucide-react'
 import { adminApi } from '../../services/api'
@@ -117,14 +118,12 @@ export default function AdminSessionInspectorPage() {
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<InspectEnvelope | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [searchParams] = useSearchParams()
 
-  async function runLookup(e?: React.FormEvent) {
-    e?.preventDefault()
-    const q = query.trim()
-    if (!q) return
+  // Shared fetch — used by both the manual search box and the deep-link entry.
+  async function runParams(params: { tripId?: string; sessionId?: string; email?: string }, displayLabel?: string) {
     setLoading(true); setError(null); setData(null); setSelectedId(null)
-    // '@' → email lookup (case-insensitive server-side); otherwise a trip id.
-    const params = q.includes('@') ? { email: q } : { tripId: q }
+    if (displayLabel != null) setQuery(displayLabel)
     try {
       const res = await adminApi.inspectSession(params)
       const env = res.data as InspectEnvelope
@@ -137,6 +136,26 @@ export default function AdminSessionInspectorPage() {
       setLoading(false)
     }
   }
+
+  async function runLookup(e?: React.FormEvent) {
+    e?.preventDefault()
+    const q = query.trim()
+    if (!q) return
+    // '@' → email lookup (case-insensitive server-side); otherwise a trip id.
+    // (sessionId is deep-link-only — an admin never types a raw session id.)
+    await runParams(q.includes('@') ? { email: q } : { tripId: q })
+  }
+
+  // Deep-link entry: the feedback inbox links here as ?tripId=… or ?sessionId=…
+  // (the inspector resolves a sessionId to its session + any built trip). Runs
+  // the lookup automatically so the admin lands straight on the result.
+  useEffect(() => {
+    const tripId = searchParams.get('tripId')
+    const sessionId = searchParams.get('sessionId')
+    if (tripId) runParams({ tripId }, tripId)
+    else if (sessionId) runParams({ sessionId }, sessionId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   const selected = useMemo(
     () => data?.sessions.find(s => s.id === selectedId) ?? null,

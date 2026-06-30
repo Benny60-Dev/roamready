@@ -1,8 +1,9 @@
 import { useCallback, useState, useRef, useEffect, useLayoutEffect, type CSSProperties } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { MapPin, Tent, Users, Loader, Plus, X, Sparkles, ChevronDown, ChevronUp, ChevronRight, Check, Info } from 'lucide-react'
+import { MapPin, Tent, Users, Loader, Plus, X, Sparkles, ChevronDown, ChevronUp, ChevronRight, Check, Info, Flag } from 'lucide-react'
 import { aiApi, sessionsApi, tripsApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
+import { useUIStore } from '../store/uiStore'
 import { ChatMessage, Trip, Rig } from '../types'
 import { VEHICLE_LABELS, rigDisplayName, missingSafetyDims, missingMpg } from '../utils/rigs'
 import BottomSheet from '../components/ui/BottomSheet'
@@ -1317,6 +1318,17 @@ export default function SessionPage() {
             )}
           </div>
           <div className="flex gap-2 flex-shrink-0">
+            {/* Report an issue — this page is a planning SESSION (no built trip
+                yet), so it tags the feedback with sessionId; the admin link
+                routes that to the inspector's session lookup. */}
+            <button
+              type="button"
+              onClick={() => useUIStore.getState().openFeedbackModal('BUG_REPORT', { sessionId })}
+              className="px-3 py-1.5 text-xs border border-gray-200 rounded-md hover:bg-gray-50 flex items-center gap-1"
+            >
+              <Flag size={13} />
+              Report an issue
+            </button>
             <button
               type="button"
               onClick={handleNewTrip}

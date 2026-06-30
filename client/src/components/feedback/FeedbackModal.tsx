@@ -58,6 +58,12 @@ export default function FeedbackModal({ onClose }: Props) {
   // default per-open; a plain no-arg open leaves prefill undefined → the
   // FEATURE_REQUEST fallback below.
   const prefillType = useUIStore(s => s.feedbackPrefillType)
+  // Trip-tag resolved by the store when the modal opened (explicit on-page ref,
+  // else remembered last trip). Sent with the submission so the admin can
+  // deep-link into the session inspector.
+  const feedbackTripId = useUIStore(s => s.feedbackTripId)
+  const feedbackTripName = useUIStore(s => s.feedbackTripName)
+  const feedbackSessionId = useUIStore(s => s.feedbackSessionId)
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     defaultValues: { type: prefillType ?? 'FEATURE_REQUEST' }
   })
@@ -113,6 +119,10 @@ export default function FeedbackModal({ onClose }: Props) {
         rating: rating || undefined,
         screen: window.location.pathname,
         attachments: attachments.length ? attachments : undefined,
+        // Trip-tag — omit absent fields (server schema is .strict()).
+        tripId: feedbackTripId || undefined,
+        tripName: feedbackTripName || undefined,
+        sessionId: feedbackSessionId || undefined,
       })
       setSubmitted(true)
     } catch (err: any) {

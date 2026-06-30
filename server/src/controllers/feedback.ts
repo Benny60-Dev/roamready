@@ -9,7 +9,7 @@ export async function submitFeedback(req: AuthRequest, res: Response, next: Next
     // Body already validated + stripped by validateBody(FeedbackSubmitSchema).
     // attachments stay out of the create call — images are never persisted,
     // they only ride the support notification email.
-    const { type, title, body, screen, rating, importance, rigType, tripContext, attachments } = req.body
+    const { type, title, body, screen, rating, importance, rigType, tripContext, tripId, tripName, sessionId, attachments } = req.body
     const feedback = await prisma.feedback.create({
       data: {
         userId: req.user!.id,
@@ -24,6 +24,12 @@ export async function submitFeedback(req: AuthRequest, res: Response, next: Next
         isPublic: false,
         rigType,
         tripContext,
+        // Trip-tagging — tripId for a built trip, sessionId for a still-planning
+        // session; tripName is the snapshot. Absent keys arrive undefined →
+        // Prisma writes NULL. The `as any` covers the locally-shipped Prisma
+        // client that predates this migration (same reason as middleware/auth.ts);
+        // these are real DB columns after `npm run db:generate`. Remove on regen.
+        ...({ tripId, tripName, sessionId } as any),
       },
     })
 

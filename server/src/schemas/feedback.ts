@@ -81,6 +81,13 @@ export const FeedbackSubmitSchema = z
     ).optional(),
     rigType: z.string().max(200).optional(),
     tripContext: z.string().max(2000).optional(),
+    // Trip-tagging (see Feedback model). tripId XOR sessionId in practice —
+    // a trip page sends tripId (+ tripName snapshot), a planning session sends
+    // sessionId. cuids are ~25 chars; 64 is a safe ceiling. Optional + .strict()
+    // means absent keys are fine but unknown keys still 400.
+    tripId: z.string().max(64).optional(),
+    tripName: z.string().max(200).optional(),
+    sessionId: z.string().max(64).optional(),
     // Plain .optional() — no preprocess pipe, so the Zod v4 outer/inner
     // placement gotcha (see title/importance above) doesn't apply here.
     attachments: z.array(AttachmentSchema).max(3).optional(),

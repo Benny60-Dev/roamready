@@ -458,12 +458,13 @@ export async function inspectSession(req: AuthRequest, res: Response, next: Next
   try {
     const tripId = typeof req.query.tripId === 'string' ? req.query.tripId.trim() : ''
     const email = typeof req.query.email === 'string' ? req.query.email.trim() : ''
-    if (!tripId && !email) {
-      throw new AppError('Provide a tripId or email to look up', 400)
+    const sessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId.trim() : ''
+    if (!tripId && !email && !sessionId) {
+      throw new AppError('Provide a tripId, sessionId, or email to look up', 400)
     }
 
     // Audit trail — who inspected which customer. Only the lookup key is logged.
-    console.info('[admin-inspect] owner=%s lookup=%s', req.user!.email, tripId || email)
+    console.info('[admin-inspect] owner=%s lookup=%s', req.user!.email, tripId || sessionId || email)
 
     // ── Lookup by trip id ────────────────────────────────────────────────────
     if (tripId) {
@@ -500,6 +501,45 @@ export async function inspectSession(req: AuthRequest, res: Response, next: Next
         sessions,
         trip: tripOut,
         trips: [tripOut],
+        aiUsageLogs,
+      })
+    }
+
+    // ── Lookup by planning-session id ────────────────────────────────────────
+    // Powers the feedback deep-link for reports filed DURING planning (no built
+    // trip yet). Returns the same envelope shape as the trip lookup so the
+    // inspector UI renders it identically; the built trip is included when the
+    // session has since promoted one.
+    if (sessionId) {
+      const session = await prisma.planningSession.findUnique({
+        where: { id: sessionId },
+        select: INSPECTOR_SESSION_SELECT,
+      })
+      if (!session) throw new AppError('No planning session found for that id', 404)
+
+      const user = session.userId
+        ? await prisma.user.findUnique({ where: { id: session.userId }, select: INSPECTOR_USER_SELECT })
+        : null
+
+      const builtTripId = session.tripId ?? null
+      const trip = builtTripId
+        ? await prisma.trip.findUnique({
+            where: { id: builtTripId },
+            select: { id: true, name: true, status: true, startDate: true, stops: { orderBy: { order: 'asc' }, select: INSPECTOR_STOP_SELECT } },
+          })
+        : null
+
+      const aiUsageLogs = await prisma.aIUsageLog.findMany({
+        where: { OR: [{ sessionId }, ...(builtTripId ? [{ tripId: builtTripId }] : [])] },
+        orderBy: { createdAt: 'asc' },
+        select: INSPECTOR_USAGE_SELECT,
+      })
+
+      return res.json({
+        user: user ? { email: user.email, firstName: user.firstName, lastName: user.lastName } : null,
+        sessions: [session],
+        trip,
+        trips: trip ? [trip] : [],
         aiUsageLogs,
       })
     }

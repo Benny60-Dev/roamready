@@ -672,6 +672,17 @@ model Feedback {
   voterIds    Json?
   rigType     String?
   tripContext String?
+  // Trip-tagged feedback: the user submitted from a specific trip or planning
+  // session, so the admin can deep-link straight into the session inspector.
+  // BOTH nullable and kept DISTINCT — tripId is set for a built trip, sessionId
+  // for a still-planning session (a session has no trip yet). Never both jammed
+  // into one column; the inspector link routes each to the right lookup. tripName
+  // is a denormalized snapshot for sanity-checking a remembered best-guess.
+  // Plain scalars (not FK relations) so feedback survives if the trip/session
+  // is later deleted.
+  tripId      String?
+  tripName    String?
+  sessionId   String?
   // Admin-only archive timestamp (null = active). Set/cleared via the admin
   // PATCH's `archived` boolean; never affects public roadmap visibility —
   // getPublicRoadmap filters on isPublic + status only, by design.
