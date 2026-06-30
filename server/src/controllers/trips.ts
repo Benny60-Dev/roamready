@@ -16,7 +16,7 @@ import { computeFuelEstimate } from '../services/fuelPrice'
 import { stampModifyActionApplied } from '../services/modifyActions'
 import { mergePackedState, resetCheckedState } from '../utils/packingMerge'
 import { resolvePackingCounts, computeStaleness } from '../utils/packingMeta'
-import { parseTripDate } from '../utils/dates'
+import { parseTripDate, rollDateForwardIfPast } from '../utils/dates'
 import { computeTripShape } from '../utils/tripShape'
 import { getClientOrigin } from '../utils/clientOrigin'
 import { geocodeHomeAddress } from '../utils/geocodeHome'
@@ -2053,7 +2053,25 @@ export async function shiftTripDates(req: AuthRequest, res: Response, next: Next
       )
     }
 
-    const { newStartDate, modifyActionId }: TripShiftDatesInput = req.body
+    let { newStartDate }: TripShiftDatesInput = req.body
+    const { modifyActionId }: TripShiftDatesInput = req.body
+
+    // PAST-TRAVEL-DATE BACKSTOP (modify path) — if the AI mis-resolved a yearless
+    // shift target to a past year, roll it forward to the next future occurrence.
+    // GATED to a trip whose CURRENT anchor is itself today-or-future: shifting a
+    // future/planning trip into the past is the mis-resolution bug, but a trip
+    // already in the past is a COMPLETED trip whose deliberate backdating
+    // (trips.ts edge-cases note) must stay possible — so we never touch that case.
+    const anchorIsFuture = rollDateForwardIfPast(anchorStop.arrivalDate!).getTime() === anchorStop.arrivalDate!.getTime()
+    if (anchorIsFuture) {
+      const corrected = rollDateForwardIfPast(newStartDate)
+      if (corrected.getTime() !== newStartDate.getTime()) {
+        console.info('[shiftTripDates] rolled past newStartDate %s → %s',
+          newStartDate.toISOString().slice(0, 10), corrected.toISOString().slice(0, 10))
+        newStartDate = corrected
+      }
+    }
+
     // .find() above asserts arrivalDate is non-null, but TS doesn't narrow
     // through .find predicates — the ! is the minimal cast.
     const currentStartMs = anchorStop.arrivalDate!.getTime()

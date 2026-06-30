@@ -22,7 +22,7 @@ import { cleanChatText } from '../utils/cleanChatText'
 import { initChatAudio } from '../utils/chatSounds'
 import { ChatInput } from '../components/ChatInput'
 import { selectGreeting } from '../utils/greeting'
-import { relativeTime } from '../utils/dates'
+import { relativeTime, parseTripDate, rollYmdForwardIfPast } from '../utils/dates'
 
 // Shared style for the "Trip context" strip chips (rig | travelers | hookup).
 // minHeight 44 gives a comfortable touch target (the rig chip is tappable on
@@ -327,6 +327,15 @@ const ONE_WAY_NOTICE =
   "I planned this one-way. Say 'round trip' if you want the return leg included."
 const TRUNCATED_NOTICE =
   'That plan got cut off mid-generation, so I didn\'t keep a partial version — please try again.'
+
+// Declarative correction (STATE-AND-PROCEED, never a question) shown when the
+// past-date backstop rolls a mis-yeared start date forward. Both dates are
+// 'yyyy-mm-dd'; parseTripDate renders the UTC calendar day correctly.
+function pastDateNotice(originalYmd: string, correctedYmd: string): string {
+  const pretty = (ymd: string) =>
+    parseTripDate(ymd)?.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) ?? ymd
+  return `I set the start date to ${pretty(correctedYmd)} since ${pretty(originalYmd)} has already passed.`
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -835,7 +844,20 @@ export default function SessionPage() {
       // user message, so it doesn't affect the check).
       if (parsedItin) {
         const { itinerary: kept, stripped } = stripUnrequestedReturnLeg(parsedItin, next, user?.homeCity)
-        setItinerary(kept)
+        // PAST-DATE BACKSTOP — if the AI mis-resolved a yearless start date to a
+        // past year, roll it forward to the next future occurrence and tell the
+        // user. Keeps the previewed/promoted date out of the past so the trip
+        // never builds in as "Completed"; the server (promoteSession) backstops
+        // any path that bypasses this.
+        let finalItin = kept
+        if (typeof kept?.startDate === 'string') {
+          const { date: corrected, rolled } = rollYmdForwardIfPast(kept.startDate)
+          if (rolled) {
+            shown.push({ role: 'assistant', content: pastDateNotice(kept.startDate, corrected), _local: true } as any)
+            finalItin = { ...kept, startDate: corrected }
+          }
+        }
+        setItinerary(finalItin)
         // No more silent surgery: deterministic client notice whenever the
         // guard removed a return leg.
         if (stripped) shown.push({ role: 'assistant', content: ONE_WAY_NOTICE, _local: true } as any)

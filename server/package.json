@@ -23,7 +23,8 @@
     "db:repair-home-coords": "tsx --env-file=../.env src/scripts/repairHomeCoords.ts",
     "diagnose:area-search": "tsx --env-file=../.env src/scripts/diagnoseAreaSearch.ts",
     "check:packing-merge": "tsx scripts/check-packing-merge.ts",
-    "check:feedback-tripid": "tsx --env-file=../.env scripts/check-feedback-tripid.ts"
+    "check:feedback-tripid": "tsx --env-file=../.env scripts/check-feedback-tripid.ts",
+    "check:date-backstop": "tsx scripts/check-date-backstop.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.27.0",
