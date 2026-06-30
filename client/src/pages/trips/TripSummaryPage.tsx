@@ -15,7 +15,7 @@ import { useAuthStore } from '../../store/authStore'
 import { useUIStore } from '../../store/uiStore'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge, StopBadge } from '../../utils/stopBadge'
 import { format, addDays } from 'date-fns'
-import { parseTripDate, toYmd } from '../../utils/dates'
+import { parseTripDate, toYmd, formatTripDate } from '../../utils/dates'
 import { directionsUrl, destinationForStop } from '../../utils/directions'
 import { computeTripTotals } from '../../utils/tripTotals'
 import { userFacingStopCount } from '../../utils/userFacingStopCount'
@@ -1379,7 +1379,12 @@ export default function TripSummaryPage() {
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           <h1 className="text-xl font-medium text-gray-900">{trip.name}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{trip.startLocation} → {trip.endLocation}</p>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {trip.startLocation} → {trip.endLocation}
+            {/* Start date WITH YEAR — the per-day timeline below shows bare
+                month/day; surfacing the year once here lets the user verify it. */}
+            {trip.startDate && <> · Departs {formatTripDate(trip.startDate, 'MMM d, yyyy')}</>}
+          </p>
         </div>
         <div className="flex gap-2 flex-shrink-0 flex-wrap">
           <button
