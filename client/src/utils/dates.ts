@@ -129,6 +129,36 @@ export function toYmd(d: Date): string {
 }
 
 /**
+ * PAST-TRAVEL-DATE BACKSTOP (client mirror of server util rollDateForwardIfPast).
+ *
+ * Rolls a yearless date the planner mis-resolved to the PAST forward to the next
+ * future occurrence of the same month/day ("2025-07-29" with today 2026-06-29 →
+ * "2026-07-29"). A date already today-or-later is returned unchanged with
+ * rolled=false. Surfaced in the planning chat so the user sees the correction;
+ * the server (promoteSession) is the authoritative guarantee.
+ *
+ * Pure string/integer math on the leading YYYY-MM-DD (so a bare date or a full
+ * ISO timestamp both work) — no Date arithmetic, no timezone pitfalls. `today`
+ * is compared via its LOCAL calendar day (the user's sense of "today").
+ */
+export function rollYmdForwardIfPast(
+  value: string,
+  today: Date = new Date(),
+): { date: string; rolled: boolean } {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
+  if (!m) return { date: value, rolled: false }
+  const Y = Number(m[1]), M = Number(m[2]), D = Number(m[3])
+  const dayNum = (y: number, mo: number, d: number) => y * 10000 + mo * 100 + d
+  const tNum = dayNum(today.getFullYear(), today.getMonth() + 1, today.getDate())
+  if (dayNum(Y, M, D) >= tNum) return { date: value, rolled: false }
+
+  let year = today.getFullYear()
+  if (dayNum(year, M, D) < tNum) year++ // this year's occurrence already passed
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return { date: `${year}-${pad(M)}-${pad(D)}`, rolled: true }
+}
+
+/**
  * Format an ISO timestamp as a relative time string ("5 minutes ago" / "2d ago").
  *
  * Replaces three byte-near-identical inline copies that had drifted into

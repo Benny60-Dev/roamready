@@ -93,3 +93,45 @@ export function parseTripDate(value: string | Date | null | undefined): Date | n
   if (isNaN(parsed.getTime())) return null
   return new Date(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate(), 12, 0, 0, 0)
 }
+
+/**
+ * PAST-TRAVEL-DATE BACKSTOP — deterministic year correction for a yearless
+ * date the planner mis-resolved to the PAST.
+ *
+ * The planner delegates year resolution entirely to the LLM (the DEPARTURE
+ * DATE RULE in services/ai.ts is prose, not code). When the model picks a past
+ * year for a yearless date (e.g. "July 29" → 2025-07-29 emitted in 2026), the
+ * past date used to persist as the trip anchor and make a still-PLANNING trip
+ * read COMPLETED (deriveTripStatus is purely date-driven).
+ *
+ * This rolls a PAST date forward to the next FUTURE occurrence of the SAME
+ * month/day (2025-07-29 with today 2026-06-29 → 2026-07-29). A date that is
+ * already today-or-later is returned UNCHANGED. Apply ONLY where a forward-
+ * looking travel date is being resolved/set (build/promote, and a future-trip
+ * date-shift) — NEVER blindly on every recompute, which would wrongly roll a
+ * genuinely-past COMPLETED trip forward.
+ *
+ * Calendar-day math is done in UTC because trip/stop dates are stored as
+ * UTC-midnight instants; the result preserves the input's UTC time-of-day so a
+ * stored UTC-midnight date stays UTC-midnight. `today` is injectable for tests.
+ *
+ * Edge: Feb 29 rolled into a non-leap year lands on Mar 1 (JS Date overflow) —
+ * acceptable for this rare case.
+ */
+export function rollDateForwardIfPast(date: Date, today: Date = new Date()): Date {
+  if (isNaN(date.getTime())) return date
+  const mo = date.getUTCMonth()
+  const day = date.getUTCDate()
+  const dayNum = (y: number, m0: number, d: number) => y * 10000 + (m0 + 1) * 100 + d
+  const dNum = dayNum(date.getUTCFullYear(), mo, day)
+  const tNum = dayNum(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+  if (dNum >= tNum) return date // already today-or-future — leave it
+
+  // Past → next occurrence of this month/day that is today-or-later.
+  let year = today.getUTCFullYear()
+  if (dayNum(year, mo, day) < tNum) year++ // this year's occurrence already passed
+  return new Date(Date.UTC(
+    year, mo, day,
+    date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds(), date.getUTCMilliseconds(),
+  ))
+}

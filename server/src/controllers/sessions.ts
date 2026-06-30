@@ -4,6 +4,7 @@ import { prisma } from '../utils/prisma'
 import { AuthRequest, hasAccess } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
 import { generatePlanningContextSummary } from '../services/ai'
+import { rollDateForwardIfPast } from '../utils/dates'
 import type {
   PlanningSessionCreateInput,
   PlanningSessionUpdateInput,
@@ -148,6 +149,22 @@ export async function promoteSession(req: AuthRequest, res: Response, next: Next
     }
 
     const data: PlanningSessionPromoteInput = req.body
+
+    // PAST-TRAVEL-DATE BACKSTOP — a brand-new promoted trip is forward-looking
+    // by definition, so a startDate in the past is always a yearless date the
+    // planner mis-resolved to the wrong year. Roll it forward to the next future
+    // occurrence so the trip never builds into the past (which would make a
+    // still-PLANNING trip read COMPLETED). Unconditional here is safe: the build
+    // flow never logs a completed/past trip. Client surfaces the correction in
+    // chat; this is the authoritative server guarantee.
+    if (data.startDate) {
+      const corrected = rollDateForwardIfPast(data.startDate)
+      if (corrected.getTime() !== data.startDate.getTime()) {
+        console.info('[promoteSession] rolled past startDate %s → %s',
+          data.startDate.toISOString().slice(0, 10), corrected.toISOString().slice(0, 10))
+        data.startDate = corrected
+      }
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       const trip = await tx.trip.create({
