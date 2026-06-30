@@ -29,9 +29,11 @@
  * A deliberate user CANCEL (AbortError) is respected — we do not force a save.
  */
 
-// Single source of truth for the share link wording/URL — easy to tweak later.
-// A REAL, working URL (the live homepage), inlined into the share text.
-const SHARE_LINK_TEXT = 'Plan your own rig-safe RV trip with RoamReady — https://roamready.ai'
+// Single source of truth for the share link — easy to tweak later. A REAL,
+// working URL (the live homepage) passed as a bare `url:` so iOS renders it as a
+// preview card from roamready.ai's metadata — with NO separate message-text
+// bubble (which a `text:` field would produce).
+const SHARE_URL = 'https://roamready.ai'
 const SHARE_TITLE = 'RoamReady trip'
 
 export async function sharePdfBlob(blob: Blob, filename: string): Promise<void> {
@@ -52,7 +54,7 @@ export async function sharePdfBlob(blob: Blob, filename: string): Promise<void> 
   if (isTouchDevice && typeof navigator !== 'undefined') {
     // Cascade: prefer file + real homepage link; if iOS won't accept that combo,
     // drop to the proven file-only payload; only then to the anchor download.
-    const withLink: ShareData = { files: [file], text: SHARE_LINK_TEXT, title: SHARE_TITLE }
+    const withLink: ShareData = { files: [file], url: SHARE_URL, title: SHARE_TITLE }
     const filesOnly: ShareData = { files: [file] }
     const payload: ShareData | null =
       navigator.canShare?.(withLink) ? withLink
