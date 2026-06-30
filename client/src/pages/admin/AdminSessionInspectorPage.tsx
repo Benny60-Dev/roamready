@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
-import { Search, AlertTriangle, User as UserIcon, ChevronLeft } from 'lucide-react'
+import { Search, AlertTriangle, User as UserIcon, ChevronLeft, Copy, Check } from 'lucide-react'
 import { adminApi } from '../../services/api'
 import { parseTripDate } from '../../utils/dates'
 
@@ -112,6 +112,67 @@ const tripClass = (s: string) => {
   }
 }
 
+// Copy a single value (id / email / name) to the clipboard. The icon flips to a
+// check for ~1s to confirm. Renders nothing for an empty value.
+function CopyIcon({ value, title }: { value: string; title?: string }) {
+  const [copied, setCopied] = useState(false)
+  if (!value) return null
+  return (
+    <button
+      type="button"
+      title={title ?? 'Copy'}
+      aria-label={title ?? 'Copy'}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(value)
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1000)
+        } catch { /* clipboard unavailable (insecure context / denied) — no-op */ }
+      }}
+      className="inline-flex items-center justify-center text-gray-400 hover:text-[#1F6F8B] transition-colors flex-shrink-0"
+    >
+      {copied ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
+    </button>
+  )
+}
+
+// "Copy for support" — copies a multi-line labeled diagnostic block, briefly
+// showing a "Copied" state. Styled as a small btn-outline to match the app.
+function CopyForSupport({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text)
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1500)
+        } catch { /* clipboard unavailable — no-op */ }
+      }}
+      className="btn-outline text-xs flex items-center gap-1.5 flex-shrink-0"
+    >
+      {copied
+        ? <><Check size={13} className="text-emerald-600" /> Copied</>
+        : <><Copy size={13} /> Copy for support</>}
+    </button>
+  )
+}
+
+// A labeled, copyable identifier row (user / session / trip id, trip name).
+function IdRow({ label, value }: { label: string; value: string }) {
+  if (!value) return null
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wide text-gray-400">{label}</p>
+      <div className="flex items-center gap-1.5">
+        <code className="text-xs text-gray-800 break-all">{value}</code>
+        <CopyIcon value={value} title={`Copy ${label}`} />
+      </div>
+    </div>
+  )
+}
+
 export default function AdminSessionInspectorPage() {
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
@@ -192,6 +253,48 @@ export default function AdminSessionInspectorPage() {
     ? selected!.partialTripData.agreedStops
     : []
 
+  // ── "Copy for support" diagnostic blocks ────────────────────────────────────
+  // Plain-text, labeled lines that paste cleanly into chat / CC. Built from
+  // whatever the inspector has loaded — no extra fetch, no data-shape change.
+  const userName = data?.user ? `${data.user.firstName} ${data.user.lastName}`.trim() : 'Unknown user'
+  const userEmail = data?.user?.email ?? ''
+
+  // Per-user block (results-list view): identity + a one-line-per-session index.
+  function userSupportText(): string {
+    if (!data) return ''
+    const uid = data.sessions[0]?.userId ?? ''
+    const lines: (string | null)[] = [
+      `User: ${userName}${userEmail ? ` <${userEmail}>` : ''}`,
+      uid ? `User ID: ${uid}` : null,
+      `Sessions: ${data.sessions.length}`,
+      ...data.sessions.map(s => {
+        const trip = s.tripId ? data.trips.find(t => t.id === s.tripId) ?? null : null
+        const tripPart = s.tripId ? `${s.tripId}${trip ? ` (${trip.name})` : ''}` : 'none'
+        return `- Session ${s.id} | ${convLabel(s.status)} | Trip: ${tripPart}`
+      }),
+    ]
+    return lines.filter(Boolean).join('\n')
+  }
+
+  // Per-session block (detail view): the full diagnostic for one session/trip.
+  function sessionSupportText(): string {
+    if (!selected) return ''
+    const lines: (string | null)[] = [
+      `User: ${userName}${userEmail ? ` <${userEmail}>` : ''}`,
+      selected.userId ? `User ID: ${selected.userId}` : null,
+      `Session ID: ${selected.id}`,
+      `Title: ${selected.title || '(untitled session)'}`,
+      `Conversation status: ${titleCase(selected.status)}`,
+      `Trip ID: ${selected.tripId ?? '(no trip built)'}`,
+      selectedTrip ? `Trip name: ${selectedTrip.name}` : null,
+      selectedTrip ? `Trip status: ${titleCase(selectedTrip.status)}` : null,
+      selectedTrip ? `Travel date: ${fmtDateOnly(selectedTrip.startDate)}` : null,
+      `Planning started: ${fmtDateTime(selected.createdAt)}`,
+      `Last edited: ${fmtDateTime(selected.updatedAt)}`,
+    ]
+    return lines.filter(Boolean).join('\n')
+  }
+
   return (
     <div className="space-y-6 max-w-4xl">
       <Breadcrumb items={[{ label: 'Admin Dashboard' }, { label: 'Session Inspector' }]} />
@@ -227,12 +330,20 @@ export default function AdminSessionInspectorPage() {
         <>
           {/* Customer + session picker */}
           <div className="card space-y-3">
-            <div className="flex items-center gap-2">
-              <UserIcon size={15} className="text-[#1F6F8B]" aria-hidden="true" />
-              <span className="text-sm font-medium text-gray-900">
-                {data.user ? `${data.user.firstName} ${data.user.lastName}` : 'Unknown user'}
-              </span>
-              {data.user && <span className="text-xs text-gray-500">{data.user.email}</span>}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <UserIcon size={15} className="text-[#1F6F8B] flex-shrink-0" aria-hidden="true" />
+                <span className="text-sm font-medium text-gray-900">
+                  {data.user ? `${data.user.firstName} ${data.user.lastName}` : 'Unknown user'}
+                </span>
+                {data.user && (
+                  <span className="text-xs text-gray-500 inline-flex items-center gap-1 min-w-0">
+                    <span className="truncate">{data.user.email}</span>
+                    <CopyIcon value={data.user.email} title="Copy email" />
+                  </span>
+                )}
+              </div>
+              <CopyForSupport text={userSupportText()} />
             </div>
             {data.sessions.length === 0 ? (
               <p className="text-sm text-gray-500">No planning sessions found.</p>
@@ -346,12 +457,20 @@ export default function AdminSessionInspectorPage() {
             {/* RIGHT — Summary panel (sticky) */}
             <aside className="space-y-2 lg:sticky lg:top-4 self-start">
               <div className="card space-y-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <UserIcon size={14} className="text-[#1F6F8B] flex-shrink-0" aria-hidden="true" />
-                    <span className="text-sm font-medium text-gray-900">{data.user ? `${data.user.firstName} ${data.user.lastName}` : 'Unknown user'}</span>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <UserIcon size={14} className="text-[#1F6F8B] flex-shrink-0" aria-hidden="true" />
+                      <span className="text-sm font-medium text-gray-900">{data.user ? `${data.user.firstName} ${data.user.lastName}` : 'Unknown user'}</span>
+                    </div>
+                    {data.user && (
+                      <div className="ml-6 flex items-center gap-1.5">
+                        <p className="text-xs text-gray-500 break-all">{data.user.email}</p>
+                        <CopyIcon value={data.user.email} title="Copy email" />
+                      </div>
+                    )}
                   </div>
-                  {data.user && <p className="text-xs text-gray-500 ml-6 break-all">{data.user.email}</p>}
+                  <CopyForSupport text={sessionSupportText()} />
                 </div>
                 <div>
                   <p className="text-[10px] uppercase tracking-wide text-gray-400">Title</p>
@@ -361,6 +480,14 @@ export default function AdminSessionInspectorPage() {
                   <span className={`badge text-xs ${selected.tripId ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{selected.tripId ? 'built trip' : 'no trip'}</span>
                   <span className={`badge text-xs ${convClass(selected.status)}`}>{convLabel(selected.status)}</span>
                   {selectedTrip && <span className={`badge text-xs ${tripClass(selectedTrip.status)}`}>Trip: {titleCase(selectedTrip.status)}</span>}
+                </div>
+                {/* Copyable identifiers — surfaced as text so each is one-click
+                    pasteable for support/CC. Same data, presentation only. */}
+                <div className="border-t border-gray-100 pt-2 space-y-1.5">
+                  {selected.userId && <IdRow label="User ID" value={selected.userId} />}
+                  <IdRow label="Session ID" value={selected.id} />
+                  {selected.tripId && <IdRow label="Trip ID" value={selected.tripId} />}
+                  {selectedTrip && <IdRow label="Trip name" value={selectedTrip.name} />}
                 </div>
                 <div>
                   <p className="text-[10px] uppercase tracking-wide text-gray-400">Messages</p>
