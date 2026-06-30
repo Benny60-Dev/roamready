@@ -10,19 +10,30 @@
  * link-preview card pointing at https://roamready.ai/<uuid> (a dead root-domain
  * URL whose OG tags render as "AI-Powered Outdoor Trip Planning").
  *
- * ─────────────────────────── THE FIX ───────────────────────────
- * On platforms that support file sharing (mobile Safari/Chrome), share the PDF
- * as a FILE-ONLY Web Share payload — `{ files: [file] }` with NO `url` and NO
- * `text`, so there is no URL for the share sheet to turn into a preview card.
- * On desktop / unsupported browsers, fall back to the classic anchor download.
+ * ─────────────────────────── DELIVERY ───────────────────────────
+ * Desktop / non-touch: classic <a download> anchor — saves the file, never a
+ * share panel. (canShare is true on desktop Chrome too, so we gate on a coarse
+ * primary pointer + touchscreen, NOT canShare alone.)
  *
- * iOS gesture caveat: navigator.share must run inside the user-activation
- * window, but heavy PDF generation before this call can exceed it
- * (NotAllowedError). The share path is therefore best-effort: any FAILURE
- * falls back to the anchor download so the user is never left without the file.
- * A deliberate user CANCEL (AbortError) is NOT a failure — the sheet opened and
- * the user declined, so we do not force a download on them.
+ * Touch / mobile: Web Share the PDF File AND a REAL "Try RoamReady" homepage
+ * link, carried INLINE in the share `text` (not a separate `url:` field, which
+ * iOS handles less reliably alongside files). This is NOT the old blob: leak —
+ * that was a dead blob:https://roamready.ai/<uuid>; this is the live homepage,
+ * intentionally re-added so a forwarded itinerary brings a working link along.
+ *
+ * Because iOS can reject or mishandle a files+text payload, delivery DEGRADES
+ * through a cascade, never ending worse than a clean file share:
+ *   [files + link]  →  [files only]  →  [anchor download]
+ * The first two are gated by navigator.canShare(); a runtime share() FAILURE
+ * (NotAllowedError from an expired gesture window, etc.) drops to the download.
+ * A deliberate user CANCEL (AbortError) is respected — we do not force a save.
  */
+
+// Single source of truth for the share link wording/URL — easy to tweak later.
+// A REAL, working URL (the live homepage), inlined into the share text.
+const SHARE_LINK_TEXT = 'Plan your own rig-safe RV trip with RoamReady — https://roamready.ai'
+const SHARE_TITLE = 'RoamReady trip'
+
 export async function sharePdfBlob(blob: Blob, filename: string): Promise<void> {
   const file = new File([blob], filename, { type: 'application/pdf' })
 
@@ -38,16 +49,27 @@ export async function sharePdfBlob(blob: Blob, filename: string): Promise<void> 
     window.matchMedia?.('(pointer: coarse)').matches === true &&
     (navigator.maxTouchPoints ?? 0) > 0
 
-  if (isTouchDevice && navigator.canShare?.({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file] }) // FILES ONLY — never url/text
-      return
-    } catch (err) {
-      // AbortError = the user opened the share sheet and cancelled; respect that
-      // and do nothing. Any OTHER error (NotAllowedError from an expired gesture
-      // window, or anything unexpected) → fall through to the download so the
-      // user always ends up with the file.
-      if (err instanceof DOMException && err.name === 'AbortError') return
+  if (isTouchDevice && typeof navigator !== 'undefined') {
+    // Cascade: prefer file + real homepage link; if iOS won't accept that combo,
+    // drop to the proven file-only payload; only then to the anchor download.
+    const withLink: ShareData = { files: [file], text: SHARE_LINK_TEXT, title: SHARE_TITLE }
+    const filesOnly: ShareData = { files: [file] }
+    const payload: ShareData | null =
+      navigator.canShare?.(withLink) ? withLink
+      : navigator.canShare?.(filesOnly) ? filesOnly
+      : null
+
+    if (payload) {
+      try {
+        await navigator.share(payload)
+        return
+      } catch (err) {
+        // AbortError = the user opened the share sheet and cancelled; respect
+        // that and do nothing. Any OTHER error (NotAllowedError from an expired
+        // gesture window, or anything unexpected) → fall through to the download
+        // so the user always ends up with the file.
+        if (err instanceof DOMException && err.name === 'AbortError') return
+      }
     }
   }
 
