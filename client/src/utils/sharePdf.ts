@@ -26,10 +26,19 @@
 export async function sharePdfBlob(blob: Blob, filename: string): Promise<void> {
   const file = new File([blob], filename, { type: 'application/pdf' })
 
-  // canShare({ files }) gates the attempt to platforms that actually support
-  // file sharing — primarily mobile. Desktop browsers return false here and go
-  // straight to the anchor download.
-  if (typeof navigator !== 'undefined' && navigator.canShare?.({ files: [file] })) {
+  // Share only on genuine touch/mobile devices. canShare({ files }) is NOT
+  // enough on its own — desktop Chrome (incl. Windows) reports it true and would
+  // pop the OS Share panel instead of downloading. So additionally require a
+  // COARSE primary pointer (phones/tablets) AND a real touchscreen; desktop
+  // (even touchscreen laptops, whose primary pointer is fine) falls through to
+  // the anchor download.
+  const isTouchDevice =
+    typeof window !== 'undefined' &&
+    typeof navigator !== 'undefined' &&
+    window.matchMedia?.('(pointer: coarse)').matches === true &&
+    (navigator.maxTouchPoints ?? 0) > 0
+
+  if (isTouchDevice && navigator.canShare?.({ files: [file] })) {
     try {
       await navigator.share({ files: [file] }) // FILES ONLY — never url/text
       return
