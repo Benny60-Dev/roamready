@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { Search, AlertTriangle, User as UserIcon, ChevronLeft, Copy, Check } from 'lucide-react'
@@ -218,6 +218,76 @@ export default function AdminSessionInspectorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
+  // ── User type-ahead ─────────────────────────────────────────────────────────
+  // Reuses the admin user list (getSubscribers) — fetched ONCE, lazily, on first
+  // focus — then filters client-side by name + email. No per-keystroke request;
+  // the filter is debounced ~250ms purely for feel. Users only (never trips or
+  // sessions). Selecting a row runs the SAME email lookup as the Look up button.
+  type UserOption = { id: string; firstName: string; lastName: string; email: string }
+  const [userOptions, setUserOptions] = useState<UserOption[]>([])
+  const usersFetchedRef = useRef(false)
+  const [showSuggest, setShowSuggest] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  const searchRef = useRef<HTMLDivElement>(null)
+
+  // Lazily load the user list the first time the admin engages the field.
+  function ensureUsers() {
+    if (usersFetchedRef.current) return
+    usersFetchedRef.current = true
+    // status:'all' so suspended users stay reachable from the type-ahead.
+    adminApi.getSubscribers({ status: 'all' })
+      .then(res => setUserOptions(res.data as UserOption[]))
+      .catch(() => { usersFetchedRef.current = false }) // allow a retry on next focus
+  }
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 250)
+    return () => clearTimeout(t)
+  }, [query])
+
+  const suggestions = useMemo<UserOption[]>(() => {
+    const q = debouncedQuery.trim().toLowerCase()
+    if (!q) return []
+    return userOptions
+      .filter(u =>
+        `${u.firstName ?? ''} ${u.lastName ?? ''}`.toLowerCase().includes(q) ||
+        (u.email ?? '').toLowerCase().includes(q))
+      .slice(0, 8)
+  }, [debouncedQuery, userOptions])
+
+  // Reset the highlighted row whenever the visible suggestion set changes.
+  useEffect(() => { setActiveIndex(-1) }, [debouncedQuery])
+
+  const suggestOpen = showSuggest && suggestions.length > 0
+
+  function selectUser(u: UserOption) {
+    setShowSuggest(false)
+    setActiveIndex(-1)
+    setQuery(u.email)
+    runParams({ email: u.email }, u.email)
+  }
+
+  // Up/Down/Enter nav (Enter selects the highlighted row; with none highlighted
+  // it falls through to the form's normal submit). Escape closes the dropdown.
+  function onSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Escape') { setShowSuggest(false); return }
+    if (!suggestOpen) return
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIndex(i => Math.min(i + 1, suggestions.length - 1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIndex(i => Math.max(i - 1, 0)) }
+    else if (e.key === 'Enter' && activeIndex >= 0) { e.preventDefault(); selectUser(suggestions[activeIndex]) }
+  }
+
+  // Close on outside click (the input + dropdown both live inside searchRef).
+  useEffect(() => {
+    if (!suggestOpen) return
+    function onDown(ev: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(ev.target as Node)) setShowSuggest(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [suggestOpen])
+
   const selected = useMemo(
     () => data?.sessions.find(s => s.id === selectedId) ?? null,
     [data, selectedId],
@@ -303,20 +373,52 @@ export default function AdminSessionInspectorPage() {
         <p className="text-sm text-gray-500 mt-0.5">Read-only. Look up a customer's planning conversation and the trip it built.</p>
       </div>
 
-      {/* Lookup */}
-      <form onSubmit={runLookup} className="card flex items-center gap-2">
-        <Search size={16} className="text-gray-400 flex-shrink-0" aria-hidden="true" />
-        <input
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="Trip id or customer email"
-          className="flex-1 bg-transparent text-sm outline-none text-gray-900 placeholder-gray-400"
-          autoFocus
-        />
-        <button type="submit" disabled={loading || !query.trim()} className="btn-primary text-sm px-4 py-1.5 disabled:opacity-50">
-          {loading ? 'Looking up…' : 'Look up'}
-        </button>
-      </form>
+      {/* Lookup + user type-ahead */}
+      <div className="relative" ref={searchRef}>
+        <form onSubmit={runLookup} className="card flex items-center gap-2">
+          <Search size={16} className="text-gray-400 flex-shrink-0" aria-hidden="true" />
+          <input
+            value={query}
+            onChange={e => { setQuery(e.target.value); setShowSuggest(true) }}
+            onFocus={() => { ensureUsers(); setShowSuggest(true) }}
+            onKeyDown={onSearchKeyDown}
+            placeholder="Search by name or email, or paste a trip id"
+            className="flex-1 bg-transparent text-sm outline-none text-gray-900 placeholder-gray-400"
+            autoFocus
+            autoComplete="off"
+            role="combobox"
+            aria-expanded={suggestOpen}
+            aria-autocomplete="list"
+          />
+          <button type="submit" disabled={loading || !query.trim()} className="btn-primary text-sm px-4 py-1.5 disabled:opacity-50">
+            {loading ? 'Looking up…' : 'Look up'}
+          </button>
+        </form>
+
+        {/* User suggestions — name + email match. Users only (never trips or
+            sessions). onMouseDown (not onClick) so the pick lands before the
+            outside-click handler can close the dropdown on blur. */}
+        {suggestOpen && (
+          <ul
+            role="listbox"
+            className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto py-1"
+          >
+            {suggestions.map((u, i) => (
+              <li key={u.id} role="option" aria-selected={i === activeIndex}>
+                <button
+                  type="button"
+                  onMouseDown={e => { e.preventDefault(); selectUser(u) }}
+                  onMouseEnter={() => setActiveIndex(i)}
+                  className={`w-full text-left px-3 py-2 flex flex-col ${i === activeIndex ? 'bg-[#1F6F8B]/5' : 'hover:bg-gray-50'}`}
+                >
+                  <span className="text-sm text-gray-900">{`${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() || '(no name)'}</span>
+                  <span className="text-xs text-gray-500 break-all">{u.email}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {error && (
         <div className="card border border-red-200 bg-red-50/40 flex items-start gap-2">
