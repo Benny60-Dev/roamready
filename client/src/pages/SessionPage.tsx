@@ -22,7 +22,7 @@ import { cleanChatText } from '../utils/cleanChatText'
 import { initChatAudio } from '../utils/chatSounds'
 import { ChatInput } from '../components/ChatInput'
 import { selectGreeting } from '../utils/greeting'
-import { relativeTime, parseTripDate, rollYmdForwardIfPast } from '../utils/dates'
+import { relativeTime, parseTripDate, rollYmdForwardIfPast, formatTripDate } from '../utils/dates'
 
 // Shared style for the "Trip context" strip chips (rig | travelers | hookup).
 // minHeight 44 gives a comfortable touch target (the rig chip is tappable on
@@ -2155,6 +2155,10 @@ export default function SessionPage() {
         >
           {itinerary && (
             <div className="px-5 py-4">
+              {/* Resolved start date WITH YEAR — see the desktop preview note. */}
+              {itinerary.startDate && (
+                <p className="text-xs text-gray-500 mb-3">Departs {formatTripDate(itinerary.startDate, 'MMM d, yyyy')}</p>
+              )}
               <div className="grid grid-cols-2 gap-2 mb-4 text-xs text-gray-500">
                 <div>~{itinerary.totalMiles?.toLocaleString()} mi</div>
                 <div>~${Math.round(computeTripTotals(itinerary).campEst).toLocaleString()} camp</div>
@@ -2194,10 +2198,15 @@ export default function SessionPage() {
         {itinerary && (
           <div className="hidden lg:flex w-80 flex-col">
             <div className="card-lg flex flex-col min-h-0 flex-1">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-2">
                 <h3 className="font-medium text-gray-900 text-sm">{deriveTripTitle(itinerary) || itinerary.name}</h3>
                 <span className="badge-green text-xs">{nightsFromStops(itinerary)}n</span>
               </div>
+              {/* Resolved start date WITH YEAR — lets the user sanity-check the
+                  year the planner resolved (complements the past-date backstop). */}
+              {itinerary.startDate && (
+                <p className="text-xs text-gray-500 mb-4">Departs {formatTripDate(itinerary.startDate, 'MMM d, yyyy')}</p>
+              )}
               <div className="grid grid-cols-2 gap-2 mb-4 text-xs text-gray-500">
                 <div>~{itinerary.totalMiles?.toLocaleString()} mi</div>
                 <div>~${Math.round(computeTripTotals(itinerary).campEst).toLocaleString()} camp</div>
