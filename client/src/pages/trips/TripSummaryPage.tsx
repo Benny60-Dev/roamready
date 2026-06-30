@@ -5,13 +5,14 @@ import {
   Download, Share2, Sparkles, Car, Tent, Star, Bed,
   MapPin, XCircle, Plus, Check, RefreshCw, ArrowRight, Clock,
   Pencil, Trash2, Wand2, Fuel, ChevronDown, ChevronRight, Info,
-  Loader2, BookOpen,
+  Loader2, BookOpen, Flag,
 } from 'lucide-react'
 const ModifyTripPanel = lazy(() => import('../../components/trip/ModifyTripPanel'))
 import ConfirmModal from '../../components/ui/ConfirmModal'
 import { tripsApi, aiApi, usersApi } from '../../services/api'
 import { Trip, Stop, ItineraryDay, ItineraryActivity, StopWeather, POI, TripFuelEstimate } from '../../types'
 import { useAuthStore } from '../../store/authStore'
+import { useUIStore } from '../../store/uiStore'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge, StopBadge } from '../../utils/stopBadge'
 import { format, addDays } from 'date-fns'
 import { parseTripDate, toYmd } from '../../utils/dates'
@@ -634,6 +635,11 @@ export default function TripSummaryPage() {
     if (!id) return
     reloadTrip().finally(() => setLoading(false))
   }, [id])
+
+  // Remember this trip as the best-guess for feedback opened elsewhere.
+  useEffect(() => {
+    if (trip?.id) useUIStore.getState().rememberTrip(trip.id, trip.name)
+  }, [trip?.id, trip?.name])
 
   // Reset window scroll to the top on the loading→ready edge when the tall
   // itinerary timeline first mounts. See hooks/useScrollResetOnReady.
@@ -1402,6 +1408,14 @@ export default function TripSummaryPage() {
               ? <><RefreshCw size={14} className="animate-spin" /> Generating…</>
               : <><Download size={14} /> PDF</>
             }
+          </button>
+          {/* Report an issue — opens the global feedback modal pre-tagged with
+              this trip for a one-click admin deep-link into the inspector. */}
+          <button
+            onClick={() => useUIStore.getState().openFeedbackModal('BUG_REPORT', { tripId: id, tripName: trip.name })}
+            className="btn-outline text-sm flex items-center gap-1.5"
+          >
+            <Flag size={14} /> Report an issue
           </button>
         </div>
       </div>

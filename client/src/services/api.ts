@@ -388,7 +388,7 @@ export const adminApi = {
     api.patch(`/admin/feedback/${id}`, data),
   analyzeFeedback: () => api.post('/admin/feedback/analyze'),
   getLinkHealth: () => api.get('/admin/link-health'),
-  // Read-only session inspector — pass { tripId } OR { email }.
-  inspectSession: (params: { tripId?: string; email?: string }) =>
+  // Read-only session inspector — pass { tripId } OR { sessionId } OR { email }.
+  inspectSession: (params: { tripId?: string; sessionId?: string; email?: string }) =>
     api.get('/admin/session-inspector', { params }),
 }

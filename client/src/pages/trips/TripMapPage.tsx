@@ -5,7 +5,7 @@ import {
   Layers, X, Plus, Minus, DollarSign, Calendar, AlertTriangle,
   Wind, Droplets, Snowflake, Thermometer, ExternalLink,
   Pencil, Trash2, Check, BookOpen, Package, Share2, Download, CheckCircle, CloudRain, Wand2,
-  Maximize2, Minimize2, Tent, Bed, CalendarPlus, MapPin,
+  Maximize2, Minimize2, Tent, Bed, CalendarPlus, MapPin, Flag,
 } from 'lucide-react'
 import { DayPicker } from 'react-day-picker'
 import 'react-day-picker/style.css'
@@ -21,6 +21,7 @@ import RigWarningPill from '../../components/trip/RigWarningPill'
 import ConfirmModal from '../../components/ui/ConfirmModal'
 import ShareModal from '../../components/trip/ShareModal'
 import { useAuthStore } from '../../store/authStore'
+import { useUIStore } from '../../store/uiStore'
 import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBadge } from '../../utils/stopBadge'
 import { deriveTripStatus } from '../../utils/tripStatus'
 import { userFacingStopCount } from '../../utils/userFacingStopCount'
@@ -789,6 +790,8 @@ export default function TripMapPage() {
       })
       setTrip(data)
       setTripNameInput(data.name)
+      // Remember this trip as the best-guess for feedback opened elsewhere.
+      useUIStore.getState().rememberTrip(data.id, data.name)
     })
   }, [id])
 
@@ -1844,6 +1847,14 @@ export default function TripMapPage() {
           className="btn-primary text-sm flex items-center gap-1.5 disabled:opacity-60"
         >
           <Download size={13} /> {downloadingPdf ? 'Generating...' : 'PDF'}
+        </button>
+        {/* Report an issue — opens the global feedback modal pre-tagged with this
+            trip so the admin can deep-link straight into the session inspector. */}
+        <button
+          onClick={() => useUIStore.getState().openFeedbackModal('BUG_REPORT', { tripId: id, tripName: trip?.name })}
+          className="btn-outline text-sm flex items-center gap-1.5"
+        >
+          <Flag size={13} /> Report an issue
         </button>
         {/* BUG-ITINERARY-BTN-FOLD — itinerary CTA in the action row, MOBILE ONLY.
             Gold/solid (btn-primary IS #F7A829, same as PDF) + active state; sized

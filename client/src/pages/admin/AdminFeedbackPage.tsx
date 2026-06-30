@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
-import { Wand2, Loader } from 'lucide-react'
+import { Wand2, Loader, Crosshair } from 'lucide-react'
 import { adminApi } from '../../services/api'
 import { Feedback } from '../../types'
 import { fbRef } from '../../utils/fbRef'
@@ -140,6 +141,25 @@ export default function AdminFeedbackPage() {
                       >
                         Find in Gmail
                       </a>
+                    </p>
+                  )}
+                  {/* Trip-tag deep-link — one click into the session inspector for
+                      the exact trip/session this feedback was filed from. tripId
+                      routes to the built-trip lookup; sessionId to the planning-
+                      session lookup. Hidden on untagged rows. */}
+                  {(item.tripId || item.sessionId) && (
+                    <p className="text-xs mt-0.5">
+                      <Link
+                        to={item.tripId
+                          ? `/admin/session-inspector?tripId=${encodeURIComponent(item.tripId)}`
+                          : `/admin/session-inspector?sessionId=${encodeURIComponent(item.sessionId!)}`}
+                        className="text-[#1F6F8B] hover:underline inline-flex items-center gap-1"
+                      >
+                        <Crosshair size={12} />
+                        {item.tripId
+                          ? `Inspect trip${item.tripName ? ` · ${item.tripName}` : ''}`
+                          : 'Inspect planning session'}
+                      </Link>
                     </p>
                   )}
                 </div>

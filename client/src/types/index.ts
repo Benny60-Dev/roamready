@@ -429,6 +429,12 @@ export interface Feedback {
   votes: number
   rigType?: string
   tripContext?: string
+  /** Trip-tagging — set when the user submitted from a trip page (tripId +
+   *  tripName snapshot) or a planning session (sessionId). Powers the admin
+   *  session-inspector deep-link. Kept distinct; a row has at most one. */
+  tripId?: string | null
+  tripName?: string | null
+  sessionId?: string | null
   /** Admin archive timestamp — null/absent = active. Admin-only concern;
    *  never affects public roadmap visibility. */
   archivedAt?: string | null

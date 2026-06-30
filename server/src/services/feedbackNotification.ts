@@ -29,6 +29,13 @@ type FeedbackRow = {
   screen: string | null
   importance: string | null
   userId: string | null
+  // Trip-tagging — present on rows submitted from a trip/planning page so the
+  // support email can deep-link the admin into the session inspector. Optional
+  // so the (locally-shipped, pre-migration) Prisma create result stays
+  // assignable to this type until `npm run db:generate` regenerates it.
+  tripId?: string | null
+  tripName?: string | null
+  sessionId?: string | null
 }
 
 const escapeHtml = (s: string) =>
@@ -70,7 +77,19 @@ export async function sendFeedbackNotification(
     ['Ref', fbRef(feedback.id)],
     ['Feedback ID', feedback.id],
   ]
+  if (feedback.tripName) lines.push(['Trip', feedback.tripName])
   if (attachments.length) lines.push(['Screenshots', String(attachments.length)])
+
+  // Admin deep-link into the session inspector — TEAM email only (never the
+  // submitter acknowledgment). tripId routes to the built-trip lookup, sessionId
+  // to the still-planning-session lookup. Same CLIENT_URL fallback pattern used
+  // by the shipped-notification email below.
+  const clientOrigin = process.env.CLIENT_URL || 'http://localhost:3000'
+  const inspectUrl = feedback.tripId
+    ? `${clientOrigin}/admin/session-inspector?tripId=${encodeURIComponent(feedback.tripId)}`
+    : feedback.sessionId
+      ? `${clientOrigin}/admin/session-inspector?sessionId=${encodeURIComponent(feedback.sessionId)}`
+      : null
 
   const html = `
     <p><strong>New feedback submission</strong></p>
@@ -78,12 +97,14 @@ export async function sendFeedbackNotification(
       ${lines.map(([k, v]) => `<tr><td style="color:#6b7280">${k}</td><td>${escapeHtml(v)}</td></tr>`).join('\n      ')}
     </table>
     <p style="white-space:pre-wrap;border-left:3px solid #1F6F8B;padding-left:12px">${escapeHtml(feedback.body)}</p>
+    ${inspectUrl ? `<p><a href="${escapeHtml(inspectUrl)}" style="color:#1F6F8B">Open in session inspector →</a></p>` : ''}
     <p style="color:#6b7280;font-size:12px">Reply to this email to respond to the submitter directly.</p>
   `.trim()
 
   const text =
     `New feedback submission\n\n` +
     lines.map(([k, v]) => `${k}: ${v}`).join('\n') +
+    (inspectUrl ? `\n\nSession inspector: ${inspectUrl}` : '') +
     `\n\n${feedback.body}\n\nReply to this email to respond to the submitter directly.`
 
   const message = {
