@@ -1,5 +1,6 @@
 import { Controller, useWatch, type Control, type UseFormRegister, type UseFormSetValue } from 'react-hook-form'
 import { useEffect, useState } from 'react'
+import { X } from 'lucide-react'
 import { VehicleType, SecondVehicle } from '../../types'
 import { deriveSecondVehicle, VEHICLE_LABELS, type TowingChoice } from '../../utils/rigs'
 import { usersApi } from '../../services/api'
@@ -84,27 +85,55 @@ export default function RigFormFields({
     if (isToadDirection) setTowingChoice('VEHICLE')
   }
 
+  // Delete a saved vehicle from the library. Confirm first, fire the DELETE
+  // (fire-and-forget), and drop it from local state optimistically so the chip
+  // disappears immediately.
+  function removeSavedVehicle(v: SecondVehicle) {
+    if (!window.confirm('Remove this saved vehicle?')) return
+    usersApi.deleteSecondVehicle(v.id).catch(() => { /* non-fatal */ })
+    setSavedVehicles(prev => prev.filter(x => x.id !== v.id))
+  }
+
+  // Blank rows (no year/make/model) never render — an unlabeled chip is
+  // indistinguishable and useless. Filter once so the heading gate and the chip
+  // map share the same clean list.
+  const pickableVehicles = savedVehicles.filter(v => v.year || v.make || v.model)
+
   // Rendered at the TOP of each second-vehicle sub-form, but only when the user
-  // actually has saved vehicles (empty → renders nothing).
-  const savedVehiclePicker = savedVehicles.length > 0 && (
+  // has >= 1 saved vehicle with identifying data. A chip list (not a <select>)
+  // so each row can carry its own delete button.
+  const savedVehiclePicker = pickableVehicles.length > 0 && (
     <div>
       <label className="label" style={{ color: TEAL }}>Reuse a saved vehicle</label>
-      <select
-        className="input"
-        defaultValue=""
-        style={{ borderColor: TEAL }}
-        onChange={e => {
-          const v = savedVehicles.find(x => x.id === e.target.value)
-          if (v) applySavedVehicle(v)
-        }}
-      >
-        <option value="">Select a saved vehicle…</option>
-        {savedVehicles.map(v => (
-          <option key={v.id} value={v.id}>
-            {savedVehicleLabel(v)}
-          </option>
-        ))}
-      </select>
+      <div className="flex flex-wrap gap-2">
+        {pickableVehicles.map(v => {
+          const label = savedVehicleLabel(v)
+          return (
+            <div
+              key={v.id}
+              className="inline-flex items-center rounded-full text-xs"
+              style={{ border: `0.5px solid ${TEAL}`, color: TEAL, backgroundColor: '#E0F0F4' }}
+            >
+              <button
+                type="button"
+                onClick={() => applySavedVehicle(v)}
+                className="pl-3 pr-1.5 py-1 hover:underline"
+              >
+                {label}
+              </button>
+              <button
+                type="button"
+                aria-label={`Remove ${label} from saved`}
+                onClick={e => { e.stopPropagation(); removeSavedVehicle(v) }}
+                className="pr-2 pl-0.5 py-1 rounded-full hover:opacity-60"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )
+        })}
+      </div>
+      <p className="mt-1 text-xs text-gray-400">Tap to fill the fields below.</p>
     </div>
   )
 

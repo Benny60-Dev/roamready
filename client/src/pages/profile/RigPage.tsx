@@ -5,7 +5,7 @@ import { Plus, Trash2, Star, Pencil, BadgeInfo, Car, Truck, AlertCircle } from '
 import { usersApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 import { Rig, VehicleType } from '../../types'
-import { deriveSecondVehicle, VEHICLE_LABELS, buildTowedFields, type TowingChoice } from '../../utils/rigs'
+import { deriveSecondVehicle, VEHICLE_LABELS, buildTowedFields, buildSecondVehiclePayload, type TowingChoice } from '../../utils/rigs'
 import RigFormFields from '../../components/forms/RigFormFields'
 
 // VEHICLE_LABELS now lives in utils/rigs (so utils can reuse it without a
@@ -258,18 +258,8 @@ export default function RigPage() {
       const { isTowing, towed } = buildTowedFields(data, direction, towingChoice)
       // RIGINFO-4: optionally save the second vehicle to the reusable library.
       // Fire-and-forget — never block or fail the rig save on the library write.
-      if (data.saveSecondVehicle && isTowing) {
-        usersApi.createSecondVehicle({
-          towedType: towed.towedType,
-          year: towed.towedYear,
-          make: towed.towedMake,
-          model: towed.towedModel,
-          length: towed.towedLength,
-          height: towed.towedHeight,
-          licensePlate: towed.towedLicensePlate,
-          fuelType: towed.towedFuelType,
-        }).catch(() => { /* non-fatal */ })
-      }
+      const svPayload = buildSecondVehiclePayload(data, isTowing, towed)
+      if (svPayload) usersApi.createSecondVehicle(svPayload).catch(() => { /* non-fatal */ })
       const res = await usersApi.createRig({
         ...data,
         isToyHauler: data.vehicleType === 'TOY_HAULER',

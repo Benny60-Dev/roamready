@@ -5,7 +5,7 @@ import { ArrowLeft } from 'lucide-react'
 import { usersApi } from '../../services/api'
 import { Rig, VehicleType } from '../../types'
 import { VEHICLE_LABELS } from './RigPage'
-import { deriveSecondVehicle, buildTowedFields, type TowingChoice } from '../../utils/rigs'
+import { deriveSecondVehicle, buildTowedFields, buildSecondVehiclePayload, type TowingChoice } from '../../utils/rigs'
 import { useScrollResetOnReady } from '../../hooks/useScrollResetOnReady'
 import RigFormFields from '../../components/forms/RigFormFields'
 
@@ -94,18 +94,8 @@ export default function EditRigPage() {
       const { isTowing, towed } = buildTowedFields(data, direction, towingChoice)
       // RIGINFO-4: optionally save the second vehicle to the reusable library.
       // Fire-and-forget — never block or fail the rig save on the library write.
-      if (data.saveSecondVehicle && isTowing) {
-        usersApi.createSecondVehicle({
-          towedType: towed.towedType,
-          year: towed.towedYear,
-          make: towed.towedMake,
-          model: towed.towedModel,
-          length: towed.towedLength,
-          height: towed.towedHeight,
-          licensePlate: towed.towedLicensePlate,
-          fuelType: towed.towedFuelType,
-        }).catch(() => { /* non-fatal */ })
-      }
+      const svPayload = buildSecondVehiclePayload(data, isTowing, towed)
+      if (svPayload) usersApi.createSecondVehicle(svPayload).catch(() => { /* non-fatal */ })
       await usersApi.updateRig(rig.id, {
         ...data,
         isToyHauler: data.vehicleType === 'TOY_HAULER',
