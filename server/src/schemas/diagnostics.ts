@@ -8,6 +8,7 @@ export const DIAGNOSTIC_QUERIES = [
   'user_overview',
   'orphan_check',
   'dangling_sessions',
+  'user_party',
 ] as const
 
 export type DiagnosticQuery = (typeof DIAGNOSTIC_QUERIES)[number]

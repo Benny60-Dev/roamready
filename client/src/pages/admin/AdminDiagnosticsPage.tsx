@@ -6,7 +6,7 @@ import { CopyForSupport } from '../../components/admin/Copy'
 
 // The fixed menu of canned read-only queries. There is NO free-text SQL input
 // anywhere — the page only ever sends a query KEY + pasted-in id/email.
-type QueryKey = 'trip_by_id' | 'user_overview' | 'orphan_check' | 'dangling_sessions'
+type QueryKey = 'trip_by_id' | 'user_overview' | 'orphan_check' | 'dangling_sessions' | 'user_party'
 
 const QUERIES: { key: QueryKey; label: string; needs: 'tripId' | 'userOrEmail' | 'none'; help: string }[] = [
   { key: 'trip_by_id', label: 'Trip by ID', needs: 'tripId',
@@ -17,6 +17,8 @@ const QUERIES: { key: QueryKey; label: string; needs: 'tripId' | 'userOrEmail' |
     help: 'Does the trip row exist, who owns it, and does it have zero stops (empty shell)?' },
   { key: 'dangling_sessions', label: 'Dangling-session integrity scan', needs: 'none',
     help: 'Sessions whose tripId points to a missing Trip row. Should be empty (FK is SetNull).' },
+  { key: 'user_party', label: 'User party snapshot (by user ID or email)', needs: 'userOrEmail',
+    help: "Legacy travelProfile counts (adults/children/hasPets — the source of the planning chip) next to the user's DEFAULT travel party (people traveling, adults/teens, pets). Use to spot party-vs-profile drift." },
 ]
 
 export default function AdminDiagnosticsPage() {
