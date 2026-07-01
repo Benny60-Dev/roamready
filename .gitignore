@@ -41,3 +41,6 @@ prisma/*.db-journal
 # Local developer tooling — not part of the codebase
 stripe-cli/
 *.exe
+
+# Session trackers — working docs kept in the folder for convenience, never code
+/RoamReady_Bug_Tracker_*.xlsx
