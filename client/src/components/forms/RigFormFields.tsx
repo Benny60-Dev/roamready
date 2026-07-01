@@ -1,12 +1,22 @@
-import { Controller, useWatch, type Control, type UseFormRegister } from 'react-hook-form'
-import { useEffect } from 'react'
-import { VehicleType } from '../../types'
+import { Controller, useWatch, type Control, type UseFormRegister, type UseFormSetValue } from 'react-hook-form'
+import { useEffect, useState } from 'react'
+import { VehicleType, SecondVehicle } from '../../types'
 import { deriveSecondVehicle, VEHICLE_LABELS, type TowingChoice } from '../../utils/rigs'
+import { usersApi } from '../../services/api'
 import RangeSelect from './RangeSelect'
 import { YEARS, LENGTHS, HEIGHTS, MPG_OPTIONS, TANK_OPTIONS, GVWR_OPTIONS } from '../../constants/rigOptions'
 
-// App teal — used for the "Where do I find this?" GVWR helper summary + link.
+// App teal — used for the "Where do I find this?" GVWR helper summary + link,
+// and the "Reuse a saved vehicle" picker accent.
 const TEAL = '#1F6F8B'
+
+/** Display label for a saved second vehicle — "[year] [make] [model]", falling
+ *  back to the towedType word when none are set. */
+function savedVehicleLabel(v: SecondVehicle): string {
+  const ymm = [v.year, v.make, v.model].filter(Boolean).join(' ').trim()
+  if (ymm) return ymm
+  return v.towedType === 'TRAILER' ? 'Trailer' : 'Vehicle'
+}
 
 interface RigFormFieldsProps {
   /** 'full' = Add/Edit rig page (every field). 'onboarding' = signup step
@@ -16,6 +26,7 @@ interface RigFormFieldsProps {
   vehicleType: VehicleType | undefined
   control: Control<any>
   register: UseFormRegister<any>
+  setValue: UseFormSetValue<any>
   towingChoice: TowingChoice
   setTowingChoice: (c: TowingChoice) => void
 }
@@ -34,6 +45,7 @@ export default function RigFormFields({
   vehicleType,
   control,
   register,
+  setValue,
   towingChoice,
   setTowingChoice,
 }: RigFormFieldsProps) {
@@ -43,6 +55,70 @@ export default function RigFormFields({
   const showSecondVehicleSection = direction !== 'none'
   const isToadDirection = direction === 'toad'
   const isTowVehicleDirection = direction === 'tow_vehicle'
+
+  // Saved second-vehicle library (RIGINFO-4). Fetched once the rig has a
+  // second-vehicle concept; used only to offer a "reuse" picker — selecting one
+  // COPIES its values into the rig's own towed* form fields.
+  const [savedVehicles, setSavedVehicles] = useState<SecondVehicle[]>([])
+  useEffect(() => {
+    if (direction === 'none') return
+    let cancelled = false
+    usersApi
+      .getSecondVehicles()
+      .then(res => { if (!cancelled) setSavedVehicles(res.data) })
+      .catch(() => { /* non-fatal — the picker just won't appear */ })
+    return () => { cancelled = true }
+  }, [direction])
+
+  // Copy a saved vehicle's values into the towed* form fields. In toad
+  // direction, also flip the radio to VEHICLE so the (just-filled) sub-form is
+  // the one shown.
+  function applySavedVehicle(v: SecondVehicle) {
+    setValue('towedYear', v.year ?? null)
+    setValue('towedMake', v.make ?? null)
+    setValue('towedModel', v.model ?? null)
+    setValue('towedLength', v.length ?? null)
+    setValue('towedHeight', v.height ?? null)
+    setValue('towedLicensePlate', v.licensePlate ?? null)
+    setValue('towedFuelType', v.fuelType ?? null)
+    if (isToadDirection) setTowingChoice('VEHICLE')
+  }
+
+  // Rendered at the TOP of each second-vehicle sub-form, but only when the user
+  // actually has saved vehicles (empty → renders nothing).
+  const savedVehiclePicker = savedVehicles.length > 0 && (
+    <div>
+      <label className="label" style={{ color: TEAL }}>Reuse a saved vehicle</label>
+      <select
+        className="input"
+        defaultValue=""
+        style={{ borderColor: TEAL }}
+        onChange={e => {
+          const v = savedVehicles.find(x => x.id === e.target.value)
+          if (v) applySavedVehicle(v)
+        }}
+      >
+        <option value="">Select a saved vehicle…</option>
+        {savedVehicles.map(v => (
+          <option key={v.id} value={v.id}>
+            {savedVehicleLabel(v)}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+
+  // Rendered near the BOTTOM of each second-vehicle sub-form. On submit, each
+  // page reads data.saveSecondVehicle and fires-and-forgets a createSecondVehicle.
+  const saveVehicleToggle = (
+    <div>
+      <label className="flex items-center gap-2 text-sm text-gray-700">
+        <input type="checkbox" {...register('saveSecondVehicle')} />
+        Save this vehicle to reuse
+      </label>
+      <p className="mt-1 text-xs text-gray-400">Keeps it in your list so the next rig can pick it.</p>
+    </div>
+  )
 
   // Keep towingChoice in sync with the derived direction (moved here so all
   // three host pages share one implementation). tow_vehicle has no radio — the
@@ -344,6 +420,7 @@ export default function RigFormFields({
 
           {towingChoice !== 'NONE' && (
             <div className="rounded-xl bg-gray-50 p-4 space-y-3">
+              {savedVehiclePicker}
               <div className="flex items-center gap-2">
                 <p className="text-sm font-medium text-gray-700">
                   {towingChoice === 'VEHICLE' ? 'Towed vehicle' : 'About your trailer'}
@@ -418,6 +495,7 @@ export default function RigFormFields({
                   </div>
                 </div>
               )}
+              {saveVehicleToggle}
             </div>
           )}
         </>
@@ -425,6 +503,7 @@ export default function RigFormFields({
 
       {showSecondVehicleSection && isTowVehicleDirection && (
         <div className="rounded-xl bg-gray-50 p-4 space-y-3">
+          {savedVehiclePicker}
           <div className="flex items-center gap-2">
             <p className="text-sm font-medium text-gray-700">
               Vehicle that tows your {VEHICLE_LABELS[vehicleType as VehicleType]}
@@ -507,6 +586,7 @@ export default function RigFormFields({
               </div>
             </div>
           )}
+          {saveVehicleToggle}
         </div>
       )}
     </>

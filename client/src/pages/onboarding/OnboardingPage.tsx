@@ -60,6 +60,20 @@ export default function OnboardingPage() {
       // wheel, so its GVWR + tow-vehicle data reaches the hazard router.
       const { direction } = deriveSecondVehicle(vehicleType)
       const { isTowing, towed } = buildTowedFields(data, direction, towingChoice)
+      // RIGINFO-4: optionally save the second vehicle to the reusable library.
+      // Fire-and-forget — never block or fail the rig save on the library write.
+      if (data.saveSecondVehicle && isTowing) {
+        usersApi.createSecondVehicle({
+          towedType: towed.towedType,
+          year: towed.towedYear,
+          make: towed.towedMake,
+          model: towed.towedModel,
+          length: towed.towedLength,
+          height: towed.towedHeight,
+          licensePlate: towed.towedLicensePlate,
+          fuelType: towed.towedFuelType,
+        }).catch(() => { /* non-fatal */ })
+      }
       await usersApi.createRig({
         ...data,
         vehicleType,
@@ -154,6 +168,7 @@ export default function OnboardingPage() {
                 vehicleType={vehicleType ?? undefined}
                 control={rigForm.control}
                 register={rigForm.register}
+                setValue={rigForm.setValue}
                 towingChoice={towingChoice}
                 setTowingChoice={setTowingChoice}
               />

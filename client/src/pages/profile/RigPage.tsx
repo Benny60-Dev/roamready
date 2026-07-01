@@ -223,7 +223,7 @@ export default function RigPage() {
   const [towingChoice, setTowingChoice] = useState<TowingChoice>('NONE')
   // Scroll the just-revealed "Add a rig" form into view (FR-RIG-ADD-SCROLL).
   const formRef = useRef<HTMLDivElement>(null)
-  const { register, handleSubmit, reset, watch, setFocus, control } = useForm()
+  const { register, handleSubmit, reset, watch, setFocus, control, setValue } = useForm()
   const vehicleType = watch('vehicleType') as VehicleType | undefined
   // Direction is derived from vehicleType; RigFormFields owns the towingChoice
   // sync effect and second-vehicle UI, so the page only needs `direction` for
@@ -256,6 +256,20 @@ export default function RigPage() {
       // Direction-aware towed-field payload (shared with EditRigPage +
       // OnboardingPage — see utils/rigs.buildTowedFields).
       const { isTowing, towed } = buildTowedFields(data, direction, towingChoice)
+      // RIGINFO-4: optionally save the second vehicle to the reusable library.
+      // Fire-and-forget — never block or fail the rig save on the library write.
+      if (data.saveSecondVehicle && isTowing) {
+        usersApi.createSecondVehicle({
+          towedType: towed.towedType,
+          year: towed.towedYear,
+          make: towed.towedMake,
+          model: towed.towedModel,
+          length: towed.towedLength,
+          height: towed.towedHeight,
+          licensePlate: towed.towedLicensePlate,
+          fuelType: towed.towedFuelType,
+        }).catch(() => { /* non-fatal */ })
+      }
       const res = await usersApi.createRig({
         ...data,
         isToyHauler: data.vehicleType === 'TOY_HAULER',
@@ -331,6 +345,7 @@ export default function RigPage() {
               vehicleType={vehicleType}
               control={control}
               register={register}
+              setValue={setValue}
               towingChoice={towingChoice}
               setTowingChoice={setTowingChoice}
             />

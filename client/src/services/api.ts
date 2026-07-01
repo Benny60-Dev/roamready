@@ -118,6 +118,11 @@ export const usersApi = {
   createMembership: (data: any) => api.post('/users/me/memberships', data),
   updateMembership: (id: string, data: any) => api.put(`/users/me/memberships/${id}`, data),
   deleteMembership: (id: string) => api.delete(`/users/me/memberships/${id}`),
+  // Saved second vehicles (RIGINFO-4) — reusable toads / tow vehicles that copy
+  // into a rig's towed* fields on select.
+  getSecondVehicles: () => api.get('/users/me/second-vehicles'),
+  createSecondVehicle: (data: any) => api.post('/users/me/second-vehicles', data),
+  deleteSecondVehicle: (id: string) => api.delete(`/users/me/second-vehicles/${id}`),
   // Travel Party (Phase B)
   getParties: () => api.get('/users/me/parties'),
   getDefaultParty: () => api.get('/users/me/parties/default'),

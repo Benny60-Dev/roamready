@@ -200,6 +200,23 @@ export interface Membership {
   isActive: boolean
 }
 
+// Saved/reusable second vehicle (RIGINFO-4) — a user-level toad / tow-vehicle
+// library. Copies into a rig's towed* fields on select in the rig form.
+export interface SecondVehicle {
+  id: string
+  userId: string
+  towedType: TowedType
+  year?: number | null
+  make?: string | null
+  model?: string | null
+  length?: number | null
+  height?: number | null
+  licensePlate?: string | null
+  fuelType?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Trip {
   id: string
   userId: string

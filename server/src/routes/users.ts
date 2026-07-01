@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 import { requireVerifiedEmail } from '../middleware/requireVerifiedEmail'
 import { validateBody } from '../middleware/validate'
-import { MembershipCreateSchema, MembershipUpdateSchema, TravelProfileUpsertSchema, MarketingConsentSchema } from '../schemas'
+import { MembershipCreateSchema, MembershipUpdateSchema, SecondVehicleCreateSchema, TravelProfileUpsertSchema, MarketingConsentSchema } from '../schemas'
 import {
   getMe,
   updateMe,
@@ -18,6 +18,9 @@ import {
   createMembership,
   updateMembership,
   deleteMembership,
+  getSecondVehicles,
+  createSecondVehicle,
+  deleteSecondVehicle,
 } from '../controllers/users'
 
 export const usersRouter = Router()
@@ -58,3 +61,7 @@ usersRouter.get('/me/memberships', getMemberships as any)
 usersRouter.post('/me/memberships', validateBody(MembershipCreateSchema), createMembership as any)
 usersRouter.put('/me/memberships/:id', validateBody(MembershipUpdateSchema), updateMembership as any)
 usersRouter.delete('/me/memberships/:id', deleteMembership as any)
+
+usersRouter.get('/me/second-vehicles', getSecondVehicles as any)
+usersRouter.post('/me/second-vehicles', validateBody(SecondVehicleCreateSchema), createSecondVehicle as any)
+usersRouter.delete('/me/second-vehicles/:id', deleteSecondVehicle as any)
