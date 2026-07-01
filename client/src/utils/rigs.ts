@@ -1,4 +1,4 @@
-import { VehicleType } from '../types'
+import { VehicleType, TowedType } from '../types'
 
 /**
  * Derive the relationship between a rig and its (optional or required) second
@@ -91,6 +91,80 @@ export function rigDisplayName(rig: {
   const ymm = [rig.year, rig.make, rig.model].filter(Boolean).join(' ').trim()
   if (ymm) return ymm
   return rig.vehicleType ? VEHICLE_LABELS[rig.vehicleType] : ''
+}
+
+// ── Towed-field save logic (shared by the three rig forms) ──────────────────
+// The local UI radio state used by the toad direction. Onboarding, Add (RigPage)
+// and Edit (EditRigPage) all keep a value of this shape.
+export type TowingChoice = 'NONE' | 'VEHICLE' | 'TRAILER'
+
+/**
+ * Build the direction-aware `isTowing` flag + `towed*` payload from the raw form
+ * values. This is the single source of truth for the towed-field serialization
+ * that RigPage, EditRigPage and OnboardingPage previously each hand-maintained
+ * (and had drifted on — onboarding never saved a tow_vehicle for trailers).
+ *
+ *   - tow_vehicle : required. Always isTowing=true, towedType='VEHICLE', carry
+ *                   year/make/model/length/plate + height/fuelType (tow-vehicle-
+ *                   only fields).
+ *   - toad + choice≠'NONE' : isTowing=true, towedType=choice; year/make/model
+ *                   only for a VEHICLE toad; length+plate carried; height+fuelType
+ *                   are never collected for a toad → null.
+ *   - else (toad+NONE, or 'none' direction) : isTowing=false, everything null.
+ *
+ * `data` is the react-hook-form values object; unset fields arrive undefined and
+ * are normalized to null so a stale value can never sneak through.
+ */
+export function buildTowedFields(
+  data: Record<string, unknown>,
+  direction: SecondVehicleDirection,
+  towingChoice: TowingChoice,
+): { isTowing: boolean; towed: Record<string, unknown> } {
+  const cleared: Record<string, unknown> = {
+    towedType: null,
+    towedYear: null,
+    towedMake: null,
+    towedModel: null,
+    towedLength: null,
+    towedLicensePlate: null,
+    towedHeight: null,
+    towedFuelType: null,
+  }
+
+  if (direction === 'tow_vehicle') {
+    return {
+      isTowing: true,
+      towed: {
+        towedType: 'VEHICLE' as TowedType,
+        towedYear: data.towedYear ?? null,
+        towedMake: data.towedMake ?? null,
+        towedModel: data.towedModel ?? null,
+        towedLength: data.towedLength ?? null,
+        towedLicensePlate: data.towedLicensePlate ?? null,
+        towedHeight: data.towedHeight ?? null,
+        towedFuelType: data.towedFuelType ?? null,
+      },
+    }
+  }
+
+  if (direction === 'toad' && towingChoice !== 'NONE') {
+    return {
+      isTowing: true,
+      towed: {
+        towedType: towingChoice as TowedType,
+        towedYear: towingChoice === 'VEHICLE' ? data.towedYear ?? null : null,
+        towedMake: towingChoice === 'VEHICLE' ? data.towedMake ?? null : null,
+        towedModel: towingChoice === 'VEHICLE' ? data.towedModel ?? null : null,
+        towedLength: data.towedLength ?? null,
+        towedLicensePlate: data.towedLicensePlate ?? null,
+        // Toad direction never collects height/fuelType — keep null.
+        towedHeight: null,
+        towedFuelType: null,
+      },
+    }
+  }
+
+  return { isTowing: false, towed: cleared }
 }
 
 // ── Rig completeness (FR-RIGINFO, build-time notice) ────────────────────────

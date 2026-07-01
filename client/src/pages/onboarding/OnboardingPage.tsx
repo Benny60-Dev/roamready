@@ -1,17 +1,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Check } from 'lucide-react'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { usersApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
-import { VehicleType, TowedType } from '../../types'
-import RangeSelect from '../../components/forms/RangeSelect'
+import { VehicleType } from '../../types'
 import MarketingOptInModal from '../../components/onboarding/MarketingOptInModal'
-import { YEARS, LENGTHS, HEIGHTS, MPG_OPTIONS, TANK_OPTIONS } from '../../constants/rigOptions'
-
-// Local UI shape — 'NONE' is the implicit default; serialized into
-// isTowing / towedType when the rig payload is built.
-type TowingChoice = 'NONE' | 'VEHICLE' | 'TRAILER'
+import RigFormFields from '../../components/forms/RigFormFields'
+import { deriveSecondVehicle, buildTowedFields, type TowingChoice } from '../../utils/rigs'
 
 const VEHICLE_OPTIONS: { type: VehicleType; emoji: string; label: string; sub: string }[] = [
   { type: 'RV_CLASS_A', emoji: '🚌', label: 'Class A Motorhome', sub: 'Large motorhome, 30-45ft' },
@@ -58,34 +54,18 @@ export default function OnboardingPage() {
     if (!vehicleType) return
     setLoading(true)
     try {
-      // Translate the towingChoice radio into the structured backend fields.
-      // TRAILER drops year/make/model since the form doesn't collect them; we
-      // null them out explicitly so a stale value can never sneak through.
-      const isTowing = towingChoice !== 'NONE'
-      const towedType: TowedType | null = isTowing ? (towingChoice as TowedType) : null
-      const towedFields = isTowing
-        ? {
-            towedType,
-            towedYear: towingChoice === 'VEHICLE' ? data.towedYear : null,
-            towedMake: towingChoice === 'VEHICLE' ? data.towedMake : null,
-            towedModel: towingChoice === 'VEHICLE' ? data.towedModel : null,
-            towedLength: data.towedLength ?? null,
-            towedLicensePlate: data.towedLicensePlate ?? null,
-          }
-        : {
-            towedType: null,
-            towedYear: null,
-            towedMake: null,
-            towedModel: null,
-            towedLength: null,
-            towedLicensePlate: null,
-          }
+      // Direction-aware towed-field payload — shared with RigPage + EditRigPage.
+      // Deriving direction (rather than the old motorhome-only radio gate) is
+      // what makes onboarding finally save a tow_vehicle for a trailer / fifth
+      // wheel, so its GVWR + tow-vehicle data reaches the hazard router.
+      const { direction } = deriveSecondVehicle(vehicleType)
+      const { isTowing, towed } = buildTowedFields(data, direction, towingChoice)
       await usersApi.createRig({
         ...data,
         vehicleType,
         isDefault: true,
         isTowing,
-        ...towedFields,
+        ...towed,
       })
       setStep('style')
     } catch (e) {
@@ -169,192 +149,14 @@ export default function OnboardingPage() {
             <h2 className="text-xl font-medium text-gray-900 mb-1">Tell us about your rig</h2>
             <p className="text-sm text-gray-500 mb-6">Used for campground compatibility filtering.</p>
             <form onSubmit={rigForm.handleSubmit(handleRigSubmit)} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Year</label>
-                  <Controller
-                    control={rigForm.control}
-                    name="year"
-                    render={({ field }) => (
-                      <RangeSelect options={YEARS} integer placeholder="Select year" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                    )}
-                  />
-                </div>
-                <div>
-                  <label className="label">Make</label>
-                  <input className="input" placeholder="Winnebago" {...rigForm.register('make')} />
-                </div>
-              </div>
-              <div>
-                <label className="label">Model</label>
-                <input className="input" placeholder="Journey 40R" {...rigForm.register('model')} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Length (ft)</label>
-                  <Controller
-                    control={rigForm.control}
-                    name="length"
-                    render={({ field }) => (
-                      <RangeSelect options={LENGTHS} placeholder="Select length" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                    )}
-                  />
-                </div>
-                <div>
-                  <label className="label">Height (ft)</label>
-                  <Controller
-                    control={rigForm.control}
-                    name="height"
-                    render={({ field }) => (
-                      <RangeSelect options={HEIGHTS} placeholder="Select height" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                    )}
-                  />
-                </div>
-              </div>
-              {vehicleType !== 'CAR_CAMPING' && vehicleType !== 'VAN' && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="label">MPG</label>
-                    <Controller
-                      control={rigForm.control}
-                      name="mpg"
-                      render={({ field }) => (
-                        <RangeSelect options={MPG_OPTIONS} placeholder="Select MPG" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                      )}
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Tank (gal)</label>
-                    <Controller
-                      control={rigForm.control}
-                      name="tankSize"
-                      render={({ field }) => (
-                        <RangeSelect options={TANK_OPTIONS} placeholder="Select tank size" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                      )}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* License plate */}
-              <div>
-                <label className="label">License plate</label>
-                <input
-                  className="input uppercase"
-                  style={{ textTransform: 'uppercase' }}
-                  placeholder="ABC-1234"
-                  {...rigForm.register('licensePlate')}
-                />
-                <p className="mt-1 text-xs text-gray-400">Most campgrounds ask for this at check-in.</p>
-              </div>
-
-              {/* Towing question — gated to motorhomes. Travel trailers / fifth
-                  wheels ARE the thing being towed; asking is nonsense for them. */}
-              {(vehicleType === 'RV_CLASS_A' || vehicleType === 'RV_CLASS_B' || vehicleType === 'RV_CLASS_C') && (
-                <>
-                  <div>
-                    <label className="label">Are you towing?</label>
-                    <div className="grid grid-cols-3 gap-2 mt-1">
-                      {([
-                        { val: 'NONE', label: 'Not towing' },
-                        { val: 'VEHICLE', label: 'Towing a vehicle' },
-                        { val: 'TRAILER', label: 'Towing a trailer' },
-                      ] as { val: TowingChoice; label: string }[]).map(opt => (
-                        <button
-                          key={opt.val}
-                          type="button"
-                          onClick={() => setTowingChoice(opt.val)}
-                          className={`px-3 py-2 rounded-xl text-sm border transition-colors ${
-                            towingChoice === opt.val
-                              ? 'border-[#1F6F8B] bg-[#E0F0F4] text-[#1F6F8B] font-medium'
-                              : 'border-gray-200 bg-white text-gray-700 hover:border-[#1F6F8B]/40'
-                          }`}
-                          style={{ borderWidth: '0.5px' }}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {towingChoice !== 'NONE' && (
-                    <div className="rounded-xl bg-gray-50 p-4 space-y-3">
-                      <p className="text-sm font-medium text-gray-700">
-                        {towingChoice === 'VEHICLE' ? 'About your toad' : 'About your trailer'}
-                      </p>
-                      {towingChoice === 'VEHICLE' && (
-                        <>
-                          <div className="grid grid-cols-3 gap-3">
-                            <div>
-                              <label className="label">Year</label>
-                              <Controller
-                                control={rigForm.control}
-                                name="towedYear"
-                                render={({ field }) => (
-                                  <RangeSelect options={YEARS} integer placeholder="Select year" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                                )}
-                              />
-                            </div>
-                            <div>
-                              <label className="label">Make</label>
-                              <input className="input" placeholder="Jeep" {...rigForm.register('towedMake')} />
-                            </div>
-                            <div>
-                              <label className="label">Model</label>
-                              <input className="input" placeholder="Wrangler" {...rigForm.register('towedModel')} />
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="label">Length (ft)</label>
-                              <Controller
-                                control={rigForm.control}
-                                name="towedLength"
-                                render={({ field }) => (
-                                  <RangeSelect options={LENGTHS} placeholder="Select length" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                                )}
-                              />
-                            </div>
-                            <div>
-                              <label className="label">License plate</label>
-                              <input
-                                className="input uppercase"
-                                style={{ textTransform: 'uppercase' }}
-                                placeholder="XYZ-5678"
-                                {...rigForm.register('towedLicensePlate')}
-                              />
-                            </div>
-                          </div>
-                        </>
-                      )}
-                      {towingChoice === 'TRAILER' && (
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="label">Length (ft)</label>
-                            <Controller
-                              control={rigForm.control}
-                              name="towedLength"
-                              render={({ field }) => (
-                                <RangeSelect options={LENGTHS} placeholder="Select length" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                              )}
-                            />
-                          </div>
-                          <div>
-                            <label className="label">License plate</label>
-                            <input
-                              className="input uppercase"
-                              style={{ textTransform: 'uppercase' }}
-                              placeholder="XYZ-5678"
-                              {...rigForm.register('towedLicensePlate')}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-
+              <RigFormFields
+                variant="onboarding"
+                vehicleType={vehicleType ?? undefined}
+                control={rigForm.control}
+                register={rigForm.register}
+                towingChoice={towingChoice}
+                setTowingChoice={setTowingChoice}
+              />
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={skipRig} className="btn-ghost flex-1">Skip for now</button>
                 <button type="submit" disabled={loading} className="btn-primary flex-1">
