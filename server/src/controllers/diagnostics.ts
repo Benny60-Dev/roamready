@@ -86,6 +86,34 @@ function danglingSessions() {
   `)
 }
 
+// (e) User-party snapshot — legacy travelProfile counts (adults/children/hasPets,
+// the source of the planning chip) next to the user's DEFAULT structured travel
+// party (people traveling, adults/teens, pets). Diagnoses party-vs-profile drift.
+async function userParty(input: DiagnosticInput) {
+  const userRows = await prismaReadOnly!.$queryRaw<any[]>(Prisma.sql`
+    SELECT id, email, "firstName", "lastName"
+    FROM "User"
+    WHERE ${input.userId ? Prisma.sql`id = ${input.userId}` : Prisma.sql`email ILIKE ${input.email}`}
+    LIMIT 1
+  `)
+  const user = userRows[0] ?? null
+  if (!user) return { user: null, travelProfile: null, defaultParty: null }
+  const profileRows = await prismaReadOnly!.$queryRaw<any[]>(Prisma.sql`
+    SELECT adults, children, "hasPets"
+    FROM "TravelProfile" WHERE "userId" = ${user.id} LIMIT 1
+  `)
+  const partyRows = await prismaReadOnly!.$queryRaw<any[]>(Prisma.sql`
+    SELECT p.id, p."isDefault",
+           (SELECT COUNT(*)::int FROM "Person" pe WHERE pe."partyId" = p.id AND pe."isTraveling") AS people_traveling,
+           (SELECT COUNT(*)::int FROM "Person" pe WHERE pe."partyId" = p.id AND pe."isTraveling" AND pe.role IN ('ADULT','TEEN')) AS adults_teens_traveling,
+           (SELECT COUNT(*)::int FROM "Pet" pt WHERE pt."partyId" = p.id) AS pets
+    FROM "TravelParty" p
+    WHERE p."userId" = ${user.id} AND p."isDefault" = true
+    LIMIT 1
+  `)
+  return { user, travelProfile: profileRows[0] ?? null, defaultParty: partyRows[0] ?? null }
+}
+
 export async function runDiagnostic(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     // Layer 4 — fail closed. No read-only client => the feature is off; never
@@ -117,6 +145,10 @@ export async function runDiagnostic(req: AuthRequest, res: Response, next: NextF
         break
       case 'dangling_sessions':
         result = await danglingSessions()
+        break
+      case 'user_party':
+        if (!input.userId && !input.email) throw new AppError('userId or email is required for this query', 400)
+        result = await userParty(input)
         break
     }
 
