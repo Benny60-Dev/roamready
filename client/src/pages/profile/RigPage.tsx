@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { Link } from 'react-router-dom'
 import { Plus, Trash2, Star, Pencil, BadgeInfo, Car, Truck, AlertCircle } from 'lucide-react'
 import { usersApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
-import { Rig, VehicleType, TowedType } from '../../types'
-import { deriveSecondVehicle, VEHICLE_LABELS } from '../../utils/rigs'
-import RangeSelect from '../../components/forms/RangeSelect'
-import { YEARS, LENGTHS, HEIGHTS, MPG_OPTIONS, TANK_OPTIONS, GVWR_OPTIONS } from '../../constants/rigOptions'
+import { Rig, VehicleType } from '../../types'
+import { deriveSecondVehicle, VEHICLE_LABELS, buildTowedFields, type TowingChoice } from '../../utils/rigs'
+import RigFormFields from '../../components/forms/RigFormFields'
 
 // VEHICLE_LABELS now lives in utils/rigs (so utils can reuse it without a
 // circular import). Re-exported here so existing `import { VEHICLE_LABELS }
@@ -217,8 +216,6 @@ function SecondVehicleCard({ rig }: { rig: Rig }) {
   )
 }
 
-type TowingChoice = 'NONE' | 'VEHICLE' | 'TRAILER'
-
 export default function RigPage() {
   const [rigs, setRigs] = useState<Rig[]>([])
   const [showForm, setShowForm] = useState(false)
@@ -228,27 +225,10 @@ export default function RigPage() {
   const formRef = useRef<HTMLDivElement>(null)
   const { register, handleSubmit, reset, watch, setFocus, control } = useForm()
   const vehicleType = watch('vehicleType') as VehicleType | undefined
-  const isToyHauler = vehicleType === 'TOY_HAULER'
-  // Block 7 — second-vehicle direction is derived from vehicleType. There's
-  // no second-vehicle UI for 'none' direction (vans, car camping); 'toad'
-  // shows the optional radio + sub-form (motorhomes); 'tow_vehicle' shows
-  // an always-on sub-form (trailers/5th wheels — they can't move without
-  // it, so we don't ask "are you towing", we just ask "tell us about it").
+  // Direction is derived from vehicleType; RigFormFields owns the towingChoice
+  // sync effect and second-vehicle UI, so the page only needs `direction` for
+  // the save-time payload (buildTowedFields).
   const { direction } = deriveSecondVehicle(vehicleType)
-  const showSecondVehicleSection = direction !== 'none'
-  const isToadDirection = direction === 'toad'
-  const isTowVehicleDirection = direction === 'tow_vehicle'
-
-  // Keep towingChoice in sync with direction. For tow_vehicle direction,
-  // there's no radio — second vehicle is always a VEHICLE (the truck) and
-  // is always present (set isTowing=true at save). For 'none' direction,
-  // force back to NONE so a previous toad selection doesn't leak through if
-  // the user re-picks vehicleType.
-  useEffect(() => {
-    if (isTowVehicleDirection) setTowingChoice('VEHICLE')
-    else if (direction === 'none') setTowingChoice('NONE')
-    // 'toad' direction — leave the user's radio choice intact
-  }, [direction, isTowVehicleDirection])
 
   useEffect(() => {
     usersApi.getRigs().then(res => setRigs(res.data))
@@ -273,47 +253,9 @@ export default function RigPage() {
   async function onSubmit(data: any) {
     setSaving(true)
     try {
-      // Build towed fields per direction. tow_vehicle always saves the truck
-      // (it's required). toad saves only when the user picked VEHICLE or
-      // TRAILER. 'none' clears everything.
-      let isTowing = false
-      let towedFields: Record<string, unknown> = {
-        towedType: null,
-        towedYear: null,
-        towedMake: null,
-        towedModel: null,
-        towedLength: null,
-        towedLicensePlate: null,
-        towedHeight: null,
-        towedFuelType: null,
-      }
-      if (isTowVehicleDirection) {
-        isTowing = true
-        towedFields = {
-          towedType: 'VEHICLE' as TowedType,
-          towedYear: data.towedYear ?? null,
-          towedMake: data.towedMake ?? null,
-          towedModel: data.towedModel ?? null,
-          towedLength: data.towedLength ?? null,
-          towedLicensePlate: data.towedLicensePlate ?? null,
-          towedHeight: data.towedHeight ?? null,
-          towedFuelType: data.towedFuelType ?? null,
-        }
-      } else if (isToadDirection && towingChoice !== 'NONE') {
-        isTowing = true
-        towedFields = {
-          towedType: towingChoice as TowedType,
-          towedYear: towingChoice === 'VEHICLE' ? data.towedYear ?? null : null,
-          towedMake:  towingChoice === 'VEHICLE' ? data.towedMake  ?? null : null,
-          towedModel: towingChoice === 'VEHICLE' ? data.towedModel ?? null : null,
-          towedLength: data.towedLength ?? null,
-          towedLicensePlate: data.towedLicensePlate ?? null,
-          // Toad direction: height + fuelType are never collected (form
-          // omits the inputs), so they stay null.
-          towedHeight: null,
-          towedFuelType: null,
-        }
-      }
+      // Direction-aware towed-field payload (shared with EditRigPage +
+      // OnboardingPage — see utils/rigs.buildTowedFields).
+      const { isTowing, towed } = buildTowedFields(data, direction, towingChoice)
       const res = await usersApi.createRig({
         ...data,
         isToyHauler: data.vehicleType === 'TOY_HAULER',
@@ -321,7 +263,7 @@ export default function RigPage() {
         isCamper: data.vehicleType === 'CAR_CAMPING',
         isDefault: rigs.length === 0,
         isTowing,
-        ...towedFields,
+        ...towed,
       })
       setRigs([...rigs, res.data])
       setShowForm(false)
@@ -384,390 +326,14 @@ export default function RigPage() {
         <div ref={formRef} className="card-lg scroll-mt-20">
           <h3 className="font-medium text-gray-900 mb-4">Add a rig</h3>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div>
-              <label className="label">Vehicle type</label>
-              <select className="input" {...register('vehicleType', { required: true })}>
-                {Object.entries(VEHICLE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="label">Year</label>
-                <Controller
-                  control={control}
-                  name="year"
-                  render={({ field }) => (
-                    <RangeSelect options={YEARS} integer placeholder="Select year" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                  )}
-                />
-              </div>
-              <div>
-                <label className="label">Make</label>
-                <input className="input" {...register('make')} />
-              </div>
-              <div>
-                <label className="label">Model</label>
-                <input className="input" {...register('model')} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">Length (ft)</label>
-                <Controller
-                  control={control}
-                  name="length"
-                  render={({ field }) => (
-                    <RangeSelect options={LENGTHS} placeholder="Select length" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                  )}
-                />
-              </div>
-              <div>
-                <label className="label">Height (ft)</label>
-                <Controller
-                  control={control}
-                  name="height"
-                  render={({ field }) => (
-                    <RangeSelect options={HEIGHTS} placeholder="Select height" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                  )}
-                />
-              </div>
-            </div>
-            {/* Weight — GVWR in POUNDS (US units, matching Length/Height in feet).
-                Optional. Feeds vehicle[grossWeight] in HERE truck routing for
-                weight-restricted bridge/road avoidance. */}
-            <div>
-              <label className="label">Weight – GVWR (lbs)</label>
-              <Controller
-                control={control}
-                name="gvwr"
-                render={({ field }) => (
-                  <RangeSelect options={GVWR_OPTIONS} integer placeholder="Select GVWR" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                )}
-              />
-              <p className="text-xs text-gray-400 mt-1">Optional. Gross Vehicle Weight Rating in pounds — used for weight-restricted routing.</p>
-            </div>
-            {/* ── Fuel / MPG section — adapts to rig type (Pass 2 of towing-
-                aware fuel estimate, May 2026). TRAILERS get ONE MPG bound
-                to mpgTowing (the rig itself has no engine; only the tow
-                vehicle's mileage matters); the rig's own fuelType row is
-                omitted because pricing uses towedFuelType captured in the
-                second-vehicle section below. MOTORHOMES / VANS / CAR
-                CAMPING get TWO MPG fields — solo + towing-a-toad — plus
-                the rig's own fuel type. See computeFuelEstimate in
-                server/src/services/fuelPrice.ts for the consumer side. */}
-            {isTowVehicleDirection ? (
-              <>
-                <p className="text-xs text-gray-500 italic">
-                  Your {VEHICLE_LABELS[vehicleType as VehicleType]?.toLowerCase() ?? 'trailer'} is towed,
-                  so we just need your tow vehicle's mileage with it hitched.
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="label">MPG — towing this trailer</label>
-                    <Controller
-                      control={control}
-                      name="mpgTowing"
-                      render={({ field }) => (
-                        <RangeSelect options={MPG_OPTIONS} placeholder="Select MPG" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                      )}
-                    />
-                    <p className="mt-1 text-xs text-gray-400">What your tow vehicle gets pulling this rig.</p>
-                  </div>
-                  <div>
-                    <label className="label">Tank (gal)</label>
-                    <Controller
-                      control={control}
-                      name="tankSize"
-                      render={({ field }) => (
-                        <RangeSelect options={TANK_OPTIONS} placeholder="Select tank size" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                      )}
-                    />
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="label">Fuel type</label>
-                    <select className="input" {...register('fuelType')}>
-                      <option value="">Any</option>
-                      <option value="Gas">Gas</option>
-                      <option value="Diesel">Diesel</option>
-                      <option value="Electric">Electric</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="label">MPG — solo</label>
-                    <Controller
-                      control={control}
-                      name="mpg"
-                      render={({ field }) => (
-                        <RangeSelect options={MPG_OPTIONS} placeholder="Select MPG" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                      )}
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Tank (gal)</label>
-                    <Controller
-                      control={control}
-                      name="tankSize"
-                      render={({ field }) => (
-                        <RangeSelect options={TANK_OPTIONS} placeholder="Select tank size" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                      )}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="label">MPG — towing a toad</label>
-                  <Controller
-                    control={control}
-                    name="mpgTowing"
-                    render={({ field }) => (
-                      <RangeSelect options={MPG_OPTIONS} placeholder="Select MPG" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                    )}
-                  />
-                  <p className="mt-1 text-xs text-gray-400">
-                    Trips use the towing figure when you're bringing the toad, solo otherwise. Leave blank to always use solo.
-                  </p>
-                </div>
-              </>
-            )}
-            <div>
-              <label className="label">Electrical amps</label>
-              <select className="input" {...register('electricalAmps')}>
-                <option value="">None</option>
-                <option value="30">30 amp</option>
-                <option value="50">50 amp</option>
-              </select>
-            </div>
-            {isToyHauler && (
-              <div className="border border-amber-100 rounded-xl p-4 bg-amber-50/30 space-y-3">
-                <p className="text-sm font-medium text-amber-800">🏍️ Toy Hauler Details</p>
-                <div>
-                  <label className="label">Garage length (ft)</label>
-                  <Controller
-                    control={control}
-                    name="garageLength"
-                    render={({ field }) => (
-                      <RangeSelect options={LENGTHS} placeholder="Select length" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                    )}
-                  />
-                </div>
-                <div>
-                  <label className="label">Toys (check all that apply)</label>
-                  <div className="grid grid-cols-2 gap-2 mt-1">
-                    {['ATV/Quad', 'UTV/Side-by-side', 'Dirt bikes', 'Motorcycles', 'Snowmobiles', 'Watercraft'].map(toy => (
-                      <label key={toy} className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" value={toy} {...register('toys')} />
-                        {toy}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* License plate */}
-            <div>
-              <label className="label">License plate</label>
-              <input
-                className="input"
-                style={{ textTransform: 'uppercase' }}
-                placeholder="ABC-1234"
-                {...register('licensePlate')}
-              />
-              <p className="mt-1 text-xs text-gray-400">Most campgrounds ask for this at check-in.</p>
-            </div>
-
-            {/* ── Second-vehicle section (Block 7) ─────────────────────────
-                Direction derived from vehicleType:
-                  - toad        : optional. Radio (None/Vehicle/Trailer) +
-                                  conditional sub-form. No fuel type field
-                                  (toad's unhooked at camp).
-                  - tow_vehicle : required. Always-on sub-form with the truck
-                                  details + fuel type + optional height. No
-                                  radio (it's always a vehicle).
-                  - none        : section hidden entirely (vans, car camping).
-            */}
-            {showSecondVehicleSection && isToadDirection && (
-              <>
-                <div>
-                  <label className="label">Are you towing?</label>
-                  <div className="grid grid-cols-3 gap-2 mt-1">
-                    {([
-                      { val: 'NONE', label: 'Not towing' },
-                      { val: 'VEHICLE', label: 'Towing a vehicle' },
-                      { val: 'TRAILER', label: 'Towing a trailer' },
-                    ] as { val: TowingChoice; label: string }[]).map(opt => (
-                      <button
-                        key={opt.val}
-                        type="button"
-                        onClick={() => setTowingChoice(opt.val)}
-                        className={`px-3 py-2 rounded-xl text-sm border transition-colors ${
-                          towingChoice === opt.val
-                            ? 'border-[#1F6F8B] bg-[#E0F0F4] text-[#1F6F8B] font-medium'
-                            : 'border-gray-200 bg-white text-gray-700 hover:border-[#1F6F8B]/40'
-                        }`}
-                        style={{ borderWidth: '0.5px' }}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {towingChoice !== 'NONE' && (
-                  <div className="rounded-xl bg-gray-50 p-4 space-y-3">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-gray-700">
-                        {towingChoice === 'VEHICLE' ? 'Towed vehicle' : 'About your trailer'}
-                      </p>
-                      {towingChoice === 'VEHICLE' && <span className="badge-active text-xs">Toad</span>}
-                    </div>
-                    {towingChoice === 'VEHICLE' && (
-                      <>
-                        <div className="grid grid-cols-3 gap-3">
-                          <div>
-                            <label className="label">Year</label>
-                            <Controller
-                              control={control}
-                              name="towedYear"
-                              render={({ field }) => (
-                                <RangeSelect options={YEARS} integer placeholder="Select year" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                              )}
-                            />
-                          </div>
-                          <div>
-                            <label className="label">Make</label>
-                            <input className="input" placeholder="Jeep" {...register('towedMake')} />
-                          </div>
-                          <div>
-                            <label className="label">Model</label>
-                            <input className="input" placeholder="Wrangler" {...register('towedModel')} />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="label">Length (ft)</label>
-                            <Controller
-                              control={control}
-                              name="towedLength"
-                              render={({ field }) => (
-                                <RangeSelect options={LENGTHS} placeholder="Select length" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                              )}
-                            />
-                          </div>
-                          <div>
-                            <label className="label">License plate</label>
-                            <input
-                              className="input"
-                              style={{ textTransform: 'uppercase' }}
-                              placeholder="XYZ-5678"
-                              {...register('towedLicensePlate')}
-                            />
-                          </div>
-                        </div>
-                      </>
-                    )}
-                    {towingChoice === 'TRAILER' && (
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="label">Length (ft)</label>
-                          <Controller
-                            control={control}
-                            name="towedLength"
-                            render={({ field }) => (
-                              <RangeSelect options={LENGTHS} placeholder="Select length" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                            )}
-                          />
-                        </div>
-                        <div>
-                          <label className="label">License plate</label>
-                          <input
-                            className="input"
-                            style={{ textTransform: 'uppercase' }}
-                            placeholder="XYZ-5678"
-                            {...register('towedLicensePlate')}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-
-            {showSecondVehicleSection && isTowVehicleDirection && (
-              <div className="rounded-xl bg-gray-50 p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-gray-700">Your tow vehicle</p>
-                  <span className="badge-active text-xs">Required to tow</span>
-                </div>
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="label">Year</label>
-                    <Controller
-                      control={control}
-                      name="towedYear"
-                      render={({ field }) => (
-                        <RangeSelect options={YEARS} integer placeholder="Select year" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                      )}
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Make</label>
-                    <input className="input" placeholder="Ford" {...register('towedMake')} />
-                  </div>
-                  <div>
-                    <label className="label">Model</label>
-                    <input className="input" placeholder="F-250" {...register('towedModel')} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="label">Length (ft)</label>
-                    <Controller
-                      control={control}
-                      name="towedLength"
-                      render={({ field }) => (
-                        <RangeSelect options={LENGTHS} placeholder="Select length" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                      )}
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Height (ft)</label>
-                    <Controller
-                      control={control}
-                      name="towedHeight"
-                      render={({ field }) => (
-                        <RangeSelect options={HEIGHTS} placeholder="Select height" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
-                      )}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="label">License plate</label>
-                    <input
-                      className="input"
-                      style={{ textTransform: 'uppercase' }}
-                      placeholder="ABC-1234"
-                      {...register('towedLicensePlate')}
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Fuel type</label>
-                    <select className="input" {...register('towedFuelType')}>
-                      <option value="">Any</option>
-                      <option value="Gas">Gas</option>
-                      <option value="Diesel">Diesel</option>
-                      <option value="Electric">Electric</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            )}
+            <RigFormFields
+              variant="full"
+              vehicleType={vehicleType}
+              control={control}
+              register={register}
+              towingChoice={towingChoice}
+              setTowingChoice={setTowingChoice}
+            />
 
             <div className="flex gap-2">
               <button type="button" onClick={() => { setShowForm(false); reset(); setTowingChoice('NONE') }} className="btn-ghost flex-1">Cancel</button>
