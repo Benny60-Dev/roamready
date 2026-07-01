@@ -2,6 +2,7 @@
 // Re-export each schema module from here so callers can import from `../schemas`.
 export * from './stop'
 export * from './membership'
+export * from './secondVehicle'
 export * from './trip'
 export * from './planningSession'
 export * from './travelProfile'

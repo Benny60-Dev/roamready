@@ -109,6 +109,7 @@ model User {
   journalEntries      JournalEntry[]
   visitedStates       VisitedState[]
   packingTemplates    PackingTemplate[]
+  secondVehicles      SecondVehicle[]
 }
 
 // Saved/reusable packing lists (FR-SAVED-PACKING). A USER-level template:
@@ -344,6 +345,30 @@ model Membership {
   // (userId, type) rows in the DB before adding this — additive constraint,
   // no data loss.
   @@unique([userId, type])
+}
+
+// Saved/reusable second vehicles (RIGINFO-4). A USER-level library of toads
+// (flat-towed cars) and tow vehicles (the truck in front of a trailer) so
+// switching rigs doesn't force re-entering the same F-150 / Jeep. On select in
+// the rig form these COPY into the rig's own towed* fields — the Rig keeps its
+// own copy, and no existing rig.towed* consumer (fuel, hazard, PDF, booking
+// stamp, cards, modal) is repointed. Purely additive. Reuses the TowedType enum.
+model SecondVehicle {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  towedType    TowedType
+  year         Int?
+  make         String?
+  model        String?
+  length       Float?
+  height       Float?
+  licensePlate String?
+  fuelType     String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([userId])
 }
 
 model Trip {

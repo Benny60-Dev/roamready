@@ -2,7 +2,7 @@ import { Response, NextFunction } from 'express'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
-import type { MembershipCreateInput, MembershipUpdateInput } from '../schemas'
+import type { MembershipCreateInput, MembershipUpdateInput, SecondVehicleCreateInput } from '../schemas'
 import { geocodeHomeAddress } from '../utils/geocodeHome'
 
 const DEFAULT_RV_MAINTENANCE = [
@@ -409,5 +409,60 @@ export async function deleteMembership(req: AuthRequest, res: Response, next: Ne
     if (!m) throw new AppError('Membership not found', 404)
     await prisma.membership.delete({ where: { id: req.params.id } })
     res.json({ message: 'Membership deleted' })
+  } catch (err) { next(err) }
+}
+
+// ── Saved second vehicles (RIGINFO-4) ───────────────────────────────────────
+// A user-level library of reusable toads / tow vehicles. These COPY into a
+// rig's own towed* fields on select in the rig form — they never repoint the
+// existing rig.towed* consumers. Mirrors the memberships trio above.
+
+export async function getSecondVehicles(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const vehicles = await prisma.secondVehicle.findMany({
+      where: { userId: req.user!.id },
+      orderBy: { updatedAt: 'desc' },
+    })
+    res.json(vehicles)
+  } catch (err) { next(err) }
+}
+
+export async function createSecondVehicle(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    // req.body is a parsed SecondVehicleCreateInput (validateBody on the route).
+    // userId comes from req.user, NEVER the body — .strict() would already have
+    // rejected a client-supplied userId with a 400.
+    const data: SecondVehicleCreateInput = req.body
+
+    // Light dedupe — keep the saved list clean. If an identical
+    // (userId, towedType, year, make, model) row already exists, return it
+    // (200) rather than inserting a near-duplicate the user has to prune. This
+    // is a convenience guard, not a uniqueness constraint (no @@unique on the
+    // model — a user could legitimately want two same-model trucks with
+    // different plates), so there's no P2002 race to translate.
+    const existing = await prisma.secondVehicle.findFirst({
+      where: {
+        userId: req.user!.id,
+        towedType: data.towedType,
+        year: data.year ?? null,
+        make: data.make ?? null,
+        model: data.model ?? null,
+      },
+    })
+    if (existing) return res.status(200).json(existing)
+
+    const vehicle = await prisma.secondVehicle.create({
+      data: { ...data, userId: req.user!.id },
+    })
+    res.status(201).json(vehicle)
+  } catch (err) { next(err) }
+}
+
+export async function deleteSecondVehicle(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const v = await prisma.secondVehicle.findFirst({ where: { id: req.params.id, userId: req.user!.id } })
+    if (!v) throw new AppError('Second vehicle not found', 404)
+    await prisma.secondVehicle.delete({ where: { id: req.params.id } })
+    res.json({ message: 'Second vehicle deleted' })
   } catch (err) { next(err) }
 }
