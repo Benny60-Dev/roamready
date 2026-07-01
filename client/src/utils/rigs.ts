@@ -167,6 +167,45 @@ export function buildTowedFields(
   return { isTowing: false, towed: cleared }
 }
 
+/**
+ * Build the POST body for saving a towed unit to the reusable second-vehicle
+ * library (RIGINFO-4), or return null when there's nothing worth saving. Single
+ * source of truth shared by RigPage / EditRigPage / OnboardingPage so the guard
+ * can't drift across the three call sites.
+ *
+ * Returns null UNLESS the user opted in (data.saveSecondVehicle), the rig is
+ * actually towing, AND the towed unit has at least one identifying field
+ * (year / make / model). The last check kills the "nameless row" bug — checking
+ * "save to reuse" with every identifying field blank creates no library row.
+ */
+export function buildSecondVehiclePayload(
+  data: Record<string, unknown>,
+  isTowing: boolean,
+  towed: Record<string, unknown>,
+): {
+  towedType: unknown
+  year: unknown
+  make: unknown
+  model: unknown
+  length: unknown
+  height: unknown
+  licensePlate: unknown
+  fuelType: unknown
+} | null {
+  const hasIdentifier = !!(towed.towedYear || towed.towedMake || towed.towedModel)
+  if (!(data.saveSecondVehicle === true && isTowing && hasIdentifier)) return null
+  return {
+    towedType: towed.towedType,
+    year: towed.towedYear,
+    make: towed.towedMake,
+    model: towed.towedModel,
+    length: towed.towedLength,
+    height: towed.towedHeight,
+    licensePlate: towed.towedLicensePlate,
+    fuelType: towed.towedFuelType,
+  }
+}
+
 // ── Rig completeness (FR-RIGINFO, build-time notice) ────────────────────────
 // The safety dimensions the hazard matcher reads server-side (controllers/
 // trips.ts hazardFiresForRig): length (rig.length), height (rig.height), and

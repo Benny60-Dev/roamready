@@ -7,7 +7,7 @@ import { useAuthStore } from '../../store/authStore'
 import { VehicleType } from '../../types'
 import MarketingOptInModal from '../../components/onboarding/MarketingOptInModal'
 import RigFormFields from '../../components/forms/RigFormFields'
-import { deriveSecondVehicle, buildTowedFields, type TowingChoice } from '../../utils/rigs'
+import { deriveSecondVehicle, buildTowedFields, buildSecondVehiclePayload, type TowingChoice } from '../../utils/rigs'
 
 const VEHICLE_OPTIONS: { type: VehicleType; emoji: string; label: string; sub: string }[] = [
   { type: 'RV_CLASS_A', emoji: '🚌', label: 'Class A Motorhome', sub: 'Large motorhome, 30-45ft' },
@@ -62,18 +62,8 @@ export default function OnboardingPage() {
       const { isTowing, towed } = buildTowedFields(data, direction, towingChoice)
       // RIGINFO-4: optionally save the second vehicle to the reusable library.
       // Fire-and-forget — never block or fail the rig save on the library write.
-      if (data.saveSecondVehicle && isTowing) {
-        usersApi.createSecondVehicle({
-          towedType: towed.towedType,
-          year: towed.towedYear,
-          make: towed.towedMake,
-          model: towed.towedModel,
-          length: towed.towedLength,
-          height: towed.towedHeight,
-          licensePlate: towed.towedLicensePlate,
-          fuelType: towed.towedFuelType,
-        }).catch(() => { /* non-fatal */ })
-      }
+      const svPayload = buildSecondVehiclePayload(data, isTowing, towed)
+      if (svPayload) usersApi.createSecondVehicle(svPayload).catch(() => { /* non-fatal */ })
       await usersApi.createRig({
         ...data,
         vehicleType,
