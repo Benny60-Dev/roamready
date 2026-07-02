@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express'
+import jwt from 'jsonwebtoken'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
@@ -24,6 +25,9 @@ function publicUserRow(u: any) {
     // Complimentary Pro — badged distinctly from real Stripe Pro on the client.
     compTier: u.compTier ?? null,
     compExpiresAt: u.compExpiresAt ?? null,
+    // Surfaced so the client can hide "Act as user" for owner rows (the server
+    // impersonate guard is the real protection; this is belt-and-suspenders).
+    isOwner: u.isOwner ?? false,
   }
 }
 
@@ -137,6 +141,8 @@ export async function getSubscribers(req: AuthRequest, res: Response, next: Next
         subscriptionTier: true, subscriptionEndsAt: true, createdAt: true,
         deactivatedAt: true, deactivatedReason: true,
         compTier: true, compExpiresAt: true,
+        // isOwner — lets the client hide "Act as user" on owner rows.
+        isOwner: true,
       },
       orderBy: { createdAt: 'desc' },
     }
@@ -239,6 +245,57 @@ export async function revokeProUser(req: AuthRequest, res: Response, next: NextF
 
     const updated = await accountLifecycle.revokePro(targetId, req.user!.id)
     res.json(publicUserRow(updated))
+  } catch (err) { next(err) }
+}
+
+// Admin "act as user" (impersonation). Owner-gated by the adminRouter.use mount
+// (requireAuth + requireVerifiedEmail + requireOwner). Mints a standalone,
+// TARGET-scoped 1-hour access token carrying an impersonatedBy claim, writes an
+// IMPERSONATE audit row, and returns ONLY that token. It deliberately does NOT
+// touch the refresh cookie — the admin's own refresh cookie must stay intact so
+// the client can restore the real admin session on Exit — and does NOT mutate
+// the target user in any way.
+export async function impersonateUser(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const targetId = req.params.id
+    const adminId = req.user!.id
+
+    // Refuse self (would pointlessly re-mint the operator's own session).
+    if (targetId === adminId) throw new AppError('You cannot act as yourself', 400)
+
+    // `as any` on select + result mirrors the file's pattern for the stale
+    // pre-migration Prisma client (deactivatedAt isn't on its generated types
+    // yet, though the column exists and is returned at runtime).
+    const target = await prisma.user.findUnique({
+      where: { id: targetId },
+      select: { id: true, isOwner: true, deactivatedAt: true } as any,
+    }) as any
+    if (!target) throw new AppError('User not found', 404)
+    // Owners must never be able to enter each other's accounts.
+    if (target.isOwner) throw new AppError('You cannot act as another owner', 403)
+    // A suspended account can't be logged into normally; don't tunnel in either.
+    if (target.deactivatedAt) throw new AppError('This account is suspended', 400)
+
+    // Audit trail — one row per impersonation. Cast through `any` for the same
+    // pre-migration-Prisma-client reason as accountLifecycle's log writes.
+    await (prisma as any).adminActionLog.create({
+      data: {
+        action: 'IMPERSONATE',
+        targetUserId: targetId,
+        performedBy: adminId,
+        reason: req.body?.reason ?? null,
+      },
+    })
+
+    // Standalone impersonation ACCESS token: scoped to the target user, 1h
+    // expiry, carrying impersonatedBy for server-side awareness. No refresh
+    // token is issued and the admin's refresh cookie is left untouched.
+    const accessToken = jwt.sign(
+      { userId: targetId, impersonatedBy: adminId },
+      process.env.JWT_SECRET!,
+      { expiresIn: '1h' },
+    )
+    res.json({ accessToken })
   } catch (err) { next(err) }
 }
 

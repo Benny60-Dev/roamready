@@ -34,3 +34,14 @@ export const AdminGrantProSchema = z
   })
 
 export type AdminGrantProInput = z.infer<typeof AdminGrantProSchema>
+
+// Body for POST /admin/users/:id/impersonate ("act as user"). An optional
+// free-text reason is recorded on the AdminActionLog audit row. .strict()
+// rejects unknown keys (mass-assignment guard).
+export const AdminImpersonateSchema = z
+  .object({
+    reason: z.string().max(500).nullable().optional(),
+  })
+  .strict()
+
+export type AdminImpersonateInput = z.infer<typeof AdminImpersonateSchema>

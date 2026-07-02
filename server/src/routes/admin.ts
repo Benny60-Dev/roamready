@@ -3,8 +3,8 @@ import { requireAuth, requireOwner } from '../middleware/auth'
 import { requireVerifiedEmail } from '../middleware/requireVerifiedEmail'
 import { validateBody } from '../middleware/validate'
 import { AdminFeedbackUpdateSchema } from '../schemas/feedback'
-import { AdminSuspendSchema, AdminGrantProSchema } from '../schemas/admin'
-import { getMetrics, getSubscribers, getMarketingSubscribers, getRevenue, getAdminFeedback, updateFeedback, analyzeFeedback, getLinkHealth, inspectSession, suspendUser, reactivateUser, getUserHistory, grantProUser, revokeProUser } from '../controllers/admin'
+import { AdminSuspendSchema, AdminGrantProSchema, AdminImpersonateSchema } from '../schemas/admin'
+import { getMetrics, getSubscribers, getMarketingSubscribers, getRevenue, getAdminFeedback, updateFeedback, analyzeFeedback, getLinkHealth, inspectSession, suspendUser, reactivateUser, getUserHistory, grantProUser, revokeProUser, impersonateUser } from '../controllers/admin'
 import { runDiagnostic } from '../controllers/diagnostics'
 
 export const adminRouter = Router()
@@ -30,6 +30,10 @@ adminRouter.get('/users/:id/history', getUserHistory as any)
 // Complimentary Pro grant / revoke (no Stripe charge).
 adminRouter.post('/users/:id/grant-pro', validateBody(AdminGrantProSchema), grantProUser as any)
 adminRouter.post('/users/:id/revoke-pro', revokeProUser as any)
+
+// "Act as user" impersonation — mints a target-scoped 1h token. Owner-gated by
+// the adminRouter.use mount; self/owner/suspended guards live in the controller.
+adminRouter.post('/users/:id/impersonate', validateBody(AdminImpersonateSchema), impersonateUser as any)
 adminRouter.get('/feedback', getAdminFeedback as any)
 adminRouter.patch('/feedback/:id', validateBody(AdminFeedbackUpdateSchema), updateFeedback as any)
 adminRouter.post('/feedback/analyze', analyzeFeedback as any)

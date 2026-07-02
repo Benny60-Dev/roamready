@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { MoreVertical, Ban, RotateCcw, Star, StarOff, Clock } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { MoreVertical, Ban, RotateCcw, Star, StarOff, Clock, LogIn } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { adminApi } from '../../services/api'
+import { useAuthStore } from '../../store/authStore'
 import { format } from 'date-fns'
 
 type User = {
@@ -16,6 +18,9 @@ type User = {
   deactivatedReason: string | null
   compTier: 'FREE' | 'PRO' | null
   compExpiresAt: string | null
+  // Surfaced by the subscribers endpoint so "Act as user" can be hidden for
+  // owner rows (belt-and-suspenders with the server impersonate guard).
+  isOwner?: boolean
 }
 
 type DurationKind = 'MONTH' | 'YEAR' | 'LIFETIME' | 'CUSTOM'
@@ -51,6 +56,7 @@ function csvCell(value: string) {
 }
 
 export default function AdminSubscribersPage() {
+  const navigate = useNavigate()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -83,6 +89,10 @@ export default function AdminSubscribersPage() {
   const [grantCustomDate, setGrantCustomDate] = useState('')
   const [grantReason, setGrantReason] = useState('')
   const [revokeProTarget, setRevokeProTarget] = useState<User | null>(null)
+
+  // "Act as user" (impersonation) confirm dialog + optional reason.
+  const [impersonateTarget, setImpersonateTarget] = useState<User | null>(null)
+  const [impersonateReason, setImpersonateReason] = useState('')
 
   // Server-side status filter (active/suspended/all). Refetches when it changes
   // — suspended users are only returned for 'suspended'/'all', which is what
@@ -263,6 +273,23 @@ export default function AdminSubscribersPage() {
     }
   }
 
+  async function doImpersonate() {
+    if (!impersonateTarget) return
+    setActionBusy(true)
+    setActionError(null)
+    try {
+      await useAuthStore.getState().impersonate(impersonateTarget.id, impersonateReason.trim() || undefined)
+      setImpersonateTarget(null)
+      setImpersonateReason('')
+      // Land in the customer's account.
+      navigate('/dashboard')
+    } catch (err: any) {
+      setActionError(err?.response?.data?.error || 'Failed to act as this user.')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
   function openHistory(u: User) {
     setHistoryTarget(u)
     setHistoryRows([])
@@ -432,6 +459,17 @@ export default function AdminSubscribersPage() {
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#1F6F8B] hover:bg-[#1F6F8B]/10"
             >
               <Star size={14} /> Grant Pro
+            </button>
+          )}
+          {/* Act as user — hidden for owner rows (server also refuses). Not
+              shown for suspended accounts (server refuses those too). */}
+          {!menuFor.isOwner && !isSuspended(menuFor) && (
+            <button
+              role="menuitem"
+              onClick={() => { setActionError(null); setImpersonateReason(''); setImpersonateTarget(menuFor); setMenuFor(null) }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+            >
+              <LogIn size={14} /> Act as user
             </button>
           )}
           <div className="my-1 border-t border-gray-100" />
@@ -636,6 +674,52 @@ export default function AdminSubscribersPage() {
                 className="bg-[#1F6F8B] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#185a72] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {actionBusy ? 'Revoking…' : 'Revoke Pro'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Act as user (impersonation) confirm — optional reason ─────────── */}
+      {impersonateTarget && (
+        <div
+          className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+          onClick={() => { if (!actionBusy) setImpersonateTarget(null) }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="bg-white rounded-lg border border-gray-200 w-full max-w-[440px] p-6 shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 className="font-semibold text-lg text-gray-900 mb-2">Act as {fullName(impersonateTarget)}?</h2>
+            <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+              You'll enter their account with full access. Everything you do is logged.
+            </p>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Reason (optional)</label>
+            <textarea
+              value={impersonateReason}
+              onChange={e => setImpersonateReason(e.target.value)}
+              rows={2}
+              autoFocus
+              className="input w-full"
+              placeholder="Why are you entering this account? (recorded in the audit log)"
+            />
+            {actionError && <p className="text-sm text-red-600 mt-2">{actionError}</p>}
+            <div className="flex justify-end gap-2 mt-5">
+              <button
+                onClick={() => setImpersonateTarget(null)}
+                disabled={actionBusy}
+                className="border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={doImpersonate}
+                disabled={actionBusy}
+                className="bg-[#1F6F8B] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#185a72] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {actionBusy ? 'Entering…' : 'Act as user'}
               </button>
             </div>
           </div>

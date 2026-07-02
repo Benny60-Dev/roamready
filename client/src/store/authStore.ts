@@ -32,6 +32,14 @@ interface AuthState {
   isAuthenticated: () => boolean
   hasAccess: (feature: string) => boolean
   rehydrateUser: () => Promise<void>
+  // Admin "act as user" (impersonation): the operator's REAL session { token,
+  // user } is stashed here while impersonating so Exit can restore it. Both null
+  // during a normal (non-impersonated) session.
+  adminToken: string | null
+  adminUser: User | null
+  isImpersonating: () => boolean
+  impersonate: (targetId: string, reason?: string) => Promise<void>
+  exitImpersonation: () => void
   // Email-verification derived state — read at render time. Owner
   // accounts always resolve as verified (isVerified: true; the other
   // two: false) so owners never see the banner or gate.
@@ -62,10 +70,14 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       token: null,
       isLoading: false,
+      adminToken: null,
+      adminUser: null,
       setUser: (user) => set({ user }),
       setToken: (token) => set({ token }),
       setLoading: (isLoading) => set({ isLoading }),
-      logout: () => set({ user: null, token: null }),
+      // logout also clears any impersonation stash so a full sign-out never
+      // leaves a way back into an admin session.
+      logout: () => set({ user: null, token: null, adminToken: null, adminUser: null }),
       isAuthenticated: () => !!get().token,
       rehydrateUser: async () => {
         if (!get().token) return
@@ -77,6 +89,21 @@ export const useAuthStore = create<AuthState>()(
         } catch {
           // Silently ignore — stale store data is better than crashing
         }
+      },
+      isImpersonating: () => get().adminToken !== null,
+      // Enter a customer's account: stash the current admin session, swap in the
+      // target-scoped token, then load the target user via /users/me.
+      impersonate: async (targetId, reason) => {
+        const { adminApi } = await import('../services/api')
+        const res = await adminApi.impersonateUser(targetId, reason)
+        const { token, user } = get()
+        set({ adminToken: token, adminUser: user, token: res.data.accessToken })
+        await get().rehydrateUser()
+      },
+      // Restore the real admin session and clear the stash.
+      exitImpersonation: () => {
+        const { adminToken, adminUser } = get()
+        set({ token: adminToken, user: adminUser, adminToken: null, adminUser: null })
       },
       hasAccess: (feature) => {
         // MIRRORS server/src/middleware/auth.ts hasAccess — keep the clause set
@@ -127,7 +154,14 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'roamready-auth',
-      partialize: (state) => ({ token: state.token, user: state.user }),
+      // Persist the impersonation stash too, so a page refresh mid-impersonation
+      // still knows the way back to the admin session.
+      partialize: (state) => ({
+        token: state.token,
+        user: state.user,
+        adminToken: state.adminToken,
+        adminUser: state.adminUser,
+      }),
     }
   )
 )

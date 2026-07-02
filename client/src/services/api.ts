@@ -18,6 +18,16 @@ api.interceptors.response.use(
   async error => {
     const original = error.config
 
+    // 401 while IMPERSONATING → do NOT run the silent refresh-and-retry. The
+    // refresh cookie belongs to the admin, so refreshing would swap the session
+    // back to the operator mid-task (and against the target's endpoints). An
+    // expired 1h impersonation token instead cleanly restores the admin session
+    // and rejects, rather than leaving a broken half-swapped state.
+    if (error.response?.status === 401 && useAuthStore.getState().isImpersonating()) {
+      useAuthStore.getState().exitImpersonation()
+      return Promise.reject(error)
+    }
+
     // 401 → try silent token refresh, then retry once
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true
@@ -386,6 +396,9 @@ export const adminApi = {
     body: { durationKind: 'MONTH' | 'YEAR' | 'LIFETIME' | 'CUSTOM'; customExpiresAt?: string; reason: string },
   ) => api.post(`/admin/users/${id}/grant-pro`, body),
   revokePro: (id: string) => api.post(`/admin/users/${id}/revoke-pro`),
+  // "Act as user" — mints a target-scoped 1h impersonation token.
+  impersonateUser: (id: string, reason?: string) =>
+    api.post(`/admin/users/${id}/impersonate`, { reason }),
   getRevenue: () => api.get('/admin/revenue'),
   getFeedback: (params?: { status?: string; includeArchived?: boolean }) =>
     api.get('/admin/feedback', { params }),
