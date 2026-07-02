@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Trash2, Pencil, User as UserIcon, PawPrint } from 'lucide-react'
+import { Plus, Trash2, Pencil, User as UserIcon, PawPrint, AlertTriangle } from 'lucide-react'
 import { usersApi } from '../../services/api'
 import { Person, Pet, PersonRole, PetType, TravelParty } from '../../types'
 
@@ -42,6 +42,10 @@ export default function TravelPartyPage() {
   const [personDraft, setPersonDraft] = useState<PersonDraft | null>(null)
   const [petDraft, setPetDraft] = useState<PetDraft | null>(null)
   const [saving, setSaving] = useState(false)
+  // Surfaces save/delete failures inline instead of the old try/finally-with-no-
+  // catch that swallowed them (part of BUG-PARTY-DUP-ON-EMPTY-STATE: a failed add
+  // looked like it did nothing).
+  const [error, setError] = useState<string | null>(null)
 
   // Default-party fetch. Returns null for users who don't have one yet
   // (the backfill only created parties for users with a TravelProfile).
@@ -58,8 +62,21 @@ export default function TravelPartyPage() {
   // through an "Initialize your travel party" empty state and matches the
   // backfill semantics: a default party comes into existence when there's
   // data to put in it.
+  //
+  // BUG-PARTY-DUP-ON-EMPTY-STATE: local `party` state being null does NOT mean
+  // the server has no default — it can be null from a slow/transient initial
+  // fetch or a click that raced the load. Re-check the server for an existing
+  // default BEFORE creating one, so we reuse the real party and createParty only
+  // fires when the server truly has none. Otherwise we'd silently mint a
+  // duplicate, non-default party and orphan the new person/pet into it.
   async function ensureParty(): Promise<TravelParty> {
     if (party) return party
+    const existing = await usersApi.getDefaultParty()
+    if (existing?.data) {
+      const found = existing.data as TravelParty
+      setParty(found)
+      return found
+    }
     const res = await usersApi.createParty({})
     const next = res.data as TravelParty
     setParty(next)
@@ -87,6 +104,7 @@ export default function TravelPartyPage() {
   async function savePerson() {
     if (!personDraft) return
     setSaving(true)
+    setError(null)
     try {
       const target = await ensureParty()
       const payload = {
@@ -104,6 +122,8 @@ export default function TravelPartyPage() {
         setParty({ ...target, people: [...target.people, res.data] })
       }
       setPersonDraft(null)
+    } catch (err: any) {
+      setError(err?.response?.data?.error || err?.message || 'Could not save this person. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -112,8 +132,13 @@ export default function TravelPartyPage() {
   async function deletePerson(personId: string) {
     if (!party) return
     if (!confirm('Remove this person from your travel party?')) return
-    await usersApi.deletePerson(party.id, personId)
-    setParty({ ...party, people: party.people.filter(p => p.id !== personId) })
+    setError(null)
+    try {
+      await usersApi.deletePerson(party.id, personId)
+      setParty({ ...party, people: party.people.filter(p => p.id !== personId) })
+    } catch (err: any) {
+      setError(err?.response?.data?.error || err?.message || 'Could not remove this person. Please try again.')
+    }
   }
 
   // ─── Pets ────────────────────────────────────────────────────────────────
@@ -137,6 +162,7 @@ export default function TravelPartyPage() {
   async function savePet() {
     if (!petDraft) return
     setSaving(true)
+    setError(null)
     try {
       const target = await ensureParty()
       const payload = {
@@ -154,6 +180,8 @@ export default function TravelPartyPage() {
         setParty({ ...target, pets: [...target.pets, res.data] })
       }
       setPetDraft(null)
+    } catch (err: any) {
+      setError(err?.response?.data?.error || err?.message || 'Could not save this pet. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -162,8 +190,13 @@ export default function TravelPartyPage() {
   async function deletePet(petId: string) {
     if (!party) return
     if (!confirm('Remove this pet from your travel party?')) return
-    await usersApi.deletePet(party.id, petId)
-    setParty({ ...party, pets: party.pets.filter(p => p.id !== petId) })
+    setError(null)
+    try {
+      await usersApi.deletePet(party.id, petId)
+      setParty({ ...party, pets: party.pets.filter(p => p.id !== petId) })
+    } catch (err: any) {
+      setError(err?.response?.data?.error || err?.message || 'Could not remove this pet. Please try again.')
+    }
   }
 
   // ─── Render ──────────────────────────────────────────────────────────────
@@ -189,6 +222,15 @@ export default function TravelPartyPage() {
         </p>
       </div>
 
+      {/* Save/delete failures surface here instead of being swallowed. Matches
+          the red-bordered error card used on AdminDiagnosticsPage. */}
+      {error && (
+        <div className="card border border-red-200 bg-red-50/40 flex items-start gap-2">
+          <AlertTriangle size={16} className="text-red-500 mt-0.5 flex-shrink-0" aria-hidden="true" />
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+
       {/* People ───────────────────────────────────────────────────────── */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -198,7 +240,7 @@ export default function TravelPartyPage() {
           </h2>
           <button
             onClick={startAddPerson}
-            disabled={!!personDraft}
+            disabled={loading || !!personDraft}
             className="btn-primary flex items-center gap-1.5 text-sm disabled:opacity-50"
           >
             <Plus size={15} /> Add person
@@ -278,7 +320,7 @@ export default function TravelPartyPage() {
             </div>
             <div className="flex gap-2">
               <button onClick={cancelPersonDraft} className="btn-ghost flex-1">Cancel</button>
-              <button onClick={savePerson} disabled={saving} className="btn-primary flex-1">
+              <button onClick={savePerson} disabled={saving || loading} className="btn-primary flex-1">
                 {saving ? 'Saving…' : personDraft.id ? 'Save' : 'Add person'}
               </button>
             </div>
@@ -295,7 +337,7 @@ export default function TravelPartyPage() {
           </h2>
           <button
             onClick={startAddPet}
-            disabled={!!petDraft}
+            disabled={loading || !!petDraft}
             className="btn-primary flex items-center gap-1.5 text-sm disabled:opacity-50"
           >
             <Plus size={15} /> Add pet
@@ -368,7 +410,7 @@ export default function TravelPartyPage() {
             </div>
             <div className="flex gap-2">
               <button onClick={cancelPetDraft} className="btn-ghost flex-1">Cancel</button>
-              <button onClick={savePet} disabled={saving} className="btn-primary flex-1">
+              <button onClick={savePet} disabled={saving || loading} className="btn-primary flex-1">
                 {saving ? 'Saving…' : petDraft.id ? 'Save' : 'Add pet'}
               </button>
             </div>
