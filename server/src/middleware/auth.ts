@@ -11,6 +11,11 @@ export interface AuthRequest extends Request {
     trialEndsAt: Date | null
     subscriptionEndsAt: Date | null
     isOwner: boolean
+    // Set when the request is authenticated with an admin "act as user"
+    // impersonation token — the owner id that minted it. req.user itself is
+    // still the TARGET user (loaded by userId), which is the point; this is for
+    // audit/awareness. Absent on ordinary sessions.
+    impersonatedBy?: string
     // Email verification + grace period — read by requireVerifiedEmail.
     // emailVerified: true means user clicked the magic link. createdAt
     // powers the 1-hour grace window for unverified accounts; after
@@ -32,7 +37,7 @@ export async function requireAuth(req: AuthRequest, _res: Response, next: NextFu
     }
 
     const token = authHeader.split(' ')[1]
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string; impersonatedBy?: string }
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
@@ -69,6 +74,10 @@ export async function requireAuth(req: AuthRequest, _res: Response, next: NextFu
     }
 
     req.user = user
+    // Carry the impersonation claim through for audit/awareness. Loading
+    // req.user by userId above already resolved the TARGET user (intended);
+    // this just records WHO is acting as them.
+    if (req.user && decoded.impersonatedBy) req.user.impersonatedBy = decoded.impersonatedBy
     next()
   } catch (err) {
     if (err instanceof AppError) return next(err)

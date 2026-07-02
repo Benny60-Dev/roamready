@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { Home, LayoutDashboard, Compass, User, Menu, X, LogOut, ChevronDown, Clock, HelpCircle, Shield } from 'lucide-react'
+import { Home, LayoutDashboard, Compass, User, Menu, X, LogOut, ChevronDown, Clock, HelpCircle, Shield, UserCog } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { useAuthStore } from '../../store/authStore'
 import { authApi } from '../../services/api'
@@ -12,6 +12,8 @@ export default function AppLayout() {
   const [sessionsPanelOpen, setSessionsPanelOpen] = useState(false)
   const { user, logout } = useAuthStore()
   const isInGracePeriod = useAuthStore(s => s.isInGracePeriod())
+  const isImpersonating = useAuthStore(s => s.isImpersonating())
+  const exitImpersonation = useAuthStore(s => s.exitImpersonation)
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const profileRef = useRef<HTMLDivElement>(null)
@@ -20,6 +22,14 @@ export default function AppLayout() {
     await authApi.logout()
     logout()
     navigate('/login')
+  }
+
+  // Exit "act as user" — restore the real admin session and return to the
+  // subscribers page. No server call: the admin's refresh cookie was never
+  // touched, so the stashed admin token/user is simply swapped back in.
+  function handleExitImpersonation() {
+    exitImpersonation()
+    navigate('/admin')
   }
 
   // Close the profile dropdown on any click/tap outside it (trigger + menu are
@@ -211,6 +221,30 @@ export default function AppLayout() {
           + past-grace users never see it (past-grace gets the gate
           screen from PrivateRoute instead, never reaches this point). */}
       {isInGracePeriod && <VerificationBanner />}
+
+      {/* Impersonation banner — shows on every authenticated page while an owner
+          is acting as a customer. Amber/warning styling; the Exit button
+          restores the admin session. Sits just below the header so it's the
+          first thing visible on any page. */}
+      {isImpersonating && (
+        <div className="sticky top-0 z-30 bg-amber-100 border-b border-amber-300" style={{ borderBottomWidth: '0.5px' }}>
+          <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <UserCog size={16} className="text-amber-700 flex-shrink-0" aria-hidden="true" />
+              <p className="text-sm text-amber-900 truncate">
+                You're acting as <strong>{user?.firstName} {user?.lastName}</strong> — changes affect their real account.
+              </p>
+            </div>
+            <button
+              onClick={handleExitImpersonation}
+              className="flex-shrink-0 text-sm font-medium text-amber-900 bg-white border border-amber-300 rounded-md px-3 py-1 hover:bg-amber-50 transition-colors"
+              style={{ borderWidth: '0.5px' }}
+            >
+              Exit
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Mobile sidebar */}
       {sidebarOpen && (
