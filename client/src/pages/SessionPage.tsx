@@ -1248,9 +1248,34 @@ export default function SessionPage() {
       : rigName
     : ''
   const hasMultipleRigs = (user?.rigs?.length ?? 0) > 1
-  const partyChipText = profile
-    ? `${profile.adults} adult${profile.adults !== 1 ? 's' : ''}${profile.hasPets ? ', pets' : ''}`
-    : ''
+  // Party chip — read the STRUCTURED default travel party (people + pets), the
+  // same source the itinerary/packing already use, falling back to the legacy
+  // travelProfile counts ONLY when there's no party. Mirrors the server's
+  // resolution in services/ai.ts (party = tripParty ?? defaultParty ?? legacy).
+  // Fixes BUG-PARTY-CHIP-LEGACY-COUNT, where the chip showed stale profile
+  // counts (e.g. "12 adults, pets") that disagreed with the real party.
+  const partyChipText = (() => {
+    const defaultParty = user?.parties?.find(p => p.isDefault) ?? user?.parties?.[0] ?? null
+    if (defaultParty) {
+      const travelingPeople = (defaultParty.people ?? []).filter(p => p.isTraveling)
+      const adults = travelingPeople.filter(p => p.role === 'ADULT' || p.role === 'TEEN').length
+      const children = travelingPeople.filter(p => p.role === 'CHILD' || p.role === 'INFANT').length
+      const hasPets = (defaultParty.pets?.length ?? 0) > 0
+      // Guard: a party with 0 traveling adults/teens (shouldn't happen) falls
+      // through to the legacy count rather than rendering "0 adults".
+      if (adults > 0) {
+        const parts = [`${adults} adult${adults !== 1 ? 's' : ''}`]
+        if (children > 0) parts.push(`${children} kid${children !== 1 ? 's' : ''}`)
+        if (hasPets) parts.push('pets')
+        return parts.join(', ')
+      }
+    }
+    // Legacy fallback — no structured party (or an empty one): the original
+    // travelProfile-derived string, exactly as before.
+    return profile
+      ? `${profile.adults} adult${profile.adults !== 1 ? 's' : ''}${profile.hasPets ? ', pets' : ''}`
+      : ''
+  })()
   const styleChipText = profile?.hookupPreference
     ? profile.hookupPreference.replace(/_/g, ' ').toLowerCase()
     : ''
