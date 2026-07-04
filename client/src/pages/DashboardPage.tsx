@@ -44,7 +44,7 @@ const TABS: TabEntry[] = [
   // Reservations it renders its own content component (JournalTabContent) which
   // fetches its own entries; it shares the lens-divider that precedes the
   // Reservations tab rather than introducing a second one.
-  { key: 'journal', label: 'RoamReady Journal', mode: 'journal' },
+  { key: 'journal', label: 'RoamReady Journal Maps', mode: 'journal' },
 ]
 
 // Reservations tab count — number of bookable stops across all trips with

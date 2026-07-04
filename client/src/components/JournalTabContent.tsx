@@ -5,8 +5,7 @@ import { useAuthStore } from '../store/authStore'
 import { useUIStore } from '../store/uiStore'
 import { JournalEntry, Trip } from '../types'
 import { formatTripDate, parseTripDate, toYmd } from '../utils/dates'
-import { deriveTripStatus } from '../utils/tripStatus'
-import { normalizeStateCode, STATE_CODES, type StateTier, type StateMeta } from './journal/stateUtils'
+import { deriveVisitedStates } from './journal/visitedStates'
 import VisitedStatesBanner from './journal/VisitedStatesBanner'
 
 interface ManualState {
@@ -227,69 +226,10 @@ export default function JournalTabContent({ trips }: Props) {
   //   counter = (finalOvernight ∪ finalPassthrough), excluding DC, of 50.
   //   stateMeta exposes per-state { derivedTier, manualTier, locked } for the
   //   phase-4 editor (consumed there; returned here so it's ready).
-  const { overnight, passthrough, visitedCount, stateMeta } = useMemo(() => {
-    // Derived sets.
-    const derivedOvernight = new Set<string>()
-    const derivedPassthrough = new Set<string>()
-    for (const trip of trips) {
-      if (deriveTripStatus(trip) !== 'COMPLETED') continue
-      for (const stop of trip.stops || []) {
-        if (stop.type === 'HOME') continue
-        const code = normalizeStateCode(stop.locationState)
-        if (!code) continue
-        if (stop.nights >= 1) derivedOvernight.add(code)
-        else derivedPassthrough.add(code)
-      }
-    }
-    for (const e of entries) {
-      const code = normalizeStateCode(e.state)
-      if (code) derivedPassthrough.add(code)
-    }
-    for (const code of derivedOvernight) derivedPassthrough.delete(code)
-
-    // Raw manual marks (kept for the editor's display, independent of the lock).
-    const rawManual = new Map<string, StateTier>()
-    for (const m of manualStates) {
-      const code = normalizeStateCode(m.state)
-      if (!code) continue
-      rawManual.set(code, m.visitType === 'overnight' ? 'overnight' : 'passthrough')
-    }
-
-    // Apply manual marks with the lock rule, then resolve overnight-wins.
-    const finalOvernight = new Set<string>(derivedOvernight)
-    const finalPassthrough = new Set<string>(derivedPassthrough)
-    for (const [code, tier] of rawManual) {
-      if (derivedOvernight.has(code)) continue // locked — manual can't downgrade
-      if (tier === 'overnight') finalOvernight.add(code)
-      else finalPassthrough.add(code)
-    }
-    for (const code of finalOvernight) finalPassthrough.delete(code) // overnight wins
-
-    // Counter is over the 50 states — DC is shown on the map but doesn't count.
-    const union = new Set<string>([...finalOvernight, ...finalPassthrough])
-    union.delete('DC')
-
-    // Per-state metadata for the editor.
-    const meta = new Map<string, StateMeta>()
-    for (const code of STATE_CODES) {
-      meta.set(code, {
-        derivedTier: derivedOvernight.has(code)
-          ? 'overnight'
-          : derivedPassthrough.has(code)
-            ? 'passthrough'
-            : 'none',
-        manualTier: rawManual.get(code) ?? 'none',
-        locked: derivedOvernight.has(code),
-      })
-    }
-
-    return {
-      overnight: finalOvernight,
-      passthrough: finalPassthrough,
-      visitedCount: union.size,
-      stateMeta: meta,
-    }
-  }, [trips, entries, manualStates])
+  const { overnight, passthrough, visitedCount, stateMeta } = useMemo(
+    () => deriveVisitedStates(trips, entries, manualStates),
+    [trips, entries, manualStates],
+  )
 
   // Group by trip; standalone (no tripId) entries fall into a trailing
   // "General" group. Map preserves insertion order, and we insert in

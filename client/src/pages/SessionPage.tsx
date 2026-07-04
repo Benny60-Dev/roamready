@@ -13,6 +13,7 @@ import RigCompletenessNotice from '../components/trip/RigCompletenessNotice'
 import RigWarningPill from '../components/trip/RigWarningPill'
 import HomeBaseCard from '../components/trip/HomeBaseCard'
 import TripCard from '../components/trip/TripCard'
+import HomeJournalMapCard from '../components/journal/HomeJournalMapCard'
 import { useSessionAutosave } from '../hooks/useSessionAutosave'
 import { useVoiceInput } from '../hooks/useVoiceInput'
 import { useScrollResetOnReady } from '../hooks/useScrollResetOnReady'
@@ -364,6 +365,10 @@ export default function SessionPage() {
   // only the canvas). Same data source DashboardPage uses (tripsApi.getAll),
   // filtered client-side — no new endpoint.
   const [planningTrips, setPlanningTrips] = useState<Trip[]>([])
+  // Full trip set (all statuses) — feeds the Home journal-map discovery card's
+  // visited-states derivation, which needs COMPLETED trips (planningTrips alone
+  // would undercount). Populated from the same single tripsApi.getAll() below.
+  const [allTrips, setAllTrips] = useState<Trip[]>([])
   const [tripsLoading, setTripsLoading] = useState(true)
   // "Add your home base" card (Option 2). homeCardDismissed = local Skip for this
   // session. The card shows for any no-home user on the empty-state hero.
@@ -658,7 +663,9 @@ export default function SessionPage() {
     tripsApi.getAll()
       .then(res => {
         if (cancelled) return
-        const planning = (res.data as Trip[])
+        const all = res.data as Trip[]
+        setAllTrips(all)
+        const planning = all
           .filter(t => deriveTripStatus(t) === 'PLANNING')
           .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
         setPlanningTrips(planning)
@@ -1285,6 +1292,10 @@ export default function SessionPage() {
   // updatedAt desc in the fetch effect.
   const recentPlanning = planningTrips.slice(0, 3)
   const showContinueStrip = isEmptyState && !tripsLoading && planningTrips.length > 0
+  // The Journal Maps discovery card shows in the same empty-state Home area, but
+  // (unlike the strip) also for users with zero PLANNING trips — its empty state
+  // ("no states traveled yet") is the point.
+  const showTravelMap = isEmptyState && !tripsLoading
   // "Add your home base" card: shown to ANY no-home user on the empty-state hero,
   // regardless of trip count. Keys purely on no-home-saved + empty-state + not-
   // dismissed-this-session. Saving sets user.homeLocation → this flips false →
@@ -2359,6 +2370,19 @@ export default function SessionPage() {
             <TripCard key={trip.id} trip={trip} variant="compact" />
           ))}
         </div>
+      </div>
+    )}
+
+    {showTravelMap && (
+      <div
+        className="px-2"
+        style={
+          showContinueStrip
+            ? { marginTop: 16, paddingBottom: 8 }
+            : { borderTop: '0.5px solid #E8E4DA', marginTop: 32, paddingTop: 24, paddingBottom: 8 }
+        }
+      >
+        <HomeJournalMapCard trips={allTrips} />
       </div>
     )}
     </>
