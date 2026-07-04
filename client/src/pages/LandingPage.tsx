@@ -1,5 +1,5 @@
 import { Link, Navigate } from 'react-router-dom'
-import { MapPin, Zap, Shield, Users, Truck, Wind, Compass, Check, ChevronRight } from 'lucide-react'
+import { MapPin, Zap, Shield, Users, Truck, Wind, Compass, Check, ChevronRight, ClipboardList, Map as TripMap } from 'lucide-react'
 import SplashScreen from '../components/SplashScreen'
 import { useAuthStore } from '../store/authStore'
 
@@ -9,27 +9,29 @@ const VEHICLE_TYPES = [
     emoji: '🚌',
     title: 'RV & Motorhome',
     subtitle: 'Class A, B, C, Fifth Wheel, Travel Trailer',
-    features: ['Rig compatibility filtering', 'Full hookup routing', 'Dump station locator'],
+    features: ['Rig compatibility filtering', 'Full-hookup filtering', 'Dump station locator'],
   },
   {
     id: 'van',
     emoji: '🚐',
     title: 'Van Life',
     subtitle: 'Converted vans, camper vans, Sprinters',
-    features: ['BLM & dispersed camping', 'Stealth spots', 'Harvest Hosts access'],
+    features: ['BLM & dispersed camping', 'Harvest Hosts locations'],
   },
   {
     id: 'car',
     emoji: '🏕️',
     title: 'Car Camping',
     subtitle: 'Tent camping, overlanding, backpacking',
-    features: ['Walk-in & backcountry sites', 'Permit tracker', 'Gear-based packing lists'],
+    features: ['Walk-in & backcountry sites', 'Gear-based packing lists'],
   },
 ]
 
 const FEATURES = [
-  { icon: Zap, title: 'AI Trip Planner', desc: 'Chat with Claude to build the perfect itinerary in minutes.' },
+  { icon: Zap, title: 'AI Trip Planner', desc: 'Chat with us to build your perfect itinerary in minutes.' },
   { icon: MapPin, title: 'Interactive Maps', desc: 'See your full route with campground pins and weather overlays.' },
+  { icon: TripMap, title: 'Trip Journal Maps', desc: 'Track the states you\'ve camped in and see every past trip mapped.' },
+  { icon: ClipboardList, title: 'Packing List Generator', desc: 'Auto-build a packing list tailored to your rig, trip, and party.' },
   { icon: Shield, title: 'Rig Compatibility', desc: 'Never arrive at a campground your rig can\'t fit.' },
   { icon: Users, title: 'Trip Sharing', desc: 'Share read-only itineraries with friends and family.' },
   { icon: Truck, title: 'Maintenance Tracker', desc: 'Stay ahead of oil changes, roof seals, and more.' },
@@ -74,14 +76,14 @@ export default function LandingPage() {
       <section className="max-w-6xl mx-auto px-4 pt-20 pb-16 text-center">
         <div className="inline-flex items-center gap-1.5 bg-[#E0F0F4] text-[#134756] px-3 py-1 rounded-full text-sm mb-6">
           <Zap size={13} />
-          Powered by Claude AI
+          Like texting a travel expert
         </div>
         <h1 className="text-4xl sm:text-5xl font-medium text-gray-900 mb-4 leading-tight">
           Plan your next adventure<br />
           <span className="text-[#1F6F8B]">in minutes, not days</span>
         </h1>
         <p className="text-lg text-gray-500 mb-8 max-w-2xl mx-auto">
-          AI-powered trip planning for RV travelers, van lifers, and car campers.
+          Trip planning for RV travelers, van lifers, and car campers.
           Rig-compatible campgrounds, weather alerts, packing lists, and more.
         </p>
         {/* Single primary CTA — the hero owns "new users" exclusively. The
@@ -97,6 +99,7 @@ export default function LandingPage() {
           </Link>
         </div>
         <p className="text-xs text-gray-400 mt-4">7-day free trial • No credit card required</p>
+        <p className="text-xs text-gray-400 mt-2">AI does the research — every decision stays yours.</p>
       </section>
 
       {/* Vehicle type selector */}
