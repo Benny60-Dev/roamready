@@ -308,14 +308,13 @@ export async function handleWebhook(req: Request, res: Response, next: NextFunct
                 <p>You've unlocked:</p>
                 <ul>
                   <li>Unlimited AI trip planning &amp; modifications</li>
-                  <li>Campground booking with real-time availability</li>
                   <li>Weather alerts &amp; route-aware forecasts along your trip</li>
                 </ul>
                 <p>Manage your subscription anytime from your <a href="${billingUrl}">Profile billing page</a>.</p>
                 <p>Questions? Reach us at <a href="mailto:${supportEmail}">${supportEmail}</a>.</p>
                 <p>Happy travels,<br/>The RoamReady team</p>
               `,
-              text: `Hi ${updatedUser.firstName},\n\nYour RoamReady ${tierLabel} subscription is now active — thanks for upgrading!\n\nYou've unlocked:\n  • Unlimited AI trip planning & modifications\n  • Campground booking with real-time availability\n  • Weather alerts & route-aware forecasts along your trip\n\nManage your subscription anytime from your Profile billing page: ${billingUrl}\n\nQuestions? Reach us at ${supportEmail}.\n\nHappy travels,\nThe RoamReady team`,
+              text: `Hi ${updatedUser.firstName},\n\nYour RoamReady ${tierLabel} subscription is now active — thanks for upgrading!\n\nYou've unlocked:\n  • Unlimited AI trip planning & modifications\n  • Weather alerts & route-aware forecasts along your trip\n\nManage your subscription anytime from your Profile billing page: ${billingUrl}\n\nQuestions? Reach us at ${supportEmail}.\n\nHappy travels,\nThe RoamReady team`,
             })
             console.log('[email] subscription confirmation sent to', updatedUser.email, `(${tierLabel})`)
           } catch (emailErr: any) {
