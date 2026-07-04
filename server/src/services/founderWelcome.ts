@@ -63,23 +63,26 @@ export async function sendFounderWelcome(email: string, firstName: string | null
 
   const html = `
     <div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#1f2937;max-width:560px">
-      <p>Hi ${name}, welcome to RoamReady — we're really glad you're here.</p>
-      <p>We're Benny and Cindy, the two people behind it. RoamReady exists to take the stress out of planning RV and road trips so you can spend more time actually out there.</p>
-      <p>Because it's just us, we read every email. Got a question, found a bug, or wish it did something it doesn't? Reply to this one — real travelers' ideas are what shape what we build next.</p>
-      <p>Good roads and clear skies,</p>
+      <p>Hi ${name},</p>
+      <p>Welcome to RoamReady — we're so glad you're here.</p>
+      <p>We're Benny and Cindy. We built RoamReady because planning an RV trip shouldn't take longer than the trip itself — so we made something to handle the logistics and let you focus on the road.</p>
+      <p>We're a team of two, which means when you reply to this email, or click on the feedback button in the app, it's us reading it. Questions, snags, wishlist ideas — send them our way. They shape what we build next.</p>
+      <p>See you out there,</p>
       <p style="margin-bottom:2px">— Benny &amp; Cindy</p>
-      <p style="margin-top:0;color:#6b7280">Founders, RoamReady</p>
+      <p style="margin-top:0;color:#6b7280">Founders of RoamReady</p>
     </div>`.trim()
 
-  const text = `Hi ${name}, welcome to RoamReady — we're really glad you're here.
+  const text = `Hi ${name},
 
-We're Benny and Cindy, the two people behind it. RoamReady exists to take the stress out of planning RV and road trips so you can spend more time actually out there.
+Welcome to RoamReady — we're so glad you're here.
 
-Because it's just us, we read every email. Got a question, found a bug, or wish it did something it doesn't? Reply to this one — real travelers' ideas are what shape what we build next.
+We're Benny and Cindy. We built RoamReady because planning an RV trip shouldn't take longer than the trip itself — so we made something to handle the logistics and let you focus on the road.
 
-Good roads and clear skies,
+We're a team of two, which means when you reply to this email, or click on the feedback button in the app, it's us reading it. Questions, snags, wishlist ideas — send them our way. They shape what we build next.
+
+See you out there,
 — Benny & Cindy
-Founders, RoamReady`
+Founders of RoamReady`
 
   await resend.emails.send({
     from: fromAddress ?? 'RoamReady <onboarding@resend.dev>',
