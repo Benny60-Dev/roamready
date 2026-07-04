@@ -1,10 +1,11 @@
-// Founders' welcome — a personal note from Benny & Cindy, sent ONCE to a paid
-// subscriber the first time they load the app after subscribing.
+// Founders' welcome — a personal note from Benny & Cindy, sent ONCE the first
+// time a newly-joined user loads the app. The goal is to greet new sign-ups and
+// invite their input early — building the relationship BEFORE they decide whether
+// to subscribe, not after.
 //
-// Distinct from the checkout "Welcome to RoamReady Pro!" email (a functional
-// benefits/receipt): this is the personal "we read every email, reply anytime"
-// hello, deliberately spaced onto the first authenticated load rather than the
-// checkout webhook.
+// Separate from the checkout "Welcome to RoamReady Pro!" email (a paid receipt)
+// and the verification email; this is the personal "we read every email, reply
+// anytime" hello that every new account gets on its first load.
 //
 // Follows the per-file Resend convention (emailVerification.ts, cron.ts):
 // module-level client, FROM_EMAIL with sandbox fallback, single sending identity.
@@ -18,25 +19,25 @@ type WelcomeUser = {
   id: string
   email: string
   firstName: string | null
-  subscriptionId: string | null
   founderWelcomeSentAt: Date | null
 }
 
 /**
  * One-time founders' welcome gate. Called from the /me load paths (auth.ts +
- * users.ts getMe). "Paid subscriber" = has a Stripe `subscriptionId` (trial
- * users have Pro access but no subscriptionId, so they're excluded).
+ * users.ts getMe), so it fires the first time ANY new user loads the app after
+ * joining — the point is to greet new sign-ups and invite their input early
+ * (before they decide whether to subscribe), not to thank existing customers.
  *
  * Race-safe: an atomic conditional updateMany "claims" the send — only the
  * request that flips founderWelcomeSentAt null->now wins the right to email, so
  * two concurrent /me calls can never both send. The claim is awaited (one cheap
- * write, only on the first post-subscription load); the SEND is detached with
- * its own .catch so a Resend outage never affects or delays the /me response.
+ * write, only on the first-ever load); the SEND is detached with its own .catch
+ * so a Resend outage never affects or delays the /me response.
  */
 export async function maybeSendFounderWelcome(user: WelcomeUser): Promise<void> {
-  if (!user.subscriptionId || user.founderWelcomeSentAt) return
+  if (user.founderWelcomeSentAt) return
   const claim = await prisma.user.updateMany({
-    where: { id: user.id, subscriptionId: { not: null }, founderWelcomeSentAt: null } as any,
+    where: { id: user.id, founderWelcomeSentAt: null } as any,
     data: { founderWelcomeSentAt: new Date() } as any,
   })
   if (claim.count !== 1) return // another concurrent request already claimed it

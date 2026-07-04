@@ -64,8 +64,8 @@ export async function getMe(req: AuthRequest, res: Response, next: NextFunction)
     // future strips in this file's updateMe + the auth.ts getMe.
     if (!user) return res.json(null)
 
-    // One-time founders' welcome (Benny & Cindy) for paid subscribers, fired on
-    // the first authenticated load after subscribing. Race-safe + guarded inside
+    // One-time founders' welcome (Benny & Cindy) for every new user, fired on
+    // their first authenticated load after joining. Race-safe + guarded inside
     // the helper; awaits only the cheap claim-write, the send itself is detached.
     await maybeSendFounderWelcome(user as any)
 

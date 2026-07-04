@@ -374,8 +374,8 @@ export async function getMe(req: AuthRequest, res: Response, next: NextFunction)
     // users.ts:updateMe whenever the strip list changes.
     if (!user) return res.json(null)
 
-    // One-time founders' welcome (Benny & Cindy) for paid subscribers, fired on
-    // the first authenticated load after subscribing. Also covered here (not just
+    // One-time founders' welcome (Benny & Cindy) for every new user, fired on
+    // their first authenticated load after joining. Also covered here (not just
     // users.ts getMe) so a Google-auth or /auth/me-first client is caught too.
     await maybeSendFounderWelcome(user as any)
 
