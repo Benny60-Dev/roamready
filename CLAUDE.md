@@ -50,3 +50,53 @@ Never push — the user tests and pushes manually.
   mapped `5432:5432`). If the DB is unreachable (`Can't reach database server at
   localhost:5432`), the fix is starting that container (`npm run docker:up`), not
   a code change.
+
+## Collaboration SOP (how Claude works with Benny — enforce EVERY session)
+
+This is the standing procedure. Follow it for every change — do NOT improvise
+generic instructions.
+
+1. **Scout read-only first.** Diagnose against the actual code (and, for customer
+   bugs, against PRODUCTION via the read-only Diagnostics queries) before proposing
+   anything. No writes while scouting.
+2. **One named recommendation.** Present a single recommended action. Show mockups
+   / side-by-side comparisons before ANY UI change — design decisions come back to
+   Benny.
+3. **Explicit approval.** Wait for Benny's go-ahead before building.
+4. **Build on a short-lived branch** off `main` (see "Standard workflow for
+   source-only edits" above): branch → edit → typecheck against the real
+   `node_modules` → merge `--no-ff` into local `main` → delete branch.
+5. **Claude never pushes, never runs prod migrations, never kills processes.**
+   Benny is the only hands on prod.
+6. **Hand over a commit message with every push pointer.** Any time Claude points
+   Benny to a push, it includes the commit message in the same breath.
+7. **Benny pushes via `save-progress.bat`** — that IS the prod deploy for both
+   Render services (`roamready-api` server + `roamready-client` client).
+8. **Pre-test gate.** Backend changes: Benny restarts the backend himself and
+   confirms before it counts as done. AI changes: tested in a fresh planning
+   session.
+
+## Migrations (CRITICAL)
+
+- **NEVER run `npm run db:migrate`** — it is wired to `prisma migrate dev`, the
+  BANNED reset path.
+- Apply a written migration with:
+  `npx dotenv-cli -e .env -- npm run db:migrate:deploy --prefix server`, then
+  `npm run db:generate --prefix server` (backend stopped first), then restart.
+- Prod migrations for new tables are applied on the Render API deploy (Render
+  migrate deploy or the Render Shell) — new code 500s until the table exists in
+  prod. Claude never runs prod migrations; Benny does.
+
+## Bug tracker
+
+- Claude owns the `.xlsx` tracker exclusively. It lives in the repo folder but is
+  gitignored (`/RoamReady_Bug_Tracker_*.xlsx`) so `save-progress` never commits it.
+- Three core tabs: Bug Tracker, Features & Roadmap, Launch Status. Stoplight fills
+  on Status only; Arial, RV-Blue titles, white-on-blue header, frozen top row,
+  gridlines off.
+
+## Editing files through the Cowork mount
+
+When an edit makes a file SHORTER, the mount can leave trailing NUL padding after
+the real content — this breaks `tsc` with TS1127 "Invalid character" at EOF. After
+any shrinking edit, strip trailing NULs and re-typecheck before committing.
