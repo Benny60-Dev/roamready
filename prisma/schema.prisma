@@ -42,10 +42,10 @@ model User {
   /// (or a retry after partial failure) don't email the same user twice.
   trialEndEmailSentAt DateTime?
   subscriptionEndsAt  DateTime?
-  /// Set the first time a user loads the app after joining, when the one-time
-  /// founders' welcome email is sent. Send-once idempotency guard — see
-  /// services/founderWelcome.ts. Backfilled to now() for all pre-existing users
-  /// (migrations 20260703120000 + 20260703130000) so only NEW sign-ups get it.
+  /// Set when the one-time founders' welcome email is sent to a GOOGLE sign-up on
+  /// first load (email/password users get that welcome in their verification
+  /// email instead). Send-once guard — see services/founderWelcome.ts. Backfilled
+  /// to now() for all pre-existing users (migrations 20260703120000 + ...130000).
   founderWelcomeSentAt DateTime?
   /// Lifetime founder rate eligibility — set at signup based on whether
   /// the user joined before FOUNDER_CUTOFF_DATE (see config/founderPricing.ts).

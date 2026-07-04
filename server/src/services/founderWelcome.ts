@@ -1,11 +1,9 @@
-// Founders' welcome — a personal note from Benny & Cindy, sent ONCE the first
-// time a newly-joined user loads the app. The goal is to greet new sign-ups and
-// invite their input early — building the relationship BEFORE they decide whether
-// to subscribe, not after.
-//
-// Separate from the checkout "Welcome to RoamReady Pro!" email (a paid receipt)
-// and the verification email; this is the personal "we read every email, reply
-// anytime" hello that every new account gets on its first load.
+// Founders' welcome for GOOGLE sign-ups — a personal note from Benny & Cindy,
+// sent ONCE the first time a Google-auth user loads the app. Email/password
+// sign-ups get this same welcome folded into their verification email
+// (emailVerification.ts); Google users skip verification, so this standalone note
+// is how THEY get greeted. Gated on having no passwordHash so the two audiences
+// never overlap and no one is welcomed twice.
 //
 // Follows the per-file Resend convention (emailVerification.ts, cron.ts):
 // module-level client, FROM_EMAIL with sandbox fallback, single sending identity.
@@ -19,14 +17,18 @@ type WelcomeUser = {
   id: string
   email: string
   firstName: string | null
+  /** Present for email/password accounts, null for Google/OAuth. Used to gate:
+   *  only no-password (Google) users get this standalone note. */
+  passwordHash: string | null
   founderWelcomeSentAt: Date | null
 }
 
 /**
- * One-time founders' welcome gate. Called from the /me load paths (auth.ts +
- * users.ts getMe), so it fires the first time ANY new user loads the app after
- * joining — the point is to greet new sign-ups and invite their input early
- * (before they decide whether to subscribe), not to thank existing customers.
+ * One-time founders' welcome for GOOGLE sign-ups. Called from the /me load paths
+ * (auth.ts + users.ts getMe). Email/password sign-ups already get this welcome in
+ * their verification email; Google users skip verification, so without this
+ * they'd never be greeted. Gate: a null passwordHash means a Google/OAuth account
+ * (email/password users always have one), so only they get this standalone note.
  *
  * Race-safe: an atomic conditional updateMany "claims" the send — only the
  * request that flips founderWelcomeSentAt null->now wins the right to email, so
@@ -35,7 +37,7 @@ type WelcomeUser = {
  * so a Resend outage never affects or delays the /me response.
  */
 export async function maybeSendFounderWelcome(user: WelcomeUser): Promise<void> {
-  if (user.founderWelcomeSentAt) return
+  if (user.passwordHash || user.founderWelcomeSentAt) return
   const claim = await prisma.user.updateMany({
     where: { id: user.id, founderWelcomeSentAt: null } as any,
     data: { founderWelcomeSentAt: new Date() } as any,
