@@ -9,6 +9,7 @@ import { isFounderEligible } from '../config/founderPricing'
 import { isDisposableEmail } from '../utils/disposableEmails'
 import { generateVerificationToken, sendVerificationEmail } from '../services/emailVerification'
 import { sendNewSignupAlert } from '../services/feedbackNotification'
+import { maybeSendFounderWelcome } from '../services/founderWelcome'
 import { validatePassword } from '../utils/passwordPolicy'
 import { getClientOrigin } from '../utils/clientOrigin'
 import { normalizeEmail } from '../utils/email'
@@ -372,6 +373,12 @@ export async function getMe(req: AuthRequest, res: Response, next: NextFunction)
     // `omit: { ... }` on the query. Mirror this in users.ts:getMe +
     // users.ts:updateMe whenever the strip list changes.
     if (!user) return res.json(null)
+
+    // One-time founders' welcome (Benny & Cindy) for paid subscribers, fired on
+    // the first authenticated load after subscribing. Also covered here (not just
+    // users.ts getMe) so a Google-auth or /auth/me-first client is caught too.
+    await maybeSendFounderWelcome(user as any)
+
     const {
       passwordHash: _ph,
       emailVerificationToken: _evt,

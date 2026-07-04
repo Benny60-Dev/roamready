@@ -4,6 +4,7 @@ import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
 import type { MembershipCreateInput, MembershipUpdateInput, SecondVehicleCreateInput } from '../schemas'
 import { geocodeHomeAddress } from '../utils/geocodeHome'
+import { maybeSendFounderWelcome } from '../services/founderWelcome'
 
 const DEFAULT_RV_MAINTENANCE = [
   { name: 'Engine oil & filter', intervalMiles: 5000 },
@@ -62,6 +63,12 @@ export async function getMe(req: AuthRequest, res: Response, next: NextFunction)
     // auth.ts:getMe for the full rationale on each field. Mirror any
     // future strips in this file's updateMe + the auth.ts getMe.
     if (!user) return res.json(null)
+
+    // One-time founders' welcome (Benny & Cindy) for paid subscribers, fired on
+    // the first authenticated load after subscribing. Race-safe + guarded inside
+    // the helper; awaits only the cheap claim-write, the send itself is detached.
+    await maybeSendFounderWelcome(user as any)
+
     const {
       passwordHash: _ph,
       emailVerificationToken: _evt,

@@ -42,6 +42,11 @@ model User {
   /// (or a retry after partial failure) don't email the same user twice.
   trialEndEmailSentAt DateTime?
   subscriptionEndsAt  DateTime?
+  /// Set the first time a PAID subscriber (has subscriptionId) loads the app,
+  /// when the one-time founders' welcome email is sent. Send-once idempotency
+  /// guard — see services/founderWelcome.ts. Backfilled to now() for existing
+  /// subscribers by migration 20260703120000 so only NEW subscribers get it.
+  founderWelcomeSentAt DateTime?
   /// Lifetime founder rate eligibility — set at signup based on whether
   /// the user joined before FOUNDER_CUTOFF_DATE (see config/founderPricing.ts).
   /// Drives Stripe price ID selection in createCheckout AND the price/badge
