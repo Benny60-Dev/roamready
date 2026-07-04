@@ -50,16 +50,32 @@ export async function sendVerificationEmail(
   const firstName = u?.firstName ?? 'there'
 
   const html = `
-    <p>Hi ${firstName},</p>
-    <p>Welcome to RoamReady! Confirm your email so we know it's really you — that way we can send you trip-planning updates, important booking notices, and the occasional founder note.</p>
-    <p><a href="${verifyUrl}" style="display:inline-block;background:#1F6F8B;color:#ffffff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:500">Verify my email →</a></p>
-    <p>Or paste this link into your browser:</p>
-    <p><a href="${verifyUrl}">${verifyUrl}</a></p>
-    <p>Hit reply if anything's off — I read every email.</p>
-    <p>— Benny<br/>Founder, RoamReady</p>
+    <div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#1f2937;max-width:560px">
+      <p>Hi ${firstName}, welcome to RoamReady — we're really glad you're here.</p>
+      <p>We're Benny and Cindy, the two people behind it. RoamReady takes the stress out of planning RV and road trips, so you can spend less time on logistics and more time actually out there.</p>
+      <p>To get started, just confirm your email:</p>
+      <p><a href="${verifyUrl}" style="display:inline-block;background:#1F6F8B;color:#ffffff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:500">Verify my email →</a></p>
+      <p>Or paste this link into your browser:</p>
+      <p><a href="${verifyUrl}">${verifyUrl}</a></p>
+      <p>And because it's just the two of us, we read every email. A question, a bug, or something you wish it did? Just reply — real travelers' ideas shape what we build next.</p>
+      <p>Good roads and clear skies,</p>
+      <p style="margin-bottom:2px">— Benny &amp; Cindy</p>
+      <p style="margin-top:0;color:#6b7280">Founders, RoamReady</p>
+    </div>
   `.trim()
 
-  const text = `Hi ${firstName},\n\nWelcome to RoamReady! Confirm your email so we know it's really you — that way we can send you trip-planning updates, important booking notices, and the occasional founder note.\n\nVerify your email: ${verifyUrl}\n\nHit reply if anything's off — I read every email.\n\n— Benny\nFounder, RoamReady`
+  const text = `Hi ${firstName}, welcome to RoamReady — we're really glad you're here.
+
+We're Benny and Cindy, the two people behind it. RoamReady takes the stress out of planning RV and road trips, so you can spend less time on logistics and more time actually out there.
+
+To get started, just confirm your email:
+${verifyUrl}
+
+And because it's just the two of us, we read every email. A question, a bug, or something you wish it did? Just reply — real travelers' ideas shape what we build next.
+
+Good roads and clear skies,
+— Benny & Cindy
+Founders, RoamReady`
 
   const fromAddress = process.env.FROM_EMAIL
   if (!fromAddress) {
@@ -76,7 +92,7 @@ export async function sendVerificationEmail(
     from: fromAddress ?? 'RoamReady <onboarding@resend.dev>',
     reply_to: replyToEmail,
     to: email,
-    subject: 'Verify your RoamReady email',
+    subject: "Welcome to RoamReady — let's get you started",
     html,
     text,
   })
