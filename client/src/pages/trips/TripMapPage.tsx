@@ -34,7 +34,12 @@ const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 
 // Only when this is on do we fetch HERE corridor waypoints and route the map line +
 // directions links through them. Off (default) → Google-only display, no extra
 // fetch, byte-identical to before. Benny sets BOTH server + client flags together.
-const USE_HERE_ROUTING_DISPLAY = import.meta.env.VITE_USE_HERE_ROUTING === 'true'
+// Rig-aware map-line display: on when EITHER truck-routing engine's display
+// flag is set. The wire fields (herePolyline/hereDistanceMeters/hereWaypoints)
+// are engine-agnostic — the server fills them from LVR or HERE (FEAT-LVR-ROUTING).
+const USE_HERE_ROUTING_DISPLAY =
+  import.meta.env.VITE_USE_HERE_ROUTING === 'true' ||
+  import.meta.env.VITE_USE_LVR_ROUTING === 'true'
 
 // ─── Marker colors ──────────────────────────────────────────────────────────────
 const MC = {

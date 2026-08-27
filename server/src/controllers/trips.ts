@@ -4,6 +4,7 @@ import { randomBytes } from 'crypto'
 import axios from 'axios'
 import { Prisma } from '@prisma/client'
 import { decodeFlexiblePolyline } from '../utils/flexiblePolyline'
+import { decodeGooglePolyline } from '../utils/googlePolyline'
 import { sampleCorridorWaypoints, type LatLng } from '../utils/polylineSample'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
@@ -516,10 +517,11 @@ interface LegDetail {
   durationSec: number
   distanceMeters: number
   steps: LegStep[]
-  /** HERE-only: restriction notices for this leg (e.g. a violated height/weight
-   *  limit on the returned route). Absent/empty on the Google path and on a clean
-   *  HERE route. Surfaced so a caller can flag a route that HERE could only
-   *  satisfy by violating a restriction — never silently treated as clean. */
+  /** Rig-aware notices for this leg: HERE/LVR restriction notices (e.g. a
+   *  violated height/weight limit on the returned route), or RV_FALLBACK_NOTE
+   *  when a rig-aware engine was enabled but the leg fell back to car routing.
+   *  Absent/empty on a clean route with no fallback. Surfaced so a caller can
+   *  flag the leg — never silently treated as clean. */
   violationNotes?: string[]
 }
 
@@ -777,6 +779,189 @@ async function fetchLegDetailHERE(
   }
 }
 
+
+// ─── Google Large Vehicle Routing (FEAT-LVR-ROUTING) ─────────────────────────
+// Google's Routes API truck routing (LVR — provisioned for this project on
+// 2026-08-27). Same fail-soft contract as the HERE path: null → the caller
+// falls through to HERE (when enabled) and then to Google car routing, so an
+// LVR outage or out-of-coverage leg never blocks planning. RigDims stay in
+// HERE-native cm/kg; LVR wants MILLIMETERS and KILOGRAMS, so cm×10 here.
+// LVR REQUIRES routingPreference TRAFFIC_AWARE_OPTIMAL with travelMode TRUCK
+// (400 INVALID_ARGUMENT otherwise — verified against the live API 2026-08-27).
+// Coverage is the contiguous US only — an out-of-coverage leg falls through,
+// and the Google car path then attaches RV_FALLBACK_NOTE so the user is TOLD
+// the leg was not RV-checked (never a silent revert; Benny's requirement).
+
+/** True only when Google LVR routing is explicitly enabled. Default FALSE —
+ *  any value other than the literal 'true' skips the LVR branch. Read at call
+ *  time so a restart picks up a flipped flag without a code change. */
+function useLvrRouting(): boolean {
+  return process.env.USE_LVR_ROUTING === 'true'
+}
+
+/** Note attached to a leg that a rig-aware engine (LVR/HERE) was supposed to
+ *  measure but that fell back to Google CAR routing (out of coverage, outage).
+ *  "Heads up" prefix = amber advisory tier in the client RigWarningPill; the
+ *  planning-reply prose (buildViolationAdvisory) phrases these separately from
+ *  real restriction notices. Compared by IDENTITY there — edit both together. */
+export const RV_FALLBACK_NOTE =
+  'Heads up: RV-safe routing was not available for the drive to this stop — its drive time and route are car-based, so verify clearances and restrictions for your rig on this leg.'
+
+/** Build LVR's vehicleInfo from HERE-native RigDims (cm→mm ×10; kg as-is).
+ *  Only dimensions the rig actually has — never a fabricated 0 (same rule as
+ *  the HERE params). Null when the rig carries no usable dimension. */
+function lvrVehicleInfo(rigDims: RigDims | null | undefined): Record<string, number> | null {
+  if (!rigDims) return null
+  const v: Record<string, number> = {}
+  if (rigDims.heightCm) v.totalHeightMm = Math.round(rigDims.heightCm * 10)
+  if (rigDims.lengthCm) v.totalLengthMm = Math.round(rigDims.lengthCm * 10)
+  if (rigDims.grossWeightKg) v.totalWeightKg = Math.round(rigDims.grossWeightKg)
+  return v.totalHeightMm || v.totalLengthMm || v.totalWeightKg ? v : null
+}
+
+/** One LVR computeRoutes call (shared by measurement + display). Returns the
+ *  first route object or null; THROWS on transport/HTTP errors so each caller
+ *  logs its own context. */
+async function computeRoutesLVR(
+  o: { lat: number; lng: number },
+  d: { lat: number; lng: number },
+  rigDims: RigDims | null | undefined,
+  googleKey: string,
+  fieldMask: string,
+): Promise<any | null> {
+  const body: Record<string, any> = {
+    origin: { location: { latLng: { latitude: o.lat, longitude: o.lng } } },
+    destination: { location: { latLng: { latitude: d.lat, longitude: d.lng } } },
+    travelMode: 'TRUCK',
+    routingPreference: 'TRAFFIC_AWARE_OPTIMAL',
+  }
+  const vehicleInfo = lvrVehicleInfo(rigDims)
+  if (vehicleInfo) body.routeModifiers = { vehicleInfo }
+  const res = await axios.post('https://routes.googleapis.com/directions/v2:computeRoutes', body, {
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': googleKey,
+      'X-Goog-FieldMask': fieldMask,
+    },
+    timeout: 10000,
+  })
+  return res.data?.routes?.[0] ?? null
+}
+
+/**
+ * LVR sibling of fetchLegDetailHERE — measures a leg with Google TRUCK routing
+ * (rig-aware), returning the SAME LegDetail shape so the split engine is
+ * unchanged. Returns null on ANY failure so the caller transparently falls
+ * through to HERE/Google.
+ *
+ * steps[] comes from routes.legs[].steps[]. Routes API steps only carry
+ * staticDuration (no per-step live duration), so each step is scaled by
+ * durationSec/Σstatic to partition the TRAFFIC-AWARE total — keeping
+ * interpolateSplitPoint's walk consistent with the leg total it splits.
+ */
+async function fetchLegDetailLVR(
+  from: any,
+  to: any,
+  rigDims: RigDims | null | undefined,
+  googleKey: string,
+): Promise<LegDetail | null> {
+  const o = await resolveCoords(from, googleKey)
+  const d = await resolveCoords(to, googleKey)
+  if (!o || !d) {
+    console.warn('[fetchLegDetailLVR] could not resolve coords for one endpoint — falling back')
+    return null
+  }
+
+  let r: any
+  try {
+    r = await computeRoutesLVR(o, d, rigDims, googleKey,
+      'routes.distanceMeters,routes.duration,routes.legs.steps.staticDuration,routes.legs.steps.startLocation,routes.legs.steps.endLocation,routes.travelAdvisory')
+  } catch (err: any) {
+    console.error('[fetchLegDetailLVR] request error for %s,%s → %s,%s — falling back: %s',
+      o.lat, o.lng, d.lat, d.lng, err?.response?.data?.error?.message ?? err?.message)
+    return null
+  }
+  if (!r || typeof r.distanceMeters !== 'number') {
+    console.warn('[fetchLegDetailLVR] no usable route — falling back')
+    return null
+  }
+
+  const durationSec = parseInt(String(r.duration ?? '0'), 10) || 0
+  const distanceMeters = r.distanceMeters
+
+  let steps: LegStep[] = (Array.isArray(r.legs) ? r.legs : [])
+    .flatMap((l: any) => l.steps ?? [])
+    .map((st: any) => ({
+      durationSec: parseInt(String(st.staticDuration ?? '0'), 10) || 0,
+      startLat: st.startLocation?.latLng?.latitude,
+      startLng: st.startLocation?.latLng?.longitude,
+      endLat: st.endLocation?.latLng?.latitude,
+      endLng: st.endLocation?.latLng?.longitude,
+    }))
+    .filter((s: any) =>
+      typeof s.startLat === 'number' && typeof s.startLng === 'number' &&
+      typeof s.endLat === 'number' && typeof s.endLng === 'number')
+  // Scale static step durations onto the traffic-aware leg total (see doc).
+  const totalStatic = steps.reduce((sum, st) => sum + st.durationSec, 0)
+  if (totalStatic > 0 && durationSec > 0) {
+    const k = durationSec / totalStatic
+    steps = steps.map(st => ({ ...st, durationSec: st.durationSec * k }))
+  }
+  // Fallback: no per-step data → one whole-leg step so interpolateSplitPoint
+  // still has start/end coords (mirrors the HERE synthesized-step fallback).
+  if (steps.length === 0) {
+    steps.push({ durationSec, startLat: o.lat, startLng: o.lng, endLat: d.lat, endLng: d.lng })
+  }
+
+  // Honesty: Google flags a route it could only build by partially ignoring the
+  // vehicle's restrictions. Unprefixed note = RED warning tier in the pill —
+  // appropriate, this is the serious case.
+  const violationNotes: string[] = []
+  if (r.travelAdvisory?.routeRestrictionsPartiallyIgnored) {
+    violationNotes.push("part of this route could not fully honor your rig's size/weight restrictions — check the drive for low clearances or weight limits before driving")
+    console.warn('[fetchLegDetailLVR] routeRestrictionsPartiallyIgnored on %s,%s → %s,%s',
+      o.lat, o.lng, d.lat, d.lng)
+  }
+
+  return {
+    durationSec, distanceMeters, steps,
+    ...(violationNotes.length ? { violationNotes } : {}),
+  }
+}
+
+/**
+ * FEAT-LVR-ROUTING (display) — LVR sibling of fetchHereLegPolyline: the FULL
+ * decoded route geometry + measured distance for a leg, from Google truck
+ * routing. Rides the SAME herePolyline/hereDistanceMeters wire fields so the
+ * client needs zero changes. Returns { points: [], distanceMeters: 0 } on ANY
+ * failure so the caller falls through (HERE, then Google-only display).
+ */
+async function fetchLvrLegPolyline(
+  from: any,
+  to: any,
+  rigDims: RigDims | null | undefined,
+  googleKey: string,
+): Promise<{ points: Array<[number, number]>; distanceMeters: number }> {
+  const EMPTY = { points: [] as Array<[number, number]>, distanceMeters: 0 }
+  const o = await resolveCoords(from, googleKey)
+  const d = await resolveCoords(to, googleKey)
+  if (!o || !d) return EMPTY
+  try {
+    const r = await computeRoutesLVR(o, d, rigDims, googleKey,
+      'routes.polyline.encodedPolyline,routes.distanceMeters')
+    const encoded = r?.polyline?.encodedPolyline
+    if (!encoded) return EMPTY
+    return {
+      points: decodeGooglePolyline(encoded),
+      distanceMeters: typeof r.distanceMeters === 'number' ? r.distanceMeters : 0,
+    }
+  } catch (err: any) {
+    console.warn('[fetchLvrLegPolyline] %s,%s → %s,%s failed (falling through): %s',
+      o.lat, o.lng, d.lat, d.lng, err?.response?.data?.error?.message ?? err?.message)
+    return EMPTY
+  }
+}
+
 /**
  * FEAT-HERE-ROUTING (display) — fetch the FULL decoded HERE route geometry for a
  * leg: the complete [lat,lng] polyline (hundreds of points) AND HERE's measured
@@ -883,11 +1068,17 @@ async function fetchLegDetail(
   apiKey: string,
   rigDims?: RigDims | null,
 ): Promise<LegDetail | null> {
-  // FEAT-HERE-ROUTING — single measurement branch point. When the flag is on,
-  // measure with HERE truck/RV routing (rig-aware). A null result (HERE down,
-  // coord miss, etc.) falls THROUGH to the Google path below — fail-soft, so a
-  // HERE outage never blocks planning. When the flag is off this whole block is
-  // skipped and the Google path runs byte-identical to before.
+  // FEAT-LVR-ROUTING / FEAT-HERE-ROUTING — single measurement branch point.
+  // Engine precedence: Google LVR truck routing → HERE truck routing → Google
+  // car routing. Each rig-aware engine is fail-soft: a null result (outage,
+  // coord miss, out-of-coverage leg) falls THROUGH to the next, so no routing
+  // engine outage ever blocks planning. With both flags off the Google path
+  // runs byte-identical to before.
+  if (useLvrRouting()) {
+    const lvr = await fetchLegDetailLVR(from, to, rigDims, apiKey)
+    if (lvr) return lvr
+    console.warn('[fetchLegDetail] LVR returned no route — trying HERE/Google for this leg')
+  }
   if (useHereRouting()) {
     const here = await fetchLegDetailHERE(from, to, rigDims, apiKey)
     if (here) return here
@@ -929,7 +1120,16 @@ async function fetchLegDetail(
       .filter((s: any) =>
         typeof s.startLat === 'number' && typeof s.startLng === 'number' &&
         typeof s.endLat === 'number' && typeof s.endLng === 'number')
-    return { durationSec, distanceMeters, steps }
+    // Rig-aware honesty (FEAT-LVR-ROUTING): a rig-aware engine is ON and this
+    // trip HAS rig dims, yet this leg was measured with CAR routing (LVR/HERE
+    // both missed). Attach the fallback note so the user is told — car numbers
+    // must never silently pass as RV-safe (see RV_FALLBACK_NOTE).
+    const rigAwareMissed =
+      (useLvrRouting() || useHereRouting()) &&
+      !!(rigDims && (rigDims.heightCm || rigDims.lengthCm || rigDims.grossWeightKg))
+    return rigAwareMissed
+      ? { durationSec, distanceMeters, steps, violationNotes: [RV_FALLBACK_NOTE] }
+      : { durationSec, distanceMeters, steps }
   } catch (err: any) {
     console.error('[fetchLegDetail] error for %s → %s:', origin, destination, err?.message)
     return null
@@ -3093,9 +3293,20 @@ export function buildTransitNote(
  */
 export function buildViolationAdvisory(legNotices: LegNotice[]): string | null {
   if (!legNotices.length) return null
-  return legNotices
-    .map(ln => `Heads up: the ${ln.fromName} → ${ln.toName} drive may cross a routing restriction (${ln.notes.join('; ')}) — verify the road is open for your dates and rig before driving.`)
-    .join(' ')
+  const sentences: string[] = []
+  for (const ln of legNotices) {
+    // FEAT-LVR-ROUTING: the coverage-fallback note is not a road restriction —
+    // phrase it as its own sentence instead of wrapping it in the
+    // "may cross a routing restriction (…)" template.
+    const restrictions = ln.notes.filter(n => n !== RV_FALLBACK_NOTE)
+    if (restrictions.length) {
+      sentences.push(`Heads up: the ${ln.fromName} → ${ln.toName} drive may cross a routing restriction (${restrictions.join('; ')}) — verify the road is open for your dates and rig before driving.`)
+    }
+    if (ln.notes.includes(RV_FALLBACK_NOTE)) {
+      sentences.push(`Heads up: RV-safe routing doesn't cover the ${ln.fromName} → ${ln.toName} drive, so that leg's drive time and route are car-based — double-check clearances and restrictions for your rig on it.`)
+    }
+  }
+  return sentences.length ? sentences.join(' ') : null
 }
 
 // ─── FEAT-HAZARD-WARN — RV hazard detection (DB-driven, NO route geometry) ─────
@@ -3680,7 +3891,7 @@ export async function generateRoutes(req: AuthRequest, res: Response, next: Next
     // additive: the existing `route` highway-name strings are untouched, and any
     // HERE failure leaves a leg with no hereWaypoints → client falls back to
     // Google-only display for that leg. Display-only; measurement is unchanged.
-    if (useHereRouting()) {
+    if (useLvrRouting() || useHereRouting()) {
       const apiKey = process.env.GOOGLE_MAPS_API_KEY
       if (apiKey) {
         const user = await prisma.user.findUnique({
@@ -3702,7 +3913,15 @@ export async function generateRoutes(req: AuthRequest, res: Response, next: Next
           const seg = routes.find(r => r.segmentIdx === i - 1)
           if (!seg) continue
           seg.toStopId = ordered[i].id
-          const { points, distanceMeters } = await fetchHereLegPolyline(ordered[i - 1], ordered[i], rigDims, apiKey)
+          // LVR polyline first when enabled; HERE as fallback; empty → the
+          // client's Google-only display for this leg (existing behavior).
+          let pl = useLvrRouting()
+            ? await fetchLvrLegPolyline(ordered[i - 1], ordered[i], rigDims, apiKey)
+            : { points: [] as Array<[number, number]>, distanceMeters: 0 }
+          if (pl.points.length === 0 && useHereRouting()) {
+            pl = await fetchHereLegPolyline(ordered[i - 1], ordered[i], rigDims, apiKey)
+          }
+          const { points, distanceMeters } = pl
           if (points.length) {
             // The MAP LINE uses HERE's FULL polyline directly (drawn client-side,
             // no Google via-reconstruction → no hooks) + HERE's measured distance.
