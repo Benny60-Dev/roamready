@@ -23,7 +23,7 @@ const QUICK_CHIPS = [
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ModifyAction {
-  action: 'add_stop' | 'remove_stop' | 'change_nights' | 'suggest_campground' | 'shift_trip_dates' | 'change_rig' | 'make_one_way'
+  action: 'add_stop' | 'remove_stop' | 'change_start' | 'change_nights' | 'suggest_campground' | 'shift_trip_dates' | 'change_rig' | 'make_one_way'
   // new schema (server-injected prompt)
   locationName?: string
   locationState?: string
@@ -96,6 +96,8 @@ function getConfirmationText(action: ModifyAction): string {
     }
     case 'remove_stop':
       return `Remove ${name}${state} from the trip`
+    case 'change_start':
+      return `Change the starting point to ${name}${state}`
     case 'change_nights':
       return `Change ${name}${state} to ${action.nights} night${action.nights !== 1 ? 's' : ''}`
     case 'suggest_campground':
@@ -506,6 +508,38 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
         const stop = findStop(cleanName)
         if (!stop || !action.nights) throw new Error(`Could not find stop or nights missing: ${cleanName}`)
         await tripsApi.updateStop(trip.id, stop.id, { nights: action.nights, modifyActionId })
+        break
+      }
+      case 'change_start': {
+        // MODIFY-CHANGE-START — relocate the protected departure stop IN PLACE
+        // (remove_stop on it is structurally rejected; this is the sanctioned
+        // path). Rides the existing PUT /stops/:stopId update: the server's
+        // legAffectingChanged recheck re-measures the first leg and inserts any
+        // needed overnight, returning transitNote like add/remove do.
+        if (!cleanName) throw new Error('change_start missing the new starting location')
+        const startStop = sortedStops[0]
+        if (!startStop) throw new Error('Trip has no starting stop to change')
+        // Duplicate guard — the new start must not already be a later stop
+        // (that trip shape needs a different edit, not a start rename).
+        const needle = cleanName.toLowerCase()
+        const clash = sortedStops.slice(1).find(
+          (s: any) =>
+            s.locationName.toLowerCase().includes(needle) ||
+            needle.includes(s.locationName.toLowerCase())
+        )
+        if (clash) throw new Error(`${clash.locationName} is already on your trip — remove or edit that stop instead of renaming the start`)
+        // NULL the stale coordinates: routing (resolveCoords) prefers stored
+        // lat/lng over the name, so leaving the old coords would keep routing
+        // from the OLD start (the wrong-Kennedy-Meadows failure) even after the
+        // rename. Cleared coords force a fresh geocode of the new name.
+        const startRes = await tripsApi.updateStop(trip.id, startStop.id, {
+          locationName: cleanName,
+          locationState: resolvedState || null,
+          latitude: null,
+          longitude: null,
+          modifyActionId,
+        })
+        if (startRes.data?.transitNote) setTransitNote(startRes.data.transitNote)
         break
       }
       case 'suggest_campground': {
