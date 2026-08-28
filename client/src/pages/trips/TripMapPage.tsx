@@ -566,6 +566,10 @@ export default function TripMapPage() {
   // wasn't propagating subsequent setRoutePath calls even with a key-driven
   // remount. See the scout notes in the polyline fix commit.
   const polylineRef = useRef<google.maps.Polyline | null>(null)
+  // FIX-GHOST-ROUTE-LINE — read at Google-fetch RESOLVE time (the closure's
+  // useHereLine is captured at fetch START and can be stale): when the rig-aware
+  // polyline owns the line, a late-resolving Google car line must not overwrite it.
+  const hereOwnsLineRef = useRef(false)
   const [mapInstance, setMapInstance]       = useState<google.maps.Map | null>(null)
   // Rename pencil — restored to name-only after the 3f8ed99 popover rework
   // bundled name+date editing behind one affordance and lost discoverability
@@ -1167,6 +1171,7 @@ export default function TripMapPage() {
   // When HERE owns the line, push it to routePath. (A separate effect, so it
   // re-asserts over any late-resolving Google computeRoutes setRoutePath below.)
   useEffect(() => {
+    hereOwnsLineRef.current = !!hereLinePath
     if (hereLinePath) setRoutePath(hereLinePath)
   }, [hereLinePath])
 
@@ -1227,7 +1232,7 @@ export default function TripMapPage() {
         // routePath; skipping here avoids a flash of Google's line + a race.
         const encoded: string = route.polyline?.encodedPolyline
         console.log('[TripMapPage] encoded polyline length:', encoded?.length ?? 0)
-        if (!useHereLine && encoded && window.google.maps.geometry?.encoding) {
+        if (!useHereLine && !hereOwnsLineRef.current && encoded && window.google.maps.geometry?.encoding) {
           setRoutePath(window.google.maps.geometry.encoding.decodePath(encoded))
         }
 
@@ -2835,10 +2840,22 @@ export default function TripMapPage() {
               {routePath && (
                 <Polyline
                   onLoad={pl => {
+                    // FIX-GHOST-ROUTE-LINE: StrictMode (and any remount) can hand us a
+                    // SECOND polyline instance while the first is still on the map —
+                    // remove the old instance or it lingers as a ghost route with a
+                    // stale path (visible once the rig-aware and car lines diverge).
+                    if (polylineRef.current && polylineRef.current !== pl) {
+                      polylineRef.current.setMap(null)
+                    }
                     polylineRef.current = pl
                     pl.setPath(routePath)
                   }}
-                  onUnmount={() => { polylineRef.current = null }}
+                  onUnmount={() => {
+                    // Explicitly detach — the library's own cleanup has proven
+                    // unreliable with this imperative-setPath pattern.
+                    polylineRef.current?.setMap(null)
+                    polylineRef.current = null
+                  }}
                   options={{ strokeColor: '#F97316', strokeWeight: 2.5, strokeOpacity: 0.85 }}
                 />
               )}
