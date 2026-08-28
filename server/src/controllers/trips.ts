@@ -807,16 +807,38 @@ function useLvrRouting(): boolean {
 export const RV_FALLBACK_NOTE =
   'Heads up: RV-safe routing was not available for the drive to this stop — its drive time and route are car-based, so verify clearances and restrictions for your rig on this leg.'
 
+// LVR REQUIRES ALL FIVE vehicleInfo fields — height, length, weight, width,
+// AND axle count. Each missing one 400s INVALID_ARGUMENT ("Invalid or missing
+// truck width value…"), live-verified field-by-field 2026-08-27 — which is how
+// the initial integration silently never ran: rigs carry no width/axles, the
+// partial vehicleInfo 400'd on every call, and every leg fell back to car
+// routing (caught on day one by the rig-aware indicator's amber line). Policy:
+//   · height/length/weight come ONLY from the rig — never fabricated (same
+//     rule as the HERE params). A rig missing any of them cannot use LVR and
+//     falls through to HERE/car + the amber fallback advisory; the RIGINFO
+//     completeness notice already pushes users to fill exactly these.
+//   · width/axles get documented UNIVERSAL defaults until the Rig model
+//     captures them (FEAT-LVR-RIG-SPECS-EXT): width 2591 mm = 102 in incl.
+//     mirrors, the US federal maximum — virtually every RV is built to
+//     96–102 in, and OVERstating width is the safe direction (respects more
+//     restrictions, never fewer). Axles 2 = the motorhome norm; axle count
+//     gates almost nothing outside toll pricing, which LVR doesn't return.
+const RV_DEFAULT_WIDTH_MM = 2591
+const RV_DEFAULT_AXLE_COUNT = 2
+
 /** Build LVR's vehicleInfo from HERE-native RigDims (cm→mm ×10; kg as-is).
- *  Only dimensions the rig actually has — never a fabricated 0 (same rule as
- *  the HERE params). Null when the rig carries no usable dimension. */
+ *  Returns the COMPLETE five-field object LVR requires, or null when the rig
+ *  lacks any of the three real safety dims (see the policy block above). */
 function lvrVehicleInfo(rigDims: RigDims | null | undefined): Record<string, number> | null {
   if (!rigDims) return null
-  const v: Record<string, number> = {}
-  if (rigDims.heightCm) v.totalHeightMm = Math.round(rigDims.heightCm * 10)
-  if (rigDims.lengthCm) v.totalLengthMm = Math.round(rigDims.lengthCm * 10)
-  if (rigDims.grossWeightKg) v.totalWeightKg = Math.round(rigDims.grossWeightKg)
-  return v.totalHeightMm || v.totalLengthMm || v.totalWeightKg ? v : null
+  if (!(rigDims.heightCm && rigDims.lengthCm && rigDims.grossWeightKg)) return null
+  return {
+    totalHeightMm: Math.round(rigDims.heightCm * 10),
+    totalLengthMm: Math.round(rigDims.lengthCm * 10),
+    totalWeightKg: Math.round(rigDims.grossWeightKg),
+    totalWidthMm: RV_DEFAULT_WIDTH_MM,
+    totalAxleCount: RV_DEFAULT_AXLE_COUNT,
+  }
 }
 
 /** One LVR computeRoutes call (shared by measurement + display). Returns the
@@ -836,7 +858,10 @@ async function computeRoutesLVR(
     routingPreference: 'TRAFFIC_AWARE_OPTIMAL',
   }
   const vehicleInfo = lvrVehicleInfo(rigDims)
-  if (vehicleInfo) body.routeModifiers = { vehicleInfo }
+  // Incomplete dims → LVR is a guaranteed 400 (all five fields required, see
+  // lvrVehicleInfo) — skip the doomed call so the caller falls through cleanly.
+  if (!vehicleInfo) return null
+  body.routeModifiers = { vehicleInfo }
   const res = await axios.post('https://routes.googleapis.com/directions/v2:computeRoutes', body, {
     headers: {
       'Content-Type': 'application/json',
@@ -1076,7 +1101,11 @@ async function fetchLegDetail(
   // runs byte-identical to before.
   if (useLvrRouting()) {
     const lvr = await fetchLegDetailLVR(from, to, rigDims, apiKey)
-    if (lvr) return lvr
+    if (lvr) {
+      console.log('[fetchLegDetail] leg measured via LVR — %s mi / %s min',
+        (lvr.distanceMeters / 1609.34).toFixed(1), Math.round(lvr.durationSec / 60))
+      return lvr
+    }
     console.warn('[fetchLegDetail] LVR returned no route — trying HERE/Google for this leg')
   }
   if (useHereRouting()) {
