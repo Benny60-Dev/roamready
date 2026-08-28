@@ -5,7 +5,7 @@ import {
   Layers, X, Plus, Minus, DollarSign, Calendar, AlertTriangle,
   Wind, Droplets, Snowflake, Thermometer, ExternalLink,
   Pencil, Trash2, Check, BookOpen, Package, Share2, Download, CheckCircle, CloudRain, Wand2,
-  Maximize2, Minimize2, Tent, Bed, CalendarPlus, MapPin, Flag,
+  Maximize2, Minimize2, Tent, Bed, CalendarPlus, MapPin, Flag, Info,
 } from 'lucide-react'
 import { DayPicker } from 'react-day-picker'
 import 'react-day-picker/style.css'
@@ -40,6 +40,13 @@ const LIBRARIES: Parameters<typeof useJsApiLoader>[0]['libraries'] = ['marker', 
 const USE_HERE_ROUTING_DISPLAY =
   import.meta.env.VITE_USE_HERE_ROUTING === 'true' ||
   import.meta.env.VITE_USE_LVR_ROUTING === 'true'
+
+// FEAT-RIG-AWARE-INDICATOR — client-side copy of the server's RV_FALLBACK_NOTE
+// wording ("Heads up" prefix = amber advisory tier in RigWarningPill). Attached
+// to a stop whose ARRIVING leg fell back to car routing while a rig-aware
+// engine was enabled (rigAware === false from POST /trips/:id/routes).
+const RV_FALLBACK_DISPLAY_NOTE =
+  'Heads up: RV-safe routing was not available for the drive to this stop — its drive time and route are car-based, so verify clearances and restrictions for your rig on this leg.'
 
 // ─── Marker colors ──────────────────────────────────────────────────────────────
 const MC = {
@@ -549,6 +556,8 @@ export default function TripMapPage() {
   const [hereLine, setHereLine]             = useState<Map<string, Array<[number, number]>>>(new Map())
   const [hereDist, setHereDist]             = useState<Map<string, number>>(new Map())
   const [hereWaypoints, setHereWaypoints]   = useState<Map<string, DirectionsWaypoint[]>>(new Map())
+  // FEAT-RIG-AWARE-INDICATOR — per-leg provenance keyed by destination stop id.
+  const [rigAwareByStop, setRigAwareByStop] = useState<Map<string, boolean>>(new Map())
   const hereRoutesKey = useRef<string | null>(null)
   // Imperative handle to the underlying google.maps.Polyline. Captured via
   // <Polyline onLoad>; used by the useEffect below to push setRoutePath
@@ -1077,6 +1086,7 @@ export default function TripMapPage() {
         const lineMap = new Map<string, Array<[number, number]>>()
         const distMap = new Map<string, number>()
         const wpMap = new Map<string, DirectionsWaypoint[]>()
+        const rigAwareMap = new Map<string, boolean>()
         for (const r of rows) {
           if (!r?.toStopId) continue
           // FULL HERE polyline → the map line.
@@ -1096,16 +1106,19 @@ export default function TripMapPage() {
               .filter((w: any) => typeof w?.lat === 'number' && typeof w?.lng === 'number')
               .map((w: any) => ({ lat: w.lat, lng: w.lng })))
           }
+          // FEAT-RIG-AWARE-INDICATOR — per-leg provenance from the same response.
+          if (typeof r.rigAware === 'boolean') rigAwareMap.set(r.toStopId, r.rigAware)
         }
         setHereLine(lineMap)
         setHereDist(distMap)
         setHereWaypoints(wpMap)
+        setRigAwareByStop(rigAwareMap)
         console.log('[TripMapPage] HERE display data: line for', lineMap.size, 'leg(s),',
           wpMap.size, 'leg(s) with link waypoints')
       })
       .catch(err => {
         console.warn('[TripMapPage] HERE display fetch failed (Google-only display):', err?.message)
-        setHereLine(new Map()); setHereDist(new Map()); setHereWaypoints(new Map())
+        setHereLine(new Map()); setHereDist(new Map()); setHereWaypoints(new Map()); setRigAwareByStop(new Map())
       })
   }, [id, trip?.stops])
 
@@ -2548,7 +2561,10 @@ export default function TripMapPage() {
                           <p className="text-xs font-medium text-gray-900 truncate">{stop.locationName}</p>
                           {/* FEAT-HAZARD-MAP-PILL — red rig-warning pill + reveal,
                               only on stops carrying recomputed hazard notes. */}
-                          <RigWarningPill notes={hazardsByStop.get(stop.id)} />
+                          <RigWarningPill notes={[
+                            ...(hazardsByStop.get(stop.id) ?? []),
+                            ...(rigAwareByStop.get(stop.id) === false ? [RV_FALLBACK_DISPLAY_NOTE] : []),
+                          ]} />
                           <p className="text-[10px] text-gray-400 truncate">{subtitleLine1}</p>
                           {subtitleLine2 && (
                             <p className="text-[10px] text-gray-400 truncate">{subtitleLine2}</p>
@@ -2673,6 +2689,61 @@ export default function TripMapPage() {
                       </span>
                     </div>
                   )}
+                  {/* FEAT-RIG-AWARE-INDICATOR — one trip-level line (mock Option D).
+                      States: BLUE nudge (rig has no safety dims — an invitation, not
+                      a warning); GREEN (every provenance-carrying leg was truck-
+                      routed); AMBER count (mixed — the flagged stop(s) wear the
+                      amber pill above); AMBER all-car. Gated on the same display
+                      flag as the routes fetch, and renders NOTHING when no
+                      provenance arrived (legacy trips, fetch failure) — the line
+                      never claims what the data can't back. */}
+                  {(() => {
+                    if (!USE_HERE_ROUTING_DISPLAY) return null
+                    const rigAny: any = currentTripRig
+                    const dimsMissing = !rigAny ||
+                      !((rigAny.height ?? 0) > 0 || (rigAny.length ?? 0) > 0 || (rigAny.gvwr ?? 0) > 0)
+                    if (dimsMissing) {
+                      return (
+                        <div className="flex items-start gap-1.5 px-2 pt-2 text-[11px] text-gray-500">
+                          <Info size={12} className="flex-shrink-0 mt-0.5 text-rr-blue" />
+                          <span>
+                            <Link
+                              to={rigAny ? `/profile/rig/${rigAny.id}/edit?returnTo=/trips/${id}/map` : '/profile/rig'}
+                              className="font-medium text-rr-blue hover:text-rr-blue-dark underline"
+                            >Add your rig's height, length &amp; weight</Link>
+                            {' '}to get drive times measured for your rig.
+                          </span>
+                        </div>
+                      )
+                    }
+                    const vals = [...rigAwareByStop.values()]
+                    const total = vals.length
+                    if (total === 0) return null
+                    const fallback = vals.filter(v => v === false).length
+                    const measured = total - fallback
+                    if (fallback === 0) {
+                      return (
+                        <div className="flex items-center gap-1.5 px-2 pt-2 text-[11px] font-medium text-rr-pine-700">
+                          <Check size={12} className="flex-shrink-0 text-rr-pine" />
+                          <span>{total === 1 ? 'Drive measured for your rig' : 'All drives measured for your rig'}</span>
+                        </div>
+                      )
+                    }
+                    if (measured === 0) {
+                      return (
+                        <div className="flex items-start gap-1.5 px-2 pt-2 text-[11px] font-medium text-amber-800">
+                          <AlertTriangle size={12} className="flex-shrink-0 mt-0.5 text-amber-600" />
+                          <span>Drive times on this trip are car-based — verify clearances and restrictions for your rig on every leg.</span>
+                        </div>
+                      )
+                    }
+                    return (
+                      <div className="flex items-start gap-1.5 px-2 pt-2 text-[11px] font-medium text-amber-800">
+                        <AlertTriangle size={12} className="flex-shrink-0 mt-0.5 text-amber-600" />
+                        <span>{measured} of {total} drives measured for your rig — see the flagged stop{fallback > 1 ? 's' : ''}</span>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
 
