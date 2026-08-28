@@ -1,0 +1,2910 @@
+{
+  "1. CAR (baseline)": {
+    "request": {
+      "origin": {
+        "address": "Great Neck, NY"
+      },
+      "destination": {
+        "address": "Hauppauge, NY"
+      },
+      "routingPreference": "TRAFFIC_AWARE",
+      "travelMode": "DRIVE"
+    },
+    "httpStatus": 200,
+    "response": {
+      "routes": [
+        {
+          "legs": [
+            {
+              "distanceMeters": 53362,
+              "duration": "3051s",
+              "staticDuration": "2633s",
+              "polyline": {
+                "encodedPolyline": "e{_xF|a_aMAMMiCCYCm@OkCUwDCe@QsCSsDSqDUqDSqDUqDYgFZC^A`CV@?z@LRFVP`Av@H}@VoABKFm@EkCAMQsAM]KOi@g@GIO]Ee@FyC@y@?qAAy@Gk@jA{@d@_@LKr@e@dAc@zEoA\\I\\GJIHEVGNCf@Mf@KtA[PCj@G\\CJ?l@Av@Ap@CPCt@OdAYpCu@ZKrAg@f@O^MNITKPMTQJK`@c@v@}@RY@A`@u@N[d@mBV}@N_@\\u@NUPQHGd@a@LINOJIpAgAlDkDBCxAwAf@g@j@i@FIFEJMZ]j@y@r@gAn@c@b@Ib@@pBYr@M|D}@tBc@FSb@K~@SbDu@NL~@U`@IpA[jFkAx@QNClDw@jAQNOHAjAIp@Aj@Ad@AZ?n@@~@BbCHjBDLNnABp@@f@@rCFf@Bj@@HGL?zBLr@DjBJdAD`A@xBCz@?vA@V?v@DH?pBPRBh@ThB~@^R`AcDd@}A?]N{@XyARgAd@_C@}@j@_D`@gDRgDFkDCmCA]EeAOgCASUkB?CMs@c@_CIc@e@eBSs@Y{@i@wAO]s@wAe@aAqCwFAEwC}FeEsI_@w@s@oBK[a@wAOo@[aBE_@[qCc@qGsBg[UgDOgCKyAc@kGUgDOsBMwACa@_@kCIi@]mBS{@_@{AWw@_@gAWq@M[[s@e@_A]m@e@w@SYsAcBY[sCsCs@o@mAoA_@e@_AoAsAeCcAgCs@kCKc@_@_CM_AQgBUkBUyBQyAu@mG]iB}@uCKYo@_B[m@i@aAm@}@_@g@c@q@i@s@oAkB[g@uAoByAkCsAcDgAsDU_AY{Ag@aDU{BGw@AUI{AAe@E_D?w@BgC@}C@i@DoJ?mA?Y?c@?q@AwEAkFBeADaCDuALkC^eILoCJuG@c@?wBAiBIaJBoE@g@DiABu@Ds@NeCF_AdA_Jd@wD`@aD`@eDFq@N_C@O@SH_D?qCAu@MeEOwBW}DGy@Aa@CmBBkDReDVgCl@gD`@aBX_AbAoCbA}Bv@gBHQl@wAbDuHd@qATw@^aB`@qB`@{CN}AFcAFqC?k@?qAGaC?MAMWiDGu@a@eDGa@_@gCMq@_@kBg@_C}@iDMg@y@wCe@gBi@qBQs@S{@o@oCm@qCOq@cAoFg@aDYkBOkAMuAIwAGqACm@C{B?y@BcB?[FwAHoAVkCD[NaAV}Ar@{C`@uAZ_AfAkCf@cAvBgE~ByE`@}@d@iARg@b@gAl@mBb@yAJa@TaAl@{CLs@R}AJcADe@Bc@Dm@F{A@_@@yBAwA?QIsBEw@WuDEo@Gm@MoAIu@E[_@sC{@uGeAcI_@qCAIoAyJqBiOY_Cm@oEkBwNIi@q@kFa@_DWeC[wDGcAOkCIaBCm@ImEASGqJI{FYuMa@}KEkA_@kHWoE{@yLE]QqB_@{DSoBYiCSoB[mCMkAa@iDIe@Ky@Iq@SuAU}ASyAk@oDW}Ac@kCuAoIeAcFKc@gAkE[gAUw@Wu@Mc@EKKY@WiAmDGS_@qBIcAAIEmBCqCAc@?u@CWEe@CQWeAUk@q@}@q@e@sBy@SKe@_@]a@OUi@mASi@MG}@gDKg@Km@SmAIk@CYGi@AQKqAGuACeDB}CFwD?o@CaECkAM{CGaAUuCYgCG]QmAUmAKq@[wAi@}BI_@WoAQ{@QaAKu@SiBMoAIqAIeBA[C{@C}B@wADwDEaCI{EQmBAEWkBCUGa@_@kBWkA]mAk@qBEQwAmF_@gCWcCMyAQiDAc@CcC?]BmBDkBBg@@y@FkBBcAHiCDaBDgBDwAFoC@y@@k@CcAMiEEeACk@Ig@o@kEE[GYk@gCGUSs@Mc@i@{AWo@eBuDg@oAo@yAsAgD]kAgAoEWoA{@}Em@}E_@aFOgEA[EqB?sB?]?w@?[AoACcAE_AASEu@MsAM}@QoA_@eBG[Ss@g@cBo@_BYm@_@u@a@s@CG_AqA]e@gBqBw@aAIIYa@{@kAU_@cBwCQ]cBoD{AmDSi@a@eAkAmD{@kDAKa@}BO_ACYOiAIcACYGq@K{BAWAq@A}ABsDPiDH}@LiADa@d@uCBONs@Pu@Po@^oAX{@Z{@h@mA`CwEj@gAN[b@gAZaA\\gADSNo@b@aCLaALmA@EFy@Dq@@g@BsA?}@?e@CaBAEOeCIcA[cDQyBAOYgFEcAEuAEiBCaACiFBuFDyBHkC@K^}GZuD\\iCHi@\\cBLg@t@qCBIPg@p@gBnAiCz@yAZg@rAeBLObBcBLKdA{@vAeA^Yx@s@DC`@a@X]b@i@d@o@LQt@sAbAyB|@mC@ERy@R}@Ji@RsABYTgCNoD@kDCcA?CE{AAWQeCGs@]kCE_@_@mBOs@m@{BK_@M_@{@eC_@gAw@aC]eAAAc@wAMa@q@uCs@{DM}@K}@MiAAEOgB?CIsA?OE_AEcBAuA@yB?_@@gB?i@@cC?wA?[KiFUmEa@{EaAeHa@oC_@aC{@aFuA_IACu@{DsCaNiAsEsAiEwAoDaBeDGOwBkDcB_C[_@mAsA{@}@sCcCQMeCcBi@Yw@c@s@]oAk@w@]aAc@s@]sAq@QIy@c@wBsAaCeBm@g@c@_@KIeAaAYWa@c@k@m@kBwBcBmBAAyDmEo@s@iAiAg@e@[Wa@[iA}@SO}@m@aBcAiB_AAAcAe@ME{@]yAi@AAiD}@sAWCASC}@OWE_C_@UG}Ac@UKKCaBy@GEwAaAwAoAa@e@o@w@SYq@cAEIYi@Ue@Ym@}@cCa@{AUcA}@uEi@gECU?EKeAQ{BSeFEgEDcE@_@?CLeD\\wEf@kET}A~AsKr@}FJcA?CT_CRqBNmBDg@JsAFgAPuCFcATaFDqADkBDqCBuAFoCEgDGqAMeBEa@KmAWiBG]{@sDgAmDKWSk@oAyCSi@g@mAe@kA[}@g@wAi@aBs@gCk@{BU_A[{AACMq@UqAi@eDg@uDU{Be@aFEc@AU[gFGoAIuBM{DIkH?CA_@@cE?qAD}CBaADaBFsBJaCFcA@OJaBHsANkBDe@Fw@\\wDPqBJy@H{@^_DVsBFc@BWLw@PkALq@P{@b@sBVaA\\mATw@DONc@Rk@`@gAXu@Xq@Tg@DKRe@`@y@b@{@b@{@f@cA^s@`AiBbAiBz@_BZg@jAuB\\k@|@{A~@_Bb@w@tBmErAkDt@yBf@aB\\gAb@gBLg@Lg@f@aCF_@X_BN{@Jm@X{BP{A@MPgBL_B@SDa@@_@Dq@FmAD{AB}@B{@DmABoAHsCDoBFeCJcEF_CDiABaA@q@HsCBaAFcCD{AD}AFoBLuE@aABoAF_C@cADwBDeB@w@H}CNaGL{EFuCBgAJqDFcCBkADoABoADsAD}ABwA?Q@aA?e@?m@AYAe@Cy@GwAEo@MsAEe@EUK}@UqAQ_AUaAK_@Ok@Uy@Qc@Uq@]}@Q_@GMSa@Sc@[i@AAS]_@m@e@o@U]Y[]a@WYGIUUa@c@[[e@g@]a@Y[WWc@e@_@a@c@g@_@a@e@e@i@m@i@i@a@e@q@u@s@u@[[y@_Ae@e@g@k@[]SSUYw@y@YY[_@_@_@[]WYWYUUq@u@Y[a@a@Y[OQ_@a@YY[]a@c@e@g@o@s@e@g@aAgAi@q@eAwAEI_A{A_@o@i@kAUi@[aACISq@e@cCKk@O_BGaAEqA?{B@y@DcAX{CFa@Ly@|@kFTsAXmA\\oAVkAvAaGfAuE^_Bf@aCLi@b@{BlAyF~AuHd@gCp@cEl@cF?IJcAPaCNqB`@eFRoCHkAXkD@[bAsNZeEJyARoCLaCL{CHgD@gA@qA?c@?uAAYAsACuAK{DEqAGmCAc@CqAGiB?AUcICaAASAm@ImB?AA]A}A?qB?Y@oDH}D?ADkBVsDJsAFaD@o@MwCEg@a@sBY}@g@{AEM_BkEUs@iA}CKUgAqC}AeEwBcGo@aBO_@Yw@]}@qBoFGOc@qAeBuEa@iAc@sAM}@CQDe@Ro@JIFCZAXRb@Xf@^HD`@\\h@`@RNnAbAh@b@\\VTRd@^RPPJf@V^JNBR?N@P?P@J?b@@D@JNXRHJFPFTJF?R@t@@j@@T[PM@?H@bACFk@Hl@KBMC{@XH"
+              },
+              "startLocation": {
+                "latLng": {
+                  "latitude": 40.800672,
+                  "longitude": -73.7284676
+                }
+              },
+              "endLocation": {
+                "latLng": {
+                  "latitude": 40.825634799999996,
+                  "longitude": -73.2025566
+                }
+              },
+              "steps": [
+                {
+                  "distanceMeters": 790,
+                  "staticDuration": "92s",
+                  "polyline": {
+                    "encodedPolyline": "e{_xF|a_aMAMMiCCYCm@OkCUwDCe@QsCSsDSqDUqDSqDUqDYgF"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.800672,
+                      "longitude": -73.7284676
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8017439,
+                      "longitude": -73.7191848
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "DEPART",
+                    "instructions": "Head east on Baker Hill Rd toward Ruxton Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.5 mi"
+                    },
+                    "staticDuration": {
+                      "text": "2 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 213,
+                  "staticDuration": "25s",
+                  "polyline": {
+                    "encodedPolyline": "{a`xFzg}`MZC^A`CV@?z@LRFVP`Av@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8017439,
+                      "longitude": -73.7191848
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.7999262,
+                      "longitude": -73.71974709999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_RIGHT",
+                    "instructions": "Turn right onto Station Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.1 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 448,
+                  "staticDuration": "51s",
+                  "polyline": {
+                    "encodedPolyline": "qv_xFlk}`MH}@VoABKFm@EkCAMQsAM]KOi@g@GIO]Ee@FyC@y@?qAAy@Gk@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.7999262,
+                      "longitude": -73.71974709999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8003201,
+                      "longitude": -73.7147616
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_LEFT",
+                    "instructions": "Turn left onto Ravine Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.3 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 1635,
+                  "staticDuration": "203s",
+                  "polyline": {
+                    "encodedPolyline": "_y_xFfl|`MjA{@d@_@LKr@e@dAc@zEoA\\I\\GJIHEVGNCf@Mf@KtA[PCj@G\\CJ?l@Av@Ap@CPCt@OdAYpCu@ZKrAg@f@O^MNITKPMTQJK`@c@v@}@RY@A`@u@N[d@mBV}@N_@\\u@NUPQHGd@a@LINOJIpAgAlDkDBCxAwAf@g@j@i@FIFEJMZ]j@y@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8003201,
+                      "longitude": -73.7147616
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.787797,
+                      "longitude": -73.70601169999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_RIGHT",
+                    "instructions": "Turn right onto E Shore Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "1.0 mi"
+                    },
+                    "staticDuration": {
+                      "text": "3 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 2188,
+                  "staticDuration": "227s",
+                  "polyline": {
+                    "encodedPolyline": "wj}wFpuz`Mr@gAn@c@b@Ib@@pBYr@M|D}@tBc@FSb@K~@SbDu@NL~@U`@IpA[jFkAx@QNClDw@jAQNOHAjAIp@Aj@Ad@AZ?n@@~@BbCHjBDLNnABp@@f@@rCFf@Bj@@HGL?zBLr@DjBJdAD`A@xBCz@?vA@V?v@DH?pBPRBh@ThB~@^R"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.787797,
+                      "longitude": -73.70601169999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.7686931,
+                      "longitude": -73.7040746
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "NAME_CHANGE",
+                    "instructions": "Continue onto Community Dr"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "1.4 mi"
+                    },
+                    "staticDuration": {
+                      "text": "4 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 124,
+                  "staticDuration": "16s",
+                  "polyline": {
+                    "encodedPolyline": "isywFliz`M`AcDd@}A"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.7686931,
+                      "longitude": -73.7040746
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.7681653,
+                      "longitude": -73.7027787
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_LEFT",
+                    "instructions": "Turn left onto S Service Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "407 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 16101,
+                  "staticDuration": "634s",
+                  "polyline": {
+                    "encodedPolyline": "apywFjaz`M?]N{@XyARgAd@_C@}@j@_D`@gDRgDFkDCmCA]EeAOgCASUoBMs@c@_CIc@e@eBSs@Y{@i@wAO]s@wAe@aAsC}FwC}FeEsI_@w@s@oBK[a@wAOo@[aBE_@[qCc@qGsBg[UgDOgCKyAc@kGUgDOsBMwACa@_@kCIi@]mBS{@_@{AWw@_@gAWq@M[[s@e@_A]m@e@w@SYsAcBY[sCsCs@o@mAoA_@e@_AoAsAeCcAgCs@kCKc@_@_CM_AQgBUkBUyBQyAu@mG]iB}@uCKYo@_B[m@i@aAm@}@_@g@c@q@i@s@oAkB[g@uAoByAkCsAcDgAsDU_AY{Ag@aDU{BGw@AUI{AAe@E_D?w@BgC@}C@i@DoJ?mA?Y?c@?q@AwEAkFBeADaCDuALkC^eILoCJuG@c@?wBAiBIaJBoE@g@DiABu@Ds@NeCF_AdA_Jd@wD`@aD`@eDFq@N_C@O@SH_D?qCAu@MeEOwBW}DGy@Aa@CmBBkDReDVgCl@gD`@aBX_AbAoCbA}Bv@gBHQl@wAbDuHd@qATw@^aB`@qB`@{CL}AHcAFqC?k@?qAGaC?MAMWiDGu@a@eDGa@_@gCMq@_@kBg@_C}@iDMg@y@wCe@gBi@qBQs@S{@o@oCm@qCOq@cAoFg@aDYkBOkAMuAIwAGqACm@C{B?y@BcB?[FwAHoAVkCD[NaAV}Ar@{C`@uAZ_AfAkCf@cAvBgE~ByE`@}@d@iARg@b@gAl@mBb@yAJa@TaAl@{CLs@R}AJcADe@Bc@Dm@F{A@_@@yBAwA?QIsBEw@WuDEo@Gm@MoAIu@E[_@sC{@uGeAcI_@qCAIoAyJqBiOY_Cm@oEkBwNIi@q@kFa@_DWeC[wDGcAOkCIaBCm@ImEASGqJI{FYuMa@}KEkA_@kHWoE{@yLE]QqB_@{DSoBYiCSoB[mCMkAa@iDIe@Ky@Iq@SuAU}ASyAk@oDW}Ac@kCuAoIeAcFKc@gAkE[gAUw@Wu@Mc@EKKY"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.7681653,
+                      "longitude": -73.7027787
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.7878008,
+                      "longitude": -73.5244742
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "RAMP_LEFT",
+                    "instructions": "Merge onto I-495 E via the ramp on the left to Riverhead"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "10.0 mi"
+                    },
+                    "staticDuration": {
+                      "text": "11 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 705,
+                  "staticDuration": "36s",
+                  "polyline": {
+                    "encodedPolyline": "wj}wF|fw_M@WiAmDGS_@qBIcAAIEmBCqCAc@?u@CWEe@CQWeAUk@q@}@q@e@sBy@SKe@_@]a@OUi@mASi@MG"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.7878008,
+                      "longitude": -73.5244742
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.7907611,
+                      "longitude": -73.51778639999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "RAMP_RIGHT",
+                    "instructions": "Take exit 42 toward Northern Pkwy E/Hauppauge"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.4 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 25746,
+                  "staticDuration": "942s",
+                  "polyline": {
+                    "encodedPolyline": "g}}wFd}u_M}@gDKg@Km@SmAIk@CYGi@AQKqAGuACeDB}CFwD?o@CaECkAM{CGaAUuCYgCG]QmAUmAKq@[wAi@}BI_@WoAQ{@QaAKu@SiBMoAIqAIeBA[C{@C}B@wADwDEaCI{EQmBAEWkBCUGa@_@kBWkA]mAk@qBEQwAmF_@gCWcCMyAQiDAc@CcC?]BmBDkBBg@@y@FkBBcAHiCDaBDgBDwAFoC@y@@k@CcAMiEEeACk@Ig@o@kEE[GYk@gCGUSs@Mc@i@{AWo@eBuDg@oAo@yAsAgD]kAgAoEWoA?A{@{Em@}E_@aFOgEA[EqB?sB?]?w@?[AoACcAE_AASEu@MsAM}@QoA_@eBG[Ss@g@cBo@_BYm@_@u@a@s@CG_AqA]e@gBqBw@aAIIYa@{@kAU_@cBwCQ]cBoD{AmDSi@a@eAkAmD{@kDAKa@}BO_ACYOiAIcACYGq@K{BAWAq@A}ABsDPiDH}@LiADa@d@uCBONs@Pu@Po@^oAX{@Z{@h@mA`CwEj@gAN[b@gAZaA\\gADSNo@b@aCLaALmA@EFy@Dq@@g@BsA?}@?e@CaBAEOeCIcA[cDQyBAOYgFEcAEuAEiBCaACiFBuFDyBHkC@K^}GZuD\\iCHi@\\cBLg@t@qCBIPg@p@gBnAiCz@yAZg@rAeBLObBcBLKdA{@vAeA^Yx@s@DC`@a@X]b@i@d@o@LQt@sAbAyB|@mC@ERy@R}@Ji@RsABYTgCNoD@kDCcAE_BAWQeCGs@]kCE_@_@mBOs@m@{BK_@M_@{@eC_@gAw@aC]eAe@yAMa@?Cq@qCs@{DM}@K}@MiAAEOgBIwA?OE_AEcBAuA@yB?_@@gB?i@@cC?wA?[KiFUmEa@{EaAeHa@oC_@aC{@aFuA_Iw@_EsCaNiAsEsAiEwAoDaBeDGOwBkDcB_C[_@mAsA{@}@sCcCQMeCcBi@Yw@c@s@]oAk@w@]aAc@s@]sAq@QIy@c@wBsAaCeBm@g@c@_@KIeAaAYWa@c@k@m@kBwBcBmB{DoEo@s@iAiAg@e@[Wa@[iA}@SO}@m@aBcAiB_AeAg@ME{@]yAi@AAiD}@sAWWE}@OWE_C_@UG}Ac@UKKCaBy@GEwAaAwAoAa@e@o@w@SYq@cAEIYi@Ue@Ym@}@cCa@{AUcA}@uEi@gECU?EKeAQ{BSeFEgEDcE@_@LiD\\wEf@kET}A~AsKr@}FJcA?CT_CRqBNmBDg@JsAFgAPuCFcATaFDqADkBDqCBuAFoCEgDGqAMeBEa@KmAWiBG]{@sDgAmDKWSk@oAyCSi@g@mAe@kA[}@g@wAi@aBs@gCk@{BU_A[{AOu@UqAi@eDg@uDU{Be@aFEc@AU[gFGoAIuBM{DIkHAc@@cE?qAD}CBaADaBFsBJaCFcA@OJaBHsANkBDe@Fw@\\wDPqBJy@H{@^_DVsBFc@BWLw@PkALq@P{@b@sBVaA\\mATw@DONc@Rk@`@gAXu@Xq@Tg@DKRe@`@y@b@{@b@{@f@cA^s@`AiBbAiBz@_BZg@jAuB\\k@|@{A~@_Bb@w@tBmErAkDt@yBf@aB\\gAb@gBLg@Lg@f@aCF_@X_BN{@Jm@X{BP{A@MPgBL_B@SDa@@_@Dq@FmAD{AB}@B{@DmABoAHsCDoBFeCJcEF_CDiABaA@q@HsCBaAFcCD{AD}AFoBLuE@aABoAF_C@cADwBDeB@w@H}CNaGL{EFuCBgAJqDFcCBkADoABoADsAD}ABwA?Q@aA?e@?m@AYAe@Cy@GwAEo@MsAEe@EUK}@UqAQ_AUaAK_@Ok@Uy@Qc@Uq@]}@Q_@GMSa@Sc@[i@AAS]_@m@e@o@U]Y[]a@WYGIUUa@c@[[e@g@]a@Y[WWc@e@_@a@c@g@_@a@e@e@i@m@i@i@a@e@q@u@s@u@[[y@_Ae@e@g@k@[]SSUYw@y@YY[_@_@_@[]WYWYUUq@u@Y[a@a@Y[OQ_@a@YY[]a@c@e@g@o@s@e@g@aAgAi@q@eAwAEI_A{A_@o@i@kAUi@[aACISq@e@cCKk@O_BGaAEqA?{B@y@DcAX{CFa@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.7907611,
+                      "longitude": -73.51778639999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8295113,
+                      "longitude": -73.25158119999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "MERGE",
+                    "instructions": "Merge onto Northern State Pkwy"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "16.0 mi"
+                    },
+                    "staticDuration": {
+                      "text": "16 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 3313,
+                  "staticDuration": "192s",
+                  "polyline": {
+                    "encodedPolyline": "moexFj}a~LLy@|@kFTsAXmA\\oAVkAvAaGfAuE^_Bf@aCLi@b@{BlAyF~AuHd@gCp@cEl@cF?IJcAPaCNqB`@eFRoCHkAXkD@[bAsNZeEJyARoCLcCLyCHgD@gA@qA?c@?uAA[AqACuAK{DEqAGmCAc@CqAGkBUcICaAASAm@IoBA]A}A?qB?Y@oDH_EDkBVsDJsA"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8295113,
+                      "longitude": -73.25158119999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8243168,
+                      "longitude": -73.21340239999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "MERGE",
+                    "instructions": "Merge onto NY-347/NY-454 E\nPass by Valley Bank (on the right in 1 mi)"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "2.1 mi"
+                    },
+                    "staticDuration": {
+                      "text": "3 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 304,
+                  "staticDuration": "21s",
+                  "polyline": {
+                    "encodedPolyline": "_odxFvnz}LFaD@o@MwCEi@a@qBY}@g@{AEM"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8243168,
+                      "longitude": -73.21340239999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8249034,
+                      "longitude": -73.209969
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_LEFT",
+                    "instructions": "Keep left to continue on NY-347 E, follow signs for Port Jefferson\nPass by Carvel (on the right)"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.2 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 990,
+                  "staticDuration": "61s",
+                  "polyline": {
+                    "encodedPolyline": "srdxFhyy}L_BkEUs@iA}CKUgAqC}AeEwBcGo@aBO_@Yw@]}@qBoFGOc@qAeBuEa@iAc@sA"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8249034,
+                      "longitude": -73.209969
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8296017,
+                      "longitude": -73.1999785
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "STRAIGHT",
+                    "instructions": "Continue straight to stay on NY-347 E"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.6 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 35,
+                  "staticDuration": "8s",
+                  "polyline": {
+                    "encodedPolyline": "_pexFzzw}LM}@CQ"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8296017,
+                      "longitude": -73.1999785
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.829694100000005,
+                      "longitude": -73.1995788
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_SLIGHT_RIGHT",
+                    "instructions": "Slight right toward Hauppauge Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "115 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 490,
+                  "staticDuration": "62s",
+                  "polyline": {
+                    "encodedPolyline": "qpexFjxw}LDe@Ro@JIFCZAXRb@Xf@^HD`@\\h@`@RNnAbAh@b@\\VTRd@^RPPJf@V^JNBR?N@P?P@J?b@@D@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.829694100000005,
+                      "longitude": -73.1995788
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8259561,
+                      "longitude": -73.20117730000001
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_SHARP_RIGHT",
+                    "instructions": "Sharp right onto Hauppauge Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.3 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 119,
+                  "staticDuration": "11s",
+                  "polyline": {
+                    "encodedPolyline": "gydxFjbx}LJNXRHJFPFTJF?R@t@@j@@T"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8259561,
+                      "longitude": -73.20117730000001
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8255477,
+                      "longitude": -73.20236249999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_RIGHT",
+                    "instructions": "Turn right onto Townline Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "390 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 26,
+                  "staticDuration": "8s",
+                  "polyline": {
+                    "encodedPolyline": "uvdxFvix}L[PM@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8255477,
+                      "longitude": -73.20236249999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8257627,
+                      "longitude": -73.2024639
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_RIGHT",
+                    "instructions": "Turn right"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "85 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 62,
+                  "staticDuration": "18s",
+                  "polyline": {
+                    "encodedPolyline": "_xdxFjjx}L?H@bACFk@H"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8257627,
+                      "longitude": -73.2024639
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8259883,
+                      "longitude": -73.2029417
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_LEFT",
+                    "instructions": "Turn left"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "203 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 58,
+                  "staticDuration": "17s",
+                  "polyline": {
+                    "encodedPolyline": "mydxFjmx}Ll@KBMC{@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8259883,
+                      "longitude": -73.2029417
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8257607,
+                      "longitude": -73.20250949999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "UTURN_LEFT",
+                    "instructions": "Make a U-turn"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "190 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 15,
+                  "staticDuration": "9s",
+                  "polyline": {
+                    "encodedPolyline": "_xdxFtjx}LXH"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8257607,
+                      "longitude": -73.20250949999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.825634799999996,
+                      "longitude": -73.2025566
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_RIGHT",
+                    "instructions": "Turn right\nDestination will be on the right"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "49 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                }
+              ],
+              "localizedValues": {
+                "distance": {
+                  "text": "33.2 mi"
+                },
+                "duration": {
+                  "text": "51 mins"
+                },
+                "staticDuration": {
+                  "text": "44 mins"
+                }
+              }
+            }
+          ],
+          "distanceMeters": 53361,
+          "duration": "3051s",
+          "staticDuration": "2634s",
+          "polyline": {
+            "encodedPolyline": "e{_xF|a_aMAMMiCCYCm@OkCUwDCe@QsCSsDSqDUqDSqDUqDYgFZC^A`CV@?z@LRFVP`Av@H}@VoABKFm@EkCAMQsAM]KOi@g@GIO]Ee@FyC@y@?qAAy@Gk@jA{@d@_@LKr@e@dAc@zEoA\\I\\GJIHEVGNCf@Mf@KtA[PCj@G\\CJ?l@Av@Ap@CPCt@OdAYpCu@ZKrAg@f@O^MNITKPMTQJK`@c@v@}@RY@A`@u@N[d@mBV}@N_@\\u@NUPQHGd@a@LINOJIpAgAlDkDBCxAwAf@g@j@i@FIFEJMZ]j@y@r@gAn@c@b@Ib@@pBYr@M|D}@tBc@FSb@K~@SbDu@NL~@U`@IpA[jFkAx@QNClDw@jAQNOHAjAIp@Aj@Ad@AZ?n@@~@BbCHjBDLNnABp@@f@@rCFf@Bj@@HGL?zBLr@DjBJdAD`A@xBCz@?vA@V?v@DH?pBPRBh@ThB~@^R`AcDd@}A?]N{@XyARgAd@_C@}@j@_D`@gDRgDFkDCmCA]EeAOgCASUkB?CMs@c@_CIc@e@eBSs@Y{@i@wAO]s@wAe@aAqCwFAEwC}FeEsI_@w@s@oBK[a@wAOo@[aBE_@[qCc@qGsBg[UgDOgCKyAc@kGUgDOsBMwACa@_@kCIi@]mBS{@_@{AWw@_@gAWq@M[[s@e@_A]m@e@w@SYsAcBY[sCsCs@o@mAoA_@e@_AoAsAeCcAgCs@kCKc@_@_CM_AQgBUkBUyBQyAu@mG]iB}@uCKYo@_B[m@i@aAm@}@_@g@c@q@i@s@oAkB[g@uAoByAkCsAcDgAsDU_AY{Ag@aDU{BGw@AUI{AAe@E_D?w@BgC@}C@i@DoJ?mA?Y?c@?q@AwEAkFBeADaCDuALkC^eILoCJuG@c@?wBAiBIaJBoE@g@DiABu@Ds@NeCF_AdA_Jd@wD`@aD`@eDFq@N_C@O@SH_D?qCAu@MeEOwBW}DGy@Aa@CmBBkDReDVgCl@gD`@aBX_AbAoCbA}Bv@gBHQl@wAbDuHd@qATw@^aB`@qB`@{CN}AFcAFqC?k@?qAGaC?MAMWiDGu@a@eDGa@_@gCMq@_@kBg@_C}@iDMg@y@wCe@gBi@qBQs@S{@o@oCm@qCOq@cAoFg@aDYkBOkAMuAIwAGqACm@C{B?y@BcB?[FwAHoAVkCD[NaAV}Ar@{C`@uAZ_AfAkCf@cAvBgE~ByE`@}@d@iARg@b@gAl@mBb@yAJa@TaAl@{CLs@R}AJcADe@Bc@Dm@F{A@_@@yBAwA?QIsBEw@WuDEo@Gm@MoAIu@E[_@sC{@uGeAcI_@qCAIoAyJqBiOY_Cm@oEkBwNIi@q@kFa@_DWeC[wDGcAOkCIaBCm@ImEASGqJI{FYuMa@}KEkA_@kHWoE{@yLE]QqB_@{DSoBYiCSoB[mCMkAa@iDIe@Ky@Iq@SuAU}ASyAk@oDW}Ac@kCuAoIeAcFKc@gAkE[gAUw@Wu@Mc@EKKY@WiAmDGS_@qBIcAAIEmBCqCAc@?u@CWEe@CQWeAUk@q@}@q@e@sBy@SKe@_@]a@OUi@mASi@MG}@gDKg@Km@SmAIk@CYGi@AQKqAGuACeDB}CFwD?o@CaECkAM{CGaAUuCYgCG]QmAUmAKq@[wAi@}BI_@WoAQ{@QaAKu@SiBMoAIqAIeBA[C{@C}B@wADwDEaCI{EQmBAEWkBCUGa@_@kBWkA]mAk@qBEQwAmF_@gCWcCMyAQiDAc@CcC?]BmBDkBBg@@y@FkBBcAHiCDaBDgBDwAFoC@y@@k@CcAMiEEeACk@Ig@o@kEE[GYk@gCGUSs@Mc@i@{AWo@eBuDg@oAo@yAsAgD]kAgAoEWoA{@}Em@}E_@aFOgEA[EqB?sB?]?w@?[AoACcAE_AASEu@MsAM}@QoA_@eBG[Ss@g@cBo@_BYm@_@u@a@s@CG_AqA]e@gBqBw@aAIIYa@{@kAU_@cBwCQ]cBoD{AmDSi@a@eAkAmD{@kDAKa@}BO_ACYOiAIcACYGq@K{BAWAq@A}ABsDPiDH}@LiADa@d@uCBONs@Pu@Po@^oAX{@Z{@h@mA`CwEj@gAN[b@gAZaA\\gADSNo@b@aCLaALmA@EFy@Dq@@g@BsA?}@?e@CaBAEOeCIcA[cDQyBAOYgFEcAEuAEiBCaACiFBuFDyBHkC@K^}GZuD\\iCHi@\\cBLg@t@qCBIPg@p@gBnAiCz@yAZg@rAeBLObBcBLKdA{@vAeA^Yx@s@DC`@a@X]b@i@d@o@LQt@sAbAyB|@mC@ERy@R}@Ji@RsABYTgCNoD@kDCcA?CE{AAWQeCGs@]kCE_@_@mBOs@m@{BK_@M_@{@eC_@gAw@aC]eAAAc@wAMa@q@uCs@{DM}@K}@MiAAEOgB?CIsA?OE_AEcBAuA@yB?_@@gB?i@@cC?wA?[KiFUmEa@{EaAeHa@oC_@aC{@aFuA_IACu@{DsCaNiAsEsAiEwAoDaBeDGOwBkDcB_C[_@mAsA{@}@sCcCQMeCcBi@Yw@c@s@]oAk@w@]aAc@s@]sAq@QIy@c@wBsAaCeBm@g@c@_@KIeAaAYWa@c@k@m@kBwBcBmBAAyDmEo@s@iAiAg@e@[Wa@[iA}@SO}@m@aBcAiB_AAAcAe@ME{@]yAi@AAiD}@sAWCASC}@OWE_C_@UG}Ac@UKKCaBy@GEwAaAwAoAa@e@o@w@SYq@cAEIYi@Ue@Ym@}@cCa@{AUcA}@uEi@gECU?EKeAQ{BSeFEgEDcE@_@?CLeD\\wEf@kET}A~AsKr@}FJcA?CT_CRqBNmBDg@JsAFgAPuCFcATaFDqADkBDqCBuAFoCEgDGqAMeBEa@KmAWiBG]{@sDgAmDKWSk@oAyCSi@g@mAe@kA[}@g@wAi@aBs@gCk@{BU_A[{AACMq@UqAi@eDg@uDU{Be@aFEc@AU[gFGoAIuBM{DIkH?CA_@@cE?qAD}CBaADaBFsBJaCFcA@OJaBHsANkBDe@Fw@\\wDPqBJy@H{@^_DVsBFc@BWLw@PkALq@P{@b@sBVaA\\mATw@DONc@Rk@`@gAXu@Xq@Tg@DKRe@`@y@b@{@b@{@f@cA^s@`AiBbAiBz@_BZg@jAuB\\k@|@{A~@_Bb@w@tBmErAkDt@yBf@aB\\gAb@gBLg@Lg@f@aCF_@X_BN{@Jm@X{BP{A@MPgBL_B@SDa@@_@Dq@FmAD{AB}@B{@DmABoAHsCDoBFeCJcEF_CDiABaA@q@HsCBaAFcCD{AD}AFoBLuE@aABoAF_C@cADwBDeB@w@H}CNaGL{EFuCBgAJqDFcCBkADoABoADsAD}ABwA?Q@aA?e@?m@AYAe@Cy@GwAEo@MsAEe@EUK}@UqAQ_AUaAK_@Ok@Uy@Qc@Uq@]}@Q_@GMSa@Sc@[i@AAS]_@m@e@o@U]Y[]a@WYGIUUa@c@[[e@g@]a@Y[WWc@e@_@a@c@g@_@a@e@e@i@m@i@i@a@e@q@u@s@u@[[y@_Ae@e@g@k@[]SSUYw@y@YY[_@_@_@[]WYWYUUq@u@Y[a@a@Y[OQ_@a@YY[]a@c@e@g@o@s@e@g@aAgAi@q@eAwAEI_A{A_@o@i@kAUi@[aACISq@e@cCKk@O_BGaAEqA?{B@y@DcAX{CFa@Ly@|@kFTsAXmA\\oAVkAvAaGfAuE^_Bf@aCLi@b@{BlAyF~AuHd@gCp@cEl@cF?IJcAPaCNqB`@eFRoCHkAXkD@[bAsNZeEJyARoCLaCL{CHgD@gA@qA?c@?uAAYAsACuAK{DEqAGmCAc@CqAGiB?AUcICaAASAm@ImB?AA]A}A?qB?Y@oDH}D?ADkBVsDJsAFaD@o@MwCEg@a@sBY}@g@{AEM_BkEUs@iA}CKUgAqC}AeEwBcGo@aBO_@Yw@]}@qBoFGOc@qAeBuEa@iAc@sAM}@CQDe@Ro@JIFCZAXRb@Xf@^HD`@\\h@`@RNnAbAh@b@\\VTRd@^RPPJf@V^JNBR?N@P?P@J?b@@D@JNXRHJFPFTJF?R@t@@j@@T[PM@?H@bACFk@Hl@KBMC{@XH"
+          },
+          "description": "I-495 E and Northern State Pkwy",
+          "warnings": [
+            "This route includes a highway."
+          ],
+          "viewport": {
+            "low": {
+              "latitude": 40.767132,
+              "longitude": -73.7284676
+            },
+            "high": {
+              "latitude": 40.8297235,
+              "longitude": -73.1990665
+            }
+          },
+          "travelAdvisory": {},
+          "localizedValues": {
+            "distance": {
+              "text": "33.2 mi"
+            },
+            "duration": {
+              "text": "51 mins"
+            },
+            "staticDuration": {
+              "text": "44 mins"
+            }
+          },
+          "routeToken": "Cq4CCsEBMr4BGqIBCjMCFg1ShDQft44Ihbspkp8thZwOvN3hAqGj017VptlH1v7YywLyrZEB8j369wHllgSpTAASNGIv_GfLAexmI2nlBghKR2dFoeUlU1XCV-7fiRLVu1QPHNEIp16LX8tC2asKuWedBagTIZYaEQAJISjzAaQHxBkJAxQIEYgBKg0bH18UZnIDBggHARplPQBtyD5FoQ39Pkje6MucrtGg1ZwBIhdjTG1NYXRqMENfbVVxdXdQdExDT3NBRRAFGk8KTQoYCg0KAggBEQAAAAAAgGZAEZhuEoNAWqxAEhIIABADEAYQExASGAJCBBoCCAUiGwoXY0xtTWFvdXNDZm1VcXV3UHRMQ09zQUVwASgBIhUAQzqku4oaNghKoNuifLFYTlyURq4aGAoKDUCwURgVvO0N1BIKDcyHUhgV-MwM1A",
+          "routeLabels": [
+            "DEFAULT_ROUTE"
+          ],
+          "polylineDetails": {}
+        }
+      ],
+      "geocodingResults": {
+        "origin": {
+          "geocoderStatus": {},
+          "type": [
+            "locality",
+            "political"
+          ],
+          "placeId": "ChIJXQNBzXCJwokRuEHYXzmN73E"
+        },
+        "destination": {
+          "geocoderStatus": {},
+          "type": [
+            "locality",
+            "political"
+          ],
+          "placeId": "ChIJPSErlOow6IkRVtvz2P4QEBk"
+        }
+      }
+    }
+  },
+  "2. RV (TRUCK + dimensions)": {
+    "request": {
+      "origin": {
+        "address": "Great Neck, NY"
+      },
+      "destination": {
+        "address": "Hauppauge, NY"
+      },
+      "routingPreference": "TRAFFIC_AWARE",
+      "travelMode": "TRUCK",
+      "routeModifiers": {
+        "vehicleInfo": {
+          "totalHeightMm": 3988,
+          "totalWidthMm": 2591,
+          "totalLengthMm": 19400,
+          "totalWeightKg": 22800,
+          "totalAxleCount": 5,
+          "trailerInfo": [
+            {
+              "lengthMm": 5916
+            }
+          ]
+        }
+      }
+    },
+    "httpStatus": 200,
+    "response": {
+      "routes": [
+        {
+          "legs": [
+            {
+              "distanceMeters": 53362,
+              "duration": "3051s",
+              "staticDuration": "2633s",
+              "polyline": {
+                "encodedPolyline": "e{_xF|a_aMAMMiCCYCm@OkCUwDCe@QsCSsDSqDUqDSqDUqDYgFZC^A`CV@?z@LRFVP`Av@H}@VoABKFm@EkCAMQsAM]KOi@g@GIO]Ee@FyC@y@?qAAy@Gk@jA{@d@_@LKr@e@dAc@zEoA\\I\\GJIHEVGNCf@Mf@KtA[PCj@G\\CJ?l@Av@Ap@CPCt@OdAYpCu@ZKrAg@f@O^MNITKPMTQJK`@c@v@}@RY@A`@u@N[d@mBV}@N_@\\u@NUPQHGd@a@LINOJIpAgAlDkDBCxAwAf@g@j@i@FIFEJMZ]j@y@r@gAn@c@b@Ib@@pBYr@M|D}@tBc@FSb@K~@SbDu@NL~@U`@IpA[jFkAx@QNClDw@jAQNOHAjAIp@Aj@Ad@AZ?n@@~@BbCHjBDLNnABp@@f@@rCFf@Bj@@HGL?zBLr@DjBJdAD`A@xBCz@?vA@V?v@DH?pBPRBh@ThB~@^R`AcDd@}A?]N{@XyARgAd@_C@}@j@_D`@gDRgDFkDCmCA]EeAOgCASUkB?CMs@c@_CIc@e@eBSs@Y{@i@wAO]s@wAe@aAqCwFAEwC}FeEsI_@w@s@oBK[a@wAOo@[aBE_@[qCc@qGsBg[UgDOgCKyAc@kGUgDOsBMwACa@_@kCIi@]mBS{@_@{AWw@_@gAWq@M[[s@e@_A]m@e@w@SYsAcBY[sCsCs@o@mAoA_@e@_AoAsAeCcAgCs@kCKc@_@_CM_AQgBUkBUyBQyAu@mG]iB}@uCKYo@_B[m@i@aAm@}@_@g@c@q@i@s@oAkB[g@uAoByAkCsAcDgAsDU_AY{Ag@aDU{BGw@AUI{AAe@E_D?w@BgC@}C@i@DoJ?mA?Y?c@?q@AwEAkFBeADaCDuALkC^eILoCJuG@c@?wBAiBIaJBoE@g@DiABu@Ds@NeCF_AdA_Jd@wD`@aD`@eDFq@N_C@O@SH_D?qCAu@MeEOwBW}DGy@Aa@CmBBkDReDVgCl@gD`@aBX_AbAoCbA}Bv@gBHQl@wAbDuHd@qATw@^aB`@qB`@{CN}AFcAFqC?k@?qAGaC?MAMWiDGu@a@eDGa@_@gCMq@_@kBg@_C}@iDMg@y@wCe@gBi@qBQs@S{@o@oCm@qCOq@cAoFg@aDYkBOkAMuAIwAGqACm@C{B?y@BcB?[FwAHoAVkCD[NaAV}Ar@{C`@uAZ_AfAkCf@cAvBgE~ByE`@}@d@iARg@b@gAl@mBb@yAJa@TaAl@{CLs@R}AJcADe@Bc@Dm@F{A@_@@yBAwA?QIsBEw@WuDEo@Gm@MoAIu@E[_@sC{@uGeAcI_@qCAIoAyJqBiOY_Cm@oEkBwNIi@q@kFa@_DWeC[wDGcAOkCIaBCm@ImEASGqJI{FYuMa@}KEkA_@kHWoE{@yLE]QqB_@{DSoBYiCSoB[mCMkAa@iDIe@Ky@Iq@SuAU}ASyAk@oDW}Ac@kCuAoIeAcFKc@gAkE[gAUw@Wu@Mc@EKKY@WiAmDGS_@qBIcAAIEmBCqCAc@?u@CWEe@CQWeAUk@q@}@q@e@sBy@SKe@_@]a@OUi@mASi@MG}@gDKg@Km@SmAIk@CYGi@AQKqAGuACeDB}CFwD?o@CaECkAM{CGaAUuCYgCG]QmAUmAKq@[wAi@}BI_@WoAQ{@QaAKu@SiBMoAIqAIeBA[C{@C}B@wADwDEaCI{EQmBAEWkBCUGa@_@kBWkA]mAk@qBEQwAmF_@gCWcCMyAQiDAc@CcC?]BmBDkBBg@@y@FkBBcAHiCDaBDgBDwAFoC@y@@k@CcAMiEEeACk@Ig@o@kEE[GYk@gCGUSs@Mc@i@{AWo@eBuDg@oAo@yAsAgD]kAgAoEWoA{@}Em@}E_@aFOgEA[EqB?sB?]?w@?[AoACcAE_AASEu@MsAM}@QoA_@eBG[Ss@g@cBo@_BYm@_@u@a@s@CG_AqA]e@gBqBw@aAIIYa@{@kAU_@cBwCQ]cBoD{AmDSi@a@eAkAmD{@kDAKa@}BO_ACYOiAIcACYGq@K{BAWAq@A}ABsDPiDH}@LiADa@d@uCBONs@Pu@Po@^oAX{@Z{@h@mA`CwEj@gAN[b@gAZaA\\gADSNo@b@aCLaALmA@EFy@Dq@@g@BsA?}@?e@CaBAEOeCIcA[cDQyBAOYgFEcAEuAEiBCaACiFBuFDyBHkC@K^}GZuD\\iCHi@\\cBLg@t@qCBIPg@p@gBnAiCz@yAZg@rAeBLObBcBLKdA{@vAeA^Yx@s@DC`@a@X]b@i@d@o@LQt@sAbAyB|@mC@ERy@R}@Ji@RsABYTgCNoD@kDCcA?CE{AAWQeCGs@]kCE_@_@mBOs@m@{BK_@M_@{@eC_@gAw@aC]eAAAc@wAMa@q@uCs@{DM}@K}@MiAAEOgB?CIsA?OE_AEcBAuA@yB?_@@gB?i@@cC?wA?[KiFUmEa@{EaAeHa@oC_@aC{@aFuA_IACu@{DsCaNiAsEsAiEwAoDaBeDGOwBkDcB_C[_@mAsA{@}@sCcCQMeCcBi@Yw@c@s@]oAk@w@]aAc@s@]sAq@QIy@c@wBsAaCeBm@g@c@_@KIeAaAYWa@c@k@m@kBwBcBmBAAyDmEo@s@iAiAg@e@[Wa@[iA}@SO}@m@aBcAiB_AAAcAe@ME{@]yAi@AAiD}@sAWCASC}@OWE_C_@UG}Ac@UKKCaBy@GEwAaAwAoAa@e@o@w@SYq@cAEIYi@Ue@Ym@}@cCa@{AUcA}@uEi@gECU?EKeAQ{BSeFEgEDcE@_@?CLeD\\wEf@kET}A~AsKr@}FJcA?CT_CRqBNmBDg@JsAFgAPuCFcATaFDqADkBDqCBuAFoCEgDGqAMeBEa@KmAWiBG]{@sDgAmDKWSk@oAyCSi@g@mAe@kA[}@g@wAi@aBs@gCk@{BU_A[{AACMq@UqAi@eDg@uDU{Be@aFEc@AU[gFGoAIuBM{DIkH?CA_@@cE?qAD}CBaADaBFsBJaCFcA@OJaBHsANkBDe@Fw@\\wDPqBJy@H{@^_DVsBFc@BWLw@PkALq@P{@b@sBVaA\\mATw@DONc@Rk@`@gAXu@Xq@Tg@DKRe@`@y@b@{@b@{@f@cA^s@`AiBbAiBz@_BZg@jAuB\\k@|@{A~@_Bb@w@tBmErAkDt@yBf@aB\\gAb@gBLg@Lg@f@aCF_@X_BN{@Jm@X{BP{A@MPgBL_B@SDa@@_@Dq@FmAD{AB}@B{@DmABoAHsCDoBFeCJcEF_CDiABaA@q@HsCBaAFcCD{AD}AFoBLuE@aABoAF_C@cADwBDeB@w@H}CNaGL{EFuCBgAJqDFcCBkADoABoADsAD}ABwA?Q@aA?e@?m@AYAe@Cy@GwAEo@MsAEe@EUK}@UqAQ_AUaAK_@Ok@Uy@Qc@Uq@]}@Q_@GMSa@Sc@[i@AAS]_@m@e@o@U]Y[]a@WYGIUUa@c@[[e@g@]a@Y[WWc@e@_@a@c@g@_@a@e@e@i@m@i@i@a@e@q@u@s@u@[[y@_Ae@e@g@k@[]SSUYw@y@YY[_@_@_@[]WYWYUUq@u@Y[a@a@Y[OQ_@a@YY[]a@c@e@g@o@s@e@g@aAgAi@q@eAwAEI_A{A_@o@i@kAUi@[aACISq@e@cCKk@O_BGaAEqA?{B@y@DcAX{CFa@Ly@|@kFTsAXmA\\oAVkAvAaGfAuE^_Bf@aCLi@b@{BlAyF~AuHd@gCp@cEl@cF?IJcAPaCNqB`@eFRoCHkAXkD@[bAsNZeEJyARoCLaCL{CHgD@gA@qA?c@?uAAYAsACuAK{DEqAGmCAc@CqAGiB?AUcICaAASAm@ImB?AA]A}A?qB?Y@oDH}D?ADkBVsDJsAFaD@o@MwCEg@a@sBY}@g@{AEM_BkEUs@iA}CKUgAqC}AeEwBcGo@aBO_@Yw@]}@qBoFGOc@qAeBuEa@iAc@sAM}@CQDe@Ro@JIFCZAXRb@Xf@^HD`@\\h@`@RNnAbAh@b@\\VTRd@^RPPJf@V^JNBR?N@P?P@J?b@@D@JNXRHJFPFTJF?R@t@@j@@T[PM@?H@bACFk@Hl@KBMC{@XH"
+              },
+              "startLocation": {
+                "latLng": {
+                  "latitude": 40.800672,
+                  "longitude": -73.7284676
+                }
+              },
+              "endLocation": {
+                "latLng": {
+                  "latitude": 40.825634799999996,
+                  "longitude": -73.2025566
+                }
+              },
+              "steps": [
+                {
+                  "distanceMeters": 790,
+                  "staticDuration": "92s",
+                  "polyline": {
+                    "encodedPolyline": "e{_xF|a_aMAMMiCCYCm@OkCUwDCe@QsCSsDSqDUqDSqDUqDYgF"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.800672,
+                      "longitude": -73.7284676
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8017439,
+                      "longitude": -73.7191848
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "DEPART",
+                    "instructions": "Head east on Baker Hill Rd toward Ruxton Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.5 mi"
+                    },
+                    "staticDuration": {
+                      "text": "2 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 213,
+                  "staticDuration": "25s",
+                  "polyline": {
+                    "encodedPolyline": "{a`xFzg}`MZC^A`CV@?z@LRFVP`Av@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8017439,
+                      "longitude": -73.7191848
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.7999262,
+                      "longitude": -73.71974709999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_RIGHT",
+                    "instructions": "Turn right onto Station Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.1 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 448,
+                  "staticDuration": "51s",
+                  "polyline": {
+                    "encodedPolyline": "qv_xFlk}`MH}@VoABKFm@EkCAMQsAM]KOi@g@GIO]Ee@FyC@y@?qAAy@Gk@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.7999262,
+                      "longitude": -73.71974709999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8003201,
+                      "longitude": -73.7147616
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_LEFT",
+                    "instructions": "Turn left onto Ravine Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.3 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 1635,
+                  "staticDuration": "203s",
+                  "polyline": {
+                    "encodedPolyline": "_y_xFfl|`MjA{@d@_@LKr@e@dAc@zEoA\\I\\GJIHEVGNCf@Mf@KtA[PCj@G\\CJ?l@Av@Ap@CPCt@OdAYpCu@ZKrAg@f@O^MNITKPMTQJK`@c@v@}@RY@A`@u@N[d@mBV}@N_@\\u@NUPQHGd@a@LINOJIpAgAlDkDBCxAwAf@g@j@i@FIFEJMZ]j@y@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8003201,
+                      "longitude": -73.7147616
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.787797,
+                      "longitude": -73.70601169999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_RIGHT",
+                    "instructions": "Turn right onto E Shore Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "1.0 mi"
+                    },
+                    "staticDuration": {
+                      "text": "3 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 2188,
+                  "staticDuration": "227s",
+                  "polyline": {
+                    "encodedPolyline": "wj}wFpuz`Mr@gAn@c@b@Ib@@pBYr@M|D}@tBc@FSb@K~@SbDu@NL~@U`@IpA[jFkAx@QNClDw@jAQNOHAjAIp@Aj@Ad@AZ?n@@~@BbCHjBDLNnABp@@f@@rCFf@Bj@@HGL?zBLr@DjBJdAD`A@xBCz@?vA@V?v@DH?pBPRBh@ThB~@^R"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.787797,
+                      "longitude": -73.70601169999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.7686931,
+                      "longitude": -73.7040746
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "NAME_CHANGE",
+                    "instructions": "Continue onto Community Dr"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "1.4 mi"
+                    },
+                    "staticDuration": {
+                      "text": "4 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 124,
+                  "staticDuration": "16s",
+                  "polyline": {
+                    "encodedPolyline": "isywFliz`M`AcDd@}A"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.7686931,
+                      "longitude": -73.7040746
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.7681653,
+                      "longitude": -73.7027787
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_LEFT",
+                    "instructions": "Turn left onto S Service Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "407 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 16101,
+                  "staticDuration": "634s",
+                  "polyline": {
+                    "encodedPolyline": "apywFjaz`M?]N{@XyARgAd@_C@}@j@_D`@gDRgDFkDCmCA]EeAOgCASUoBMs@c@_CIc@e@eBSs@Y{@i@wAO]s@wAe@aAsC}FwC}FeEsI_@w@s@oBK[a@wAOo@[aBE_@[qCc@qGsBg[UgDOgCKyAc@kGUgDOsBMwACa@_@kCIi@]mBS{@_@{AWw@_@gAWq@M[[s@e@_A]m@e@w@SYsAcBY[sCsCs@o@mAoA_@e@_AoAsAeCcAgCs@kCKc@_@_CM_AQgBUkBUyBQyAu@mG]iB}@uCKYo@_B[m@i@aAm@}@_@g@c@q@i@s@oAkB[g@uAoByAkCsAcDgAsDU_AY{Ag@aDU{BGw@AUI{AAe@E_D?w@BgC@}C@i@DoJ?mA?Y?c@?q@AwEAkFBeADaCDuALkC^eILoCJuG@c@?wBAiBIaJBoE@g@DiABu@Ds@NeCF_AdA_Jd@wD`@aD`@eDFq@N_C@O@SH_D?qCAu@MeEOwBW}DGy@Aa@CmBBkDReDVgCl@gD`@aBX_AbAoCbA}Bv@gBHQl@wAbDuHd@qATw@^aB`@qB`@{CL}AHcAFqC?k@?qAGaC?MAMWiDGu@a@eDGa@_@gCMq@_@kBg@_C}@iDMg@y@wCe@gBi@qBQs@S{@o@oCm@qCOq@cAoFg@aDYkBOkAMuAIwAGqACm@C{B?y@BcB?[FwAHoAVkCD[NaAV}Ar@{C`@uAZ_AfAkCf@cAvBgE~ByE`@}@d@iARg@b@gAl@mBb@yAJa@TaAl@{CLs@R}AJcADe@Bc@Dm@F{A@_@@yBAwA?QIsBEw@WuDEo@Gm@MoAIu@E[_@sC{@uGeAcI_@qCAIoAyJqBiOY_Cm@oEkBwNIi@q@kFa@_DWeC[wDGcAOkCIaBCm@ImEASGqJI{FYuMa@}KEkA_@kHWoE{@yLE]QqB_@{DSoBYiCSoB[mCMkAa@iDIe@Ky@Iq@SuAU}ASyAk@oDW}Ac@kCuAoIeAcFKc@gAkE[gAUw@Wu@Mc@EKKY"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.7681653,
+                      "longitude": -73.7027787
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.7878008,
+                      "longitude": -73.5244742
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "RAMP_LEFT",
+                    "instructions": "Merge onto I-495 E via the ramp on the left to Riverhead"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "10.0 mi"
+                    },
+                    "staticDuration": {
+                      "text": "11 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 705,
+                  "staticDuration": "36s",
+                  "polyline": {
+                    "encodedPolyline": "wj}wF|fw_M@WiAmDGS_@qBIcAAIEmBCqCAc@?u@CWEe@CQWeAUk@q@}@q@e@sBy@SKe@_@]a@OUi@mASi@MG"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.7878008,
+                      "longitude": -73.5244742
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.7907611,
+                      "longitude": -73.51778639999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "RAMP_RIGHT",
+                    "instructions": "Take exit 42 toward Northern Pkwy E/Hauppauge"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.4 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 25746,
+                  "staticDuration": "942s",
+                  "polyline": {
+                    "encodedPolyline": "g}}wFd}u_M}@gDKg@Km@SmAIk@CYGi@AQKqAGuACeDB}CFwD?o@CaECkAM{CGaAUuCYgCG]QmAUmAKq@[wAi@}BI_@WoAQ{@QaAKu@SiBMoAIqAIeBA[C{@C}B@wADwDEaCI{EQmBAEWkBCUGa@_@kBWkA]mAk@qBEQwAmF_@gCWcCMyAQiDAc@CcC?]BmBDkBBg@@y@FkBBcAHiCDaBDgBDwAFoC@y@@k@CcAMiEEeACk@Ig@o@kEE[GYk@gCGUSs@Mc@i@{AWo@eBuDg@oAo@yAsAgD]kAgAoEWoA?A{@{Em@}E_@aFOgEA[EqB?sB?]?w@?[AoACcAE_AASEu@MsAM}@QoA_@eBG[Ss@g@cBo@_BYm@_@u@a@s@CG_AqA]e@gBqBw@aAIIYa@{@kAU_@cBwCQ]cBoD{AmDSi@a@eAkAmD{@kDAKa@}BO_ACYOiAIcACYGq@K{BAWAq@A}ABsDPiDH}@LiADa@d@uCBONs@Pu@Po@^oAX{@Z{@h@mA`CwEj@gAN[b@gAZaA\\gADSNo@b@aCLaALmA@EFy@Dq@@g@BsA?}@?e@CaBAEOeCIcA[cDQyBAOYgFEcAEuAEiBCaACiFBuFDyBHkC@K^}GZuD\\iCHi@\\cBLg@t@qCBIPg@p@gBnAiCz@yAZg@rAeBLObBcBLKdA{@vAeA^Yx@s@DC`@a@X]b@i@d@o@LQt@sAbAyB|@mC@ERy@R}@Ji@RsABYTgCNoD@kDCcAE_BAWQeCGs@]kCE_@_@mBOs@m@{BK_@M_@{@eC_@gAw@aC]eAe@yAMa@?Cq@qCs@{DM}@K}@MiAAEOgBIwA?OE_AEcBAuA@yB?_@@gB?i@@cC?wA?[KiFUmEa@{EaAeHa@oC_@aC{@aFuA_Iw@_EsCaNiAsEsAiEwAoDaBeDGOwBkDcB_C[_@mAsA{@}@sCcCQMeCcBi@Yw@c@s@]oAk@w@]aAc@s@]sAq@QIy@c@wBsAaCeBm@g@c@_@KIeAaAYWa@c@k@m@kBwBcBmB{DoEo@s@iAiAg@e@[Wa@[iA}@SO}@m@aBcAiB_AeAg@ME{@]yAi@AAiD}@sAWWE}@OWE_C_@UG}Ac@UKKCaBy@GEwAaAwAoAa@e@o@w@SYq@cAEIYi@Ue@Ym@}@cCa@{AUcA}@uEi@gECU?EKeAQ{BSeFEgEDcE@_@LiD\\wEf@kET}A~AsKr@}FJcA?CT_CRqBNmBDg@JsAFgAPuCFcATaFDqADkBDqCBuAFoCEgDGqAMeBEa@KmAWiBG]{@sDgAmDKWSk@oAyCSi@g@mAe@kA[}@g@wAi@aBs@gCk@{BU_A[{AOu@UqAi@eDg@uDU{Be@aFEc@AU[gFGoAIuBM{DIkHAc@@cE?qAD}CBaADaBFsBJaCFcA@OJaBHsANkBDe@Fw@\\wDPqBJy@H{@^_DVsBFc@BWLw@PkALq@P{@b@sBVaA\\mATw@DONc@Rk@`@gAXu@Xq@Tg@DKRe@`@y@b@{@b@{@f@cA^s@`AiBbAiBz@_BZg@jAuB\\k@|@{A~@_Bb@w@tBmErAkDt@yBf@aB\\gAb@gBLg@Lg@f@aCF_@X_BN{@Jm@X{BP{A@MPgBL_B@SDa@@_@Dq@FmAD{AB}@B{@DmABoAHsCDoBFeCJcEF_CDiABaA@q@HsCBaAFcCD{AD}AFoBLuE@aABoAF_C@cADwBDeB@w@H}CNaGL{EFuCBgAJqDFcCBkADoABoADsAD}ABwA?Q@aA?e@?m@AYAe@Cy@GwAEo@MsAEe@EUK}@UqAQ_AUaAK_@Ok@Uy@Qc@Uq@]}@Q_@GMSa@Sc@[i@AAS]_@m@e@o@U]Y[]a@WYGIUUa@c@[[e@g@]a@Y[WWc@e@_@a@c@g@_@a@e@e@i@m@i@i@a@e@q@u@s@u@[[y@_Ae@e@g@k@[]SSUYw@y@YY[_@_@_@[]WYWYUUq@u@Y[a@a@Y[OQ_@a@YY[]a@c@e@g@o@s@e@g@aAgAi@q@eAwAEI_A{A_@o@i@kAUi@[aACISq@e@cCKk@O_BGaAEqA?{B@y@DcAX{CFa@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.7907611,
+                      "longitude": -73.51778639999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8295113,
+                      "longitude": -73.25158119999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "MERGE",
+                    "instructions": "Merge onto Northern State Pkwy"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "16.0 mi"
+                    },
+                    "staticDuration": {
+                      "text": "16 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 3313,
+                  "staticDuration": "192s",
+                  "polyline": {
+                    "encodedPolyline": "moexFj}a~LLy@|@kFTsAXmA\\oAVkAvAaGfAuE^_Bf@aCLi@b@{BlAyF~AuHd@gCp@cEl@cF?IJcAPaCNqB`@eFRoCHkAXkD@[bAsNZeEJyARoCLcCLyCHgD@gA@qA?c@?uAA[AqACuAK{DEqAGmCAc@CqAGkBUcICaAASAm@IoBA]A}A?qB?Y@oDH_EDkBVsDJsA"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8295113,
+                      "longitude": -73.25158119999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8243168,
+                      "longitude": -73.21340239999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "MERGE",
+                    "instructions": "Merge onto NY-347/NY-454 E\nPass by Valley Bank (on the right in 1 mi)"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "2.1 mi"
+                    },
+                    "staticDuration": {
+                      "text": "3 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 304,
+                  "staticDuration": "21s",
+                  "polyline": {
+                    "encodedPolyline": "_odxFvnz}LFaD@o@MwCEi@a@qBY}@g@{AEM"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8243168,
+                      "longitude": -73.21340239999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8249034,
+                      "longitude": -73.209969
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_LEFT",
+                    "instructions": "Keep left to continue on NY-347 E, follow signs for Port Jefferson\nPass by Carvel (on the right)"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.2 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 990,
+                  "staticDuration": "61s",
+                  "polyline": {
+                    "encodedPolyline": "srdxFhyy}L_BkEUs@iA}CKUgAqC}AeEwBcGo@aBO_@Yw@]}@qBoFGOc@qAeBuEa@iAc@sA"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8249034,
+                      "longitude": -73.209969
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8296017,
+                      "longitude": -73.1999785
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "STRAIGHT",
+                    "instructions": "Continue straight to stay on NY-347 E"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.6 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 35,
+                  "staticDuration": "8s",
+                  "polyline": {
+                    "encodedPolyline": "_pexFzzw}LM}@CQ"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8296017,
+                      "longitude": -73.1999785
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.829694100000005,
+                      "longitude": -73.1995788
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_SLIGHT_RIGHT",
+                    "instructions": "Slight right toward Hauppauge Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "115 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 490,
+                  "staticDuration": "62s",
+                  "polyline": {
+                    "encodedPolyline": "qpexFjxw}LDe@Ro@JIFCZAXRb@Xf@^HD`@\\h@`@RNnAbAh@b@\\VTRd@^RPPJf@V^JNBR?N@P?P@J?b@@D@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.829694100000005,
+                      "longitude": -73.1995788
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8259561,
+                      "longitude": -73.20117730000001
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_SHARP_RIGHT",
+                    "instructions": "Sharp right onto Hauppauge Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.3 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 119,
+                  "staticDuration": "11s",
+                  "polyline": {
+                    "encodedPolyline": "gydxFjbx}LJNXRHJFPFTJF?R@t@@j@@T"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8259561,
+                      "longitude": -73.20117730000001
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8255477,
+                      "longitude": -73.20236249999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_RIGHT",
+                    "instructions": "Turn right onto Townline Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "390 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 26,
+                  "staticDuration": "8s",
+                  "polyline": {
+                    "encodedPolyline": "uvdxFvix}L[PM@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8255477,
+                      "longitude": -73.20236249999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8257627,
+                      "longitude": -73.2024639
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_RIGHT",
+                    "instructions": "Turn right"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "85 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 62,
+                  "staticDuration": "18s",
+                  "polyline": {
+                    "encodedPolyline": "_xdxFjjx}L?H@bACFk@H"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8257627,
+                      "longitude": -73.2024639
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8259883,
+                      "longitude": -73.2029417
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_LEFT",
+                    "instructions": "Turn left"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "203 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 58,
+                  "staticDuration": "17s",
+                  "polyline": {
+                    "encodedPolyline": "mydxFjmx}Ll@KBMC{@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8259883,
+                      "longitude": -73.2029417
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8257607,
+                      "longitude": -73.20250949999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "UTURN_LEFT",
+                    "instructions": "Make a U-turn"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "190 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 15,
+                  "staticDuration": "9s",
+                  "polyline": {
+                    "encodedPolyline": "_xdxFtjx}LXH"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8257607,
+                      "longitude": -73.20250949999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.825634799999996,
+                      "longitude": -73.2025566
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_RIGHT",
+                    "instructions": "Turn right\nDestination will be on the right"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "49 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                }
+              ],
+              "localizedValues": {
+                "distance": {
+                  "text": "33.2 mi"
+                },
+                "duration": {
+                  "text": "51 mins"
+                },
+                "staticDuration": {
+                  "text": "44 mins"
+                }
+              }
+            }
+          ],
+          "distanceMeters": 53361,
+          "duration": "3051s",
+          "staticDuration": "2634s",
+          "polyline": {
+            "encodedPolyline": "e{_xF|a_aMAMMiCCYCm@OkCUwDCe@QsCSsDSqDUqDSqDUqDYgFZC^A`CV@?z@LRFVP`Av@H}@VoABKFm@EkCAMQsAM]KOi@g@GIO]Ee@FyC@y@?qAAy@Gk@jA{@d@_@LKr@e@dAc@zEoA\\I\\GJIHEVGNCf@Mf@KtA[PCj@G\\CJ?l@Av@Ap@CPCt@OdAYpCu@ZKrAg@f@O^MNITKPMTQJK`@c@v@}@RY@A`@u@N[d@mBV}@N_@\\u@NUPQHGd@a@LINOJIpAgAlDkDBCxAwAf@g@j@i@FIFEJMZ]j@y@r@gAn@c@b@Ib@@pBYr@M|D}@tBc@FSb@K~@SbDu@NL~@U`@IpA[jFkAx@QNClDw@jAQNOHAjAIp@Aj@Ad@AZ?n@@~@BbCHjBDLNnABp@@f@@rCFf@Bj@@HGL?zBLr@DjBJdAD`A@xBCz@?vA@V?v@DH?pBPRBh@ThB~@^R`AcDd@}A?]N{@XyARgAd@_C@}@j@_D`@gDRgDFkDCmCA]EeAOgCASUkB?CMs@c@_CIc@e@eBSs@Y{@i@wAO]s@wAe@aAqCwFAEwC}FeEsI_@w@s@oBK[a@wAOo@[aBE_@[qCc@qGsBg[UgDOgCKyAc@kGUgDOsBMwACa@_@kCIi@]mBS{@_@{AWw@_@gAWq@M[[s@e@_A]m@e@w@SYsAcBY[sCsCs@o@mAoA_@e@_AoAsAeCcAgCs@kCKc@_@_CM_AQgBUkBUyBQyAu@mG]iB}@uCKYo@_B[m@i@aAm@}@_@g@c@q@i@s@oAkB[g@uAoByAkCsAcDgAsDU_AY{Ag@aDU{BGw@AUI{AAe@E_D?w@BgC@}C@i@DoJ?mA?Y?c@?q@AwEAkFBeADaCDuALkC^eILoCJuG@c@?wBAiBIaJBoE@g@DiABu@Ds@NeCF_AdA_Jd@wD`@aD`@eDFq@N_C@O@SH_D?qCAu@MeEOwBW}DGy@Aa@CmBBkDReDVgCl@gD`@aBX_AbAoCbA}Bv@gBHQl@wAbDuHd@qATw@^aB`@qB`@{CN}AFcAFqC?k@?qAGaC?MAMWiDGu@a@eDGa@_@gCMq@_@kBg@_C}@iDMg@y@wCe@gBi@qBQs@S{@o@oCm@qCOq@cAoFg@aDYkBOkAMuAIwAGqACm@C{B?y@BcB?[FwAHoAVkCD[NaAV}Ar@{C`@uAZ_AfAkCf@cAvBgE~ByE`@}@d@iARg@b@gAl@mBb@yAJa@TaAl@{CLs@R}AJcADe@Bc@Dm@F{A@_@@yBAwA?QIsBEw@WuDEo@Gm@MoAIu@E[_@sC{@uGeAcI_@qCAIoAyJqBiOY_Cm@oEkBwNIi@q@kFa@_DWeC[wDGcAOkCIaBCm@ImEASGqJI{FYuMa@}KEkA_@kHWoE{@yLE]QqB_@{DSoBYiCSoB[mCMkAa@iDIe@Ky@Iq@SuAU}ASyAk@oDW}Ac@kCuAoIeAcFKc@gAkE[gAUw@Wu@Mc@EKKY@WiAmDGS_@qBIcAAIEmBCqCAc@?u@CWEe@CQWeAUk@q@}@q@e@sBy@SKe@_@]a@OUi@mASi@MG}@gDKg@Km@SmAIk@CYGi@AQKqAGuACeDB}CFwD?o@CaECkAM{CGaAUuCYgCG]QmAUmAKq@[wAi@}BI_@WoAQ{@QaAKu@SiBMoAIqAIeBA[C{@C}B@wADwDEaCI{EQmBAEWkBCUGa@_@kBWkA]mAk@qBEQwAmF_@gCWcCMyAQiDAc@CcC?]BmBDkBBg@@y@FkBBcAHiCDaBDgBDwAFoC@y@@k@CcAMiEEeACk@Ig@o@kEE[GYk@gCGUSs@Mc@i@{AWo@eBuDg@oAo@yAsAgD]kAgAoEWoA{@}Em@}E_@aFOgEA[EqB?sB?]?w@?[AoACcAE_AASEu@MsAM}@QoA_@eBG[Ss@g@cBo@_BYm@_@u@a@s@CG_AqA]e@gBqBw@aAIIYa@{@kAU_@cBwCQ]cBoD{AmDSi@a@eAkAmD{@kDAKa@}BO_ACYOiAIcACYGq@K{BAWAq@A}ABsDPiDH}@LiADa@d@uCBONs@Pu@Po@^oAX{@Z{@h@mA`CwEj@gAN[b@gAZaA\\gADSNo@b@aCLaALmA@EFy@Dq@@g@BsA?}@?e@CaBAEOeCIcA[cDQyBAOYgFEcAEuAEiBCaACiFBuFDyBHkC@K^}GZuD\\iCHi@\\cBLg@t@qCBIPg@p@gBnAiCz@yAZg@rAeBLObBcBLKdA{@vAeA^Yx@s@DC`@a@X]b@i@d@o@LQt@sAbAyB|@mC@ERy@R}@Ji@RsABYTgCNoD@kDCcA?CE{AAWQeCGs@]kCE_@_@mBOs@m@{BK_@M_@{@eC_@gAw@aC]eAAAc@wAMa@q@uCs@{DM}@K}@MiAAEOgB?CIsA?OE_AEcBAuA@yB?_@@gB?i@@cC?wA?[KiFUmEa@{EaAeHa@oC_@aC{@aFuA_IACu@{DsCaNiAsEsAiEwAoDaBeDGOwBkDcB_C[_@mAsA{@}@sCcCQMeCcBi@Yw@c@s@]oAk@w@]aAc@s@]sAq@QIy@c@wBsAaCeBm@g@c@_@KIeAaAYWa@c@k@m@kBwBcBmBAAyDmEo@s@iAiAg@e@[Wa@[iA}@SO}@m@aBcAiB_AAAcAe@ME{@]yAi@AAiD}@sAWCASC}@OWE_C_@UG}Ac@UKKCaBy@GEwAaAwAoAa@e@o@w@SYq@cAEIYi@Ue@Ym@}@cCa@{AUcA}@uEi@gECU?EKeAQ{BSeFEgEDcE@_@?CLeD\\wEf@kET}A~AsKr@}FJcA?CT_CRqBNmBDg@JsAFgAPuCFcATaFDqADkBDqCBuAFoCEgDGqAMeBEa@KmAWiBG]{@sDgAmDKWSk@oAyCSi@g@mAe@kA[}@g@wAi@aBs@gCk@{BU_A[{AACMq@UqAi@eDg@uDU{Be@aFEc@AU[gFGoAIuBM{DIkH?CA_@@cE?qAD}CBaADaBFsBJaCFcA@OJaBHsANkBDe@Fw@\\wDPqBJy@H{@^_DVsBFc@BWLw@PkALq@P{@b@sBVaA\\mATw@DONc@Rk@`@gAXu@Xq@Tg@DKRe@`@y@b@{@b@{@f@cA^s@`AiBbAiBz@_BZg@jAuB\\k@|@{A~@_Bb@w@tBmErAkDt@yBf@aB\\gAb@gBLg@Lg@f@aCF_@X_BN{@Jm@X{BP{A@MPgBL_B@SDa@@_@Dq@FmAD{AB}@B{@DmABoAHsCDoBFeCJcEF_CDiABaA@q@HsCBaAFcCD{AD}AFoBLuE@aABoAF_C@cADwBDeB@w@H}CNaGL{EFuCBgAJqDFcCBkADoABoADsAD}ABwA?Q@aA?e@?m@AYAe@Cy@GwAEo@MsAEe@EUK}@UqAQ_AUaAK_@Ok@Uy@Qc@Uq@]}@Q_@GMSa@Sc@[i@AAS]_@m@e@o@U]Y[]a@WYGIUUa@c@[[e@g@]a@Y[WWc@e@_@a@c@g@_@a@e@e@i@m@i@i@a@e@q@u@s@u@[[y@_Ae@e@g@k@[]SSUYw@y@YY[_@_@_@[]WYWYUUq@u@Y[a@a@Y[OQ_@a@YY[]a@c@e@g@o@s@e@g@aAgAi@q@eAwAEI_A{A_@o@i@kAUi@[aACISq@e@cCKk@O_BGaAEqA?{B@y@DcAX{CFa@Ly@|@kFTsAXmA\\oAVkAvAaGfAuE^_Bf@aCLi@b@{BlAyF~AuHd@gCp@cEl@cF?IJcAPaCNqB`@eFRoCHkAXkD@[bAsNZeEJyARoCLaCL{CHgD@gA@qA?c@?uAAYAsACuAK{DEqAGmCAc@CqAGiB?AUcICaAASAm@ImB?AA]A}A?qB?Y@oDH}D?ADkBVsDJsAFaD@o@MwCEg@a@sBY}@g@{AEM_BkEUs@iA}CKUgAqC}AeEwBcGo@aBO_@Yw@]}@qBoFGOc@qAeBuEa@iAc@sAM}@CQDe@Ro@JIFCZAXRb@Xf@^HD`@\\h@`@RNnAbAh@b@\\VTRd@^RPPJf@V^JNBR?N@P?P@J?b@@D@JNXRHJFPFTJF?R@t@@j@@T[PM@?H@bACFk@Hl@KBMC{@XH"
+          },
+          "description": "I-495 E and Northern State Pkwy",
+          "warnings": [
+            "This route includes a highway."
+          ],
+          "viewport": {
+            "low": {
+              "latitude": 40.767132,
+              "longitude": -73.7284676
+            },
+            "high": {
+              "latitude": 40.8297235,
+              "longitude": -73.1990665
+            }
+          },
+          "travelAdvisory": {},
+          "localizedValues": {
+            "distance": {
+              "text": "33.2 mi"
+            },
+            "duration": {
+              "text": "51 mins"
+            },
+            "staticDuration": {
+              "text": "44 mins"
+            }
+          },
+          "routeToken": "Cq4CCsEBMr4BGqIBCjMCFg1ShDQft44Ihbspkp8thZwOvN3hAqGj017VptlH1v7YywLyrZEB8j369wHllgSpTAASNGIv_GfLAexmI2nlBghKR2dFoeUlU1XCV-7fiRLVu1QPHNEIp16LX8tC2asKuWedBagTIZYaEQAJISjzAaQHxBkJAxQIEYgBKg0bH18UZnIDBggHARplPQBtyD5FoQ39Pkje6MucrtGg1ZwBIhdjTG1NYXRqMENfbVVxdXdQdExDT3NBRRAFGk8KTQoYCg0KAggBEQAAAAAAgGZAEZhuEoNAWqxAEhIIABADEAYQExASGAJCBBoCCAUiGwoXY0xtTWFvdXNDZm1VcXV3UHRMQ09zQUVwASgBIhUAQzqku4oaNghKoNuifLFYTlyURq4aGAoKDUCwURgVvO0N1BIKDcyHUhgV-MwM1A",
+          "routeLabels": [
+            "DEFAULT_ROUTE"
+          ],
+          "polylineDetails": {}
+        }
+      ],
+      "geocodingResults": {
+        "origin": {
+          "geocoderStatus": {},
+          "type": [
+            "locality",
+            "political"
+          ],
+          "placeId": "ChIJXQNBzXCJwokRuEHYXzmN73E"
+        },
+        "destination": {
+          "geocoderStatus": {},
+          "type": [
+            "locality",
+            "political"
+          ],
+          "placeId": "ChIJPSErlOow6IkRVtvz2P4QEBk"
+        }
+      }
+    }
+  },
+  "3. RV + PROPANE (GASES)": {
+    "request": {
+      "origin": {
+        "address": "Great Neck, NY"
+      },
+      "destination": {
+        "address": "Hauppauge, NY"
+      },
+      "routingPreference": "TRAFFIC_AWARE",
+      "travelMode": "TRUCK",
+      "routeModifiers": {
+        "vehicleInfo": {
+          "totalHeightMm": 3988,
+          "totalWidthMm": 2591,
+          "totalLengthMm": 19400,
+          "totalWeightKg": 22800,
+          "totalAxleCount": 5,
+          "trailerInfo": [
+            {
+              "lengthMm": 5916
+            }
+          ],
+          "hazardousGoodsTypes": [
+            "GASES"
+          ]
+        }
+      }
+    },
+    "httpStatus": 200,
+    "response": {
+      "routes": [
+        {
+          "legs": [
+            {
+              "distanceMeters": 53362,
+              "duration": "3051s",
+              "staticDuration": "2633s",
+              "polyline": {
+                "encodedPolyline": "e{_xF|a_aMAMMiCCYCm@OkCUwDCe@QsCSsDSqDUqDSqDUqDYgFZC^A`CV@?z@LRFVP`Av@H}@VoABKFm@EkCAMQsAM]KOi@g@GIO]Ee@FyC@y@?qAAy@Gk@jA{@d@_@LKr@e@dAc@zEoA\\I\\GJIHEVGNCf@Mf@KtA[PCj@G\\CJ?l@Av@Ap@CPCt@OdAYpCu@ZKrAg@f@O^MNITKPMTQJK`@c@v@}@RY@A`@u@N[d@mBV}@N_@\\u@NUPQHGd@a@LINOJIpAgAlDkDBCxAwAf@g@j@i@FIFEJMZ]j@y@r@gAn@c@b@Ib@@pBYr@M|D}@tBc@FSb@K~@SbDu@NL~@U`@IpA[jFkAx@QNClDw@jAQNOHAjAIp@Aj@Ad@AZ?n@@~@BbCHjBDLNnABp@@f@@rCFf@Bj@@HGL?zBLr@DjBJdAD`A@xBCz@?vA@V?v@DH?pBPRBh@ThB~@^R`AcDd@}A?]N{@XyARgAd@_C@}@j@_D`@gDRgDFkDCmCA]EeAOgCASUkB?CMs@c@_CIc@e@eBSs@Y{@i@wAO]s@wAe@aAqCwFAEwC}FeEsI_@w@s@oBK[a@wAOo@[aBE_@[qCc@qGsBg[UgDOgCKyAc@kGUgDOsBMwACa@_@kCIi@]mBS{@_@{AWw@_@gAWq@M[[s@e@_A]m@e@w@SYsAcBY[sCsCs@o@mAoA_@e@_AoAsAeCcAgCs@kCKc@_@_CM_AQgBUkBUyBQyAu@mG]iB}@uCKYo@_B[m@i@aAm@}@_@g@c@q@i@s@oAkB[g@uAoByAkCsAcDgAsDU_AY{Ag@aDU{BGw@AUI{AAe@E_D?w@BgC@}C@i@DoJ?mA?Y?c@?q@AwEAkFBeADaCDuALkC^eILoCJuG@c@?wBAiBIaJBoE@g@DiABu@Ds@NeCF_AdA_Jd@wD`@aD`@eDFq@N_C@O@SH_D?qCAu@MeEOwBW}DGy@Aa@CmBBkDReDVgCl@gD`@aBX_AbAoCbA}Bv@gBHQl@wAbDuHd@qATw@^aB`@qB`@{CN}AFcAFqC?k@?qAGaC?MAMWiDGu@a@eDGa@_@gCMq@_@kBg@_C}@iDMg@y@wCe@gBi@qBQs@S{@o@oCm@qCOq@cAoFg@aDYkBOkAMuAIwAGqACm@C{B?y@BcB?[FwAHoAVkCD[NaAV}Ar@{C`@uAZ_AfAkCf@cAvBgE~ByE`@}@d@iARg@b@gAl@mBb@yAJa@TaAl@{CLs@R}AJcADe@Bc@Dm@F{A@_@@yBAwA?QIsBEw@WuDEo@Gm@MoAIu@E[_@sC{@uGeAcI_@qCAIoAyJqBiOY_Cm@oEkBwNIi@q@kFa@_DWeC[wDGcAOkCIaBCm@ImEASGqJI{FYuMa@}KEkA_@kHWoE{@yLE]QqB_@{DSoBYiCSoB[mCMkAa@iDIe@Ky@Iq@SuAU}ASyAk@oDW}Ac@kCuAoIeAcFKc@gAkE[gAUw@Wu@Mc@EKKY@WiAmDGS_@qBIcAAIEmBCqCAc@?u@CWEe@CQWeAUk@q@}@q@e@sBy@SKe@_@]a@OUi@mASi@MG}@gDKg@Km@SmAIk@CYGi@AQKqAGuACeDB}CFwD?o@CaECkAM{CGaAUuCYgCG]QmAUmAKq@[wAi@}BI_@WoAQ{@QaAKu@SiBMoAIqAIeBA[C{@C}B@wADwDEaCI{EQmBAEWkBCUGa@_@kBWkA]mAk@qBEQwAmF_@gCWcCMyAQiDAc@CcC?]BmBDkBBg@@y@FkBBcAHiCDaBDgBDwAFoC@y@@k@CcAMiEEeACk@Ig@o@kEE[GYk@gCGUSs@Mc@i@{AWo@eBuDg@oAo@yAsAgD]kAgAoEWoA{@}Em@}E_@aFOgEA[EqB?sB?]?w@?[AoACcAE_AASEu@MsAM}@QoA_@eBG[Ss@g@cBo@_BYm@_@u@a@s@CG_AqA]e@gBqBw@aAIIYa@{@kAU_@cBwCQ]cBoD{AmDSi@a@eAkAmD{@kDAKa@}BO_ACYOiAIcACYGq@K{BAWAq@A}ABsDPiDH}@LiADa@d@uCBONs@Pu@Po@^oAX{@Z{@h@mA`CwEj@gAN[b@gAZaA\\gADSNo@b@aCLaALmA@EFy@Dq@@g@BsA?}@?e@CaBAEOeCIcA[cDQyBAOYgFEcAEuAEiBCaACiFBuFDyBHkC@K^}GZuD\\iCHi@\\cBLg@t@qCBIPg@p@gBnAiCz@yAZg@rAeBLObBcBLKdA{@vAeA^Yx@s@DC`@a@X]b@i@d@o@LQt@sAbAyB|@mC@ERy@R}@Ji@RsABYTgCNoD@kDCcA?CE{AAWQeCGs@]kCE_@_@mBOs@m@{BK_@M_@{@eC_@gAw@aC]eAAAc@wAMa@q@uCs@{DM}@K}@MiAAEOgB?CIsA?OE_AEcBAuA@yB?_@@gB?i@@cC?wA?[KiFUmEa@{EaAeHa@oC_@aC{@aFuA_IACu@{DsCaNiAsEsAiEwAoDaBeDGOwBkDcB_C[_@mAsA{@}@sCcCQMeCcBi@Yw@c@s@]oAk@w@]aAc@s@]sAq@QIy@c@wBsAaCeBm@g@c@_@KIeAaAYWa@c@k@m@kBwBcBmBAAyDmEo@s@iAiAg@e@[Wa@[iA}@SO}@m@aBcAiB_AAAcAe@ME{@]yAi@AAiD}@sAWCASC}@OWE_C_@UG}Ac@UKKCaBy@GEwAaAwAoAa@e@o@w@SYq@cAEIYi@Ue@Ym@}@cCa@{AUcA}@uEi@gECU?EKeAQ{BSeFEgEDcE@_@?CLeD\\wEf@kET}A~AsKr@}FJcA?CT_CRqBNmBDg@JsAFgAPuCFcATaFDqADkBDqCBuAFoCEgDGqAMeBEa@KmAWiBG]{@sDgAmDKWSk@oAyCSi@g@mAe@kA[}@g@wAi@aBs@gCk@{BU_A[{AACMq@UqAi@eDg@uDU{Be@aFEc@AU[gFGoAIuBM{DIkH?CA_@@cE?qAD}CBaADaBFsBJaCFcA@OJaBHsANkBDe@Fw@\\wDPqBJy@H{@^_DVsBFc@BWLw@PkALq@P{@b@sBVaA\\mATw@DONc@Rk@`@gAXu@Xq@Tg@DKRe@`@y@b@{@b@{@f@cA^s@`AiBbAiBz@_BZg@jAuB\\k@|@{A~@_Bb@w@tBmErAkDt@yBf@aB\\gAb@gBLg@Lg@f@aCF_@X_BN{@Jm@X{BP{A@MPgBL_B@SDa@@_@Dq@FmAD{AB}@B{@DmABoAHsCDoBFeCJcEF_CDiABaA@q@HsCBaAFcCD{AD}AFoBLuE@aABoAF_C@cADwBDeB@w@H}CNaGL{EFuCBgAJqDFcCBkADoABoADsAD}ABwA?Q@aA?e@?m@AYAe@Cy@GwAEo@MsAEe@EUK}@UqAQ_AUaAK_@Ok@Uy@Qc@Uq@]}@Q_@GMSa@Sc@[i@AAS]_@m@e@o@U]Y[]a@WYGIUUa@c@[[e@g@]a@Y[WWc@e@_@a@c@g@_@a@e@e@i@m@i@i@a@e@q@u@s@u@[[y@_Ae@e@g@k@[]SSUYw@y@YY[_@_@_@[]WYWYUUq@u@Y[a@a@Y[OQ_@a@YY[]a@c@e@g@o@s@e@g@aAgAi@q@eAwAEI_A{A_@o@i@kAUi@[aACISq@e@cCKk@O_BGaAEqA?{B@y@DcAX{CFa@Ly@|@kFTsAXmA\\oAVkAvAaGfAuE^_Bf@aCLi@b@{BlAyF~AuHd@gCp@cEl@cF?IJcAPaCNqB`@eFRoCHkAXkD@[bAsNZeEJyARoCLaCL{CHgD@gA@qA?c@?uAAYAsACuAK{DEqAGmCAc@CqAGiB?AUcICaAASAm@ImB?AA]A}A?qB?Y@oDH}D?ADkBVsDJsAFaD@o@MwCEg@a@sBY}@g@{AEM_BkEUs@iA}CKUgAqC}AeEwBcGo@aBO_@Yw@]}@qBoFGOc@qAeBuEa@iAc@sAM}@CQDe@Ro@JIFCZAXRb@Xf@^HD`@\\h@`@RNnAbAh@b@\\VTRd@^RPPJf@V^JNBR?N@P?P@J?b@@D@JNXRHJFPFTJF?R@t@@j@@T[PM@?H@bACFk@Hl@KBMC{@XH"
+              },
+              "startLocation": {
+                "latLng": {
+                  "latitude": 40.800672,
+                  "longitude": -73.7284676
+                }
+              },
+              "endLocation": {
+                "latLng": {
+                  "latitude": 40.825634799999996,
+                  "longitude": -73.2025566
+                }
+              },
+              "steps": [
+                {
+                  "distanceMeters": 790,
+                  "staticDuration": "92s",
+                  "polyline": {
+                    "encodedPolyline": "e{_xF|a_aMAMMiCCYCm@OkCUwDCe@QsCSsDSqDUqDSqDUqDYgF"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.800672,
+                      "longitude": -73.7284676
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8017439,
+                      "longitude": -73.7191848
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "DEPART",
+                    "instructions": "Head east on Baker Hill Rd toward Ruxton Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.5 mi"
+                    },
+                    "staticDuration": {
+                      "text": "2 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 213,
+                  "staticDuration": "25s",
+                  "polyline": {
+                    "encodedPolyline": "{a`xFzg}`MZC^A`CV@?z@LRFVP`Av@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8017439,
+                      "longitude": -73.7191848
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.7999262,
+                      "longitude": -73.71974709999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_RIGHT",
+                    "instructions": "Turn right onto Station Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.1 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 448,
+                  "staticDuration": "51s",
+                  "polyline": {
+                    "encodedPolyline": "qv_xFlk}`MH}@VoABKFm@EkCAMQsAM]KOi@g@GIO]Ee@FyC@y@?qAAy@Gk@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.7999262,
+                      "longitude": -73.71974709999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8003201,
+                      "longitude": -73.7147616
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_LEFT",
+                    "instructions": "Turn left onto Ravine Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.3 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 1635,
+                  "staticDuration": "203s",
+                  "polyline": {
+                    "encodedPolyline": "_y_xFfl|`MjA{@d@_@LKr@e@dAc@zEoA\\I\\GJIHEVGNCf@Mf@KtA[PCj@G\\CJ?l@Av@Ap@CPCt@OdAYpCu@ZKrAg@f@O^MNITKPMTQJK`@c@v@}@RY@A`@u@N[d@mBV}@N_@\\u@NUPQHGd@a@LINOJIpAgAlDkDBCxAwAf@g@j@i@FIFEJMZ]j@y@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8003201,
+                      "longitude": -73.7147616
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.787797,
+                      "longitude": -73.70601169999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_RIGHT",
+                    "instructions": "Turn right onto E Shore Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "1.0 mi"
+                    },
+                    "staticDuration": {
+                      "text": "3 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 2188,
+                  "staticDuration": "227s",
+                  "polyline": {
+                    "encodedPolyline": "wj}wFpuz`Mr@gAn@c@b@Ib@@pBYr@M|D}@tBc@FSb@K~@SbDu@NL~@U`@IpA[jFkAx@QNClDw@jAQNOHAjAIp@Aj@Ad@AZ?n@@~@BbCHjBDLNnABp@@f@@rCFf@Bj@@HGL?zBLr@DjBJdAD`A@xBCz@?vA@V?v@DH?pBPRBh@ThB~@^R"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.787797,
+                      "longitude": -73.70601169999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.7686931,
+                      "longitude": -73.7040746
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "NAME_CHANGE",
+                    "instructions": "Continue onto Community Dr"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "1.4 mi"
+                    },
+                    "staticDuration": {
+                      "text": "4 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 124,
+                  "staticDuration": "16s",
+                  "polyline": {
+                    "encodedPolyline": "isywFliz`M`AcDd@}A"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.7686931,
+                      "longitude": -73.7040746
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.7681653,
+                      "longitude": -73.7027787
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_LEFT",
+                    "instructions": "Turn left onto S Service Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "407 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 16101,
+                  "staticDuration": "634s",
+                  "polyline": {
+                    "encodedPolyline": "apywFjaz`M?]N{@XyARgAd@_C@}@j@_D`@gDRgDFkDCmCA]EeAOgCASUoBMs@c@_CIc@e@eBSs@Y{@i@wAO]s@wAe@aAsC}FwC}FeEsI_@w@s@oBK[a@wAOo@[aBE_@[qCc@qGsBg[UgDOgCKyAc@kGUgDOsBMwACa@_@kCIi@]mBS{@_@{AWw@_@gAWq@M[[s@e@_A]m@e@w@SYsAcBY[sCsCs@o@mAoA_@e@_AoAsAeCcAgCs@kCKc@_@_CM_AQgBUkBUyBQyAu@mG]iB}@uCKYo@_B[m@i@aAm@}@_@g@c@q@i@s@oAkB[g@uAoByAkCsAcDgAsDU_AY{Ag@aDU{BGw@AUI{AAe@E_D?w@BgC@}C@i@DoJ?mA?Y?c@?q@AwEAkFBeADaCDuALkC^eILoCJuG@c@?wBAiBIaJBoE@g@DiABu@Ds@NeCF_AdA_Jd@wD`@aD`@eDFq@N_C@O@SH_D?qCAu@MeEOwBW}DGy@Aa@CmBBkDReDVgCl@gD`@aBX_AbAoCbA}Bv@gBHQl@wAbDuHd@qATw@^aB`@qB`@{CL}AHcAFqC?k@?qAGaC?MAMWiDGu@a@eDGa@_@gCMq@_@kBg@_C}@iDMg@y@wCe@gBi@qBQs@S{@o@oCm@qCOq@cAoFg@aDYkBOkAMuAIwAGqACm@C{B?y@BcB?[FwAHoAVkCD[NaAV}Ar@{C`@uAZ_AfAkCf@cAvBgE~ByE`@}@d@iARg@b@gAl@mBb@yAJa@TaAl@{CLs@R}AJcADe@Bc@Dm@F{A@_@@yBAwA?QIsBEw@WuDEo@Gm@MoAIu@E[_@sC{@uGeAcI_@qCAIoAyJqBiOY_Cm@oEkBwNIi@q@kFa@_DWeC[wDGcAOkCIaBCm@ImEASGqJI{FYuMa@}KEkA_@kHWoE{@yLE]QqB_@{DSoBYiCSoB[mCMkAa@iDIe@Ky@Iq@SuAU}ASyAk@oDW}Ac@kCuAoIeAcFKc@gAkE[gAUw@Wu@Mc@EKKY"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.7681653,
+                      "longitude": -73.7027787
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.7878008,
+                      "longitude": -73.5244742
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "RAMP_LEFT",
+                    "instructions": "Merge onto I-495 E via the ramp on the left to Riverhead"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "10.0 mi"
+                    },
+                    "staticDuration": {
+                      "text": "11 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 705,
+                  "staticDuration": "36s",
+                  "polyline": {
+                    "encodedPolyline": "wj}wF|fw_M@WiAmDGS_@qBIcAAIEmBCqCAc@?u@CWEe@CQWeAUk@q@}@q@e@sBy@SKe@_@]a@OUi@mASi@MG"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.7878008,
+                      "longitude": -73.5244742
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.7907611,
+                      "longitude": -73.51778639999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "RAMP_RIGHT",
+                    "instructions": "Take exit 42 toward Northern Pkwy E/Hauppauge"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.4 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 25746,
+                  "staticDuration": "942s",
+                  "polyline": {
+                    "encodedPolyline": "g}}wFd}u_M}@gDKg@Km@SmAIk@CYGi@AQKqAGuACeDB}CFwD?o@CaECkAM{CGaAUuCYgCG]QmAUmAKq@[wAi@}BI_@WoAQ{@QaAKu@SiBMoAIqAIeBA[C{@C}B@wADwDEaCI{EQmBAEWkBCUGa@_@kBWkA]mAk@qBEQwAmF_@gCWcCMyAQiDAc@CcC?]BmBDkBBg@@y@FkBBcAHiCDaBDgBDwAFoC@y@@k@CcAMiEEeACk@Ig@o@kEE[GYk@gCGUSs@Mc@i@{AWo@eBuDg@oAo@yAsAgD]kAgAoEWoA?A{@{Em@}E_@aFOgEA[EqB?sB?]?w@?[AoACcAE_AASEu@MsAM}@QoA_@eBG[Ss@g@cBo@_BYm@_@u@a@s@CG_AqA]e@gBqBw@aAIIYa@{@kAU_@cBwCQ]cBoD{AmDSi@a@eAkAmD{@kDAKa@}BO_ACYOiAIcACYGq@K{BAWAq@A}ABsDPiDH}@LiADa@d@uCBONs@Pu@Po@^oAX{@Z{@h@mA`CwEj@gAN[b@gAZaA\\gADSNo@b@aCLaALmA@EFy@Dq@@g@BsA?}@?e@CaBAEOeCIcA[cDQyBAOYgFEcAEuAEiBCaACiFBuFDyBHkC@K^}GZuD\\iCHi@\\cBLg@t@qCBIPg@p@gBnAiCz@yAZg@rAeBLObBcBLKdA{@vAeA^Yx@s@DC`@a@X]b@i@d@o@LQt@sAbAyB|@mC@ERy@R}@Ji@RsABYTgCNoD@kDCcAE_BAWQeCGs@]kCE_@_@mBOs@m@{BK_@M_@{@eC_@gAw@aC]eAe@yAMa@?Cq@qCs@{DM}@K}@MiAAEOgBIwA?OE_AEcBAuA@yB?_@@gB?i@@cC?wA?[KiFUmEa@{EaAeHa@oC_@aC{@aFuA_Iw@_EsCaNiAsEsAiEwAoDaBeDGOwBkDcB_C[_@mAsA{@}@sCcCQMeCcBi@Yw@c@s@]oAk@w@]aAc@s@]sAq@QIy@c@wBsAaCeBm@g@c@_@KIeAaAYWa@c@k@m@kBwBcBmB{DoEo@s@iAiAg@e@[Wa@[iA}@SO}@m@aBcAiB_AeAg@ME{@]yAi@AAiD}@sAWWE}@OWE_C_@UG}Ac@UKKCaBy@GEwAaAwAoAa@e@o@w@SYq@cAEIYi@Ue@Ym@}@cCa@{AUcA}@uEi@gECU?EKeAQ{BSeFEgEDcE@_@LiD\\wEf@kET}A~AsKr@}FJcA?CT_CRqBNmBDg@JsAFgAPuCFcATaFDqADkBDqCBuAFoCEgDGqAMeBEa@KmAWiBG]{@sDgAmDKWSk@oAyCSi@g@mAe@kA[}@g@wAi@aBs@gCk@{BU_A[{AOu@UqAi@eDg@uDU{Be@aFEc@AU[gFGoAIuBM{DIkHAc@@cE?qAD}CBaADaBFsBJaCFcA@OJaBHsANkBDe@Fw@\\wDPqBJy@H{@^_DVsBFc@BWLw@PkALq@P{@b@sBVaA\\mATw@DONc@Rk@`@gAXu@Xq@Tg@DKRe@`@y@b@{@b@{@f@cA^s@`AiBbAiBz@_BZg@jAuB\\k@|@{A~@_Bb@w@tBmErAkDt@yBf@aB\\gAb@gBLg@Lg@f@aCF_@X_BN{@Jm@X{BP{A@MPgBL_B@SDa@@_@Dq@FmAD{AB}@B{@DmABoAHsCDoBFeCJcEF_CDiABaA@q@HsCBaAFcCD{AD}AFoBLuE@aABoAF_C@cADwBDeB@w@H}CNaGL{EFuCBgAJqDFcCBkADoABoADsAD}ABwA?Q@aA?e@?m@AYAe@Cy@GwAEo@MsAEe@EUK}@UqAQ_AUaAK_@Ok@Uy@Qc@Uq@]}@Q_@GMSa@Sc@[i@AAS]_@m@e@o@U]Y[]a@WYGIUUa@c@[[e@g@]a@Y[WWc@e@_@a@c@g@_@a@e@e@i@m@i@i@a@e@q@u@s@u@[[y@_Ae@e@g@k@[]SSUYw@y@YY[_@_@_@[]WYWYUUq@u@Y[a@a@Y[OQ_@a@YY[]a@c@e@g@o@s@e@g@aAgAi@q@eAwAEI_A{A_@o@i@kAUi@[aACISq@e@cCKk@O_BGaAEqA?{B@y@DcAX{CFa@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.7907611,
+                      "longitude": -73.51778639999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8295113,
+                      "longitude": -73.25158119999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "MERGE",
+                    "instructions": "Merge onto Northern State Pkwy"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "16.0 mi"
+                    },
+                    "staticDuration": {
+                      "text": "16 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 3313,
+                  "staticDuration": "192s",
+                  "polyline": {
+                    "encodedPolyline": "moexFj}a~LLy@|@kFTsAXmA\\oAVkAvAaGfAuE^_Bf@aCLi@b@{BlAyF~AuHd@gCp@cEl@cF?IJcAPaCNqB`@eFRoCHkAXkD@[bAsNZeEJyARoCLcCLyCHgD@gA@qA?c@?uAA[AqACuAK{DEqAGmCAc@CqAGkBUcICaAASAm@IoBA]A}A?qB?Y@oDH_EDkBVsDJsA"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8295113,
+                      "longitude": -73.25158119999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8243168,
+                      "longitude": -73.21340239999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "MERGE",
+                    "instructions": "Merge onto NY-347/NY-454 E\nPass by Valley Bank (on the right in 1 mi)"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "2.1 mi"
+                    },
+                    "staticDuration": {
+                      "text": "3 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 304,
+                  "staticDuration": "21s",
+                  "polyline": {
+                    "encodedPolyline": "_odxFvnz}LFaD@o@MwCEi@a@qBY}@g@{AEM"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8243168,
+                      "longitude": -73.21340239999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8249034,
+                      "longitude": -73.209969
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_LEFT",
+                    "instructions": "Keep left to continue on NY-347 E, follow signs for Port Jefferson\nPass by Carvel (on the right)"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.2 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 990,
+                  "staticDuration": "61s",
+                  "polyline": {
+                    "encodedPolyline": "srdxFhyy}L_BkEUs@iA}CKUgAqC}AeEwBcGo@aBO_@Yw@]}@qBoFGOc@qAeBuEa@iAc@sA"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8249034,
+                      "longitude": -73.209969
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8296017,
+                      "longitude": -73.1999785
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "STRAIGHT",
+                    "instructions": "Continue straight to stay on NY-347 E"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.6 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 35,
+                  "staticDuration": "8s",
+                  "polyline": {
+                    "encodedPolyline": "_pexFzzw}LM}@CQ"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8296017,
+                      "longitude": -73.1999785
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.829694100000005,
+                      "longitude": -73.1995788
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_SLIGHT_RIGHT",
+                    "instructions": "Slight right toward Hauppauge Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "115 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 490,
+                  "staticDuration": "62s",
+                  "polyline": {
+                    "encodedPolyline": "qpexFjxw}LDe@Ro@JIFCZAXRb@Xf@^HD`@\\h@`@RNnAbAh@b@\\VTRd@^RPPJf@V^JNBR?N@P?P@J?b@@D@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.829694100000005,
+                      "longitude": -73.1995788
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8259561,
+                      "longitude": -73.20117730000001
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_SHARP_RIGHT",
+                    "instructions": "Sharp right onto Hauppauge Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.3 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 119,
+                  "staticDuration": "11s",
+                  "polyline": {
+                    "encodedPolyline": "gydxFjbx}LJNXRHJFPFTJF?R@t@@j@@T"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8259561,
+                      "longitude": -73.20117730000001
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8255477,
+                      "longitude": -73.20236249999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_RIGHT",
+                    "instructions": "Turn right onto Townline Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "390 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 26,
+                  "staticDuration": "8s",
+                  "polyline": {
+                    "encodedPolyline": "uvdxFvix}L[PM@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8255477,
+                      "longitude": -73.20236249999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8257627,
+                      "longitude": -73.2024639
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_RIGHT",
+                    "instructions": "Turn right"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "85 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 62,
+                  "staticDuration": "18s",
+                  "polyline": {
+                    "encodedPolyline": "_xdxFjjx}L?H@bACFk@H"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8257627,
+                      "longitude": -73.2024639
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8259883,
+                      "longitude": -73.2029417
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_LEFT",
+                    "instructions": "Turn left"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "203 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 58,
+                  "staticDuration": "17s",
+                  "polyline": {
+                    "encodedPolyline": "mydxFjmx}Ll@KBMC{@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8259883,
+                      "longitude": -73.2029417
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8257607,
+                      "longitude": -73.20250949999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "UTURN_LEFT",
+                    "instructions": "Make a U-turn"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "190 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 15,
+                  "staticDuration": "9s",
+                  "polyline": {
+                    "encodedPolyline": "_xdxFtjx}LXH"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8257607,
+                      "longitude": -73.20250949999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.825634799999996,
+                      "longitude": -73.2025566
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_RIGHT",
+                    "instructions": "Turn right\nDestination will be on the right"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "49 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                }
+              ],
+              "localizedValues": {
+                "distance": {
+                  "text": "33.2 mi"
+                },
+                "duration": {
+                  "text": "51 mins"
+                },
+                "staticDuration": {
+                  "text": "44 mins"
+                }
+              }
+            }
+          ],
+          "distanceMeters": 53361,
+          "duration": "3051s",
+          "staticDuration": "2634s",
+          "polyline": {
+            "encodedPolyline": "e{_xF|a_aMAMMiCCYCm@OkCUwDCe@QsCSsDSqDUqDSqDUqDYgFZC^A`CV@?z@LRFVP`Av@H}@VoABKFm@EkCAMQsAM]KOi@g@GIO]Ee@FyC@y@?qAAy@Gk@jA{@d@_@LKr@e@dAc@zEoA\\I\\GJIHEVGNCf@Mf@KtA[PCj@G\\CJ?l@Av@Ap@CPCt@OdAYpCu@ZKrAg@f@O^MNITKPMTQJK`@c@v@}@RY@A`@u@N[d@mBV}@N_@\\u@NUPQHGd@a@LINOJIpAgAlDkDBCxAwAf@g@j@i@FIFEJMZ]j@y@r@gAn@c@b@Ib@@pBYr@M|D}@tBc@FSb@K~@SbDu@NL~@U`@IpA[jFkAx@QNClDw@jAQNOHAjAIp@Aj@Ad@AZ?n@@~@BbCHjBDLNnABp@@f@@rCFf@Bj@@HGL?zBLr@DjBJdAD`A@xBCz@?vA@V?v@DH?pBPRBh@ThB~@^R`AcDd@}A?]N{@XyARgAd@_C@}@j@_D`@gDRgDFkDCmCA]EeAOgCASUkB?CMs@c@_CIc@e@eBSs@Y{@i@wAO]s@wAe@aAqCwFAEwC}FeEsI_@w@s@oBK[a@wAOo@[aBE_@[qCc@qGsBg[UgDOgCKyAc@kGUgDOsBMwACa@_@kCIi@]mBS{@_@{AWw@_@gAWq@M[[s@e@_A]m@e@w@SYsAcBY[sCsCs@o@mAoA_@e@_AoAsAeCcAgCs@kCKc@_@_CM_AQgBUkBUyBQyAu@mG]iB}@uCKYo@_B[m@i@aAm@}@_@g@c@q@i@s@oAkB[g@uAoByAkCsAcDgAsDU_AY{Ag@aDU{BGw@AUI{AAe@E_D?w@BgC@}C@i@DoJ?mA?Y?c@?q@AwEAkFBeADaCDuALkC^eILoCJuG@c@?wBAiBIaJBoE@g@DiABu@Ds@NeCF_AdA_Jd@wD`@aD`@eDFq@N_C@O@SH_D?qCAu@MeEOwBW}DGy@Aa@CmBBkDReDVgCl@gD`@aBX_AbAoCbA}Bv@gBHQl@wAbDuHd@qATw@^aB`@qB`@{CN}AFcAFqC?k@?qAGaC?MAMWiDGu@a@eDGa@_@gCMq@_@kBg@_C}@iDMg@y@wCe@gBi@qBQs@S{@o@oCm@qCOq@cAoFg@aDYkBOkAMuAIwAGqACm@C{B?y@BcB?[FwAHoAVkCD[NaAV}Ar@{C`@uAZ_AfAkCf@cAvBgE~ByE`@}@d@iARg@b@gAl@mBb@yAJa@TaAl@{CLs@R}AJcADe@Bc@Dm@F{A@_@@yBAwA?QIsBEw@WuDEo@Gm@MoAIu@E[_@sC{@uGeAcI_@qCAIoAyJqBiOY_Cm@oEkBwNIi@q@kFa@_DWeC[wDGcAOkCIaBCm@ImEASGqJI{FYuMa@}KEkA_@kHWoE{@yLE]QqB_@{DSoBYiCSoB[mCMkAa@iDIe@Ky@Iq@SuAU}ASyAk@oDW}Ac@kCuAoIeAcFKc@gAkE[gAUw@Wu@Mc@EKKY@WiAmDGS_@qBIcAAIEmBCqCAc@?u@CWEe@CQWeAUk@q@}@q@e@sBy@SKe@_@]a@OUi@mASi@MG}@gDKg@Km@SmAIk@CYGi@AQKqAGuACeDB}CFwD?o@CaECkAM{CGaAUuCYgCG]QmAUmAKq@[wAi@}BI_@WoAQ{@QaAKu@SiBMoAIqAIeBA[C{@C}B@wADwDEaCI{EQmBAEWkBCUGa@_@kBWkA]mAk@qBEQwAmF_@gCWcCMyAQiDAc@CcC?]BmBDkBBg@@y@FkBBcAHiCDaBDgBDwAFoC@y@@k@CcAMiEEeACk@Ig@o@kEE[GYk@gCGUSs@Mc@i@{AWo@eBuDg@oAo@yAsAgD]kAgAoEWoA{@}Em@}E_@aFOgEA[EqB?sB?]?w@?[AoACcAE_AASEu@MsAM}@QoA_@eBG[Ss@g@cBo@_BYm@_@u@a@s@CG_AqA]e@gBqBw@aAIIYa@{@kAU_@cBwCQ]cBoD{AmDSi@a@eAkAmD{@kDAKa@}BO_ACYOiAIcACYGq@K{BAWAq@A}ABsDPiDH}@LiADa@d@uCBONs@Pu@Po@^oAX{@Z{@h@mA`CwEj@gAN[b@gAZaA\\gADSNo@b@aCLaALmA@EFy@Dq@@g@BsA?}@?e@CaBAEOeCIcA[cDQyBAOYgFEcAEuAEiBCaACiFBuFDyBHkC@K^}GZuD\\iCHi@\\cBLg@t@qCBIPg@p@gBnAiCz@yAZg@rAeBLObBcBLKdA{@vAeA^Yx@s@DC`@a@X]b@i@d@o@LQt@sAbAyB|@mC@ERy@R}@Ji@RsABYTgCNoD@kDCcA?CE{AAWQeCGs@]kCE_@_@mBOs@m@{BK_@M_@{@eC_@gAw@aC]eAAAc@wAMa@q@uCs@{DM}@K}@MiAAEOgB?CIsA?OE_AEcBAuA@yB?_@@gB?i@@cC?wA?[KiFUmEa@{EaAeHa@oC_@aC{@aFuA_IACu@{DsCaNiAsEsAiEwAoDaBeDGOwBkDcB_C[_@mAsA{@}@sCcCQMeCcBi@Yw@c@s@]oAk@w@]aAc@s@]sAq@QIy@c@wBsAaCeBm@g@c@_@KIeAaAYWa@c@k@m@kBwBcBmBAAyDmEo@s@iAiAg@e@[Wa@[iA}@SO}@m@aBcAiB_AAAcAe@ME{@]yAi@AAiD}@sAWCASC}@OWE_C_@UG}Ac@UKKCaBy@GEwAaAwAoAa@e@o@w@SYq@cAEIYi@Ue@Ym@}@cCa@{AUcA}@uEi@gECU?EKeAQ{BSeFEgEDcE@_@?CLeD\\wEf@kET}A~AsKr@}FJcA?CT_CRqBNmBDg@JsAFgAPuCFcATaFDqADkBDqCBuAFoCEgDGqAMeBEa@KmAWiBG]{@sDgAmDKWSk@oAyCSi@g@mAe@kA[}@g@wAi@aBs@gCk@{BU_A[{AACMq@UqAi@eDg@uDU{Be@aFEc@AU[gFGoAIuBM{DIkH?CA_@@cE?qAD}CBaADaBFsBJaCFcA@OJaBHsANkBDe@Fw@\\wDPqBJy@H{@^_DVsBFc@BWLw@PkALq@P{@b@sBVaA\\mATw@DONc@Rk@`@gAXu@Xq@Tg@DKRe@`@y@b@{@b@{@f@cA^s@`AiBbAiBz@_BZg@jAuB\\k@|@{A~@_Bb@w@tBmErAkDt@yBf@aB\\gAb@gBLg@Lg@f@aCF_@X_BN{@Jm@X{BP{A@MPgBL_B@SDa@@_@Dq@FmAD{AB}@B{@DmABoAHsCDoBFeCJcEF_CDiABaA@q@HsCBaAFcCD{AD}AFoBLuE@aABoAF_C@cADwBDeB@w@H}CNaGL{EFuCBgAJqDFcCBkADoABoADsAD}ABwA?Q@aA?e@?m@AYAe@Cy@GwAEo@MsAEe@EUK}@UqAQ_AUaAK_@Ok@Uy@Qc@Uq@]}@Q_@GMSa@Sc@[i@AAS]_@m@e@o@U]Y[]a@WYGIUUa@c@[[e@g@]a@Y[WWc@e@_@a@c@g@_@a@e@e@i@m@i@i@a@e@q@u@s@u@[[y@_Ae@e@g@k@[]SSUYw@y@YY[_@_@_@[]WYWYUUq@u@Y[a@a@Y[OQ_@a@YY[]a@c@e@g@o@s@e@g@aAgAi@q@eAwAEI_A{A_@o@i@kAUi@[aACISq@e@cCKk@O_BGaAEqA?{B@y@DcAX{CFa@Ly@|@kFTsAXmA\\oAVkAvAaGfAuE^_Bf@aCLi@b@{BlAyF~AuHd@gCp@cEl@cF?IJcAPaCNqB`@eFRoCHkAXkD@[bAsNZeEJyARoCLaCL{CHgD@gA@qA?c@?uAAYAsACuAK{DEqAGmCAc@CqAGiB?AUcICaAASAm@ImB?AA]A}A?qB?Y@oDH}D?ADkBVsDJsAFaD@o@MwCEg@a@sBY}@g@{AEM_BkEUs@iA}CKUgAqC}AeEwBcGo@aBO_@Yw@]}@qBoFGOc@qAeBuEa@iAc@sAM}@CQDe@Ro@JIFCZAXRb@Xf@^HD`@\\h@`@RNnAbAh@b@\\VTRd@^RPPJf@V^JNBR?N@P?P@J?b@@D@JNXRHJFPFTJF?R@t@@j@@T[PM@?H@bACFk@Hl@KBMC{@XH"
+          },
+          "description": "I-495 E and Northern State Pkwy",
+          "warnings": [
+            "This route includes a highway."
+          ],
+          "viewport": {
+            "low": {
+              "latitude": 40.767132,
+              "longitude": -73.7284676
+            },
+            "high": {
+              "latitude": 40.8297235,
+              "longitude": -73.1990665
+            }
+          },
+          "travelAdvisory": {},
+          "localizedValues": {
+            "distance": {
+              "text": "33.2 mi"
+            },
+            "duration": {
+              "text": "51 mins"
+            },
+            "staticDuration": {
+              "text": "44 mins"
+            }
+          },
+          "routeToken": "Cq4CCsEBMr4BGqIBCjMCFg1ShDQft44Ihbspkp8thZwOvN3hAqGj017VptlH1v7YywLyrZEB8j369wHllgSpTAASNGIv_GfLAexmI2nlBghKR2dFoeUlU1XCV-7fiRLVu1QPHNEIp16LX8tC2asKuWedBagTIZYaEQAJISjzAaQHxBkJAxQIEYgBKg0bH18UZnIDBggHARplPQBtyD5FoQ39Pkje6MucrtGg1ZwBIhdjTG1NYXRqMENfbVVxdXdQdExDT3NBRRAFGk8KTQoYCg0KAggBEQAAAAAAgGZAEZhuEoNAWqxAEhIIABADEAYQExASGAJCBBoCCAUiGwoXY0xtTWFvdXNDZm1VcXV3UHRMQ09zQUVwASgBIhUAQzqku4oaNghKoNuifLFYTlyURq4aGAoKDUCwURgVvO0N1BIKDcyHUhgV-MwM1A",
+          "routeLabels": [
+            "DEFAULT_ROUTE"
+          ],
+          "polylineDetails": {}
+        }
+      ],
+      "geocodingResults": {
+        "origin": {
+          "geocoderStatus": {},
+          "type": [
+            "locality",
+            "political"
+          ],
+          "placeId": "ChIJXQNBzXCJwokRuEHYXzmN73E"
+        },
+        "destination": {
+          "geocoderStatus": {},
+          "type": [
+            "locality",
+            "political"
+          ],
+          "placeId": "ChIJPSErlOow6IkRVtvz2P4QEBk"
+        }
+      }
+    }
+  },
+  "4. IMPOSSIBLE TRUCK (26 ft tall, 220k lb)": {
+    "request": {
+      "origin": {
+        "address": "Great Neck, NY"
+      },
+      "destination": {
+        "address": "Hauppauge, NY"
+      },
+      "routingPreference": "TRAFFIC_AWARE",
+      "travelMode": "TRUCK",
+      "routeModifiers": {
+        "vehicleInfo": {
+          "totalHeightMm": 8000,
+          "totalWidthMm": 4000,
+          "totalLengthMm": 40000,
+          "totalWeightKg": 100000,
+          "totalAxleCount": 9
+        }
+      }
+    },
+    "httpStatus": 200,
+    "response": {
+      "routes": [
+        {
+          "legs": [
+            {
+              "distanceMeters": 53362,
+              "duration": "3051s",
+              "staticDuration": "2633s",
+              "polyline": {
+                "encodedPolyline": "e{_xF|a_aMAMMiCCYCm@OkCUwDCe@QsCSsDSqDUqDSqDUqDYgFZC^A`CV@?z@LRFVP`Av@H}@VoABKFm@EkCAMQsAM]KOi@g@GIO]Ee@FyC@y@?qAAy@Gk@jA{@d@_@LKr@e@dAc@zEoA\\I\\GJIHEVGNCf@Mf@KtA[PCj@G\\CJ?l@Av@Ap@CPCt@OdAYpCu@ZKrAg@f@O^MNITKPMTQJK`@c@v@}@RY@A`@u@N[d@mBV}@N_@\\u@NUPQHGd@a@LINOJIpAgAlDkDBCxAwAf@g@j@i@FIFEJMZ]j@y@r@gAn@c@b@Ib@@pBYr@M|D}@tBc@FSb@K~@SbDu@NL~@U`@IpA[jFkAx@QNClDw@jAQNOHAjAIp@Aj@Ad@AZ?n@@~@BbCHjBDLNnABp@@f@@rCFf@Bj@@HGL?zBLr@DjBJdAD`A@xBCz@?vA@V?v@DH?pBPRBh@ThB~@^R`AcDd@}A?]N{@XyARgAd@_C@}@j@_D`@gDRgDFkDCmCA]EeAOgCASUkB?CMs@c@_CIc@e@eBSs@Y{@i@wAO]s@wAe@aAqCwFAEwC}FeEsI_@w@s@oBK[a@wAOo@[aBE_@[qCc@qGsBg[UgDOgCKyAc@kGUgDOsBMwACa@_@kCIi@]mBS{@_@{AWw@_@gAWq@M[[s@e@_A]m@e@w@SYsAcBY[sCsCs@o@mAoA_@e@_AoAsAeCcAgCs@kCKc@_@_CM_AQgBUkBUyBQyAu@mG]iB}@uCKYo@_B[m@i@aAm@}@_@g@c@q@i@s@oAkB[g@uAoByAkCsAcDgAsDU_AY{Ag@aDU{BGw@AUI{AAe@E_D?w@BgC@}C@i@DoJ?mA?Y?c@?q@AwEAkFBeADaCDuALkC^eILoCJuG@c@?wBAiBIaJBoE@g@DiABu@Ds@NeCF_AdA_Jd@wD`@aD`@eDFq@N_C@O@SH_D?qCAu@MeEOwBW}DGy@Aa@CmBBkDReDVgCl@gD`@aBX_AbAoCbA}Bv@gBHQl@wAbDuHd@qATw@^aB`@qB`@{CN}AFcAFqC?k@?qAGaC?MAMWiDGu@a@eDGa@_@gCMq@_@kBg@_C}@iDMg@y@wCe@gBi@qBQs@S{@o@oCm@qCOq@cAoFg@aDYkBOkAMuAIwAGqACm@C{B?y@BcB?[FwAHoAVkCD[NaAV}Ar@{C`@uAZ_AfAkCf@cAvBgE~ByE`@}@d@iARg@b@gAl@mBb@yAJa@TaAl@{CLs@R}AJcADe@Bc@Dm@F{A@_@@yBAwA?QIsBEw@WuDEo@Gm@MoAIu@E[_@sC{@uGeAcI_@qCAIoAyJqBiOY_Cm@oEkBwNIi@q@kFa@_DWeC[wDGcAOkCIaBCm@ImEASGqJI{FYuMa@}KEkA_@kHWoE{@yLE]QqB_@{DSoBYiCSoB[mCMkAa@iDIe@Ky@Iq@SuAU}ASyAk@oDW}Ac@kCuAoIeAcFKc@gAkE[gAUw@Wu@Mc@EKKY@WiAmDGS_@qBIcAAIEmBCqCAc@?u@CWEe@CQWeAUk@q@}@q@e@sBy@SKe@_@]a@OUi@mASi@MG}@gDKg@Km@SmAIk@CYGi@AQKqAGuACeDB}CFwD?o@CaECkAM{CGaAUuCYgCG]QmAUmAKq@[wAi@}BI_@WoAQ{@QaAKu@SiBMoAIqAIeBA[C{@C}B@wADwDEaCI{EQmBAEWkBCUGa@_@kBWkA]mAk@qBEQwAmF_@gCWcCMyAQiDAc@CcC?]BmBDkBBg@@y@FkBBcAHiCDaBDgBDwAFoC@y@@k@CcAMiEEeACk@Ig@o@kEE[GYk@gCGUSs@Mc@i@{AWo@eBuDg@oAo@yAsAgD]kAgAoEWoA{@}Em@}E_@aFOgEA[EqB?sB?]?w@?[AoACcAE_AASEu@MsAM}@QoA_@eBG[Ss@g@cBo@_BYm@_@u@a@s@CG_AqA]e@gBqBw@aAIIYa@{@kAU_@cBwCQ]cBoD{AmDSi@a@eAkAmD{@kDAKa@}BO_ACYOiAIcACYGq@K{BAWAq@A}ABsDPiDH}@LiADa@d@uCBONs@Pu@Po@^oAX{@Z{@h@mA`CwEj@gAN[b@gAZaA\\gADSNo@b@aCLaALmA@EFy@Dq@@g@BsA?}@?e@CaBAEOeCIcA[cDQyBAOYgFEcAEuAEiBCaACiFBuFDyBHkC@K^}GZuD\\iCHi@\\cBLg@t@qCBIPg@p@gBnAiCz@yAZg@rAeBLObBcBLKdA{@vAeA^Yx@s@DC`@a@X]b@i@d@o@LQt@sAbAyB|@mC@ERy@R}@Ji@RsABYTgCNoD@kDCcA?CE{AAWQeCGs@]kCE_@_@mBOs@m@{BK_@M_@{@eC_@gAw@aC]eAAAc@wAMa@q@uCs@{DM}@K}@MiAAEOgB?CIsA?OE_AEcBAuA@yB?_@@gB?i@@cC?wA?[KiFUmEa@{EaAeHa@oC_@aC{@aFuA_IACu@{DsCaNiAsEsAiEwAoDaBeDGOwBkDcB_C[_@mAsA{@}@sCcCQMeCcBi@Yw@c@s@]oAk@w@]aAc@s@]sAq@QIy@c@wBsAaCeBm@g@c@_@KIeAaAYWa@c@k@m@kBwBcBmBAAyDmEo@s@iAiAg@e@[Wa@[iA}@SO}@m@aBcAiB_AAAcAe@ME{@]yAi@AAiD}@sAWCASC}@OWE_C_@UG}Ac@UKKCaBy@GEwAaAwAoAa@e@o@w@SYq@cAEIYi@Ue@Ym@}@cCa@{AUcA}@uEi@gECU?EKeAQ{BSeFEgEDcE@_@?CLeD\\wEf@kET}A~AsKr@}FJcA?CT_CRqBNmBDg@JsAFgAPuCFcATaFDqADkBDqCBuAFoCEgDGqAMeBEa@KmAWiBG]{@sDgAmDKWSk@oAyCSi@g@mAe@kA[}@g@wAi@aBs@gCk@{BU_A[{AACMq@UqAi@eDg@uDU{Be@aFEc@AU[gFGoAIuBM{DIkH?CA_@@cE?qAD}CBaADaBFsBJaCFcA@OJaBHsANkBDe@Fw@\\wDPqBJy@H{@^_DVsBFc@BWLw@PkALq@P{@b@sBVaA\\mATw@DONc@Rk@`@gAXu@Xq@Tg@DKRe@`@y@b@{@b@{@f@cA^s@`AiBbAiBz@_BZg@jAuB\\k@|@{A~@_Bb@w@tBmErAkDt@yBf@aB\\gAb@gBLg@Lg@f@aCF_@X_BN{@Jm@X{BP{A@MPgBL_B@SDa@@_@Dq@FmAD{AB}@B{@DmABoAHsCDoBFeCJcEF_CDiABaA@q@HsCBaAFcCD{AD}AFoBLuE@aABoAF_C@cADwBDeB@w@H}CNaGL{EFuCBgAJqDFcCBkADoABoADsAD}ABwA?Q@aA?e@?m@AYAe@Cy@GwAEo@MsAEe@EUK}@UqAQ_AUaAK_@Ok@Uy@Qc@Uq@]}@Q_@GMSa@Sc@[i@AAS]_@m@e@o@U]Y[]a@WYGIUUa@c@[[e@g@]a@Y[WWc@e@_@a@c@g@_@a@e@e@i@m@i@i@a@e@q@u@s@u@[[y@_Ae@e@g@k@[]SSUYw@y@YY[_@_@_@[]WYWYUUq@u@Y[a@a@Y[OQ_@a@YY[]a@c@e@g@o@s@e@g@aAgAi@q@eAwAEI_A{A_@o@i@kAUi@[aACISq@e@cCKk@O_BGaAEqA?{B@y@DcAX{CFa@Ly@|@kFTsAXmA\\oAVkAvAaGfAuE^_Bf@aCLi@b@{BlAyF~AuHd@gCp@cEl@cF?IJcAPaCNqB`@eFRoCHkAXkD@[bAsNZeEJyARoCLaCL{CHgD@gA@qA?c@?uAAYAsACuAK{DEqAGmCAc@CqAGiB?AUcICaAASAm@ImB?AA]A}A?qB?Y@oDH}D?ADkBVsDJsAFaD@o@MwCEg@a@sBY}@g@{AEM_BkEUs@iA}CKUgAqC}AeEwBcGo@aBO_@Yw@]}@qBoFGOc@qAeBuEa@iAc@sAM}@CQDe@Ro@JIFCZAXRb@Xf@^HD`@\\h@`@RNnAbAh@b@\\VTRd@^RPPJf@V^JNBR?N@P?P@J?b@@D@JNXRHJFPFTJF?R@t@@j@@T[PM@?H@bACFk@Hl@KBMC{@XH"
+              },
+              "startLocation": {
+                "latLng": {
+                  "latitude": 40.800672,
+                  "longitude": -73.7284676
+                }
+              },
+              "endLocation": {
+                "latLng": {
+                  "latitude": 40.825634799999996,
+                  "longitude": -73.2025566
+                }
+              },
+              "steps": [
+                {
+                  "distanceMeters": 790,
+                  "staticDuration": "92s",
+                  "polyline": {
+                    "encodedPolyline": "e{_xF|a_aMAMMiCCYCm@OkCUwDCe@QsCSsDSqDUqDSqDUqDYgF"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.800672,
+                      "longitude": -73.7284676
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8017439,
+                      "longitude": -73.7191848
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "DEPART",
+                    "instructions": "Head east on Baker Hill Rd toward Ruxton Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.5 mi"
+                    },
+                    "staticDuration": {
+                      "text": "2 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 213,
+                  "staticDuration": "25s",
+                  "polyline": {
+                    "encodedPolyline": "{a`xFzg}`MZC^A`CV@?z@LRFVP`Av@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8017439,
+                      "longitude": -73.7191848
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.7999262,
+                      "longitude": -73.71974709999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_RIGHT",
+                    "instructions": "Turn right onto Station Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.1 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 448,
+                  "staticDuration": "51s",
+                  "polyline": {
+                    "encodedPolyline": "qv_xFlk}`MH}@VoABKFm@EkCAMQsAM]KOi@g@GIO]Ee@FyC@y@?qAAy@Gk@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.7999262,
+                      "longitude": -73.71974709999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8003201,
+                      "longitude": -73.7147616
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_LEFT",
+                    "instructions": "Turn left onto Ravine Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.3 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 1635,
+                  "staticDuration": "203s",
+                  "polyline": {
+                    "encodedPolyline": "_y_xFfl|`MjA{@d@_@LKr@e@dAc@zEoA\\I\\GJIHEVGNCf@Mf@KtA[PCj@G\\CJ?l@Av@Ap@CPCt@OdAYpCu@ZKrAg@f@O^MNITKPMTQJK`@c@v@}@RY@A`@u@N[d@mBV}@N_@\\u@NUPQHGd@a@LINOJIpAgAlDkDBCxAwAf@g@j@i@FIFEJMZ]j@y@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8003201,
+                      "longitude": -73.7147616
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.787797,
+                      "longitude": -73.70601169999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_RIGHT",
+                    "instructions": "Turn right onto E Shore Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "1.0 mi"
+                    },
+                    "staticDuration": {
+                      "text": "3 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 2188,
+                  "staticDuration": "227s",
+                  "polyline": {
+                    "encodedPolyline": "wj}wFpuz`Mr@gAn@c@b@Ib@@pBYr@M|D}@tBc@FSb@K~@SbDu@NL~@U`@IpA[jFkAx@QNClDw@jAQNOHAjAIp@Aj@Ad@AZ?n@@~@BbCHjBDLNnABp@@f@@rCFf@Bj@@HGL?zBLr@DjBJdAD`A@xBCz@?vA@V?v@DH?pBPRBh@ThB~@^R"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.787797,
+                      "longitude": -73.70601169999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.7686931,
+                      "longitude": -73.7040746
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "NAME_CHANGE",
+                    "instructions": "Continue onto Community Dr"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "1.4 mi"
+                    },
+                    "staticDuration": {
+                      "text": "4 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 124,
+                  "staticDuration": "16s",
+                  "polyline": {
+                    "encodedPolyline": "isywFliz`M`AcDd@}A"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.7686931,
+                      "longitude": -73.7040746
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.7681653,
+                      "longitude": -73.7027787
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_LEFT",
+                    "instructions": "Turn left onto S Service Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "407 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 16101,
+                  "staticDuration": "634s",
+                  "polyline": {
+                    "encodedPolyline": "apywFjaz`M?]N{@XyARgAd@_C@}@j@_D`@gDRgDFkDCmCA]EeAOgCASUoBMs@c@_CIc@e@eBSs@Y{@i@wAO]s@wAe@aAsC}FwC}FeEsI_@w@s@oBK[a@wAOo@[aBE_@[qCc@qGsBg[UgDOgCKyAc@kGUgDOsBMwACa@_@kCIi@]mBS{@_@{AWw@_@gAWq@M[[s@e@_A]m@e@w@SYsAcBY[sCsCs@o@mAoA_@e@_AoAsAeCcAgCs@kCKc@_@_CM_AQgBUkBUyBQyAu@mG]iB}@uCKYo@_B[m@i@aAm@}@_@g@c@q@i@s@oAkB[g@uAoByAkCsAcDgAsDU_AY{Ag@aDU{BGw@AUI{AAe@E_D?w@BgC@}C@i@DoJ?mA?Y?c@?q@AwEAkFBeADaCDuALkC^eILoCJuG@c@?wBAiBIaJBoE@g@DiABu@Ds@NeCF_AdA_Jd@wD`@aD`@eDFq@N_C@O@SH_D?qCAu@MeEOwBW}DGy@Aa@CmBBkDReDVgCl@gD`@aBX_AbAoCbA}Bv@gBHQl@wAbDuHd@qATw@^aB`@qB`@{CL}AHcAFqC?k@?qAGaC?MAMWiDGu@a@eDGa@_@gCMq@_@kBg@_C}@iDMg@y@wCe@gBi@qBQs@S{@o@oCm@qCOq@cAoFg@aDYkBOkAMuAIwAGqACm@C{B?y@BcB?[FwAHoAVkCD[NaAV}Ar@{C`@uAZ_AfAkCf@cAvBgE~ByE`@}@d@iARg@b@gAl@mBb@yAJa@TaAl@{CLs@R}AJcADe@Bc@Dm@F{A@_@@yBAwA?QIsBEw@WuDEo@Gm@MoAIu@E[_@sC{@uGeAcI_@qCAIoAyJqBiOY_Cm@oEkBwNIi@q@kFa@_DWeC[wDGcAOkCIaBCm@ImEASGqJI{FYuMa@}KEkA_@kHWoE{@yLE]QqB_@{DSoBYiCSoB[mCMkAa@iDIe@Ky@Iq@SuAU}ASyAk@oDW}Ac@kCuAoIeAcFKc@gAkE[gAUw@Wu@Mc@EKKY"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.7681653,
+                      "longitude": -73.7027787
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.7878008,
+                      "longitude": -73.5244742
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "RAMP_LEFT",
+                    "instructions": "Merge onto I-495 E via the ramp on the left to Riverhead"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "10.0 mi"
+                    },
+                    "staticDuration": {
+                      "text": "11 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 705,
+                  "staticDuration": "36s",
+                  "polyline": {
+                    "encodedPolyline": "wj}wF|fw_M@WiAmDGS_@qBIcAAIEmBCqCAc@?u@CWEe@CQWeAUk@q@}@q@e@sBy@SKe@_@]a@OUi@mASi@MG"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.7878008,
+                      "longitude": -73.5244742
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.7907611,
+                      "longitude": -73.51778639999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "RAMP_RIGHT",
+                    "instructions": "Take exit 42 toward Northern Pkwy E/Hauppauge"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.4 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 25746,
+                  "staticDuration": "942s",
+                  "polyline": {
+                    "encodedPolyline": "g}}wFd}u_M}@gDKg@Km@SmAIk@CYGi@AQKqAGuACeDB}CFwD?o@CaECkAM{CGaAUuCYgCG]QmAUmAKq@[wAi@}BI_@WoAQ{@QaAKu@SiBMoAIqAIeBA[C{@C}B@wADwDEaCI{EQmBAEWkBCUGa@_@kBWkA]mAk@qBEQwAmF_@gCWcCMyAQiDAc@CcC?]BmBDkBBg@@y@FkBBcAHiCDaBDgBDwAFoC@y@@k@CcAMiEEeACk@Ig@o@kEE[GYk@gCGUSs@Mc@i@{AWo@eBuDg@oAo@yAsAgD]kAgAoEWoA?A{@{Em@}E_@aFOgEA[EqB?sB?]?w@?[AoACcAE_AASEu@MsAM}@QoA_@eBG[Ss@g@cBo@_BYm@_@u@a@s@CG_AqA]e@gBqBw@aAIIYa@{@kAU_@cBwCQ]cBoD{AmDSi@a@eAkAmD{@kDAKa@}BO_ACYOiAIcACYGq@K{BAWAq@A}ABsDPiDH}@LiADa@d@uCBONs@Pu@Po@^oAX{@Z{@h@mA`CwEj@gAN[b@gAZaA\\gADSNo@b@aCLaALmA@EFy@Dq@@g@BsA?}@?e@CaBAEOeCIcA[cDQyBAOYgFEcAEuAEiBCaACiFBuFDyBHkC@K^}GZuD\\iCHi@\\cBLg@t@qCBIPg@p@gBnAiCz@yAZg@rAeBLObBcBLKdA{@vAeA^Yx@s@DC`@a@X]b@i@d@o@LQt@sAbAyB|@mC@ERy@R}@Ji@RsABYTgCNoD@kDCcAE_BAWQeCGs@]kCE_@_@mBOs@m@{BK_@M_@{@eC_@gAw@aC]eAe@yAMa@?Cq@qCs@{DM}@K}@MiAAEOgBIwA?OE_AEcBAuA@yB?_@@gB?i@@cC?wA?[KiFUmEa@{EaAeHa@oC_@aC{@aFuA_Iw@_EsCaNiAsEsAiEwAoDaBeDGOwBkDcB_C[_@mAsA{@}@sCcCQMeCcBi@Yw@c@s@]oAk@w@]aAc@s@]sAq@QIy@c@wBsAaCeBm@g@c@_@KIeAaAYWa@c@k@m@kBwBcBmB{DoEo@s@iAiAg@e@[Wa@[iA}@SO}@m@aBcAiB_AeAg@ME{@]yAi@AAiD}@sAWWE}@OWE_C_@UG}Ac@UKKCaBy@GEwAaAwAoAa@e@o@w@SYq@cAEIYi@Ue@Ym@}@cCa@{AUcA}@uEi@gECU?EKeAQ{BSeFEgEDcE@_@LiD\\wEf@kET}A~AsKr@}FJcA?CT_CRqBNmBDg@JsAFgAPuCFcATaFDqADkBDqCBuAFoCEgDGqAMeBEa@KmAWiBG]{@sDgAmDKWSk@oAyCSi@g@mAe@kA[}@g@wAi@aBs@gCk@{BU_A[{AOu@UqAi@eDg@uDU{Be@aFEc@AU[gFGoAIuBM{DIkHAc@@cE?qAD}CBaADaBFsBJaCFcA@OJaBHsANkBDe@Fw@\\wDPqBJy@H{@^_DVsBFc@BWLw@PkALq@P{@b@sBVaA\\mATw@DONc@Rk@`@gAXu@Xq@Tg@DKRe@`@y@b@{@b@{@f@cA^s@`AiBbAiBz@_BZg@jAuB\\k@|@{A~@_Bb@w@tBmErAkDt@yBf@aB\\gAb@gBLg@Lg@f@aCF_@X_BN{@Jm@X{BP{A@MPgBL_B@SDa@@_@Dq@FmAD{AB}@B{@DmABoAHsCDoBFeCJcEF_CDiABaA@q@HsCBaAFcCD{AD}AFoBLuE@aABoAF_C@cADwBDeB@w@H}CNaGL{EFuCBgAJqDFcCBkADoABoADsAD}ABwA?Q@aA?e@?m@AYAe@Cy@GwAEo@MsAEe@EUK}@UqAQ_AUaAK_@Ok@Uy@Qc@Uq@]}@Q_@GMSa@Sc@[i@AAS]_@m@e@o@U]Y[]a@WYGIUUa@c@[[e@g@]a@Y[WWc@e@_@a@c@g@_@a@e@e@i@m@i@i@a@e@q@u@s@u@[[y@_Ae@e@g@k@[]SSUYw@y@YY[_@_@_@[]WYWYUUq@u@Y[a@a@Y[OQ_@a@YY[]a@c@e@g@o@s@e@g@aAgAi@q@eAwAEI_A{A_@o@i@kAUi@[aACISq@e@cCKk@O_BGaAEqA?{B@y@DcAX{CFa@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.7907611,
+                      "longitude": -73.51778639999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8295113,
+                      "longitude": -73.25158119999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "MERGE",
+                    "instructions": "Merge onto Northern State Pkwy"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "16.0 mi"
+                    },
+                    "staticDuration": {
+                      "text": "16 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 3313,
+                  "staticDuration": "192s",
+                  "polyline": {
+                    "encodedPolyline": "moexFj}a~LLy@|@kFTsAXmA\\oAVkAvAaGfAuE^_Bf@aCLi@b@{BlAyF~AuHd@gCp@cEl@cF?IJcAPaCNqB`@eFRoCHkAXkD@[bAsNZeEJyARoCLcCLyCHgD@gA@qA?c@?uAA[AqACuAK{DEqAGmCAc@CqAGkBUcICaAASAm@IoBA]A}A?qB?Y@oDH_EDkBVsDJsA"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8295113,
+                      "longitude": -73.25158119999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8243168,
+                      "longitude": -73.21340239999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "MERGE",
+                    "instructions": "Merge onto NY-347/NY-454 E\nPass by Valley Bank (on the right in 1 mi)"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "2.1 mi"
+                    },
+                    "staticDuration": {
+                      "text": "3 mins"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 304,
+                  "staticDuration": "21s",
+                  "polyline": {
+                    "encodedPolyline": "_odxFvnz}LFaD@o@MwCEi@a@qBY}@g@{AEM"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8243168,
+                      "longitude": -73.21340239999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8249034,
+                      "longitude": -73.209969
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_LEFT",
+                    "instructions": "Keep left to continue on NY-347 E, follow signs for Port Jefferson\nPass by Carvel (on the right)"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.2 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 990,
+                  "staticDuration": "61s",
+                  "polyline": {
+                    "encodedPolyline": "srdxFhyy}L_BkEUs@iA}CKUgAqC}AeEwBcGo@aBO_@Yw@]}@qBoFGOc@qAeBuEa@iAc@sA"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8249034,
+                      "longitude": -73.209969
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8296017,
+                      "longitude": -73.1999785
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "STRAIGHT",
+                    "instructions": "Continue straight to stay on NY-347 E"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.6 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 35,
+                  "staticDuration": "8s",
+                  "polyline": {
+                    "encodedPolyline": "_pexFzzw}LM}@CQ"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8296017,
+                      "longitude": -73.1999785
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.829694100000005,
+                      "longitude": -73.1995788
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_SLIGHT_RIGHT",
+                    "instructions": "Slight right toward Hauppauge Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "115 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 490,
+                  "staticDuration": "62s",
+                  "polyline": {
+                    "encodedPolyline": "qpexFjxw}LDe@Ro@JIFCZAXRb@Xf@^HD`@\\h@`@RNnAbAh@b@\\VTRd@^RPPJf@V^JNBR?N@P?P@J?b@@D@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.829694100000005,
+                      "longitude": -73.1995788
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8259561,
+                      "longitude": -73.20117730000001
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_SHARP_RIGHT",
+                    "instructions": "Sharp right onto Hauppauge Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "0.3 mi"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 119,
+                  "staticDuration": "11s",
+                  "polyline": {
+                    "encodedPolyline": "gydxFjbx}LJNXRHJFPFTJF?R@t@@j@@T"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8259561,
+                      "longitude": -73.20117730000001
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8255477,
+                      "longitude": -73.20236249999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_RIGHT",
+                    "instructions": "Turn right onto Townline Rd"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "390 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 26,
+                  "staticDuration": "8s",
+                  "polyline": {
+                    "encodedPolyline": "uvdxFvix}L[PM@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8255477,
+                      "longitude": -73.20236249999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8257627,
+                      "longitude": -73.2024639
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_RIGHT",
+                    "instructions": "Turn right"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "85 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 62,
+                  "staticDuration": "18s",
+                  "polyline": {
+                    "encodedPolyline": "_xdxFjjx}L?H@bACFk@H"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8257627,
+                      "longitude": -73.2024639
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8259883,
+                      "longitude": -73.2029417
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_LEFT",
+                    "instructions": "Turn left"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "203 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 58,
+                  "staticDuration": "17s",
+                  "polyline": {
+                    "encodedPolyline": "mydxFjmx}Ll@KBMC{@"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8259883,
+                      "longitude": -73.2029417
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.8257607,
+                      "longitude": -73.20250949999999
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "UTURN_LEFT",
+                    "instructions": "Make a U-turn"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "190 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                },
+                {
+                  "distanceMeters": 15,
+                  "staticDuration": "9s",
+                  "polyline": {
+                    "encodedPolyline": "_xdxFtjx}LXH"
+                  },
+                  "startLocation": {
+                    "latLng": {
+                      "latitude": 40.8257607,
+                      "longitude": -73.20250949999999
+                    }
+                  },
+                  "endLocation": {
+                    "latLng": {
+                      "latitude": 40.825634799999996,
+                      "longitude": -73.2025566
+                    }
+                  },
+                  "navigationInstruction": {
+                    "maneuver": "TURN_RIGHT",
+                    "instructions": "Turn right\nDestination will be on the right"
+                  },
+                  "localizedValues": {
+                    "distance": {
+                      "text": "49 ft"
+                    },
+                    "staticDuration": {
+                      "text": "1 min"
+                    }
+                  },
+                  "travelMode": "DRIVE"
+                }
+              ],
+              "localizedValues": {
+                "distance": {
+                  "text": "33.2 mi"
+                },
+                "duration": {
+                  "text": "51 mins"
+                },
+                "staticDuration": {
+                  "text": "44 mins"
+                }
+              }
+            }
+          ],
+          "distanceMeters": 53361,
+          "duration": "3051s",
+          "staticDuration": "2634s",
+          "polyline": {
+            "encodedPolyline": "e{_xF|a_aMAMMiCCYCm@OkCUwDCe@QsCSsDSqDUqDSqDUqDYgFZC^A`CV@?z@LRFVP`Av@H}@VoABKFm@EkCAMQsAM]KOi@g@GIO]Ee@FyC@y@?qAAy@Gk@jA{@d@_@LKr@e@dAc@zEoA\\I\\GJIHEVGNCf@Mf@KtA[PCj@G\\CJ?l@Av@Ap@CPCt@OdAYpCu@ZKrAg@f@O^MNITKPMTQJK`@c@v@}@RY@A`@u@N[d@mBV}@N_@\\u@NUPQHGd@a@LINOJIpAgAlDkDBCxAwAf@g@j@i@FIFEJMZ]j@y@r@gAn@c@b@Ib@@pBYr@M|D}@tBc@FSb@K~@SbDu@NL~@U`@IpA[jFkAx@QNClDw@jAQNOHAjAIp@Aj@Ad@AZ?n@@~@BbCHjBDLNnABp@@f@@rCFf@Bj@@HGL?zBLr@DjBJdAD`A@xBCz@?vA@V?v@DH?pBPRBh@ThB~@^R`AcDd@}A?]N{@XyARgAd@_C@}@j@_D`@gDRgDFkDCmCA]EeAOgCASUkB?CMs@c@_CIc@e@eBSs@Y{@i@wAO]s@wAe@aAqCwFAEwC}FeEsI_@w@s@oBK[a@wAOo@[aBE_@[qCc@qGsBg[UgDOgCKyAc@kGUgDOsBMwACa@_@kCIi@]mBS{@_@{AWw@_@gAWq@M[[s@e@_A]m@e@w@SYsAcBY[sCsCs@o@mAoA_@e@_AoAsAeCcAgCs@kCKc@_@_CM_AQgBUkBUyBQyAu@mG]iB}@uCKYo@_B[m@i@aAm@}@_@g@c@q@i@s@oAkB[g@uAoByAkCsAcDgAsDU_AY{Ag@aDU{BGw@AUI{AAe@E_D?w@BgC@}C@i@DoJ?mA?Y?c@?q@AwEAkFBeADaCDuALkC^eILoCJuG@c@?wBAiBIaJBoE@g@DiABu@Ds@NeCF_AdA_Jd@wD`@aD`@eDFq@N_C@O@SH_D?qCAu@MeEOwBW}DGy@Aa@CmBBkDReDVgCl@gD`@aBX_AbAoCbA}Bv@gBHQl@wAbDuHd@qATw@^aB`@qB`@{CN}AFcAFqC?k@?qAGaC?MAMWiDGu@a@eDGa@_@gCMq@_@kBg@_C}@iDMg@y@wCe@gBi@qBQs@S{@o@oCm@qCOq@cAoFg@aDYkBOkAMuAIwAGqACm@C{B?y@BcB?[FwAHoAVkCD[NaAV}Ar@{C`@uAZ_AfAkCf@cAvBgE~ByE`@}@d@iARg@b@gAl@mBb@yAJa@TaAl@{CLs@R}AJcADe@Bc@Dm@F{A@_@@yBAwA?QIsBEw@WuDEo@Gm@MoAIu@E[_@sC{@uGeAcI_@qCAIoAyJqBiOY_Cm@oEkBwNIi@q@kFa@_DWeC[wDGcAOkCIaBCm@ImEASGqJI{FYuMa@}KEkA_@kHWoE{@yLE]QqB_@{DSoBYiCSoB[mCMkAa@iDIe@Ky@Iq@SuAU}ASyAk@oDW}Ac@kCuAoIeAcFKc@gAkE[gAUw@Wu@Mc@EKKY@WiAmDGS_@qBIcAAIEmBCqCAc@?u@CWEe@CQWeAUk@q@}@q@e@sBy@SKe@_@]a@OUi@mASi@MG}@gDKg@Km@SmAIk@CYGi@AQKqAGuACeDB}CFwD?o@CaECkAM{CGaAUuCYgCG]QmAUmAKq@[wAi@}BI_@WoAQ{@QaAKu@SiBMoAIqAIeBA[C{@C}B@wADwDEaCI{EQmBAEWkBCUGa@_@kBWkA]mAk@qBEQwAmF_@gCWcCMyAQiDAc@CcC?]BmBDkBBg@@y@FkBBcAHiCDaBDgBDwAFoC@y@@k@CcAMiEEeACk@Ig@o@kEE[GYk@gCGUSs@Mc@i@{AWo@eBuDg@oAo@yAsAgD]kAgAoEWoA{@}Em@}E_@aFOgEA[EqB?sB?]?w@?[AoACcAE_AASEu@MsAM}@QoA_@eBG[Ss@g@cBo@_BYm@_@u@a@s@CG_AqA]e@gBqBw@aAIIYa@{@kAU_@cBwCQ]cBoD{AmDSi@a@eAkAmD{@kDAKa@}BO_ACYOiAIcACYGq@K{BAWAq@A}ABsDPiDH}@LiADa@d@uCBONs@Pu@Po@^oAX{@Z{@h@mA`CwEj@gAN[b@gAZaA\\gADSNo@b@aCLaALmA@EFy@Dq@@g@BsA?}@?e@CaBAEOeCIcA[cDQyBAOYgFEcAEuAEiBCaACiFBuFDyBHkC@K^}GZuD\\iCHi@\\cBLg@t@qCBIPg@p@gBnAiCz@yAZg@rAeBLObBcBLKdA{@vAeA^Yx@s@DC`@a@X]b@i@d@o@LQt@sAbAyB|@mC@ERy@R}@Ji@RsABYTgCNoD@kDCcA?CE{AAWQeCGs@]kCE_@_@mBOs@m@{BK_@M_@{@eC_@gAw@aC]eAAAc@wAMa@q@uCs@{DM}@K}@MiAAEOgB?CIsA?OE_AEcBAuA@yB?_@@gB?i@@cC?wA?[KiFUmEa@{EaAeHa@oC_@aC{@aFuA_IACu@{DsCaNiAsEsAiEwAoDaBeDGOwBkDcB_C[_@mAsA{@}@sCcCQMeCcBi@Yw@c@s@]oAk@w@]aAc@s@]sAq@QIy@c@wBsAaCeBm@g@c@_@KIeAaAYWa@c@k@m@kBwBcBmBAAyDmEo@s@iAiAg@e@[Wa@[iA}@SO}@m@aBcAiB_AAAcAe@ME{@]yAi@AAiD}@sAWCASC}@OWE_C_@UG}Ac@UKKCaBy@GEwAaAwAoAa@e@o@w@SYq@cAEIYi@Ue@Ym@}@cCa@{AUcA}@uEi@gECU?EKeAQ{BSeFEgEDcE@_@?CLeD\\wEf@kET}A~AsKr@}FJcA?CT_CRqBNmBDg@JsAFgAPuCFcATaFDqADkBDqCBuAFoCEgDGqAMeBEa@KmAWiBG]{@sDgAmDKWSk@oAyCSi@g@mAe@kA[}@g@wAi@aBs@gCk@{BU_A[{AACMq@UqAi@eDg@uDU{Be@aFEc@AU[gFGoAIuBM{DIkH?CA_@@cE?qAD}CBaADaBFsBJaCFcA@OJaBHsANkBDe@Fw@\\wDPqBJy@H{@^_DVsBFc@BWLw@PkALq@P{@b@sBVaA\\mATw@DONc@Rk@`@gAXu@Xq@Tg@DKRe@`@y@b@{@b@{@f@cA^s@`AiBbAiBz@_BZg@jAuB\\k@|@{A~@_Bb@w@tBmErAkDt@yBf@aB\\gAb@gBLg@Lg@f@aCF_@X_BN{@Jm@X{BP{A@MPgBL_B@SDa@@_@Dq@FmAD{AB}@B{@DmABoAHsCDoBFeCJcEF_CDiABaA@q@HsCBaAFcCD{AD}AFoBLuE@aABoAF_C@cADwBDeB@w@H}CNaGL{EFuCBgAJqDFcCBkADoABoADsAD}ABwA?Q@aA?e@?m@AYAe@Cy@GwAEo@MsAEe@EUK}@UqAQ_AUaAK_@Ok@Uy@Qc@Uq@]}@Q_@GMSa@Sc@[i@AAS]_@m@e@o@U]Y[]a@WYGIUUa@c@[[e@g@]a@Y[WWc@e@_@a@c@g@_@a@e@e@i@m@i@i@a@e@q@u@s@u@[[y@_Ae@e@g@k@[]SSUYw@y@YY[_@_@_@[]WYWYUUq@u@Y[a@a@Y[OQ_@a@YY[]a@c@e@g@o@s@e@g@aAgAi@q@eAwAEI_A{A_@o@i@kAUi@[aACISq@e@cCKk@O_BGaAEqA?{B@y@DcAX{CFa@Ly@|@kFTsAXmA\\oAVkAvAaGfAuE^_Bf@aCLi@b@{BlAyF~AuHd@gCp@cEl@cF?IJcAPaCNqB`@eFRoCHkAXkD@[bAsNZeEJyARoCLaCL{CHgD@gA@qA?c@?uAAYAsACuAK{DEqAGmCAc@CqAGiB?AUcICaAASAm@ImB?AA]A}A?qB?Y@oDH}D?ADkBVsDJsAFaD@o@MwCEg@a@sBY}@g@{AEM_BkEUs@iA}CKUgAqC}AeEwBcGo@aBO_@Yw@]}@qBoFGOc@qAeBuEa@iAc@sAM}@CQDe@Ro@JIFCZAXRb@Xf@^HD`@\\h@`@RNnAbAh@b@\\VTRd@^RPPJf@V^JNBR?N@P?P@J?b@@D@JNXRHJFPFTJF?R@t@@j@@T[PM@?H@bACFk@Hl@KBMC{@XH"
+          },
+          "description": "I-495 E and Northern State Pkwy",
+          "warnings": [
+            "This route includes a highway."
+          ],
+          "viewport": {
+            "low": {
+              "latitude": 40.767132,
+              "longitude": -73.7284676
+            },
+            "high": {
+              "latitude": 40.8297235,
+              "longitude": -73.1990665
+            }
+          },
+          "travelAdvisory": {},
+          "localizedValues": {
+            "distance": {
+              "text": "33.2 mi"
+            },
+            "duration": {
+              "text": "51 mins"
+            },
+            "staticDuration": {
+              "text": "44 mins"
+            }
+          },
+          "routeToken": "Cq4CCsEBMr4BGqIBCjMCFg1ShDQft44Ihbspkp8thZwOvN3hAqGj017VptlH1v7YywLyrZEB8j369wHllgSpTAASNGIv_GfLAexmI2nlBghKR2dFoeUlU1XCV-7fiRLVu1QPHNEIp16LX8tC2asKuWedBagTIZYaEQAJISjzAaQHxBkJAxQIEYgBKg0bH18UZnIDBggHARplPQBtyD5FoQ39Pkje6MucrtGg1ZwBIhdjTG1NYXRqMENfbVVxdXdQdExDT3NBRRAFGk8KTQoYCg0KAggBEQAAAAAAgGZAEZhuEoNAWqxAEhIIABADEAYQExASGAJCBBoCCAUiGwoXY0xtTWFvdXNDZm1VcXV3UHRMQ09zQUVwASgBIhUAQzqku4oaNghKoNuifLFYTlyURq4aGAoKDUCwURgVvO0N1BIKDcyHUhgV-MwM1A",
+          "routeLabels": [
+            "DEFAULT_ROUTE"
+          ],
+          "polylineDetails": {}
+        }
+      ],
+      "geocodingResults": {
+        "origin": {
+          "geocoderStatus": {},
+          "type": [
+            "locality",
+            "political"
+          ],
+          "placeId": "ChIJXQNBzXCJwokRuEHYXzmN73E"
+        },
+        "destination": {
+          "geocoderStatus": {},
+          "type": [
+            "locality",
+            "political"
+          ],
+          "placeId": "ChIJPSErlOow6IkRVtvz2P4QEBk"
+        }
+      }
+    }
+  }
+}
