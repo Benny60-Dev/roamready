@@ -3883,6 +3883,7 @@ export async function generateRoutes(req: AuthRequest, res: Response, next: Next
       hereWaypoints?: LatLng[]          // ≤3 snapped — directions-link URLs only
       herePolyline?: Array<[number, number]>  // FULL HERE geometry — the map line
       hereDistanceMeters?: number       // HERE's measured leg distance (matches the line)
+      rigAware?: boolean                // FEAT-RIG-AWARE-INDICATOR — leg provenance (see below)
     }> = await fetchAllSegmentRoutes(trip)
 
     // FEAT-HERE-ROUTING (display) — when the flag is on, attach HERE's RV-safe
@@ -3922,6 +3923,14 @@ export async function generateRoutes(req: AuthRequest, res: Response, next: Next
             pl = await fetchHereLegPolyline(ordered[i - 1], ordered[i], rigDims, apiKey)
           }
           const { points, distanceMeters } = pl
+          // FEAT-RIG-AWARE-INDICATOR — per-leg measurement provenance for the
+          // client's trip-level line + per-stop fallback pill. true = this leg's
+          // displayed route/distance came from truck routing (LVR or HERE);
+          // false = a rig-aware engine is on and the trip HAS rig dims, yet this
+          // leg fell back to car routing; undefined = no usable rig dims
+          // (nothing to claim either way — the client shows the add-specs nudge).
+          if (points.length > 0) seg.rigAware = true
+          else if (rigDims) seg.rigAware = false
           if (points.length) {
             // The MAP LINE uses HERE's FULL polyline directly (drawn client-side,
             // no Google via-reconstruction → no hooks) + HERE's measured distance.
