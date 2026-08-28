@@ -3470,6 +3470,10 @@ const HAZARD_MESSAGES: Record<string, string> = {
   'moki-dugway-ut': "DANGER: Moki Dugway (UT-261) is a series of steep UNPAVED switchbacks carved into a cliff. Large RVs and trailers should not attempt it — use the paved alternate.",
   'apache-trail-az': "DANGER: AZ-88 (Apache Trail) between Tortilla Flat and Roosevelt Lake is winding gravel/dirt, sometimes a single lane. Do NOT attempt in a big rig.",
   'cajon-pass-ca': "CAUTION: Cajon Pass (I-15 south of Victorville) descends ~6% with a 12-mile downgrade, 45 mph truck limit, and a runaway ramp. Heavy truck traffic. Low gear and engine braking — watch brake temps the whole way down.",
+  // Tahoe east-side corridor (RR60). Both MED in the seed — these fire only
+  // after Benny verifies the numbers and flips the rows to HIGH.
+  'monitor-pass-ca': "CAUTION: Monitor Pass (CA-89) tops out at 8,314 ft with sustained ~6-10% grades and short pitches near 12%. Long steady pulls on both sides and a seasonal winter closure. Demanding in a large rig — low gear, watch brake temps; staying on US-395 to Kingsbury Grade or US-50 is the gentler way into Tahoe.",
+  'kingsbury-grade-daggett-pass-nv': "CAUTION: Kingsbury Grade (NV-207 over Daggett Pass, 7,344 ft) climbs and descends at up to ~8.4% with sweeping curves into the Tahoe basin. A standard RV route, but treat the downgrade with respect — low gear and engine braking — and chains can be required in winter.",
 }
 
 /** Compose the user-facing warning from the hazard row + the rig that tripped it.

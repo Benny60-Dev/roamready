@@ -152,6 +152,19 @@ const HAZARDS: SeedHazard[] = [
   { name: 'Cajon Pass', state: 'CA', lat: 34.3400, lng: -117.4500, // VERIFY (Cajon Summit, I-15)
     hazardType: HazardType.GRADE, gradePct: 6,
     confidence: HazardConfidence.HIGH, source: 'Caltrans / Mountain Directory', roadDesignation: 'I-15' },
+
+  // ── Tahoe east-side corridor (added RR60 — discovered when LVR routed the
+  //    Kennedy Meadows PS → S. Lake Tahoe leg over Kingsbury; the corridor had
+  //    no rows). MED on purpose: grade numbers are from measured cycling GPS
+  //    data (PJAMM) + road guides — good DISCOVERY sources, not authoritative
+  //    (the tracker's data-hygiene rule). Verify vs Mountain Directory /
+  //    Caltrans / NDOT, then flip to HIGH + re-run the seed to fire live. ──
+  { name: 'Monitor Pass', state: 'CA', lat: 38.6739, lng: -119.6153, // VERIFY (summit)
+    hazardType: HazardType.GRADE, gradePct: 10, // steepest MILE ~9.8%, pitches ~11.7% (PJAMM, west side)
+    confidence: HazardConfidence.MED, source: 'PJAMM GPS data / road guides — VERIFY vs Mountain Directory', roadDesignation: 'CA-89' },
+  { name: 'Kingsbury Grade / Daggett Pass', state: 'NV', lat: 38.9633, lng: -119.8872, // VERIFY (Daggett Pass)
+    hazardType: HazardType.GRADE, gradePct: 8.4, // max gradient per road guides; NDOT chain controls in winter
+    confidence: HazardConfidence.MED, source: 'road guides / NDOT winter controls — VERIFY vs Mountain Directory', roadDesignation: 'NV-207' },
 ]
 
 /** Deterministic id so re-runs upsert in place (mirrors prisma/seed.ts RigDatabase). */
