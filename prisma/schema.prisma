@@ -424,6 +424,11 @@ model Trip {
   /// no longer consecutive real stops. Lives on the Trip (not the planning session)
   /// so it persists for manual trips too. Null/absent = none.
   acknowledgedLongLegs Json?
+  /// FEAT-TRIP-DRIVE-CAP — per-trip daily drive-time limit in HOURS, captured
+  /// when the user states one in planning/modify chat ("keep drive days under
+  /// 4 hours"). Overrides TravelProfile.maxDriveHours for THIS trip only; null =
+  /// profile/default governs. Read through deriveCapHours().
+  maxDriveHours        Float?
   /// Build-time RV-safety acknowledgment. The user confirmed (via the blocking
   /// modal at Build Itinerary) that destinations/routes are NOT verified RV-safe
   /// and that checking clearance/weight/length/grade is their responsibility.

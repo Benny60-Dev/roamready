@@ -2344,6 +2344,33 @@ export default function TripMapPage() {
                     }}
                   />
                 )}
+                {/* FEAT-TRIP-DRIVE-CAP — a daily drive limit the user stated in
+                    chat for THIS trip (overrides the profile cap). Visible so
+                    the override is never a surprise; × clears it back to the
+                    profile setting (raising the cap never needs a recheck). */}
+                {id && trip && trip.maxDriveHours != null && trip.maxDriveHours > 0 && (
+                  <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-[#1F6F8B]/30 bg-[#1F6F8B]/5 px-2.5 py-1 text-[11px] text-[#134756]">
+                    <span className="font-medium">Drive limit: {trip.maxDriveHours}h/day</span>
+                    <span className="text-[#1F6F8B]/70">for this trip</span>
+                    <button
+                      type="button"
+                      aria-label="Clear the drive limit for this trip"
+                      title="Clear — go back to your profile's drive limit"
+                      className="ml-0.5 rounded-full px-1 text-[#1F6F8B]/70 hover:text-[#134756] hover:bg-[#1F6F8B]/10"
+                      onClick={async () => {
+                        try {
+                          await tripsApi.update(id, { maxDriveHours: null })
+                          const fresh = (await tripsApi.get(id)).data
+                          setTrip(fresh)
+                        } catch (err) {
+                          console.error('[drive-cap] clear failed', err)
+                        }
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* C1 — 4-card stats grid removed. Miles + Nights + Est. cost

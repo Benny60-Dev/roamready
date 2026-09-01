@@ -16,7 +16,7 @@ import { hasRoundTripIntent } from '../utils/roundTripIntent'
 // with build's expandLongLegs. trips.ts already imports enforcePerUserDailyCap
 // from this module; both exports are only ever CALLED inside request handlers
 // (never at module load), so the two-way import resolves cleanly at call time.
-import { planTransitInserts, deriveCapHours, buildTransitNote, buildViolationAdvisory, minimalTripBudget, rigDimsFromRig, detectStopHazards, geocodeOriginText } from './trips'
+import { planTransitInserts, deriveCapHours, buildTransitNote, buildViolationAdvisory, minimalTripBudget, rigDimsFromRig, detectStopHazards, geocodeOriginText, recheckLongLegs } from './trips'
 
 // Soft cap: inject a "wrap up" system message and let Claude actually respond
 // (so it has a chance to emit the <itinerary> JSON block).
@@ -682,6 +682,8 @@ function buildLiveTripState(trip: any, rigs: any[] = []): string {
     '- When the user says "first stop" / "stop 1" / "the second stop" / "the last stop", they almost always mean a NUMBERED DESTINATION — not the home departure and not the return-home entry. If the request is ambiguous, ASK BEFORE EMITTING a <modify> tag: "Just to confirm — you mean [first destination], not your home departure?"',
     '- Concrete example: trip is "Starting point: [HomeCity] | Stop 1: [EXAMPLE_STOP_1] | Stop 2: [EXAMPLE_STOP_2] | Return home: [HomeCity]". User says "remove the first stop" → that means [EXAMPLE_STOP_1], not [HomeCity]. Confirm with the user, then emit <modify>{"action":"remove_stop","locationName":"[EXAMPLE_STOP_1]"}</modify>.',
     '',
+    'DRIVE LIMIT TAG (FEAT-TRIP-DRIVE-CAP): If the user states a daily drive-time limit for this trip ("keep drive days under 4 hours", "no more than 5 hours a day", "max 300 miles a day" → convert miles to hours at 55 mph and round to the nearest half hour), acknowledge it in ONE plain sentence ("Got it — I\'ll keep drive days under 4 hours for this trip") and append a machine tag on its OWN line at the very END of your reply: <drive_cap>4</drive_cap> (a number of hours, 1–16, decimals allowed). Emit it once per stated limit. Do NOT emit it for hypotheticals or questions ("what if we did 4 hours?"). The app stores it, re-measures every leg against it, and adds any overnight stops itself — do not propose transit stops for it.',
+    '',
     'DRIVE-TIME — THE APP HANDLES IT, NOT YOU: After ANY change you propose (add, remove, reorder, return-home), the app measures REAL drive times and automatically inserts any overnight transit stop a new or merged leg needs, then tells the user about it. So: do NOT propose, add, or emit OVERNIGHT_ONLY / transit stops in a <modify> (no transit stop in add_stop, none "along the way") — just propose the destination change the user asked for. And do NOT tell the user that a leg "stays within" / "is over" / "fits" their drive-time limit, how many hours or miles a leg is, or that you checked/verified drive times — your estimate is not authoritative. Reproduce any OVERNIGHT_ONLY stops already in the live trip unchanged; never invent new ones.',
     '',
     'TRAVEL PARTY — HARD RULE: The trip-scoped `party` (in the JSON context below, when present) or the user\'s `defaultParty` describes who is traveling. Trip-scoped overrides user-level. You MUST consult party data when proposing modifications.',
@@ -1151,6 +1153,10 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     // conversation never re-routes the same leg (no wasted Directions call / latency).
     let priorDestination: string | null = null
     let priorRequestedNights: number | null = null
+    // FEAT-TRIP-DRIVE-CAP — the per-trip drive limit in force for this turn's
+    // deterministic checks: planning reads it from partialTripData (captured on a
+    // prior turn or THIS turn via <drive_cap>), modify reads it off the live trip.
+    let tripDriveCap: number | null = null
     // ORIGIN-FIX — read any starting location captured on a PRIOR turn (persisted
     // to PlanningSession.partialTripData after the AI emitted an <origin> tag) and
     // fold it onto userProfile so services/ai.ts can suppress the no-home re-ask
@@ -1166,6 +1172,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       // Snapshot prior budget inputs for the cost gate (see pre-build check below).
       priorDestination = typeof ptd?.destination === 'string' ? ptd.destination : null
       priorRequestedNights = typeof ptd?.requestedNights === 'number' ? ptd.requestedNights : null
+      tripDriveCap = typeof ptd?.driveCapHours === 'number' && ptd.driveCapHours > 0 ? ptd.driveCapHours : null
       // BUILD 3a — surface the confirmed requested trip length (nights) captured
       // on a PRIOR turn (via the <requestedNights> tag below) so the DURATION
       // CONFIRMATION rule in services/ai.ts sees it in the profile context and
@@ -1618,6 +1625,42 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       }
     }
 
+    // DRIVE-CAP CAPTURE (FEAT-TRIP-DRIVE-CAP) — the user stated a daily drive
+    // limit for this trip ("keep drive days under 4 hours"). The model emits
+    // <drive_cap>4</drive_cap>; strip it, validate 1–16h, and persist:
+    //   planning → partialTripData.driveCapHours (copied to Trip.maxDriveHours at
+    //              promote), and it governs THIS turn's planning-time transit check;
+    //   modify   → Trip.maxDriveHours directly, then the long-leg recheck re-runs
+    //              so the trip reshapes to the new limit without a second ask.
+    const driveCapMatch = response.match(/<drive_cap>([\s\S]*?)<\/drive_cap>/)
+    if (driveCapMatch) {
+      response = response.replace(/<drive_cap>[\s\S]*?<\/drive_cap>/g, '').trim()
+      const rawCap = driveCapMatch[1].trim()
+      const parsedCap = Number(rawCap)
+      if (Number.isFinite(parsedCap) && parsedCap >= 1 && parsedCap <= 16) {
+        tripDriveCap = parsedCap
+        if (context === 'modify' && tripId && liveTrip) {
+          try {
+            await prisma.trip.update({ where: { id: tripId }, data: { maxDriveHours: parsedCap } })
+            console.log('[AI drive-cap] tripId=%s maxDriveHours=%s (modify)', tripId, parsedCap)
+            const { note } = await recheckLongLegs(tripId, req.user!.id)
+            if (note) response = `${response}\n\n${note}`.trim()
+          } catch (e: any) {
+            console.error('[AI drive-cap] modify persist/recheck failed tripId=%s: %s', tripId, e?.message)
+          }
+        } else if (sessionId) {
+          try {
+            await mergePartialTripData(sessionId, { driveCapHours: parsedCap })
+            console.log('[AI drive-cap] sessionId=%s driveCapHours=%s (planning)', sessionId, parsedCap)
+          } catch (e: any) {
+            console.error('[AI drive-cap] planning persist failed for sessionId=%s: %s', sessionId, e?.message)
+          }
+        }
+      } else if (rawCap) {
+        console.warn('[AI drive-cap] ignored out-of-range <drive_cap> value "%s"', rawCap)
+      }
+    }
+
     // REQUESTED-NIGHTS SINGLE-SHOT FALLBACK — under the state-and-proceed opening
     // flow a one-shot prompt ("…6 days…") can state the length AND emit the
     // <itinerary> in the SAME turn; if the model didn't append <requestedNights>
@@ -1771,7 +1814,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
         const transitItin = parseItineraryBlock(response)
         const transitStops = Array.isArray(transitItin?.stops) ? (transitItin!.stops as any[]) : null
         if (transitItin && transitStops && transitStops.length >= 2) {
-          const capHours = deriveCapHours(user?.travelProfile)
+          const capHours = deriveCapHours(user?.travelProfile, tripDriveCap)
           // FEAT-HERE-ROUTING — rig dims for the truck-routing measurement, taken
           // from the rig the user is planning FOR (canvas-selected / default /
           // ad-hoc, already resolved into userProfile.rigs above). Only consumed
@@ -1895,7 +1938,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             const changed = destination !== priorDestination || reqNights !== priorRequestedNights
 
             if (originName && destination && reqNights != null && changed) {
-              const capHours = deriveCapHours(user?.travelProfile)
+              const capHours = deriveCapHours(user?.travelProfile, tripDriveCap)
               // FEAT-HERE-ROUTING — same rig-dims threading as the main splice
               // path; ignored when USE_HERE_ROUTING is off.
               const rigDims = rigDimsFromRig(userProfile.rigs?.[0] as any)

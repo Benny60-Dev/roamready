@@ -135,7 +135,7 @@ export async function promoteSession(req: AuthRequest, res: Response, next: Next
       // Pull `messages` here so we can summarize them after promote without a
       // second round-trip. They're already in PG, this is the cheapest
       // moment to grab them.
-      select: { id: true, tripId: true, messages: true },
+      select: { id: true, tripId: true, messages: true, partialTripData: true },
     })
     if (!session) throw new AppError('Session not found', 404)
     // BUILD-DUPE-1 — idempotent re-promote. Back-button + a second Build
@@ -185,6 +185,13 @@ export async function promoteSession(req: AuthRequest, res: Response, next: Next
           // the write intent is visible). null only if an older client omits it,
           // in which case Phase 3's stop-shape fallback still applies.
           tripType: data.tripType ?? null,
+          // FEAT-TRIP-DRIVE-CAP — carry a drive limit the user stated during
+          // planning (captured via <drive_cap> into partialTripData) onto the
+          // trip so the build's long-leg checks honour it. Null = profile governs.
+          maxDriveHours: (() => {
+            const v = (session as any)?.partialTripData?.driveCapHours
+            return typeof v === 'number' && v > 0 ? v : null
+          })(),
         },
       })
       // Mirror trip.name onto session.title so the SessionsPanel reads
