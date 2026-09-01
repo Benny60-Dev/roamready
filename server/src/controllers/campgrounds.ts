@@ -3,7 +3,7 @@ import axios from 'axios'
 import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { getCache, setCache } from '../utils/redis'
-import { verifyCampground, verifyCampgroundBatch, searchCampgroundsByArea } from '../services/googlePlaces'
+import { verifyCampground, verifyCampgroundBatch, searchCampgroundsByArea, StopCoords } from '../services/googlePlaces'
 
 interface CampgroundResult {
   id: string
@@ -263,18 +263,31 @@ export async function searchCampgrounds(req: AuthRequest, res: Response, next: N
       id: string
       locationName: string
       locationState: string | null
+      latitude: number | null
+      longitude: number | null
       campgroundName: string | null
       campgroundCandidates: any
     } | null = null
     if (stopId && typeof stopId === 'string') {
       stop = await prisma.stop.findFirst({
         where: { id: stopId, trip: { userId } },
-        select: { id: true, locationName: true, locationState: true, campgroundName: true, campgroundCandidates: true },
+        select: { id: true, locationName: true, locationState: true, latitude: true, longitude: true, campgroundName: true, campgroundCandidates: true },
       })
       console.log(
         `[campgrounds] Orchestration triggered for stopId=${stopId}, candidates=${JSON.stringify(stop?.campgroundCandidates ?? null)}`,
       )
     }
+
+    // Stop position for proximity checks. Prefer the stored stop coordinates;
+    // fall back to the lat/lng the client sent with the request.
+    const qLat = lat ? parseFloat(lat as string) : NaN
+    const qLng = lng ? parseFloat(lng as string) : NaN
+    const stopCoords: StopCoords | null =
+      stop && stop.latitude != null && stop.longitude != null
+        ? { latitude: stop.latitude, longitude: stop.longitude }
+        : Number.isFinite(qLat) && Number.isFinite(qLng)
+          ? { latitude: qLat, longitude: qLng }
+          : null
 
     // Tier 1 — RIDB (always runs, with or without stopId)
     const ridbCampgrounds = await fetchRecGovCampgrounds(
@@ -295,8 +308,10 @@ export async function searchCampgrounds(req: AuthRequest, res: Response, next: N
         ? `${stop.locationName}, ${stop.locationState}`
         : stop.locationName
 
+      // FIX-CAMPGROUND-PROXIMITY: hand the stop's position to verification so
+      // a name-only Google match 200 mi away is rejected instead of served.
       const verifications = await verifyCampgroundBatch(
-        candidateNames.map(name => ({ name, location: locationLabel })),
+        candidateNames.map(name => ({ name, location: locationLabel, coords: stopCoords })),
         { userId },
       )
 
@@ -361,6 +376,7 @@ export async function searchCampgrounds(req: AuthRequest, res: Response, next: N
         stop.locationName,
         stop.locationState,
         { userId },
+        stopCoords,
       )
       for (const r of areaResults) {
         if (placesResults.some(p => p.id === `places-${r.placeId}`)) continue
