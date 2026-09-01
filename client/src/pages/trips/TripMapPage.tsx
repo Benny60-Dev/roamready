@@ -571,6 +571,8 @@ export default function TripMapPage() {
   // polyline owns the line, a late-resolving Google car line must not overwrite it.
   const hereOwnsLineRef = useRef(false)
   const [mapInstance, setMapInstance]       = useState<google.maps.Map | null>(null)
+  // FEAT-MAP-TYPE-TOGGLE: 'hybrid' = satellite imagery WITH road/place labels
+  const [mapTypeId, setMapTypeId]           = useState<'roadmap' | 'hybrid' | 'terrain'>('roadmap')
   // Rename pencil — restored to name-only after the 3f8ed99 popover rework
   // bundled name+date editing behind one affordance and lost discoverability
   // on the date side. Dates now live on their own clickable line below the
@@ -2810,6 +2812,26 @@ export default function TripMapPage() {
             </button>
           )}
 
+          {/* FEAT-MAP-TYPE-TOGGLE: Map / Satellite / Terrain segmented control.
+              Google's own mapTypeControl stays off (options above) so the map
+              keeps RoamReady chrome only. "Satellite" is Google's hybrid mode --
+              imagery with labels -- so stops and the route line stay readable.
+              Cloud styling (mapId) applies to roadmap only, which is expected. */}
+          <div className={`absolute ${isMobile ? 'top-3' : 'top-14'} right-3 z-10 bg-white rounded-lg border border-gray-200 shadow-sm flex overflow-hidden`}>
+            {([['roadmap', 'Map'], ['hybrid', 'Satellite'], ['terrain', 'Terrain']] as const).map(([id, label], i) => (
+              <button
+                key={id}
+                onClick={() => setMapTypeId(id)}
+                className={`px-2.5 py-1.5 text-xs transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
+                  mapTypeId === id ? 'bg-[#1F6F8B] text-white font-semibold' : 'text-gray-600 hover:bg-gray-50'
+                }`}
+                title={id === 'hybrid' ? 'Satellite imagery with labels' : `${label} view`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           {isLoaded ? (
             // `center` and `zoom` here are PLACEHOLDER values only — the real
             // framing is applied imperatively by the fitBounds useEffect above,
@@ -2825,6 +2847,7 @@ export default function TripMapPage() {
               mapContainerStyle={MAP_CONTAINER_STYLE}
               zoom={6}
               center={center}
+              mapTypeId={mapTypeId}
               options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false, gestureHandling: 'greedy', mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID' }}
               onLoad={onMapLoad}
             >
