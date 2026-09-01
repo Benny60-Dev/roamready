@@ -5,7 +5,7 @@ import { VehicleType, SecondVehicle } from '../../types'
 import { deriveSecondVehicle, VEHICLE_LABELS, type TowingChoice } from '../../utils/rigs'
 import { usersApi } from '../../services/api'
 import RangeSelect from './RangeSelect'
-import { YEARS, LENGTHS, HEIGHTS, MPG_OPTIONS, TANK_OPTIONS, GVWR_OPTIONS } from '../../constants/rigOptions'
+import { YEARS, LENGTHS, HEIGHTS, MPG_OPTIONS, TANK_OPTIONS, GVWR_OPTIONS, WIDTH_OPTIONS, AXLE_OPTIONS } from '../../constants/rigOptions'
 
 // App teal — used for the "Where do I find this?" GVWR helper summary + link,
 // and the "Reuse a saved vehicle" picker accent.
@@ -272,6 +272,48 @@ export default function RigFormFields({
             </p>
           </div>
         </details>
+      </div>
+
+      {/* ── FEAT-RIG-DIMENSIONS: width (inches) + axle count. Both OPTIONAL —
+          blank keeps LVR's documented safe defaults (102 in, 2 axles), so no
+          completeness notice pushes these; filled means truck routing uses the
+          rig's real numbers. Width gets a find-it helper like GVWR's. */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="label">Width (inches)</label>
+          <Controller
+            control={control}
+            name="widthInches"
+            render={({ field }) => (
+              <RangeSelect options={WIDTH_OPTIONS} integer placeholder="Select width" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+            )}
+          />
+          <p className="mt-1 text-xs text-gray-400">
+            Most RVs are 96–102″. Helps route you around narrow roads and tight tunnels. Optional — blank uses a safe 102″.
+          </p>
+          <details className="mt-1">
+            <summary className="text-xs cursor-pointer" style={{ color: TEAL }}>
+              Where do I find this?
+            </summary>
+            <div className="mt-1 space-y-1 text-xs text-gray-500">
+              <p>Your owner's manual or spec sheet — listed as "exterior width" or "body width."</p>
+              <p>Manufacturer brochures quote it too; 101″–102″ is typical for Class A coaches, 96″ for smaller rigs. Mirrors don't count.</p>
+            </div>
+          </details>
+        </div>
+        <div>
+          <label className="label">Axles</label>
+          <Controller
+            control={control}
+            name="axleCount"
+            render={({ field }) => (
+              <RangeSelect options={AXLE_OPTIONS} integer placeholder="Select axles" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
+            )}
+          />
+          <p className="mt-1 text-xs text-gray-400">
+            Count every axle touching the road — including a tag axle or trailer axles. Optional.
+          </p>
+        </div>
       </div>
 
       {/* ── Fuel / MPG section — direction-aware (Pass 2 of towing-aware fuel

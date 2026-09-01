@@ -540,6 +540,11 @@ export interface RigDims {
   lengthCm?: number
   /** vehicle[grossWeight] — kilograms */
   grossWeightKg?: number
+  /** vehicle[width] — centimeters (FEAT-RIG-DIMENSIONS; from Rig.widthInches) */
+  widthCm?: number
+  /** total axles incl. tag/trailer (FEAT-RIG-DIMENSIONS; LVR only — HERE's
+   *  axle params are truck-toll oriented and deliberately not sent) */
+  axleCount?: number
 }
 
 // UNIT CONVERSION (safety-critical). Rig dims are stored in US units:
@@ -555,6 +560,7 @@ export interface RigDims {
 // restriction — the exact opposite of this feature's safety purpose. Centimeters
 // is correct and is what's used here.
 const FEET_TO_CM = 30.48
+const INCHES_TO_CM = 2.54
 const POUNDS_TO_KG = 0.453592
 
 /** Convert a Rig (US units) to HERE-native RigDims. Returns null when the rig
@@ -566,6 +572,8 @@ export function rigDimsFromRig(
         length?: number | null
         height?: number | null
         gvwr?: number | null
+        widthInches?: number | null
+        axleCount?: number | null
         isTowing?: boolean | null
         towedWeight?: number | null
       }
@@ -576,6 +584,10 @@ export function rigDimsFromRig(
   const dims: RigDims = {}
   if (rig.height != null && rig.height > 0) dims.heightCm = rig.height * FEET_TO_CM
   if (rig.length != null && rig.length > 0) dims.lengthCm = rig.length * FEET_TO_CM
+  // FEAT-RIG-DIMENSIONS: width stored in INCHES (RV convention), axles as a
+  // plain count. Optional like everything else — omitted when not captured.
+  if (rig.widthInches != null && rig.widthInches > 0) dims.widthCm = rig.widthInches * INCHES_TO_CM
+  if (rig.axleCount != null && rig.axleCount > 0) dims.axleCount = rig.axleCount
 
   // Gross weight HERE routes on = coach GVWR PLUS the toad's weight WHEN towing —
   // the rig + toad cross weight-limited bridges/roads as one combined mass
@@ -711,6 +723,9 @@ async function fetchLegDetailHERE(
   if (rigDims?.heightCm) params['vehicle[height]'] = String(Math.round(rigDims.heightCm))
   if (rigDims?.lengthCm) params['vehicle[length]'] = String(Math.round(rigDims.lengthCm))
   if (rigDims?.grossWeightKg) params['vehicle[grossWeight]'] = String(Math.round(rigDims.grossWeightKg))
+  // FEAT-RIG-DIMENSIONS: a captured real width now reaches HERE too (same
+  // only-real-dims policy — never a default here; defaults are LVR-only).
+  if (rigDims?.widthCm) params['vehicle[width]'] = String(Math.round(rigDims.widthCm))
 
   let res: any
   try {
@@ -817,8 +832,9 @@ export const RV_FALLBACK_NOTE =
 //     rule as the HERE params). A rig missing any of them cannot use LVR and
 //     falls through to HERE/car + the amber fallback advisory; the RIGINFO
 //     completeness notice already pushes users to fill exactly these.
-//   · width/axles get documented UNIVERSAL defaults until the Rig model
-//     captures them (FEAT-LVR-RIG-SPECS-EXT): width 2591 mm = 102 in incl.
+//   · width/axles: the Rig model NOW captures them (FEAT-RIG-DIMENSIONS,
+//     widthInches/axleCount, both optional) — real values win; the UNIVERSAL
+//     defaults below remain the fallback: width 2591 mm = 102 in incl.
 //     mirrors, the US federal maximum — virtually every RV is built to
 //     96–102 in, and OVERstating width is the safe direction (respects more
 //     restrictions, never fewer). Axles 2 = the motorhome norm; axle count
@@ -836,8 +852,11 @@ function lvrVehicleInfo(rigDims: RigDims | null | undefined): Record<string, num
     totalHeightMm: Math.round(rigDims.heightCm * 10),
     totalLengthMm: Math.round(rigDims.lengthCm * 10),
     totalWeightKg: Math.round(rigDims.grossWeightKg),
-    totalWidthMm: RV_DEFAULT_WIDTH_MM,
-    totalAxleCount: RV_DEFAULT_AXLE_COUNT,
+    // FEAT-RIG-DIMENSIONS: real captured values win; the documented universal
+    // defaults remain the fallback so uncaptured rigs keep routing exactly as
+    // before (102 in width is the safe over-statement, 2 axles the norm).
+    totalWidthMm: rigDims.widthCm ? Math.round(rigDims.widthCm * 10) : RV_DEFAULT_WIDTH_MM,
+    totalAxleCount: rigDims.axleCount ?? RV_DEFAULT_AXLE_COUNT,
   }
 }
 
@@ -1019,6 +1038,9 @@ async function fetchHereLegPolyline(
   if (rigDims?.heightCm) params['vehicle[height]'] = String(Math.round(rigDims.heightCm))
   if (rigDims?.lengthCm) params['vehicle[length]'] = String(Math.round(rigDims.lengthCm))
   if (rigDims?.grossWeightKg) params['vehicle[grossWeight]'] = String(Math.round(rigDims.grossWeightKg))
+  // FEAT-RIG-DIMENSIONS: a captured real width now reaches HERE too (same
+  // only-real-dims policy — never a default here; defaults are LVR-only).
+  if (rigDims?.widthCm) params['vehicle[width]'] = String(Math.round(rigDims.widthCm))
 
   try {
     const res = await axios.get('https://router.hereapi.com/v8/routes', { params, timeout: 10000 })

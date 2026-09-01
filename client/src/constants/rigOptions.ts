@@ -39,3 +39,7 @@ export const TANK_OPTIONS: number[] = buildRange(10, 200, 5)
 // granularity of LENGTHS/HEIGHTS. RangeSelect injects any saved between-steps
 // value as a selectable option, so an exact GVWR off the grid is never lost.
 export const GVWR_OPTIONS: number[] = buildRange(6000, 60000, 500)
+// FEAT-RIG-DIMENSIONS: width in INCHES (RV convention; 102 = federal max) and
+// total axle count. RangeSelect injects any saved off-step value as usual.
+export const WIDTH_OPTIONS: number[] = buildRange(84, 102, 1)
+export const AXLE_OPTIONS: number[] = [2, 3, 4, 5]
