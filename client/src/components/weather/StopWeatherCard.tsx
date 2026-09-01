@@ -61,8 +61,15 @@ export function StopWeatherCard({ stop, weather, compact = false }: Props) {
                 View live forecast on NWS → <ExternalLink size={9} />
               </a>
             )
-            : <span className="text-blue-400 italic text-[10px]">Live forecast within 10 days</span>
+            : null
           }
+        </div>
+        {/* Explain WHY this stop shows averages instead of a forecast. Mirrors the
+            server gate (trips.ts getTripWeather): live data is fetched once the
+            trip departs within 10 days and the stop's stay ends inside the
+            15-day Open-Meteo window; everything else falls back to averages. */}
+        <div className="text-[10px] text-blue-500/80 italic mb-1.5">
+          Live forecast appears here within 10 days of departure.
         </div>
         <div className="flex items-center gap-4 text-gray-700 mb-1.5">
           <span className="text-base font-semibold">
