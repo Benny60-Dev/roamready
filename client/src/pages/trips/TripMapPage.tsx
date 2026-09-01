@@ -573,6 +573,11 @@ export default function TripMapPage() {
   const [mapInstance, setMapInstance]       = useState<google.maps.Map | null>(null)
   // FEAT-MAP-TYPE-TOGGLE: 'hybrid' = satellite imagery WITH road/place labels
   const [mapTypeId, setMapTypeId]           = useState<'roadmap' | 'hybrid' | 'terrain'>('roadmap')
+  // FEAT-TRAFFIC-TOGGLE: live traffic overlay, OFF by default (a driving-day
+  // tool; always-on coloring clutters the planning view). The TrafficLayer
+  // instance is created once and re-attached/detached via the effect below.
+  const [trafficOn, setTrafficOn]           = useState(false)
+  const trafficLayerRef                     = useRef<google.maps.TrafficLayer | null>(null)
   // Rename pencil — restored to name-only after the 3f8ed99 popover rework
   // bundled name+date editing behind one affordance and lost discoverability
   // on the date side. Dates now live on their own clickable line below the
@@ -654,6 +659,20 @@ export default function TripMapPage() {
   // card. Offset scales with map height so the mobile 45vh layout doesn't
   // get an oversized pan that shoots past the viewport bottom.
   //
+  // FEAT-TRAFFIC-TOGGLE: attach/detach the traffic overlay. Works in all three
+  // map types; cleanup detaches on unmount so an expanded->collapsed remount
+  // never leaks a layer bound to a dead map instance.
+  useEffect(() => {
+    if (!mapInstance) return
+    if (trafficOn) {
+      if (!trafficLayerRef.current) trafficLayerRef.current = new google.maps.TrafficLayer()
+      trafficLayerRef.current.setMap(mapInstance)
+    } else {
+      trafficLayerRef.current?.setMap(null)
+    }
+    return () => { trafficLayerRef.current?.setMap(null) }
+  }, [mapInstance, trafficOn])
+
   // Guarded with mapInstance && lat/lng so first-load races safely no-op
   // (selectedStop still updates — never worse than today's behavior).
   // panTo short-circuits when the target is already in view, so clicks on
@@ -2831,6 +2850,18 @@ export default function TripMapPage() {
               </button>
             ))}
           </div>
+
+          {/* FEAT-TRAFFIC-TOGGLE: overlay button, same chrome as the map-type
+              control it sits under (56/12 + control height + 8px gap). */}
+          <button
+            onClick={() => setTrafficOn(t => !t)}
+            className={`absolute ${isMobile ? 'top-[50px]' : 'top-[94px]'} right-3 z-10 rounded-lg border border-gray-200 shadow-sm px-2.5 py-1.5 text-xs transition-colors ${
+              trafficOn ? 'bg-[#1F6F8B] text-white font-semibold' : 'bg-white text-gray-600 hover:bg-gray-50'
+            }`}
+            title={trafficOn ? 'Hide live traffic' : 'Show live traffic'}
+          >
+            Traffic
+          </button>
 
           {isLoaded ? (
             // `center` and `zoom` here are PLACEHOLDER values only — the real
