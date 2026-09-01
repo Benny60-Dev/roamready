@@ -167,13 +167,22 @@ export const tripsApi = {
   // acknowledgeLongLeg (Part 2): set when the user chose "keep the long drive" in
   // the delete-confirm modal — the server records the merged leg as acknowledged so
   // recheckLongLegs won't re-insert an overnight on it.
-  deleteStop: (id: string, stopId: string, modifyActionId?: string, acknowledgeLongLeg?: boolean) => {
+  // deferLegRecheck (FIX-MODIFY-SWAP-RECHECK): the Modify panel sets this on a
+  // remove_stop that is immediately followed by an add_stop in the same batch, so
+  // the server doesn't re-insert an overnight on the merged leg before the swap's
+  // add lands. The add's own recheck covers the final shape.
+  deleteStop: (id: string, stopId: string, modifyActionId?: string, acknowledgeLongLeg?: boolean, deferLegRecheck?: boolean) => {
     const params = new URLSearchParams()
     if (modifyActionId) params.set('modifyActionId', modifyActionId)
     if (acknowledgeLongLeg) params.set('acknowledgeLongLeg', 'true')
+    if (deferLegRecheck) params.set('deferLegRecheck', 'true')
     const qs = params.toString()
     return api.delete(`/trips/${id}/stops/${stopId}${qs ? `?${qs}` : ''}`)
   },
+  // Explicit Plan-is-Truth long-leg recheck — safety net after a deferred-recheck
+  // remove whose paired add_stop didn't land.
+  recheckLegs: (id: string) =>
+    api.post<{ inserted: number; transitNote?: string }>(`/trips/${id}/recheck-legs`),
   // Long-leg delete preview — measures the merged leg before deleting an overnight
   // so the confirm modal can show real hours. See controllers/trips.ts.
   longLegPreview: (id: string, stopId: string) =>

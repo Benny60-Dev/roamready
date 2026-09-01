@@ -2885,7 +2885,21 @@ export async function deleteStop(req: AuthRequest, res: Response, next: NextFunc
     // can now exceed the drive cap. Re-check on the SETTLED, already-resequenced
     // list so the merged leg gets a transit stop if needed (unless acknowledged
     // above). Idempotent + fail-soft.
-    const { note: deleteTransitNote } = await recheckLongLegs(req.params.id, req.user!.id)
+    //
+    // FIX-MODIFY-SWAP-RECHECK: the AI Modify panel applies "swap X for Y" as
+    // remove_stop(X) then add_stop(Y). Rechecking here — between the two — sees
+    // the merged over-cap leg and re-inserts an overnight (often X itself), so the
+    // card says "Applied — Remove X" while X is still on the trip. When the panel
+    // knows an add_stop follows in the same batch it passes deferLegRecheck=true;
+    // the add's own recheck then runs once on the final shape. If the add never
+    // lands, the panel calls POST /:id/recheck-legs so the leg is still covered.
+    const deferLegRecheck = req.query.deferLegRecheck === 'true'
+    const { note: deleteTransitNote } = deferLegRecheck
+      ? { note: null as string | null }
+      : await recheckLongLegs(req.params.id, req.user!.id)
+    if (deferLegRecheck) {
+      console.log('[deleteStop] tripId=%s long-leg recheck DEFERRED to the following add_stop', req.params.id)
+    }
     // AI-MESA-10 — verified apply stamp. DELETE has no body, so the Modify
     // panel threads the action id as a query param. Never throws.
     if (typeof req.query.modifyActionId === 'string') {
@@ -2906,6 +2920,25 @@ export async function deleteStop(req: AuthRequest, res: Response, next: NextFunc
  * planLegSplits' split trigger (legHours > cap + grace), so the modal only appears
  * when the resulting drive would actually exceed the user's daily limit.
  */
+// FIX-MODIFY-SWAP-RECHECK — explicit long-leg recheck. The Modify panel calls
+// this when a remove_stop was applied with deferLegRecheck=true but the paired
+// add_stop did not land (failed, or the batch stopped), so the merged leg still
+// gets its Plan-is-Truth overnight. Idempotent; same fail-soft posture as the
+// mutation controllers' own rechecks.
+export async function recheckLegs(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const trip = await prisma.trip.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+      select: { id: true },
+    })
+    if (!trip) throw new AppError('Trip not found', 404)
+    const { inserted, note } = await recheckLongLegs(trip.id, req.user!.id)
+    res.json({ inserted, ...(note ? { transitNote: note } : {}) })
+  } catch (error) {
+    next(error)
+  }
+}
+
 export async function longLegPreview(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const trip = await prisma.trip.findFirst({

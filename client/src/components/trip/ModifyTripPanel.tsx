@@ -65,6 +65,13 @@ interface ActionUiState {
   error?: string
 }
 
+/** FIX-MODIFY-SWAP-RECHECK — per-action follow-up recorded on a successful
+ *  apply: what the server ADDED as a consequence (a Plan-is-Truth overnight on
+ *  a merged/over-cap leg). Rendered on the Applied line so "Applied" never
+ *  hides a stop the user didn't ask for. In-session only; the banner above the
+ *  composer is the persistent record. */
+type ActionFollowUp = { transitNote: string }
+
 interface ChatMsg {
   role: 'user' | 'assistant'
   content: string
@@ -205,6 +212,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
   // Per-action in-session overlay (applying spinner / failed error). Reset on
   // every history load — persisted `applied` flags are the durable state.
   const [actionUi, setActionUi] = useState<Record<string, ActionUiState>>({})
+  const [actionFollowUp, setActionFollowUp] = useState<Record<string, ActionFollowUp>>({})
   // ADDSTOP-RESLOT Phase B — transient "your insert shifted a booked stop's
   // itinerary date" heads-up, set from the createStop response after an add_stop
   // apply. The reservation itself is unchanged; this just flags the date move.
@@ -367,7 +375,14 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
    *  threading the action id so the SERVER stamps applied=true at execution
    *  time (AI-MESA-10 — the client never self-reports apply success as the
    *  source of truth). Throws on any failure; callers own the card state. */
-  async function executeAction(action: ModifyAction, modifyActionId: string) {
+  async function executeAction(
+    action: ModifyAction,
+    modifyActionId: string,
+    opts: { deferLegRecheck?: boolean } = {},
+  ): Promise<{ transitNote: string | null }> {
+    // Any transit overnight the server inserts as a side effect of THIS action
+    // is captured here and returned so the Applied line can say so.
+    let sideEffectNote: string | null = null
     // Fetch fresh trip data from the DB so position math uses current stop orders,
     // not the (potentially stale) React prop captured at last render.
     const freshRes = await tripsApi.get(trip.id)
@@ -485,7 +500,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
         }
         // Server may have inserted an overnight on an over-cap leg into/out of the
         // new stop — surface the grounded note.
-        if (createRes.data?.transitNote) setTransitNote(createRes.data.transitNote)
+        if (createRes.data?.transitNote) { setTransitNote(createRes.data.transitNote); sideEffectNote = createRes.data.transitNote }
         break
       }
       case 'make_one_way': {
@@ -500,8 +515,8 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
         if (!stop) throw new Error(`Could not find stop: ${cleanName}`)
         // Removing a stop merges two legs — the server may insert an overnight on
         // the merged over-cap leg. Surface the grounded note when it does.
-        const removeRes = await tripsApi.deleteStop(trip.id, stop.id, modifyActionId)
-        if (removeRes.data?.transitNote) setTransitNote(removeRes.data.transitNote)
+        const removeRes = await tripsApi.deleteStop(trip.id, stop.id, modifyActionId, undefined, opts.deferLegRecheck)
+        if (removeRes.data?.transitNote) { setTransitNote(removeRes.data.transitNote); sideEffectNote = removeRes.data.transitNote }
         break
       }
       case 'change_nights': {
@@ -539,7 +554,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
           longitude: null,
           modifyActionId,
         })
-        if (startRes.data?.transitNote) setTransitNote(startRes.data.transitNote)
+        if (startRes.data?.transitNote) { setTransitNote(startRes.data.transitNote); sideEffectNote = startRes.data.transitNote }
         break
       }
       case 'suggest_campground': {
@@ -555,7 +570,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
         // and pass the response straight to onTripUpdated. Saves one round-trip.
         const shiftRes = await tripsApi.shiftDates(trip.id, { newStartDate: action.newStartDate, modifyActionId })
         onTripUpdated(shiftRes.data)
-        return
+        return { transitNote: null }
       }
       case 'change_rig': {
         // RIG-CHANGE Phase 3 — route through the SAME PUT /trips/:id path the
@@ -576,19 +591,27 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
     // Refresh trip data and propagate upward
     const res = await tripsApi.get(trip.id)
     onTripUpdated(res.data)
+    return { transitNote: sideEffectNote }
   }
 
   /** Applies one action with per-card state: applying (disabled, spinner
    *  label) → ✓ applied (mirrors the server's stamp) or failed (server error
    *  shown verbatim on the card, which stays applicable for retry). Returns
    *  success so applyAll can stop on the first failure. */
-  async function applyAction(msgIndex: number, sa: ServerModifyAction): Promise<boolean> {
+  async function applyAction(
+    msgIndex: number,
+    sa: ServerModifyAction,
+    opts: { deferLegRecheck?: boolean } = {},
+  ): Promise<boolean> {
     setApplying(true)
     setBookedShiftWarning(null) // clear any prior heads-up; executeAction re-sets it if this add shifts a booking
     setTransitNote(null) // clear any prior transit note; executeAction re-sets it if this edit triggers an insert
     setActionUi(prev => ({ ...prev, [sa.id]: { status: 'applying' } }))
     try {
-      await executeAction(sa.action, sa.id)
+      const { transitNote: followUpNote } = await executeAction(sa.action, sa.id, opts)
+      // Record what the server added on the side of this action so the Applied
+      // line can say it (FIX-MODIFY-SWAP-RECHECK honest copy).
+      if (followUpNote) setActionFollowUp(prev => ({ ...prev, [sa.id]: { transitNote: followUpNote } }))
       // Mirror the server's stamp locally — the mutation endpoint succeeded
       // and stamped applied=true; a reload renders the same state from
       // persisted truth.
@@ -616,10 +639,34 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
    *  order per the AI-MESA-10 contract). Stops on the first failure: that
    *  card shows its error, the rest stay pending. */
   async function applyAll(msgIndex: number, actions: ServerModifyAction[]) {
-    for (const sa of actions) {
-      if (sa.applied) continue
-      const ok = await applyAction(msgIndex, sa)
+    const pending = actions.filter(a => !a.applied)
+    // FIX-MODIFY-SWAP-RECHECK: "swap X for Y" arrives as remove_stop(X) +
+    // add_stop(Y). If the remove's long-leg recheck runs between them it sees the
+    // merged over-cap leg and re-inserts an overnight (often X itself) — so the
+    // card says "Applied — Remove X" while X is still on the trip. Defer that
+    // recheck when an add_stop is the very next pending action; the add's own
+    // recheck then runs once on the final shape.
+    let recheckOwed = false
+    for (let i = 0; i < pending.length; i++) {
+      const sa = pending[i]
+      const next = pending[i + 1]
+      const defer = sa.action.action === 'remove_stop' && next?.action.action === 'add_stop'
+      const ok = await applyAction(msgIndex, sa, { deferLegRecheck: defer })
       if (!ok) break
+      if (defer) recheckOwed = true
+      if (sa.action.action === 'add_stop') recheckOwed = false // the add's own recheck covered the shape
+    }
+    // Safety net: a deferred remove whose paired add never landed (failed, or the
+    // batch stopped) must not leave an unchecked over-cap leg behind.
+    if (recheckOwed) {
+      try {
+        const r = await tripsApi.recheckLegs(trip.id)
+        if (r.data?.transitNote) setTransitNote(r.data.transitNote)
+        const res = await tripsApi.get(trip.id)
+        onTripUpdated(res.data)
+      } catch (err: any) {
+        console.error('[applyMod] recheck-legs safety net failed:', err?.message)
+      }
     }
   }
 
@@ -785,6 +832,11 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
                         return (
                           <div key={sa.id} className="ml-0.5 text-[11px] text-[#0F766E] font-medium">
                             ✅ Applied — {getConfirmationText(sa.action)}
+                            {actionFollowUp[sa.id]?.transitNote && (
+                              <span className="block font-normal text-teal-700/90 mt-0.5">
+                                · {actionFollowUp[sa.id].transitNote}
+                              </span>
+                            )}
                           </div>
                         )
                       }
