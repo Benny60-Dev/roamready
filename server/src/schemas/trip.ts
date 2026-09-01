@@ -61,6 +61,9 @@ export const TripUpdateSchema = z
     // same shape applies here.
     bringingTowed: z.boolean().nullable().optional(),
     adHocVehicle: z.record(z.string(), z.unknown()).nullable().optional(),
+    // FEAT-TRIP-DRIVE-CAP — per-trip daily drive limit (hours). null clears the
+    // override so the profile/default cap governs again.
+    maxDriveHours: z.number().min(1).max(16).nullable().optional(),
     // AI-MESA-10 — when the Modify panel applies an AI-proposed change_rig action
     // via this endpoint (RIG-CHANGE Phase 3), it threads the action's id so the
     // server stamps the persisted proposal applied=true after the rig swap runs.

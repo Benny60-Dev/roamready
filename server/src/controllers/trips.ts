@@ -1488,7 +1488,11 @@ async function planLegSplits(
  */
 export function deriveCapHours(
   travelProfile: { maxDriveHours?: number | null; maxMilesPerDay?: number | null } | null | undefined,
+  tripOverrideHours?: number | null,
 ): number {
+  // FEAT-TRIP-DRIVE-CAP — a limit the user stated for THIS trip wins over the
+  // profile setting. Null/absent = fall through to the profile chain.
+  if (tripOverrideHours != null && tripOverrideHours > 0) return tripOverrideHours
   let maxHours = travelProfile?.maxDriveHours ?? null
   if (maxHours == null && travelProfile?.maxMilesPerDay != null) maxHours = travelProfile.maxMilesPerDay / 55
   if (maxHours == null || maxHours <= 0) maxHours = 6
@@ -2970,7 +2974,7 @@ export async function longLegPreview(req: AuthRequest, res: Response, next: Next
       where: { id: req.user!.id },
       include: { travelProfile: true, rigs: { where: { isDefault: true } } },
     })
-    const cap = deriveCapHours(user?.travelProfile)
+    const cap = deriveCapHours(user?.travelProfile, (trip as any).maxDriveHours)
     // FEAT-HERE-ROUTING — default-rig dims for the truck-routing measurement;
     // ignored on the Google path (flag off).
     const rigDims = rigDimsFromRig(user?.rigs?.[0])
@@ -3746,7 +3750,8 @@ export async function recheckLongLegs(tripId: string, userId: string): Promise<{
       include: { travelProfile: true, rigs: { where: { isDefault: true } } },
     })
     // Shared single source of truth for the per-leg cap (see deriveCapHours).
-    const maxHours = deriveCapHours(user?.travelProfile)
+    // FEAT-TRIP-DRIVE-CAP: the trip's own limit (if the user stated one) wins.
+    const maxHours = deriveCapHours(user?.travelProfile, trip.maxDriveHours)
 
     // FEAT-HERE-ROUTING — rig dims for the truck-routing measurement. Prefer the
     // trip's OWN rig (what it was planned for); fall back to the user's default.

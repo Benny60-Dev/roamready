@@ -260,6 +260,9 @@ export interface Trip {
   // the server can preserve the ack across metadata-only stop writes and reset it
   // only on a genuine route change. The client gates on presence; routeSig is internal.
   acknowledgedRvSafety?: { acknowledgedAt: string; routeSig?: string } | null
+  /** FEAT-TRIP-DRIVE-CAP — per-trip daily drive limit (hours) the user stated
+   *  in chat; null/absent = profile/default cap governs. */
+  maxDriveHours?: number | null
   createdAt: string
   updatedAt: string
 }
