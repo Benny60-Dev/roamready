@@ -225,6 +225,9 @@ function pickRigInput(body: any) {
     fuelType, mpg, mpgTowing, tankSize,
     slideouts, electricalAmps,
     isToyHauler, garageLength, gvwr, toys, terrainTypes,
+    // FEAT-RIG-DIMENSIONS: width (inches) + axle count feed LVR truck routing;
+    // MUST be on this allowlist or they silently won't persist from the form.
+    widthInches, axleCount,
     isVan, vanLength,
     powerSetup, waterCapacity,
     hasStarlink, isRemoteWorker,
@@ -243,6 +246,7 @@ function pickRigInput(body: any) {
     fuelType, mpg, mpgTowing, tankSize,
     slideouts, electricalAmps,
     isToyHauler, garageLength, gvwr, toys, terrainTypes,
+    widthInches, axleCount,
     isVan, vanLength,
     powerSetup, waterCapacity,
     hasStarlink, isRemoteWorker,

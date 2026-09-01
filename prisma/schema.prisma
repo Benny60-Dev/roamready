@@ -173,6 +173,13 @@ model Rig {
   isToyHauler    Boolean     @default(false)
   garageLength   Float?
   gvwr           Float?
+  // FEAT-RIG-DIMENSIONS: body width in INCHES (US convention like length/height
+  // in feet; RV widths are quoted in inches, 96-102 typical). Nullable - when
+  // null, LVR uses the documented safe default (102 in / federal max). Total
+  // axles on the road incl. tag/trailer axles; null -> default 2. Migration
+  // 20260901120000_add_rig_width_axles.
+  widthInches    Float?
+  axleCount      Int?
   towVehicle     String?
   toys           Json?
   terrainTypes   Json?

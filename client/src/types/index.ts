@@ -135,6 +135,10 @@ export interface Rig {
   isToyHauler: boolean
   garageLength?: number
   gvwr?: number
+  // FEAT-RIG-DIMENSIONS: body width in inches (96-102 typical) + total axle
+  // count incl. tag/trailer axles. Optional - null keeps LVR's safe defaults.
+  widthInches?: number
+  axleCount?: number
   towVehicle?: string
   toys?: string[]
   terrainTypes?: string[]

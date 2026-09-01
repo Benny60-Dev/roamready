@@ -50,6 +50,9 @@ export default function EditRigPage() {
         length: found.length,
         height: found.height,
         gvwr: found.gvwr,
+        // FEAT-RIG-DIMENSIONS: same null-tolerant hydration as gvwr above.
+        widthInches: found.widthInches,
+        axleCount: found.axleCount,
         fuelType: found.fuelType,
         mpg: found.mpg,
         // Pre-fill the new towing-mpg field (Pass 2 of towing-aware fuel
