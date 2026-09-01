@@ -1648,7 +1648,10 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
           try {
             await prisma.trip.update({ where: { id: tripId }, data: { maxDriveHours: parsedCap } })
             console.log('[AI drive-cap] tripId=%s maxDriveHours=%s (modify)', tripId, parsedCap)
-            const { note } = await recheckLongLegs(tripId, req.user!.id)
+            // strict: re-measure every consecutive pair (overnight-only stops
+            // included) so a tightened cap reshapes legs the normal, idempotent
+            // recheck would treat as already answered.
+            const { note } = await recheckLongLegs(tripId, req.user!.id, { strict: true })
             if (note) response = `${response}\n\n${note}`.trim()
           } catch (e: any) {
             console.error('[AI drive-cap] modify persist/recheck failed tripId=%s: %s', tripId, e?.message)

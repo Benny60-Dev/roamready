@@ -1581,6 +1581,7 @@ export async function planTransitInserts(
   apiKey: string,
   rigDims?: RigDims | null,
   ackKeys: Set<string> = new Set(),
+  opts: { strict?: boolean } = {},
 ): Promise<PlanTransitResult> {
   // No key or fewer than two stops → nothing to measure; return the input
   // unchanged (defensive copy) so callers can treat the result uniformly.
@@ -1604,9 +1605,14 @@ export async function planTransitInserts(
   // Walk SEGMENTS between consecutive REAL (non-OVERNIGHT_ONLY) stops. A segment
   // that already has an overnight between its endpoints is answered → skipped; an
   // empty adjacent segment is measured once. See the idempotency note above.
+  // FEAT-TRIP-DRIVE-CAP strict mode: when the user TIGHTENS the cap on an
+  // already-built trip, "answered" segments can hide a sub-leg that is now over
+  // the new limit (Flagstaff → Moab at 5.5h under a 4h cap). Strict walks EVERY
+  // consecutive pair, overnight-only stops included, so the trip really reshapes
+  // to the stated limit. Default (non-strict) keeps the idempotent rule above.
   const realIdx: number[] = []
   for (let i = 0; i < stops.length; i++) {
-    if ((stops[i] as any).type !== 'OVERNIGHT_ONLY') realIdx.push(i)
+    if (opts.strict || (stops[i] as any).type !== 'OVERNIGHT_ONLY') realIdx.push(i)
   }
 
   for (let k = 1; k < realIdx.length; k++) {
@@ -3728,7 +3734,11 @@ function mergedLegEndpoints(stops: any[], deletedStopId: string): { a: any; b: a
  * Fail-soft: ANY error (routing, geocode, DB) is swallowed and logged; the trip
  * is left as-is and the caller's response is never blocked.
  */
-export async function recheckLongLegs(tripId: string, userId: string): Promise<{ inserted: number; note: string | null }> {
+export async function recheckLongLegs(
+  tripId: string,
+  userId: string,
+  opts: { strict?: boolean } = {},
+): Promise<{ inserted: number; note: string | null }> {
   try {
     const apiKey = process.env.GOOGLE_MAPS_API_KEY
     if (!apiKey) {
@@ -3787,7 +3797,7 @@ export async function recheckLongLegs(tripId: string, userId: string): Promise<{
     if (effectiveAcks.size !== storedAcks.size) await setAckLegKeys(tripId, [...effectiveAcks])
 
     console.log('[recheckLongLegs] tripId=%s checking %d stop(s) against cap=%sh (%d acknowledged leg(s))', tripId, stops.length, maxHours, effectiveAcks.size)
-    const { inserts } = await planTransitInserts(stops, maxHours, apiKey, rigDims, effectiveAcks)
+    const { inserts } = await planTransitInserts(stops, maxHours, apiKey, rigDims, effectiveAcks, { strict: !!opts.strict })
     if (inserts.length === 0) {
       console.log('[recheckLongLegs] tripId=%s no over-cap leg found — inserted 0', tripId)
       return { inserted: 0, note: null }
