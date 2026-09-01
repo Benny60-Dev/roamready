@@ -27,14 +27,36 @@ const PLACES_TEXT_SEARCH_COST_USD = 0.017
 
 const CACHE_TTL_DAYS = 30
 
-function buildCacheKey(name: string, location: string): string {
+// Proximity guard for AI-suggested candidates (FIX-CAMPGROUND-PROXIMITY).
+// The AI names campgrounds from memory and sometimes picks one that exists
+// but is nowhere near the stop (Tonalea, AZ -> Coon Bluff, 200 mi south in
+// Mesa). Google's text search matches on NAME, so without a distance check
+// the wrong place verifies cleanly. Anything farther than this from the stop
+// is treated as a fabrication and dropped — not surfaced as an AI suggestion.
+export const CAMPGROUND_MAX_DISTANCE_MILES = 50
+// Bias radius sent to Places so it prefers the near copy of an ambiguous name.
+// Places caps circle locationBias at 50,000 m.
+const CAMPGROUND_BIAS_RADIUS_METERS = 50000
+
+export interface StopCoords {
+  latitude: number
+  longitude: number
+}
+
+function buildCacheKey(name: string, location: string, coords?: StopCoords | null): string {
   const normalize = (s: string) =>
     s
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '')
-  return `${normalize(name)}|${normalize(location)}`
+  // Coordinate bucket (~0.1° ≈ 7 mi) when the caller has the stop's position.
+  // Rows written before proximity checks existed have no bucket, so they
+  // naturally miss and get re-verified instead of serving a stale far-away hit.
+  const bucket = coords
+    ? `|${coords.latitude.toFixed(1)},${coords.longitude.toFixed(1)}`
+    : ''
+  return `${normalize(name)}|${normalize(location)}${bucket}`
 }
 
 async function logPlacesUsage(userId: string) {
@@ -114,8 +136,9 @@ export async function verifyCampground(
   name: string,
   location: string,
   ctx: { userId: string },
+  coords?: StopCoords | null,
 ): Promise<VerifiedCampground | null> {
-  const cacheKey = buildCacheKey(name, location)
+  const cacheKey = buildCacheKey(name, location, coords)
   const now = new Date()
 
   // 1. Cache lookup — both positive (found=true) and negative (found=false)
@@ -154,11 +177,44 @@ export async function verifyCampground(
     `${name} ${location}`,
     'places.id,places.displayName,places.formattedAddress,places.internationalPhoneNumber,places.websiteUri,places.googleMapsUri,places.rating,places.userRatingCount,places.location',
     ctx,
+    coords
+      ? {
+          locationBias: {
+            circle: {
+              center: { latitude: coords.latitude, longitude: coords.longitude },
+              radius: CAMPGROUND_BIAS_RADIUS_METERS,
+            },
+          },
+        }
+      : undefined,
   )
   if (places === null) return null
-  const firstPlace: any = places[0] ?? null
+  let firstPlace: any = places[0] ?? null
 
   const expiresAt = new Date(now.getTime() + CACHE_TTL_DAYS * 24 * 60 * 60 * 1000)
+
+  // Proximity guard: a name match that lands far from the stop is the AI
+  // having invented a plausible-sounding campground that happens to exist
+  // elsewhere. Treat it exactly like NOT FOUND (negative-cached for this
+  // stop's coordinate bucket) so it neither shows up nor falls through to the
+  // "AI suggestion" tier.
+  if (firstPlace && coords) {
+    const km = haversineKm(
+      coords.latitude,
+      coords.longitude,
+      firstPlace.location?.latitude ?? null,
+      firstPlace.location?.longitude ?? null,
+    )
+    const miles = km * KM_TO_MILES
+    if (!Number.isFinite(miles) || miles > CAMPGROUND_MAX_DISTANCE_MILES) {
+      console.warn(
+        `[Places] REJECTED "${name}" near "${location}": matched "${firstPlace.displayName?.text ?? '?'}" ${
+          Number.isFinite(miles) ? Math.round(miles) + ' mi' : 'with no coordinates'
+        } from the stop (limit ${CAMPGROUND_MAX_DISTANCE_MILES} mi) — likely AI fabrication`,
+      )
+      firstPlace = null
+    }
+  }
 
   if (!firstPlace) {
     if (process.env.NODE_ENV !== 'production') {
@@ -235,7 +291,7 @@ export async function verifyCampground(
 }
 
 export async function verifyCampgroundBatch(
-  candidates: Array<{ name: string; location: string }>,
+  candidates: Array<{ name: string; location: string; coords?: StopCoords | null }>,
   ctx: { userId: string },
 ): Promise<Array<VerifiedCampground | null>> {
   // Sequential on purpose: Google's free tier rate-limits aggressively and
@@ -244,7 +300,7 @@ export async function verifyCampgroundBatch(
   // climbs and rate limits stop being a concern.
   const results: Array<VerifiedCampground | null> = []
   for (const candidate of candidates) {
-    results.push(await verifyCampground(candidate.name, candidate.location, ctx))
+    results.push(await verifyCampground(candidate.name, candidate.location, ctx, candidate.coords))
   }
   return results
 }
@@ -284,12 +340,27 @@ export async function searchCampgroundsByArea(
   locationName: string,
   locationState: string | null,
   ctx: { userId: string },
+  coords?: StopCoords | null,
 ): Promise<VerifiedCampground[]> {
   const textQuery = `campgrounds and RV parks near ${locationName}${locationState ? ', ' + locationState : ''}`
   const fieldMask =
     'places.id,places.displayName,places.formattedAddress,places.internationalPhoneNumber,places.websiteUri,places.googleMapsUri,places.rating,places.userRatingCount,places.location,places.types'
 
-  const places = await placesTextSearch(textQuery, fieldMask, ctx)
+  const places = await placesTextSearch(
+    textQuery,
+    fieldMask,
+    ctx,
+    coords
+      ? {
+          locationBias: {
+            circle: {
+              center: { latitude: coords.latitude, longitude: coords.longitude },
+              radius: CAMPGROUND_BIAS_RADIUS_METERS,
+            },
+          },
+        }
+      : undefined,
+  )
   // Coalesce null (transport error) and [] (no hits) — orchestrator just
   // needs an empty array either way. The cache distinction matters in
   // verifyCampground; here we don't cache, so collapse them.
@@ -312,7 +383,25 @@ export async function searchCampgroundsByArea(
     return nameMatches || typeMatches
   })
 
-  return filtered.slice(0, 5).map((place: any) => ({
+  // With stop coordinates: drop anything beyond the proximity limit and rank
+  // closest-first (Google ranks by relevance, not distance).
+  const nearby = coords
+    ? filtered
+        .map((place: any) => ({
+          place,
+          km: haversineKm(
+            coords.latitude,
+            coords.longitude,
+            place.location?.latitude ?? null,
+            place.location?.longitude ?? null,
+          ),
+        }))
+        .filter(({ km }) => km * KM_TO_MILES <= CAMPGROUND_MAX_DISTANCE_MILES)
+        .sort((a, b) => a.km - b.km)
+        .map(({ place }) => place)
+    : filtered
+
+  return nearby.slice(0, 5).map((place: any) => ({
     placeId: place.id,
     name: place.displayName?.text ?? locationName,
     address: place.formattedAddress ?? null,
