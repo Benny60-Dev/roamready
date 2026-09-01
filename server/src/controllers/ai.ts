@@ -682,7 +682,7 @@ function buildLiveTripState(trip: any, rigs: any[] = []): string {
     '- When the user says "first stop" / "stop 1" / "the second stop" / "the last stop", they almost always mean a NUMBERED DESTINATION — not the home departure and not the return-home entry. If the request is ambiguous, ASK BEFORE EMITTING a <modify> tag: "Just to confirm — you mean [first destination], not your home departure?"',
     '- Concrete example: trip is "Starting point: [HomeCity] | Stop 1: [EXAMPLE_STOP_1] | Stop 2: [EXAMPLE_STOP_2] | Return home: [HomeCity]". User says "remove the first stop" → that means [EXAMPLE_STOP_1], not [HomeCity]. Confirm with the user, then emit <modify>{"action":"remove_stop","locationName":"[EXAMPLE_STOP_1]"}</modify>.',
     '',
-    'DRIVE LIMIT TAG (FEAT-TRIP-DRIVE-CAP): If the user states a daily drive-time limit for this trip ("keep drive days under 4 hours", "no more than 5 hours a day", "max 300 miles a day" → convert miles to hours at 55 mph and round to the nearest half hour), acknowledge it in ONE plain sentence ("Got it — I\'ll keep drive days under 4 hours for this trip") and append a machine tag on its OWN line at the very END of your reply: <drive_cap>4</drive_cap> (a number of hours, 1–16, decimals allowed). Emit it once per stated limit. Do NOT emit it for hypotheticals or questions ("what if we did 4 hours?"). The app stores it, re-measures every leg against it, and adds any overnight stops itself — do not propose transit stops for it.',
+    'DRIVE LIMIT TAG (FEAT-TRIP-DRIVE-CAP): If the user states a daily drive-time limit for this trip ("keep drive days under 4 hours", "no more than 5 hours a day", "max 300 miles a day" → convert miles to hours at 55 mph and round to the nearest half hour), acknowledge it in ONE plain sentence ("Got it — I\'ll keep drive days under 4 hours for this trip") and append a machine tag on its OWN line at the very END of your reply: <drive_cap>4</drive_cap> (a number of hours, 1–16, decimals allowed). Emit it once per stated limit. Do NOT emit it for hypotheticals or questions ("what if we did 4 hours?"). The app stores it, re-measures every leg against it, and adds any overnight stops itself — do not propose transit stops for it. A drive-limit statement on its own needs NO <modify> block and NO <clarify> tag: the acknowledgement sentence plus the <drive_cap> tag IS the complete reply. Only add <modify> blocks if the user ALSO asked for a stop/route change in the same message.',
     '',
     'DRIVE-TIME — THE APP HANDLES IT, NOT YOU: After ANY change you propose (add, remove, reorder, return-home), the app measures REAL drive times and automatically inserts any overnight transit stop a new or merged leg needs, then tells the user about it. So: do NOT propose, add, or emit OVERNIGHT_ONLY / transit stops in a <modify> (no transit stop in add_stop, none "along the way") — just propose the destination change the user asked for. And do NOT tell the user that a leg "stays within" / "is over" / "fits" their drive-time limit, how many hours or miles a leg is, or that you checked/verified drive times — your estimate is not authoritative. Reproduce any OVERNIGHT_ONLY stops already in the live trip unchanged; never invent new ones.',
     '',
@@ -1309,8 +1309,13 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
 
     if (liveStateMsg) {
       const hasModify = /<modify>/.test(response)
-      const hasClarify = /<clarify>/.test(response)
-      console.log('[AI modify] response hasModify=%s hasClarify=%s preview=%s', hasModify, hasClarify, response.slice(0, 200))
+      // FEAT-TRIP-DRIVE-CAP — a stated drive limit is a valid, self-declared
+      // outcome with no <modify> block (the app applies it, not the model).
+      // Counting it as a clarify-class reply keeps the auto-retry from firing
+      // and REPLACING the reply that carried the tag.
+      const hasDriveCap = /<drive_cap>/.test(response)
+      const hasClarify = /<clarify>/.test(response) || hasDriveCap
+      console.log('[AI modify] response hasModify=%s hasClarify=%s hasDriveCap=%s preview=%s', hasModify, hasClarify, hasDriveCap, response.slice(0, 200))
 
       // Auto-retry ONLY when the model emitted NEITHER tag — then we can't tell
       // whether it meant to propose a change or to ask a question. A reply that
@@ -1344,7 +1349,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
 
       // Classify the FINAL response into one of the three outcomes.
       if (/<modify>/.test(response)) modifyOutcome = 'proposal'
-      else if (/<clarify>/.test(response)) modifyOutcome = 'clarify'
+      else if (/<clarify>/.test(response) || /<drive_cap>/.test(response)) modifyOutcome = 'clarify'
       else modifyOutcome = 'failed'
 
       // Unwrap any <clarify>…</clarify> so the user sees only the question
