@@ -1,4 +1,10 @@
 @echo off
+REM  Delayed expansion so commit messages containing > or < can't act as
+REM  shell redirects (an unquoted `echo %msg%` once dumped the message into
+REM  stray files named after the redirect targets, e.g. a file "Google"
+REM  from "LVR->HERE->Google", which then got committed by `git add -A`).
+REM  Trade-off: a literal ! in a typed message will be swallowed.
+setlocal EnableDelayedExpansion
 REM  IMPORTANT: this repo must NEVER run with core.autocrlf=true. Prisma
 REM  migration checksums are byte hashes; CRLF rewrites break them and
 REM  `migrate dev` then offers a destructive DB reset. The repo-local git
@@ -45,11 +51,13 @@ set /p msg="Commit message (or press Enter for timestamp): "
 if "%msg%"=="" (
     for /f "tokens=1-4 delims=/ " %%a in ('date /t') do set today=%%a-%%b-%%c-%%d
     for /f "tokens=1-2 delims=: " %%a in ('time /t') do set now=%%a%%b
-    set msg=Progress save - %today% %now%
+    REM !vars! not %vars%: today/now are set inside this same block, so
+    REM percent-expansion would read them BEFORE they exist (parse time).
+    set msg=Progress save - !today! !now!
 )
 
-echo Committing with message: %msg%
-git commit -m "%msg%"
+echo Committing with message: !msg!
+git commit -m "!msg!"
 
 echo.
 echo Pushing to GitHub...
