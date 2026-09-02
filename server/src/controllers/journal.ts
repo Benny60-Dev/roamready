@@ -16,7 +16,16 @@ const s3 = new S3Client({
   },
 })
 
-export const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } })
+export const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  // Images only — the bucket policy makes journals/* publicly readable, so
+  // never let an arbitrary file type land there.
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true)
+    else cb(new AppError('Only image files can be added to a journal entry', 400))
+  },
+})
 
 async function verifyStopOwnership(stopId: string, userId: string) {
   const stop = await prisma.stop.findFirst({
@@ -307,7 +316,11 @@ export async function uploadPhotos(req: AuthRequest, res: Response, next: NextFu
     const uploadedUrls: string[] = []
 
     for (const file of files) {
-      const key = `journals/${req.user!.id}/${stop.id}/${Date.now()}-${file.originalname}`
+      // Key = user/stop/timestamp + a random tail + the original extension.
+      // The original filename is dropped: it can contain spaces/unicode that
+      // break the plain https URL we store, and it leaks nothing useful.
+      const ext = (file.originalname.match(/\.[a-z0-9]{1,5}$/i)?.[0] || '').toLowerCase()
+      const key = `journals/${req.user!.id}/${stop.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`
       await s3.send(new PutObjectCommand({
         Bucket: process.env.AWS_S3_BUCKET,
         Key: key,

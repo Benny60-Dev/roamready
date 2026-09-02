@@ -12,6 +12,7 @@ import {
   upsertEntry,
   upsertRoutePoiEntry,
   uploadPhotos,
+  upload,
 } from '../controllers/journal'
 
 export const journalRouter = Router()
@@ -29,7 +30,11 @@ journalRouter.post('/', requireFeature('tripJournal'), validateBody(JournalCreat
 // more specific /:stopId/photos path resolves, and kept at their original
 // paths so the client needs no change. POST /:stopId does not collide with
 // POST / above (param vs no-param).
-journalRouter.post('/:stopId/photos', requireFeature('tripJournal'), uploadPhotos as any)
+// multer parses the multipart body into req.files (field name "photos",
+// up to 10 per request, 10MB each — see the `upload` instance in the
+// controller). Without this middleware req.files is undefined and every
+// upload 400s "No files uploaded" — which is what shipped originally.
+journalRouter.post('/:stopId/photos', requireFeature('tripJournal'), upload.array('photos', 10), uploadPhotos as any)
 // Route-POI upsert (itinerary "stops along the way"). Literal "route-poi"
 // prefix + two segments, so it never collides with POST /:stopId (one segment)
 // or the /:id diary routes (one segment). Keyed on the POI's stable client id.
