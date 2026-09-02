@@ -130,7 +130,7 @@ export default function ProfilePage() {
     // of 6 types have no sender. Route stays registered in App.tsx so any
     // bookmarked /profile/notifications URLs still work and re-linking here
     // post-launch is a one-line restoration once delivery is wired up.
-    { to: '/profile/billing',       icon: CreditCard, label: 'Billing',     sub: user?.subscriptionTier === 'FREE' ? 'Free plan' : `${user?.subscriptionTier} plan`, color: 'text-rr-pine', tint: 'bg-rr-pine/10' },
+    { to: '/profile/billing',       icon: CreditCard, label: 'Billing',     sub: user?.isOwner && user?.subscriptionTier === 'FREE' ? 'Owner' : user?.subscriptionTier === 'FREE' ? 'Free plan' : `${user?.subscriptionTier} plan`, color: 'text-rr-pine', tint: 'bg-rr-pine/10' },
   ]
 
   // Subtitle for the collapsed Personal Information row: full name · home city,
