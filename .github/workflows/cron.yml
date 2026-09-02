@@ -1,0 +1,50 @@
+# CRON-1 — external scheduler for the /api/v1/internal/cron/* endpoints.
+#
+# The API exposes cron handlers (server/src/routes/internal.ts) that are
+# meant to be hit by an external scheduler. Nothing on Render calls them,
+# so this workflow is the scheduler. Each call sends X-Cron-Secret from
+# the CRON_SECRET repository secret, which must match CRON_SECRET on the
+# roamready-api Render service.
+#
+# Schedules are UTC. GitHub may delay a scheduled run by several minutes
+# under load; the trial-ending handler uses a 23–25h lookahead window, so
+# an hourly cadence with occasional drift never skips a user.
+name: cron
+
+on:
+  schedule:
+    - cron: '17 * * * *'   # trial-ending reminders: hourly at :17
+    - cron: '30 9 1 * *'   # OHV link check: 1st of the month, 09:30 UTC
+  workflow_dispatch:
+    inputs:
+      job:
+        description: Which job to run manually
+        type: choice
+        options: [trial-ending, ohv-link-check]
+        default: trial-ending
+
+env:
+  API_BASE: https://roamready.ai/api/v1/internal/cron
+
+jobs:
+  trial-ending:
+    if: github.event.schedule == '17 * * * *' || (github.event_name == 'workflow_dispatch' && inputs.job == 'trial-ending')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call trial-ending reminder
+        run: |
+          set -o pipefail
+          curl --fail-with-body --silent --show-error --max-time 120 \
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" \
+            "$API_BASE/trial-ending"
+
+  ohv-link-check:
+    if: github.event.schedule == '30 9 1 * *' || (github.event_name == 'workflow_dispatch' && inputs.job == 'ohv-link-check')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call OHV link check
+        run: |
+          set -o pipefail
+          curl --fail-with-body --silent --show-error --max-time 600 \
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" \
+            "$API_BASE/ohv-link-check"
