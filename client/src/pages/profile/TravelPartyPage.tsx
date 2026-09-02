@@ -30,10 +30,21 @@ interface PetDraft {
   id?: string
   type: PetType
   name: string
+  // Phase B (FEAT-PET-CAPTURE) — the fields the packing + planning prompts
+  // already read from party.pets. All optional.
+  breed: string
+  weightLbs: string // text while editing; parsed on save
+  leashTrained: boolean
+  comfortableInCrowds: boolean
+  comfortableAtNight: boolean
+  notes: string
 }
 
 const EMPTY_PERSON: PersonDraft = { name: '', role: 'ADULT' }
-const EMPTY_PET: PetDraft = { type: 'DOG', name: '' }
+const EMPTY_PET: PetDraft = {
+  type: 'DOG', name: '', breed: '', weightLbs: '',
+  leashTrained: false, comfortableInCrowds: false, comfortableAtNight: false, notes: '',
+}
 
 export default function TravelPartyPage() {
   const [party, setParty] = useState<TravelParty | null>(null)
@@ -152,6 +163,12 @@ export default function TravelPartyPage() {
       id: p.id,
       type: p.type,
       name: p.name ?? '',
+      breed: p.breed ?? '',
+      weightLbs: p.weightLbs != null ? String(p.weightLbs) : '',
+      leashTrained: !!p.leashTrained,
+      comfortableInCrowds: !!p.comfortableInCrowds,
+      comfortableAtNight: !!p.comfortableAtNight,
+      notes: p.notes ?? '',
     })
   }
 
@@ -165,9 +182,21 @@ export default function TravelPartyPage() {
     setError(null)
     try {
       const target = await ensureParty()
+      const weight = petDraft.weightLbs.trim() === '' ? null : Math.round(Number(petDraft.weightLbs))
+      if (weight != null && (!Number.isFinite(weight) || weight < 0 || weight > 500)) {
+        setError('Weight should be a number between 0 and 500 lbs.')
+        setSaving(false)
+        return
+      }
       const payload = {
         type: petDraft.type,
         name: petDraft.name.trim() || null,
+        breed: petDraft.breed.trim() || null,
+        weightLbs: weight,
+        leashTrained: petDraft.leashTrained,
+        comfortableInCrowds: petDraft.comfortableInCrowds,
+        comfortableAtNight: petDraft.comfortableAtNight,
+        notes: petDraft.notes.trim() || null,
       }
       if (petDraft.id) {
         const res = await usersApi.updatePet(target.id, petDraft.id, payload)
@@ -352,7 +381,11 @@ export default function TravelPartyPage() {
                   <p className="font-medium text-gray-900">
                     {p.name?.trim() || <span className="text-gray-400">Unnamed</span>}
                   </p>
-                  <p className="text-xs text-gray-500">{PET_TYPE_LABELS[p.type]}</p>
+                  <p className="text-xs text-gray-500">
+                    {PET_TYPE_LABELS[p.type]}
+                    {p.breed ? ` · ${p.breed}` : ''}
+                    {p.weightLbs != null ? ` · ${p.weightLbs} lbs` : ''}
+                  </p>
                 </div>
                 <div className="flex items-center gap-1 ml-2">
                   <button
@@ -406,6 +439,55 @@ export default function TravelPartyPage() {
                 placeholder="Pet's name"
                 value={petDraft.name}
                 onChange={e => setPetDraft({ ...petDraft, name: e.target.value })}
+              />
+            </div>
+            {/* Phase B — optional details the planner and packing list use
+                (breed/size for gear, temperament for campground + activity fit). */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Breed <span className="text-gray-400 font-normal">(optional)</span></label>
+                <input
+                  className="input"
+                  placeholder="e.g. Golden Retriever"
+                  value={petDraft.breed}
+                  onChange={e => setPetDraft({ ...petDraft, breed: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="label">Weight (lbs) <span className="text-gray-400 font-normal">(optional)</span></label>
+                <input
+                  className="input"
+                  inputMode="numeric"
+                  placeholder="e.g. 65"
+                  value={petDraft.weightLbs}
+                  onChange={e => setPetDraft({ ...petDraft, weightLbs: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="space-y-2 text-sm text-gray-700">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={petDraft.leashTrained}
+                  onChange={e => setPetDraft({ ...petDraft, leashTrained: e.target.checked })} />
+                Leash trained
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={petDraft.comfortableInCrowds}
+                  onChange={e => setPetDraft({ ...petDraft, comfortableInCrowds: e.target.checked })} />
+                Comfortable in crowds (towns, busy campgrounds)
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={petDraft.comfortableAtNight}
+                  onChange={e => setPetDraft({ ...petDraft, comfortableAtNight: e.target.checked })} />
+                Settles at night (okay left in the rig for an evening out)
+              </label>
+            </div>
+            <div>
+              <label className="label">Notes <span className="text-gray-400 font-normal">(optional)</span></label>
+              <textarea
+                className="input min-h-[72px]"
+                placeholder="Meds, anxiety triggers, food, anything the planner should know"
+                value={petDraft.notes}
+                onChange={e => setPetDraft({ ...petDraft, notes: e.target.value })}
               />
             </div>
             <div className="flex gap-2">

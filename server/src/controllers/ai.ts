@@ -16,6 +16,7 @@ import { hasRoundTripIntent } from '../utils/roundTripIntent'
 // with build's expandLongLegs. trips.ts already imports enforcePerUserDailyCap
 // from this module; both exports are only ever CALLED inside request handlers
 // (never at module load), so the two-way import resolves cleanly at call time.
+import { parsePetTag, persistCapturedPets } from '../services/petCapture'
 import { planTransitInserts, deriveCapHours, buildTransitNote, buildViolationAdvisory, minimalTripBudget, rigDimsFromRig, detectStopHazards, geocodeOriginText, recheckLongLegs } from './trips'
 
 // Soft cap: inject a "wrap up" system message and let Claude actually respond
@@ -684,6 +685,8 @@ function buildLiveTripState(trip: any, rigs: any[] = []): string {
     '',
     'DRIVE LIMIT TAG (FEAT-TRIP-DRIVE-CAP): If the user states a daily drive-time limit for this trip ("keep drive days under 4 hours", "no more than 5 hours a day", "max 300 miles a day" → convert miles to hours at 55 mph and round to the nearest half hour), acknowledge it in ONE plain sentence ("Got it — I\'ll keep drive days under 4 hours for this trip") and append a machine tag on its OWN line at the very END of your reply: <drive_cap>4</drive_cap> (a number of hours, 1–16, decimals allowed). Emit it once per stated limit. Do NOT emit it for hypotheticals or questions ("what if we did 4 hours?"). The app stores it, re-measures every leg against it, and adds any overnight stops itself — do not propose transit stops for it. A drive-limit statement on its own needs NO <modify> block and NO <clarify> tag: the acknowledgement sentence plus the <drive_cap> tag IS the complete reply. Only add <modify> blocks if the user ALSO asked for a stop/route change in the same message.',
     '',
+    'PET TAG (FEAT-PET-CAPTURE): If the user says THEIR OWN pet is coming on this trip ("we\'re bringing Callie, our golden retriever", "traveling with our two cats", "the dog is coming"), and that pet is NOT already in the travel party shown in the JSON context, append one machine tag per pet on its OWN line at the very END of your reply: <pet>TYPE|Name|Breed</pet> where TYPE is exactly DOG, CAT, or OTHER; Name and Breed may be blank but keep the | separators (e.g. <pet>DOG|Callie|Golden Retriever</pet>, <pet>CAT||</pet>). Acknowledge in one short sentence ("Got it — I\'ll plan with Callie along"). Do NOT emit it for someone else\'s pet, a hypothetical, or a pet the user says is staying home. A pet statement on its own needs NO <modify> block and NO <clarify> tag. The tag is stripped before the user sees your message.',
+    '',
     'DRIVE-TIME — THE APP HANDLES IT, NOT YOU: After ANY change you propose (add, remove, reorder, return-home), the app measures REAL drive times and automatically inserts any overnight transit stop a new or merged leg needs, then tells the user about it. So: do NOT propose, add, or emit OVERNIGHT_ONLY / transit stops in a <modify> (no transit stop in add_stop, none "along the way") — just propose the destination change the user asked for. And do NOT tell the user that a leg "stays within" / "is over" / "fits" their drive-time limit, how many hours or miles a leg is, or that you checked/verified drive times — your estimate is not authoritative. Reproduce any OVERNIGHT_ONLY stops already in the live trip unchanged; never invent new ones.',
     '',
     'TRAVEL PARTY — HARD RULE: The trip-scoped `party` (in the JSON context below, when present) or the user\'s `defaultParty` describes who is traveling. Trip-scoped overrides user-level. You MUST consult party data when proposing modifications.',
@@ -1313,7 +1316,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       // outcome with no <modify> block (the app applies it, not the model).
       // Counting it as a clarify-class reply keeps the auto-retry from firing
       // and REPLACING the reply that carried the tag.
-      const hasDriveCap = /<drive_cap>/.test(response)
+      const hasDriveCap = /<drive_cap>/.test(response) || /<pet>/.test(response)
       const hasClarify = /<clarify>/.test(response) || hasDriveCap
       console.log('[AI modify] response hasModify=%s hasClarify=%s hasDriveCap=%s preview=%s', hasModify, hasClarify, hasDriveCap, response.slice(0, 200))
 
@@ -1349,7 +1352,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
 
       // Classify the FINAL response into one of the three outcomes.
       if (/<modify>/.test(response)) modifyOutcome = 'proposal'
-      else if (/<clarify>/.test(response) || /<drive_cap>/.test(response)) modifyOutcome = 'clarify'
+      else if (/<clarify>/.test(response) || /<drive_cap>/.test(response) || /<pet>/.test(response)) modifyOutcome = 'clarify'
       else modifyOutcome = 'failed'
 
       // Unwrap any <clarify>…</clarify> so the user sees only the question
@@ -1666,6 +1669,25 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
         }
       } else if (rawCap) {
         console.warn('[AI drive-cap] ignored out-of-range <drive_cap> value "%s"', rawCap)
+      }
+    }
+
+    // PET CAPTURE (FEAT-PET-CAPTURE) — the user said THEIR pet is coming
+    // ("we're bringing Callie, our golden"). The model emits one
+    // <pet>TYPE|Name|Breed</pet> per pet; strip them, persist to the default
+    // party (and the trip's party in modify mode), dedup by name. The packing
+    // and planning prompts already read party.pets — this is what fills it.
+    const petTags = [...response.matchAll(/<pet>([\s\S]*?)<\/pet>/g)]
+    if (petTags.length) {
+      response = response.replace(/<pet>[\s\S]*?<\/pet>/g, '').trim()
+      const pets = petTags.map(m => parsePetTag(m[1])).filter((p): p is NonNullable<typeof p> => !!p)
+      if (pets.length) {
+        const created = await persistCapturedPets(
+          req.user!.id,
+          context === 'modify' && tripId ? tripId : null,
+          pets,
+        )
+        console.log('[pet-capture] %d tag(s) → %d pet row(s) created (context=%s)', pets.length, created, context)
       }
     }
 
