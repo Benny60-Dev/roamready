@@ -48,7 +48,7 @@ export interface NavigateSheetProps {
   prevStop: NavStop | null
   /** ≤3 snapped corridor points for prevStop→stop (from the routes endpoint). */
   waypoints?: DirectionsWaypoint[] | null
-  /** Leg provenance: true = measured for the rig, false = fell back to car
+  /** Leg provenance: true = planned for the rig (LVR), false = fell back to car
    *  routing with a rig on file, undefined = no usable rig dims / unknown. */
   rigAware?: boolean
   tripId?: string
@@ -149,27 +149,27 @@ export default function NavigateSheet({
         {/* Status — provenance first, then the corridor caveat when it applies. */}
         {rigAware === true && corridorApplies && (
           <StatusBox tone="ok" icon={<Check size={14} />}>
-            <strong>Route measured for your rig.</strong> The maps app is given {waypoints!.length} point{waypoints!.length === 1 ? '' : 's'} along our route so it keeps to the same roads.
+            <strong>Route planned for your rig.</strong> This drive was planned around your rig’s height, weight and length. The maps app gets {waypoints!.length} point{waypoints!.length === 1 ? '' : 's'} along that route so it keeps to the same roads.
           </StatusBox>
         )}
         {rigAware === true && !corridorApplies && fix.kind === 'far' && (
           <StatusBox tone="warn" icon={<AlertTriangle size={14} />}>
-            <strong>Heads up — you're already on this leg.</strong> Our measured route points are left out from here so the app doesn't send you back to {prevStop?.locationName ?? 'the previous stop'}; it will route the rest as a car. Switch to "Previous stop" to see the full measured route.
+            <strong>Heads up — you're already on this leg.</strong> The points from the route planned for your rig are left out from here so the app doesn't send you back to {prevStop?.locationName ?? 'the previous stop'}; it will use standard car routing for the rest. Switch to "Previous stop" to get the full planned route.
           </StatusBox>
         )}
         {rigAware === true && !corridorApplies && fix.kind !== 'far' && (
           <StatusBox tone="warn" icon={<AlertTriangle size={14} />}>
-            <strong>Heads up — {fix.kind === 'pending' ? 'still checking your location' : 'we couldn’t confirm your location'}.</strong> Without it the measured route points are left out and the app routes as a car. Choose "Previous stop" to include the full measured route.
+            <strong>Heads up — {fix.kind === 'pending' ? 'still checking your location' : 'we couldn’t confirm your location'}.</strong> Without it the points from the route planned for your rig are left out and the app uses standard car routing. Choose "Previous stop" to get the full planned route.
           </StatusBox>
         )}
         {rigAware === false && (
           <StatusBox tone="warn" icon={<AlertTriangle size={14} />}>
-            <strong>Heads up — this leg wasn't measured for your rig.</strong> Rig-measured routing isn't available here, so the maps app will route it as a car. Check clearances and grades yourself before you go.
+            <strong>This leg couldn’t be planned for your rig.</strong> Rig-aware routing isn’t available here, so the maps app will use standard car routing. Check clearances and grades yourself before you go.
           </StatusBox>
         )}
         {rigAware === undefined && (
           <StatusBox tone="info" icon={<Info size={14} />}>
-            This leg isn't measured for a rig — add your rig's height, length and weight on your profile to get drive routes measured for it.
+            We need your rig’s details on file to plan your route around it — height, weight and length. Add them on your profile and this trip’s drives will be re-planned for your rig.
           </StatusBox>
         )}
 
@@ -256,10 +256,10 @@ export function NavigateButton({
           {label ?? `Navigate to ${stop.locationName}`}
         </button>
         {rigAware === true && (
-          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#2F4030]"><Check size={12} /> Measured for your rig</span>
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#2F4030]"><Check size={12} /> Route planned for your rig</span>
         )}
         {rigAware === false && (
-          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800"><AlertTriangle size={12} className="text-amber-600" /> Not measured for your rig</span>
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800"><AlertTriangle size={12} className="text-amber-600" /> Couldn’t be planned for your rig</span>
         )}
       </div>
       {open && (
@@ -300,7 +300,7 @@ export function WholeTripButton({ stops, tripId, className }: { stops: NavStop[]
         <BottomSheet isOpen={open} onClose={() => setOpen(false)} title="Open the whole trip in a maps app">
           <div className="px-5 pb-6 pt-3 space-y-4 w-full max-w-xl mx-auto">
             <StatusBox tone="info" icon={<Info size={14} />}>
-              Every stop is passed in order, but between stops the maps app plans its own roads — this is the overview, not the measured route. Use <strong>Navigate</strong> on a stop for the leg measured for your rig.
+              Every stop is passed in order, but between stops the maps app plans its own roads — this is the overview, not the route planned for your rig. Use <strong>Navigate</strong> on a stop for the drive planned around your rig.
             </StatusBox>
             {google.included < google.total && (
               <StatusBox tone="warn" icon={<AlertTriangle size={14} />}>

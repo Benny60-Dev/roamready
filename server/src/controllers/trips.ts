@@ -821,7 +821,7 @@ function useLvrRouting(): boolean {
  *  planning-reply prose (buildViolationAdvisory) phrases these separately from
  *  real restriction notices. Compared by IDENTITY there — edit both together. */
 export const RV_FALLBACK_NOTE =
-  'Heads up: RV-safe routing was not available for the drive to this stop — its drive time and route are car-based, so verify clearances and restrictions for your rig on this leg.'
+  'Heads up: this drive couldn’t be planned for your rig — its drive time and route use standard car routing, so verify clearances and restrictions for your rig on this leg.'
 
 // LVR REQUIRES ALL FIVE vehicleInfo fields — height, length, weight, width,
 // AND axle count. Each missing one 400s INVALID_ARGUMENT ("Invalid or missing
@@ -3398,7 +3398,7 @@ export function buildViolationAdvisory(legNotices: LegNotice[]): string | null {
       sentences.push(`Heads up: the ${ln.fromName} → ${ln.toName} drive may cross a routing restriction (${restrictions.join('; ')}) — verify the road is open for your dates and rig before driving.`)
     }
     if (ln.notes.includes(RV_FALLBACK_NOTE)) {
-      sentences.push(`Heads up: RV-safe routing doesn't cover the ${ln.fromName} → ${ln.toName} drive, so that leg's drive time and route are car-based — double-check clearances and restrictions for your rig on it.`)
+      sentences.push(`Heads up: the ${ln.fromName} → ${ln.toName} drive couldn’t be planned for your rig, so that leg’s drive time and route use standard car routing — double-check clearances and restrictions for your rig on it.`)
     }
   }
   return sentences.length ? sentences.join(' ') : null
