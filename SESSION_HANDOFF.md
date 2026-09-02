@@ -1,7 +1,7 @@
 # Session Handoff
 <!-- GENERATED FROM launch-status.json — do not hand-edit this section; it is overwritten on every regen -->
 
-**Status as of 2026-09-02** — verified against `main` @ `7d7e5f2`.
+**Status as of 2026-09-02** — verified against `main` @ `cfa8dc4`.
 
 ## Open items
 - PR-1 — **Free tier is a dead app post-trial** — Free and Pro cards list identical features; after the 7-day trial nearly every surface is `requireFeature`-gated (chat, campground search, journal writes, packing, resources, weather, share, PDF) (OPEN — **product decision first**)
@@ -11,6 +11,7 @@
 - PR-6 — **Missing camping cost line** — a 6-night trip priced 5 nights; the Tonalea overnight had no camping line (OPEN)
 - PR-7 — **Off-route hazard warning** — Moki Dugway (UT-261) warned on a US-160 → US-191 route (OPEN)
 - PR-10 — **PDF export "click gives no feedback"** (OPEN — verify as a gating bug)
+- FEAT-PDF-ROUTE-LINE — **PDF cover map traces the measured route** — today it connects stop pins with straight lines (OPEN — backlog (Benny asked 2026-09-02))
 - BOOKING-PILLS-INV — **Booking-pill CTA inventory** — wording/affordance refinement of the booking pills/CTAs (OPEN — backlog (scouted, not built))
 
 ## Deferred / post-launch
@@ -40,6 +41,7 @@
 - PR-14 — **Booking alternates' distance is relative to the primary, not the stop** — "54 mi from NavajoLand" when the primary is itself 25 mi from Tonalea
 - PR-15 — **Drive-limit chip "×" hit target is ~15×17 px**
 - CRON-1 — **Scheduler for `/internal/cron/*` in production** — trial-ending reminder AND the OHV link-checker were never being called
+- FEAT-NAV-HANDOFF — **Navigation handoff — measured route into Google Maps / Apple Maps**
 - LVR-PROD — **"RV-safe routing absent" (review gap table)** — it is LIVE
 - FIX-WEATHER-HINT — **Live forecast looked missing** — historical-averages card never said why
 - FIX-CAMPGROUND-PROXIMITY — **Review #1 critical** — Tonalea, AZ recommended Coon Bluff Rec Area, 200 mi south in Mesa

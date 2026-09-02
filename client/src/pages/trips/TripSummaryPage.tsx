@@ -17,7 +17,8 @@ import { buildStopBadges, formatStopBadgeLabel, formatStopBadgeMarker, isHomeBad
 import { format, addDays } from 'date-fns'
 import { parseTripDate, toYmd, formatTripDate } from '../../utils/dates'
 import { sharePdfBlob } from '../../utils/sharePdf'
-import { directionsUrl, destinationForStop } from '../../utils/directions'
+import { NavigateButton } from '../../components/trip/NavigateSheet'
+import { useLegRoutes, LegRoutesProvider } from '../../hooks/useLegRoutes'
 import { computeTripTotals } from '../../utils/tripTotals'
 import { userFacingStopCount } from '../../utils/userFacingStopCount'
 import { StopWeatherCard } from '../../components/weather/StopWeatherCard'
@@ -518,6 +519,9 @@ export default function TripSummaryPage() {
   const { user } = useAuthStore()
   const { id } = useParams<{ id: string }>()
   const [trip, setTrip] = useState<Trip | null>(null)
+  // FEAT-NAV-HANDOFF — per-leg corridor + provenance for the Navigate buttons
+  // in the drive rows (server-cached; see useLegRoutes).
+  const legRoutes = useLegRoutes(id, trip?.stops)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   // Block 15 — confirmation gate for the destructive Regenerate path. The
@@ -1364,6 +1368,7 @@ export default function TripSummaryPage() {
   }, 0)
 
   return (
+    <LegRoutesProvider value={legRoutes}>
     <div className="space-y-6 max-w-3xl">
       <Breadcrumb items={[
         { label: 'Dashboard', href: '/dashboard' },
@@ -2117,6 +2122,7 @@ export default function TripSummaryPage() {
         />
       </Suspense>
     </div>
+    </LegRoutesProvider>
   )
 }
 
@@ -2903,20 +2909,8 @@ function DriveContent({
           origins: current location (origin omitted) or the previous stop.
           Destination routes to the booked campground when this stop is booked. */}
       {entry.prevStop && entry.stop && (
-        <div className="mb-1.5 ml-4 text-xs text-gray-500 flex items-center gap-1 flex-wrap">
-          <MapPin size={12} className="flex-shrink-0 text-[#185FA5]" />
-          <span>Directions:</span>
-          <a
-            href={directionsUrl(null, destinationForStop(entry.stop))}
-            target="_blank" rel="noreferrer"
-            className="text-[#185FA5] hover:underline"
-          >from my location</a>
-          <span aria-hidden>·</span>
-          <a
-            href={directionsUrl(entry.prevStop, destinationForStop(entry.stop))}
-            target="_blank" rel="noreferrer"
-            className="text-[#185FA5] hover:underline"
-          >from previous stop</a>
+        <div className="mb-2 ml-4">
+          <NavigateButton stop={entry.stop} prevStop={entry.prevStop} tripId={entry.stop.tripId} source="summary" compact label="Navigate" />
         </div>
       )}
       {entry.highwayRoute && (

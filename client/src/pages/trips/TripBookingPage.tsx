@@ -5,6 +5,8 @@ import {
   Phone, MapPin, Globe, ChevronDown, ChevronUp, Loader, Check,
   BadgeInfo, Bed, Tent, X,
 } from 'lucide-react'
+import { NavigateButton } from '../../components/trip/NavigateSheet'
+import { useLegRoutes, LegRoutesProvider } from '../../hooks/useLegRoutes'
 import { tripsApi, campgroundsApi, usersApi } from '../../services/api'
 import { Trip, Stop, Campground, Rig } from '../../types'
 import { formatTripDate } from '../../utils/dates'
@@ -551,6 +553,7 @@ function StopHeaderBlock({
 
 function BookedRowCard({
   stop,
+  prevStop,
   cg,
   marker,
   onStopUpdated,
@@ -561,6 +564,9 @@ function BookedRowCard({
   autoOpenEdit,
 }: {
   stop: Stop
+  // FEAT-NAV-HANDOFF — the leg's departure stop, for "Start this leg". Absent
+  // on the first stop (nothing to navigate from).
+  prevStop?: Stop
   // The booked campground — comes from renderStopContent's bookedCg lookup
   // (cgs.find(c => c.id === stop.campgroundId)). Required: ReservationSection
   // inside the Edit expansion needs a campground id/name when saving.
@@ -650,6 +656,16 @@ function BookedRowCard({
             {totalCost > 0 && <>{' · '}${totalCost}</>}
             {stop.confirmationNum && <>{' · '}conf. {stop.confirmationNum}</>}
           </p>
+          {/* FEAT-NAV-HANDOFF — "Start this leg": the Navigate sheet with "My
+              location" preselected, destination = this booked campground. */}
+          {prevStop && (
+            <div style={{ marginTop: 8 }}>
+              <NavigateButton
+                stop={stop} prevStop={prevStop} tripId={stop.tripId}
+                source="booking" defaultOrigin="me" compact label="Start this leg"
+              />
+            </div>
+          )}
         </div>
         {/* Edit toggle */}
         <button
@@ -1201,6 +1217,8 @@ export default function TripBookingPage() {
   // so the Edit panel auto-opens only on the deep-link landing, not on navigation.
   const [deepLinkStopId] = useState(() => searchParams.get('stopId'))
   const [trip, setTrip] = useState<Trip | null>(null)
+  // FEAT-NAV-HANDOFF — corridor + provenance for the booked card's "Start this leg".
+  const legRoutes = useLegRoutes(id, trip?.stops)
   const [campgrounds, setCampgrounds] = useState<Record<string, Campground[]>>({})
   const [loading, setLoading] = useState(true)
   const [activeStop, setActiveStop] = useState<string | null>(null)
@@ -1551,6 +1569,7 @@ export default function TripBookingPage() {
           // Unbook action.
           <BookedRowCard
             stop={stop}
+            prevStop={prevStop}
             cg={bookedCg}
             marker={marker}
             onStopUpdated={handleStopUpdated}
@@ -1671,6 +1690,7 @@ export default function TripBookingPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
+    <LegRoutesProvider value={legRoutes}>
     // Break out of layout padding, fill viewport like the map page
     <div className="-mx-4 -my-6 h-[calc(100dvh-3.5rem)] flex flex-col">
 
@@ -2015,5 +2035,6 @@ export default function TripBookingPage() {
         onClose={() => setTowingNoteOpen(false)}
       />
     </div>
+    </LegRoutesProvider>
   )
 }

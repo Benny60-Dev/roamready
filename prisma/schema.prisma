@@ -870,6 +870,23 @@ model OhvLinkCheck {
 // the audit row must survive the target user's eventual deletion, which an
 // onDelete:Cascade relation would defeat. performedBy is an owner id or
 // "script:<name>" for CLI-driven actions.
+// FEAT-NAV-HANDOFF — lightweight product-usage events written by the client
+// (e.g. which maps app a user hands a leg to). Deliberately generic so later
+// features can log without a schema change: `name` is the event, `props` the
+// details. Not a relation to User — must survive account deletion; userId is
+// nullable for the rare unauthenticated event.
+model ClientEvent {
+  id        String   @id @default(cuid())
+  name      String
+  userId    String?
+  tripId    String?
+  props     Json?
+  createdAt DateTime @default(now())
+
+  @@index([name, createdAt])
+  @@index([userId])
+}
+
 model AdminActionLog {
   id           String   @id @default(cuid())
   action       String   // DEACTIVATE | REACTIVATE  (DELETE/ANONYMIZE reserved for Tier 2)
