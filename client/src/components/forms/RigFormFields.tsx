@@ -451,9 +451,18 @@ export default function RigFormFields({
           className="input"
           style={{ textTransform: 'uppercase' }}
           placeholder="ABC-1234"
-          {...register('licensePlate')}
+          maxLength={8}
+          {...register('licensePlate', {
+            // POLISH-1 (PR-8) — plates are 2–8 letters/digits (space or dash
+            // allowed); uppercase on save. Empty stays empty (null-able).
+            setValueAs: (v: unknown) => {
+              if (typeof v !== 'string') return v
+              const cleaned = v.toUpperCase().replace(/[^A-Z0-9 -]/g, '').trim().slice(0, 8)
+              return cleaned.length >= 2 ? cleaned : (cleaned.length === 0 ? '' : cleaned)
+            },
+          })}
         />
-        <p className="mt-1 text-xs text-gray-400">Most campgrounds ask for this at check-in.</p>
+        <p className="mt-1 text-xs text-gray-400">Letters, numbers, spaces or dashes — 2 to 8 characters. Most campgrounds ask for this at check-in.</p>
       </div>
 
       {/* ── Second-vehicle section ───────────────────────────────────────────
