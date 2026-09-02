@@ -3,7 +3,7 @@
   "source": {
     "sessionId": "cmtkgb1zu0002q72dprt6b858",
     "capturedAt": "2026-09-02",
-    "note": "Feedback 'Trip days total exceeded': 4-stop trip to Del Rio, 2 nights asked; canned minimum repeated verbatim on pushback; agreed 3 nights then built 4 (drive-limit insert) and silently dropped a stop."
+    "note": "Feedback 'Trip days total exceeded': 4-stop trip to Del Rio, 2 nights asked; canned minimum repeated verbatim on pushback; agreed 3 nights then built 4 (drive-limit insert) and silently dropped a stop. Expected after FEAT-PLANNER-FACTS: ask for length before building; explain the minimum with real hours on pushback; flag 4 stops vs 3 nights instead of dropping a stop; build only once it fits."
   },
   "setup": {
     "rigId": null,
@@ -19,7 +19,10 @@
     {
       "user": "Home",
       "expect": {
-        "noItinerary": true
+        "noItinerary": true,
+        "mustMention": [
+          "night"
+        ]
       }
     },
     {
@@ -37,20 +40,31 @@
         "noItinerary": true,
         "notRepeatOfPrev": true,
         "mustMention": [
-          "hour|drive|limit"
+          "hour|drive"
         ]
       }
     },
     {
       "user": "Ok 3",
       "expect": {
+        "noItinerary": true,
+        "mustMention": [
+          "stop"
+        ],
         "mustNotMention": [
           "Saragosa"
         ]
       }
+    },
+    {
+      "user": "Fine, drop a stop and keep it at 3 nights",
+      "expect": {
+        "itinerary": true
+      }
     }
   ],
   "final": {
-    "builtNightsLteRequested": true
+    "builtNightsLteRequested": true,
+    "maxStops": 3
   }
 }

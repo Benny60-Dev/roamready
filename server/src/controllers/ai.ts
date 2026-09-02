@@ -17,7 +17,7 @@ import { hasRoundTripIntent } from '../utils/roundTripIntent'
 // from this module; both exports are only ever CALLED inside request handlers
 // (never at module load), so the two-way import resolves cleanly at call time.
 import { parsePetTag, persistCapturedPets } from '../services/petCapture'
-import { planTransitInserts, deriveCapHours, buildTransitNote, buildViolationAdvisory, minimalTripBudget, rigDimsFromRig, detectStopHazards, geocodeOriginText, recheckLongLegs } from './trips'
+import { planTransitInserts, deriveCapHours, buildTransitNote, buildViolationAdvisory, minimalTripBudget, rigDimsFromRig, detectStopHazards, geocodeOriginText, recheckLongLegs, computeDriveFacts, type DriveFacts } from './trips'
 
 // Soft cap: inject a "wrap up" system message and let Claude actually respond
 // (so it has a chance to emit the <itinerary> JSON block).
@@ -887,6 +887,66 @@ function buildGateAsk(whereOk: boolean, whenOk: boolean, lengthOk: boolean): str
 /** BUG-2 — refuse-and-ask when the MINIMAL trip can't fit the user's stated
  *  total-nights budget. Names the turnaround, states the specific minimum, and
  *  offers to set it. No itinerary, so nothing builds until the user resolves it. */
+/** FEAT-PLANNER-FACTS — explicit stop count the user asked for ("four stop
+ *  trip", "3 stops", "a 5-stop loop"). Digits or number words up to twelve;
+ *  null when nothing explicit was said. Scanned across ALL user turns so the
+ *  count survives history truncation; the LAST mention wins. */
+const NUMBER_WORDS: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+}
+function parseRequestedStops(userMessages: string[]): number | null {
+  let found: number | null = null
+  for (const msg of userMessages) {
+    const t = String(msg ?? '').toLowerCase()
+    const re = /\b(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)[\s-]*stops?\b/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(t))) {
+      const n = /^\d+$/.test(m[1]) ? Number(m[1]) : NUMBER_WORDS[m[1]]
+      if (Number.isInteger(n) && n > 0 && n <= 30) found = n
+    }
+  }
+  return found
+}
+
+/** FEAT-PLANNER-FACTS — the fact block the planner reads before it writes.
+ *  Every number here was measured by the app; the prompt rule makes them
+ *  authoritative. Kept short and literal so it survives being quoted. */
+function buildDriveFactsBlock(
+  f: DriveFacts,
+  requestedNights: number | null,
+  requestedStops: number | null,
+  lastOverBudget: { legFrom: string; legTo: string; legHours: number; addedNights: number; total: number } | null,
+): string {
+  const shape = f.roundTrip ? 'round trip' : 'one-way'
+  const lines: string[] = []
+  lines.push(`Core drive ${f.originName} → ${f.destName} (${shape}): ${f.miles} mi, about ${f.driveHours} h of driving each way.`)
+  lines.push(`Daily drive limit in effect: ${f.capHours} h. Minimum trip length at that limit: ${f.minNights} night${f.minNights === 1 ? '' : 's'}${f.oneWayTransitNights > 0 ? ` (the core drive needs ${f.oneWayTransitNights} overnight stop${f.oneWayTransitNights === 1 ? '' : 's'} on the road${f.roundTrip ? ' each way' : ''})` : ''}.`)
+  if (requestedNights != null) {
+    if (requestedNights < f.minNights) {
+      // Hours per driving day needed to do it in the requested nights: the core
+      // drive spread over `requestedNights` driving days (one-way: arrive on the
+      // last driving day and sleep there; round trip: both directions).
+      const drivingDays = Math.max(1, requestedNights)
+      const need = (f.driveHours * (f.roundTrip ? 2 : 1)) / drivingDays
+      lines.push(`The user asked for ${requestedNights} night${requestedNights === 1 ? '' : 's'}: that is BELOW the minimum. Doing it in ${requestedNights} would need about ${Math.ceil(need * 2) / 2}-hour drive days instead of ${f.capHours}.`)
+    } else {
+      lines.push(`The user asked for ${requestedNights} night${requestedNights === 1 ? '' : 's'}: that fits the minimum.`)
+    }
+  } else {
+    lines.push('Trip length: not stated yet. Ask for it before building.')
+  }
+  if (requestedStops != null) {
+    const note = requestedNights != null && requestedStops > requestedNights
+      ? ` That is MORE than the ${requestedNights} night${requestedNights === 1 ? '' : 's'} asked for — ${requestedStops} stops need at least ${requestedStops} nights.`
+      : ''
+    lines.push(`The user asked for ${requestedStops} stop${requestedStops === 1 ? '' : 's'}; each stop is at least 1 night.${note}`)
+  }
+  if (lastOverBudget) {
+    lines.push(`Last build attempt: routing via the user's stops made the ${lastOverBudget.legFrom} → ${lastOverBudget.legTo} drive ${lastOverBudget.legHours} h, over the ${f.capHours} h limit, which adds ${lastOverBudget.addedNights} overnight (${lastOverBudget.total} nights total). It was NOT built.`)
+  }
+  return `<drive_facts>\n${lines.join('\n')}\n</drive_facts>`
+}
+
 function buildBudgetConflictAsk(destName: string, minNeeded: number, requestedNights: number): string {
   const need = `${minNeeded} night${minNeeded === 1 ? '' : 's'}`
   const have = `${requestedNights} night${requestedNights === 1 ? '' : 's'}`
@@ -1289,6 +1349,54 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       if (earlyNights) {
         await mergePartialTripData(sessionId, { requestedNights: earlyNights })
           .catch((e: any) => console.error('[AI nights-capture:early] persist failed for sessionId=%s: %s', sessionId, e?.message))
+      }
+    }
+
+    // ── FEAT-PLANNER-FACTS ─────────────────────────────────────────────────────
+    // Hand the planner the app's measured facts BEFORE it writes, so it can
+    // negotiate length / stops / drive days in its own words with real numbers.
+    // Replaces the pre-build canned "needs about N nights minimum" overwrite.
+    // Measured once per (origin, destination, shape, cap) and cached on the
+    // session (partialTripData.driveFacts) so a settled conversation costs no
+    // Directions calls. Fail-soft: any error → no block this turn.
+    let driveFacts: DriveFacts | null = null
+    let factsRequestedNights: number | null = null
+    if (context !== 'modify' && sessionId && process.env.GOOGLE_MAPS_API_KEY) {
+      try {
+        const s = await prisma.planningSession.findUnique({ where: { id: sessionId }, select: { partialTripData: true } })
+        const pb = (s?.partialTripData as any) ?? {}
+        const originName: string | null =
+          ((userProfile as any).capturedOrigin as string | null) ??
+          (userProfile?.homeCity ? `${userProfile.homeCity}${userProfile.homeState ? ', ' + userProfile.homeState : ''}` : null)
+        const destination: string | null =
+          (typeof pb?.destination === 'string' ? pb.destination : null) ?? detectedRoute?.dest ?? null
+        const rn = Number(pb?.requestedNights)
+        factsRequestedNights = Number.isInteger(rn) && rn > 0 ? rn : null
+        if (originName && destination) {
+          const userMsgs = (messages as any[]).filter(m => m?.role === 'user').map(m => String(m?.content ?? ''))
+          const roundTrip = hasRoundTripIntent(userMsgs, [originName])
+          const capHours = deriveCapHours(user?.travelProfile, tripDriveCap)
+          const key = `${originName}|${destination}|${roundTrip ? 'RT' : 'OW'}|${capHours}`
+          const cached = pb?.driveFacts && pb.driveFacts.key === key ? (pb.driveFacts.facts as DriveFacts) : null
+          driveFacts = cached ?? await computeDriveFacts(
+            originName, destination, roundTrip, capHours, process.env.GOOGLE_MAPS_API_KEY,
+            rigDimsFromRig(userProfile.rigs?.[0] as any),
+          )
+          if (driveFacts && !cached) {
+            await mergePartialTripData(sessionId, { driveFacts: { key, facts: driveFacts } }).catch(() => {})
+          }
+          if (driveFacts) {
+            const requestedStops = parseRequestedStops(userMsgs)
+            const lastOverBudget = pb?.lastOverBudget ?? null
+            const block = buildDriveFactsBlock(driveFacts, factsRequestedNights, requestedStops, lastOverBudget)
+            messagesForAI = [{ role: 'system' as const, content: block }, ...messagesForAI]
+            console.log('[AI drive-facts] sessionId=%s %s→%s %dmi %sh cap=%dh min=%d requested=%s stops=%s %s',
+              sessionId, originName, destination, driveFacts.miles, driveFacts.driveHours, capHours, driveFacts.minNights,
+              factsRequestedNights ?? '-', requestedStops ?? '-', cached ? '(cached)' : '(measured)')
+          }
+        }
+      } catch (e: any) {
+        console.warn('[AI drive-facts] skipped: %s', e?.message ?? e)
       }
     }
 
@@ -1868,13 +1976,51 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             ? await minimalTripBudget(transitStops, capHours, reqNights, process.env.GOOGLE_MAPS_API_KEY, rigDims)
             : null
 
+          // FEAT-PLANNER-FACTS — instead of overwriting the reply with a canned
+          // sentence, drop the over-budget build and let the planner explain and
+          // ask in its own words, given the specific measured fact. One retry;
+          // if it still builds, the plain server sentence is the backstop.
+          const renegotiate = async (fact: string, fallback: string) => {
+            const retryMessages = [
+              ...messagesForAI,
+              { role: 'assistant' as const, content: response },
+              {
+                role: 'user' as const,
+                content: `[SYSTEM REMINDER — measured by the app, authoritative: ${fact} Your last reply built a trip that does not fit, so it was NOT shown to the user. Reply again: do NOT emit an <itinerary> block. In one or two warm sentences say what the app measured and why the plan doesn't fit the ${reqNights} night${reqNights === 1 ? '' : 's'} they asked for, then offer the real choices — add the night(s), drop a stop, or allow longer drive days (say how long) — and ask which they want. Do not repeat an earlier question word for word.]`,
+              },
+            ]
+            const retry = await chatWithAI(retryMessages, userProfile, recentSurpriseDestinations, surpriseVibe, aiCtx)
+            if (retry && !/<itinerary>/.test(retry)) {
+              // The retry can legitimately carry <drive_cap> / <requestedNights>
+              // (the user just agreed to longer days or more nights) — the
+              // per-tag handlers already ran on the FIRST reply, so honour the
+              // two that matter here before the catch-all strip removes them.
+              const capM = retry.match(/<drive_cap>([\s\S]*?)<\/drive_cap>/)
+              const capV = capM ? Number(capM[1].trim()) : NaN
+              if (sessionId && Number.isFinite(capV) && capV >= 1 && capV <= 16) {
+                tripDriveCap = capV
+                await mergePartialTripData(sessionId, { driveCapHours: capV }).catch(() => {})
+                console.log('[AI drive-cap] sessionId=%s driveCapHours=%s (planning, via renegotiate)', sessionId, capV)
+              }
+              const rnM = retry.match(/<requestedNights>([\s\S]*?)<\/requestedNights>/)
+              const rnV = rnM ? Number(rnM[1].trim()) : NaN
+              if (sessionId && Number.isInteger(rnV) && rnV > 0) {
+                await mergePartialTripData(sessionId, { requestedNights: rnV }).catch(() => {})
+              }
+              response = retry.replace(/<(?!\/?itinerary\b)([a-z][a-zA-Z0-9]*)>[\s\S]*?<\/\1>/g, '').trim()
+            } else {
+              response = fallback
+            }
+          }
+
           if (conflict) {
-            // Discard the itinerary; ask ONE actionable question naming the turnaround
-            // and the specific minimum, offering to set it. Nothing builds until resolved.
-            response = buildBudgetConflictAsk(conflict.turnaroundName, conflict.minNeeded, reqNights!)
             console.warn(
               '[AI budget-conflict] sessionId=%s refusing — turnaround=%s minNeeded=%d requested=%d',
               sessionId ?? '(none)', conflict.turnaroundName, conflict.minNeeded, reqNights,
+            )
+            await renegotiate(
+              `the drive to ${conflict.turnaroundName} needs at least ${conflict.minNeeded} night${conflict.minNeeded === 1 ? '' : 's'} at the ${capHours}-hour daily limit; the user asked for ${reqNights}.`,
+              buildBudgetConflictAsk(conflict.turnaroundName, conflict.minNeeded, reqNights!),
             )
           } else {
             // No budget conflict → run the normal transit splice on the AI's full route.
@@ -1893,8 +2039,31 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             // restriction notice, OR a DB hazard fired — any of these means
             // splicedStops now carry per-leg violationNotes that must reach the plan
             // view. None of them → untouched, byte-identical to before.
-            if (inserts.length > 0 || legNotices.length > 0 || hazardResult.hitCount > 0) {
             const addedNights = inserts.reduce((n, ins) => n + ins.towns.length, 0)
+            const builtNightsPre = transitStops.reduce(
+              (n: number, s: any) => n + (s.type === 'OVERNIGHT_ONLY' ? 1 : (s.nights ?? 0)), 0,
+            )
+            // FEAT-PLANNER-FACTS — the AI's route (via its chosen stops) forces an
+            // overnight that pushes the trip PAST the agreed length. Don't silently
+            // add the night: drop the build, remember the leg fact for next turn's
+            // <drive_facts>, and let the planner ask.
+            if (reqNights != null && addedNights > 0 && builtNightsPre + addedNights > reqNights) {
+              const ins0 = inserts[0]
+              const legFrom = (transitStops[ins0.afterIndex] as any)?.locationName ?? 'the previous stop'
+              const legTo = (transitStops[ins0.afterIndex + 1] as any)?.locationName ?? 'the next stop'
+              const legHours = Math.round(ins0.legHours * 10) / 10
+              const total = builtNightsPre + addedNights
+              if (sessionId) {
+                await mergePartialTripData(sessionId, { lastOverBudget: { legFrom, legTo, legHours, addedNights, total } }).catch(() => {})
+              }
+              console.warn('[AI over-budget-insert] sessionId=%s %s→%s %sh adds %d night(s) → %d > requested %d; renegotiating',
+                sessionId ?? '(none)', legFrom, legTo, legHours, addedNights, total, reqNights)
+              await renegotiate(
+                `with the stops you chose, the ${legFrom} → ${legTo} drive is ${legHours} hours, over the ${capHours}-hour daily limit, which adds ${addedNights} overnight on the road — ${total} nights total.`,
+                `With those stops, the ${legFrom} → ${legTo} drive is about ${legHours} hours — over your ${capHours}-hour daily limit — which adds an overnight and makes it ${total} nights instead of ${reqNights}. Want me to make it ${total} nights, drop a stop, or allow a longer drive day for that leg?`,
+              )
+            } else if (inserts.length > 0 || legNotices.length > 0 || hazardResult.hitCount > 0) {
+            if (sessionId) await mergePartialTripData(sessionId, { lastOverBudget: null }).catch(() => {})
             // Bump totalNights by the inserted nights (each OVERNIGHT_ONLY = 1) so
             // the nightsShortfall check below doesn't false-flag our own inserts.
             const prevTotal = typeof transitItin.totalNights === 'number' ? transitItin.totalNights : 0
@@ -1982,13 +2151,19 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
               const synthetic = roundTrip
                 ? [home, dest, { locationName: originName, type: 'DESTINATION', nights: 0 }]
                 : [home, dest]
-              const conflict = await minimalTripBudget(synthetic as any, capHours, reqNights, process.env.GOOGLE_MAPS_API_KEY, rigDims)
-              if (conflict) {
-                response = buildBudgetConflictAsk(conflict.turnaroundName, conflict.minNeeded, reqNights)
-                console.warn(
-                  '[AI budget-conflict:pre-build] sessionId=%s shape=%s turnaround=%s minNeeded=%d requested=%d',
-                  sessionId, roundTrip ? 'ROUND_TRIP' : 'ONE_WAY', conflict.turnaroundName, conflict.minNeeded, reqNights,
-                )
+              // FEAT-PLANNER-FACTS — the planner already saw <drive_facts> this
+              // turn when facts were available, so it explains the minimum itself.
+              // The canned overwrite runs ONLY when no facts could be measured
+              // (driveFacts null) — the old deterministic backstop.
+              if (!driveFacts) {
+                const conflict = await minimalTripBudget(synthetic as any, capHours, reqNights, process.env.GOOGLE_MAPS_API_KEY, rigDims)
+                if (conflict) {
+                  response = buildBudgetConflictAsk(conflict.turnaroundName, conflict.minNeeded, reqNights)
+                  console.warn(
+                    '[AI budget-conflict:pre-build:no-facts] sessionId=%s shape=%s turnaround=%s minNeeded=%d requested=%d',
+                    sessionId, roundTrip ? 'ROUND_TRIP' : 'ONE_WAY', conflict.turnaroundName, conflict.minNeeded, reqNights,
+                  )
+                }
               }
             } else if (!changed) {
               console.log('[AI budget-conflict:pre-build] sessionId=%s skipped (cost gate — destination/length unchanged)', sessionId)
