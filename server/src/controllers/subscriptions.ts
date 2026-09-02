@@ -494,7 +494,50 @@ export async function getInvoices(req: AuthRequest, res: Response, next: NextFun
     const user = await prisma.user.findUnique({ where: { id: req.user!.id } })
     if (!user?.customerId) return res.json([])
 
-    const invoices = await stripe.invoices.list({ customer: user.customerId, limit: 12 })
+    // FIX-BILLING-TRUTH (1): reconcile the DB against Stripe on billing-page
+    // load. The page trusts subscriptionTier, which is written ONLY by
+    // webhooks — a lost delivery (or local dev, which gets none) leaves a
+    // paying customer reading "Free plan · no active subscription" above
+    // their paid invoices. Self-heal in the UPGRADE direction only; never
+    // auto-downgrade a paying user on a Stripe hiccup — log that instead.
+    try {
+      const subs = await stripe.subscriptions.list({ customer: user.customerId, status: 'all', limit: 5 })
+      const live = subs.data.find(sb => ['active', 'trialing', 'past_due'].includes(sb.status))
+      if (live && user.subscriptionTier === 'FREE') {
+        const cpe = (live as any).current_period_end
+        const periodEnd = typeof cpe === 'number' ? new Date(cpe * 1000) : null
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            subscriptionTier: 'PRO',
+            subscriptionId: live.id,
+            ...(periodEnd ? { subscriptionEndsAt: periodEnd } : {}),
+          } as any,
+        })
+        console.warn(
+          '[billing-reconcile] userId=%s DB said FREE but Stripe sub %s is %s — healed to PRO (period end %s)',
+          user.id, live.id, live.status, periodEnd?.toISOString() ?? 'n/a',
+        )
+      } else if (!live && user.subscriptionTier !== 'FREE' && user.subscriptionId) {
+        console.warn(
+          '[billing-reconcile] userId=%s DB says %s (sub %s) but Stripe has no live subscription — NOT auto-downgrading; check webhooks',
+          user.id, user.subscriptionTier, user.subscriptionId,
+        )
+      }
+    } catch (e: any) {
+      console.warn('[billing-reconcile] skipped for userId=%s: %s', user.id, e?.message)
+    }
+
+    // FIX-BILLING-TRUTH (2): fail soft. A customer id that Stripe rejects
+    // (test-mode customer against the live key, deleted customer) used to
+    // 500 the whole request and blank the page silently.
+    let invoices
+    try {
+      invoices = await stripe.invoices.list({ customer: user.customerId, limit: 12 })
+    } catch (e: any) {
+      console.warn('[billing] invoices.list failed for userId=%s customer=%s: %s', user.id, user.customerId, e?.message)
+      return res.json([])
+    }
     res.json(invoices.data.map(inv => ({
       id: inv.id,
       amount: inv.amount_paid,

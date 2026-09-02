@@ -1,18 +1,26 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ExternalLink } from 'lucide-react'
-import { subscriptionsApi } from '../../services/api'
+import { subscriptionsApi, usersApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 import { format } from 'date-fns'
 
 export default function BillingPage() {
-  const { user } = useAuthStore()
+  const { user, setUser } = useAuthStore()
   const [invoices, setInvoices] = useState<any[]>([])
   const [portalLoading, setPortalLoading] = useState(false)
 
   useEffect(() => {
-    subscriptionsApi.getInvoices().then(res => setInvoices(res.data))
-  }, [])
+    // FIX-BILLING-TRUTH: the invoices call also reconciles the DB against
+    // Stripe (server-side, upgrade direction only). Re-read the user after it
+    // so a healed tier shows on THIS load, not the next one.
+    subscriptionsApi.getInvoices()
+      .then(res => setInvoices(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setInvoices([]))
+      .finally(() => {
+        usersApi.getMe().then(res => setUser(res.data)).catch(() => {})
+      })
+  }, [setUser])
 
   async function openPortal() {
     setPortalLoading(true)
@@ -33,6 +41,12 @@ export default function BillingPage() {
   // checkout and is the source of truth for "paying customer".
   const hasRealSub = user?.subscriptionTier !== 'FREE'
 
+  // FIX-BILLING-TRUTH: the owner account bypasses every feature gate
+  // (middleware/auth.ts hasAccess: `if (user.isOwner) return true`), so
+  // "Free Plan · No active subscription · Upgrade" was both wrong and
+  // confusing on it. Say what the account actually is.
+  const isOwner = !!user?.isOwner && !hasRealSub
+
   // Complimentary (owner-granted) Pro. Only shown when there is NO real sub —
   // a paying subscription always takes display precedence. Valid = compTier PRO
   // and either lifetime (no expiry) or not yet expired. Mirrors hasAccess().
@@ -52,15 +66,16 @@ export default function BillingPage() {
       {/* Current plan. Display precedence: real Stripe sub → complimentary Pro →
           free/trial. compActive intentionally suppresses the trial/Free/Upgrade
           messaging, which is false for a comped user. */}
-      <div className={`card-lg ${compActive ? 'border-indigo-200 bg-indigo-50/40' : isTrialing ? 'border-[#1F6F8B]/30 bg-[#E0F0F4]/30' : ''}`}>
+      <div className={`card-lg ${isOwner ? 'border-amber-200 bg-amber-50/40' : compActive ? 'border-indigo-200 bg-indigo-50/40' : isTrialing ? 'border-[#1F6F8B]/30 bg-[#E0F0F4]/30' : ''}`}>
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <p className="font-medium text-gray-900">
-                {compActive ? 'Pro (complimentary)' : hasRealSub ? 'Pro' : 'Free'} Plan
+                {isOwner ? 'Owner' : compActive ? 'Pro (complimentary)' : hasRealSub ? 'Pro' : 'Free'} Plan
               </p>
-              {compActive && <span className="badge text-xs bg-indigo-100 text-indigo-700">Complimentary</span>}
-              {isTrialing && !compActive && <span className="badge-green text-xs">Trial active</span>}
+              {isOwner && <span className="badge text-xs bg-amber-100 text-amber-800">Owner</span>}
+              {compActive && !isOwner && <span className="badge text-xs bg-indigo-100 text-indigo-700">Complimentary</span>}
+              {isTrialing && !compActive && !isOwner && <span className="badge-green text-xs">Trial active</span>}
             </div>
             {/* Subtext branches on compActive first, then subscriptionTier BEFORE
                 subscriptionEndsAt so a freshly-paid Pro user (whose
@@ -70,7 +85,9 @@ export default function BillingPage() {
                 window is also narrowed server-side (the checkout handler writes
                 subscriptionEndsAt eagerly); this UI guard remains as
                 defense-in-depth in case a webhook delivery fails entirely. */}
-            {compActive ? (
+            {isOwner ? (
+              <p className="text-sm text-gray-500">All Pro features included — no subscription needed.</p>
+            ) : compActive ? (
               <p className="text-sm text-gray-500">
                 {compLifetime
                   ? 'Complimentary Pro access — Lifetime'
@@ -79,7 +96,9 @@ export default function BillingPage() {
             ) : isTrialing ? (
               <p className="text-sm text-gray-500">Trial ends in {trialDaysLeft} day{trialDaysLeft !== 1 ? 's' : ''} — upgrade to keep Pro features</p>
             ) : !hasRealSub ? (
-              <p className="text-sm text-gray-500">No active subscription</p>
+              <p className="text-sm text-gray-500">
+                {invoices.length > 0 ? 'No active subscription — your previous subscription has ended' : 'No active subscription'}
+              </p>
             ) : user?.subscriptionEndsAt ? (
               <p className="text-sm text-gray-500">Renews {format(new Date(user.subscriptionEndsAt), 'MMM d, yyyy')}</p>
             ) : (
@@ -95,7 +114,7 @@ export default function BillingPage() {
             {/* Big primary "Upgrade" only for genuine Free users — never for a
                 comped user (subscriptionTier is FREE for comps, but the upsell
                 is false there). */}
-            {!hasRealSub && !compActive && (
+            {!hasRealSub && !compActive && !isOwner && (
               <Link to="/profile/billing/upgrade" className="btn-primary text-sm">
                 Upgrade
               </Link>
