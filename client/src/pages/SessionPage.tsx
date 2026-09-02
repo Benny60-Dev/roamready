@@ -1836,17 +1836,20 @@ export default function SessionPage() {
                       )}
                     </span>
                   )}
+                  {/* POLISH-1 (PR-9) — these chips share the rig chip's button
+                      styling, so they READ as tappable. Make them tappable:
+                      party → Travel Party, style → Travel Style. */}
                   {partyChipText && (
-                    <span style={CONTEXT_CHIP_STYLE}>
+                    <Link to="/profile/party" style={CONTEXT_CHIP_STYLE} title="Edit your travel party">
                       <Users size={14} aria-hidden="true" color="#1F6F8B" />
                       {partyChipText}
-                    </span>
+                    </Link>
                   )}
                   {styleChipText && (
-                    <span style={CONTEXT_CHIP_STYLE}>
+                    <Link to="/profile/style" style={CONTEXT_CHIP_STYLE} title="Edit your travel style">
                       <Tent size={14} aria-hidden="true" color="#1F6F8B" />
                       {styleChipText}
-                    </span>
+                    </Link>
                   )}
                 </div>
               )}

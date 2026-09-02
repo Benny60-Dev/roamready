@@ -2356,7 +2356,7 @@ export default function TripMapPage() {
                       type="button"
                       aria-label="Clear the drive limit for this trip"
                       title="Clear — go back to your profile's drive limit"
-                      className="ml-0.5 rounded-full px-1 text-[#1F6F8B]/70 hover:text-[#134756] hover:bg-[#1F6F8B]/10"
+                      className="ml-0.5 -my-2 -mr-1.5 inline-flex h-8 w-8 items-center justify-center rounded-full text-base leading-none text-[#1F6F8B]/70 hover:text-[#134756] hover:bg-[#1F6F8B]/10"
                       onClick={async () => {
                         try {
                           await tripsApi.update(id, { maxDriveHours: null })

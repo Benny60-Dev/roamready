@@ -670,6 +670,16 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
     }
   }
 
+  // POLISH-1 (PR-13) — index of the newest assistant message that carries
+  // proposals; only its unapplied cards render a live Apply button.
+  const lastProposalIndex = (() => {
+    for (let k = messages.length - 1; k >= 0; k--) {
+      const m = messages[k]
+      if (m.role === 'assistant' && m.actions && m.actions.length > 0) return k
+    }
+    return -1
+  })()
+
   return (
     <>
       {/* Backdrop — mobile only */}
@@ -824,10 +834,22 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
                   (server error verbatim, card stays applicable for retry). */}
               {msg.role === 'assistant' && msg.actions && msg.actions.length > 0 && (() => {
                 const pending = msg.actions.filter(a => !a.applied)
+                // POLISH-1 (PR-13) — only the NEWEST proposal batch is actionable.
+                // Older unapplied cards (a failed duplicate add, a batch the user
+                // walked away from) used to re-render with a live Apply button
+                // after reload even though the trip had moved on.
+                const isLatestProposal = i === lastProposalIndex
                 return (
                   <div className="mt-2 mr-4 space-y-1.5">
                     {msg.actions.map((sa, idx) => {
                       const ui = actionUi[sa.id]
+                      if (!sa.applied && !isLatestProposal) {
+                        return (
+                          <div key={sa.id} className="ml-0.5 text-[11px] text-gray-400 line-through">
+                            {getConfirmationText(sa.action)} <span className="no-underline not-italic">— no longer applicable</span>
+                          </div>
+                        )
+                      }
                       if (sa.applied) {
                         return (
                           <div key={sa.id} className="ml-0.5 text-[11px] text-[#0F766E] font-medium">
@@ -869,7 +891,7 @@ export default function ModifyTripPanel({ trip, isOpen, onClose, onTripUpdated }
                         </div>
                       )
                     })}
-                    {pending.length >= 2 && (
+                    {isLatestProposal && pending.length >= 2 && (
                       <button
                         onClick={() => applyAll(i, msg.actions!)}
                         disabled={applying}

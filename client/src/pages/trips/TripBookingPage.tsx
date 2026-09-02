@@ -228,9 +228,28 @@ function ReservationSection({
 
   function set(field: keyof ReservationForm, value: string) {
     setForm(f => ({ ...f, [field]: value }))
+    if (field === 'siteNumber') setSiteError(null)
+  }
+
+  // POLISH-1 (PR-8) — the review saw "site #site" because the VALUE was the
+  // word "site". A site number must carry at least one digit ("14A", "B-7",
+  // "Loop C 12") and stay short; anything else is almost certainly a
+  // placeholder typed into the wrong field.
+  const [siteError, setSiteError] = useState<string | null>(null)
+  function validateSiteNumber(raw: string): string | null {
+    const v = raw.trim()
+    if (!v) return null
+    if (v.length > 12) return 'Site numbers are short — 12 characters max.'
+    if (!/\d/.test(v)) return 'Enter the site number from your confirmation (e.g. 14A).'
+    return null
   }
 
   async function save() {
+    const siteProblem = validateSiteNumber(form.siteNumber)
+    if (siteProblem) {
+      setSiteError(siteProblem)
+      return
+    }
     setSaving(true)
     try {
       // Block 13 — convert the actual-cost text inputs to numbers (or
@@ -332,11 +351,15 @@ function ReservationSection({
             <div>
               <label className="block text-xs text-gray-500 mb-1">Site #</label>
               <input
-                className="input text-xs w-full"
+                className={`input text-xs w-full ${siteError ? 'border-red-400' : ''}`}
                 placeholder="14A"
+                maxLength={12}
                 value={form.siteNumber}
                 onChange={e => set('siteNumber', e.target.value)}
+                onBlur={() => setSiteError(validateSiteNumber(form.siteNumber))}
+                aria-invalid={!!siteError}
               />
+              {siteError && <p className="mt-1 text-[11px] text-red-600">{siteError}</p>}
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Check-in time</label>
@@ -974,11 +997,18 @@ function AlternateCampgroundCard({
   membershipLabels: string[]
 }) {
   const isConfirmed = stop.campgroundId === cg.id && stop.bookingStatus === 'CONFIRMED'
-  const dist = calcDistance(primary?.latitude, primary?.longitude, cg.latitude, cg.longitude)
+  // POLISH-1 (PR-14) — measure from the STOP, not from whichever campground is
+  // currently primary ("54 mi from NavajoLand" read oddly when NavajoLand was
+  // itself 25 mi out). Falls back to the primary only when the stop has no
+  // coordinates.
+  const fromStop = calcDistance(stop.latitude, stop.longitude, cg.latitude, cg.longitude)
+  const dist = fromStop ?? calcDistance(primary?.latitude, primary?.longitude, cg.latitude, cg.longitude)
   const distLabel = dist
-    ? primary?.name
-      ? `${dist} mi from ${primary.name}`
-      : `${dist} mi away`
+    ? fromStop != null
+      ? `${dist} mi from ${stop.locationName}`
+      : primary?.name
+        ? `${dist} mi from ${primary.name}`
+        : `${dist} mi away`
     : null
 
   const mapQuery = [cg.name, cg.address].filter(Boolean).join(' ')
