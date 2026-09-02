@@ -1,6 +1,6 @@
 {
   "meta": {
-    "verifiedAgainstCommit": "7d7e5f2",
+    "verifiedAgainstCommit": "cfa8dc4",
     "verifiedDate": "2026-09-02",
     "generatedNote": "LAUNCH_STATUS.md is generated from this file by scripts/gen-status.mjs. Edit this JSON, not the .md.",
     "intro": [
@@ -393,12 +393,12 @@
       "id": "PR-12",
       "title": "**Journal photos: built end to end, blocked on storage**",
       "status": "DONE",
-      "statusRaw": "**DONE — pending prod verification (RR64)**",
+      "statusRaw": "**DONE — live on prod (RR65)**",
       "severity": null,
       "category": "review-fixed",
       "commits": [],
-      "evidence": "Full pipeline in [server/src/controllers/journal.ts](server/src/controllers/journal.ts) (S3Client L2/L11, multer 10MB L19, POST `/journal/:stopId/photos` Pro-gated, upload returns S3 URLs L312-317); client renders stored photos ([TripJournalPage.tsx:124-127](client/src/pages/trips/TripJournalPage.tsx)). `AWS_S3_BUCKET` absent, `AWS_ACCESS_KEY_ID` empty → L300 503s; upload button intentionally hidden ([TripJournalPage.tsx:120-123](client/src/pages/trips/TripJournalPage.tsx)). 2026-09-02: bucket `roamready-journal-photos` created in **us-east-2** (us-east-1 is locked on the account's plan → `AWS_REGION` changed to us-east-2 on Render + local); bucket policy = public `s3:GetObject` on `journals/*` only (ACLs stay blocked); IAM user `roamready-api` with policy `roamready-journal-photos-write` (`s3:PutObject` on `journals/*`). FEAT-JOURNAL-PHOTOS: the route never attached multer, so every upload would have 400'd \"No files uploaded\" — `upload.array('photos', 10)` added; image-only `fileFilter`; S3 keys drop the original filename (timestamp + random tail + ext); \"Add photos\" control built on the stop card ([TripJournalPage.tsx](client/src/pages/trips/TripJournalPage.tsx)) — uploads immediately, adopts server photos, paywall-gated client-side.",
-      "whatRemains": "Verify on prod: upload a photo to a stop, confirm it renders and the S3 URL opens."
+      "evidence": "Full pipeline in [server/src/controllers/journal.ts](server/src/controllers/journal.ts) (S3Client L2/L11, multer 10MB L19, POST `/journal/:stopId/photos` Pro-gated, upload returns S3 URLs L312-317); client renders stored photos ([TripJournalPage.tsx:124-127](client/src/pages/trips/TripJournalPage.tsx)). `AWS_S3_BUCKET` absent, `AWS_ACCESS_KEY_ID` empty → L300 503s; upload button intentionally hidden ([TripJournalPage.tsx:120-123](client/src/pages/trips/TripJournalPage.tsx)). 2026-09-02: bucket `roamready-journal-photos` created in **us-east-2** (us-east-1 is locked on the account's plan → `AWS_REGION` changed to us-east-2 on Render + local); bucket policy = public `s3:GetObject` on `journals/*` only (ACLs stay blocked); IAM user `roamready-api` with policy `roamready-journal-photos-write` (`s3:PutObject` on `journals/*`). FEAT-JOURNAL-PHOTOS: the route never attached multer, so every upload would have 400'd \"No files uploaded\" — `upload.array('photos', 10)` added; image-only `fileFilter`; S3 keys drop the original filename (timestamp + random tail + ext); \"Add photos\" control built on the stop card ([TripJournalPage.tsx](client/src/pages/trips/TripJournalPage.tsx)) — uploads immediately, adopts server photos, paywall-gated client-side. Pushed as RR65 2026-09-02 (merge `cfa8dc4`); photo upload verified on dev and prod (thumbnail renders, S3 URL opens).",
+      "whatRemains": null
     },
     {
       "id": "PR-13",
@@ -443,6 +443,28 @@
       "commits": [],
       "evidence": "Endpoints exist ([routes/internal.ts:13,15](server/src/routes/internal.ts), `X-Cron-Secret`), but there is no in-process scheduler (`node-cron`/`setInterval` absent), no `.github/workflows`, and the Render dashboard lists only roamready-api / roamready-client / roamready-redis — no Cron Job service. Confirmed 2026-09-02 in the Render dashboard: no Cron Job service exists (only roamready-api / roamready-client / roamready-redis), so nothing had ever called these. Fix: `.github/workflows/cron.yml` (commit `7d7e5f2`) — GitHub Actions calls `https://roamready.ai/api/v1/internal/cron/trial-ending` hourly at :17 and `/ohv-link-check` on the 1st of each month at 09:30 UTC, with `X-Cron-Secret` from the `CRON_SECRET` repository secret (matches the roamready-api Render env). `workflow_dispatch` allows manual runs. Smoke test 2026-09-02: run #1 `trial-ending` green (Success, 2s); `ohv-link-check` correctly skipped outside its schedule.",
       "whatRemains": null
+    },
+    {
+      "id": "FEAT-NAV-HANDOFF",
+      "title": "**Navigation handoff — measured route into Google Maps / Apple Maps**",
+      "status": "DONE",
+      "statusRaw": "**BUILT — on local main, pending dev + prod verification (RR66)**",
+      "severity": null,
+      "category": "review-fixed",
+      "commits": [],
+      "evidence": "Scout 2026-09-02 corrected the re-audit: the \"from previous stop\" links already carried ≤3 snapped corridor waypoints (LVR, HERE fallback dormant); what was missing was Apple Maps, corridor points on \"from my location\", the honesty line at the tap, waypoints on the summary page (never loaded routes), and Cindy's \"Start this leg\" / whole-trip asks. Built: [utils/navHandoff.ts](client/src/utils/navHandoff.ts) (Apple `maps.apple.com/directions` with repeated `waypoint`, whole-trip links, platform detect, remembered app); [components/trip/NavigateSheet.tsx](client/src/components/trip/NavigateSheet.tsx) (`NavigateButton` + sheet: Leaving-from toggle with a one-shot geolocation read — corridor rides along from the previous stop, and from \"my location\" only within 10 mi of it; status line = measured / not measured / no rig dims; Google always, Apple on Apple devices; Waze one honest line; last app remembered per device); `WholeTripButton` in the trip header (Google caps at 9 intermediate stops → says so). Wired into the map popup, itinerary rows, summary drive rows and the booked card (\"Start this leg\", My location preselected). [hooks/useLegRoutes.ts](client/src/hooks/useLegRoutes.ts) feeds the summary/booking pages via context. Server: GET /trips/:id/routes now Redis-cached 24h keyed on stop coords + rig id/updatedAt + flags (`X-Routes-Cache` header) so the two new pages add no LVR spend; `ClientEvent` table + POST /api/v1/events (migration `20260902160000_add_client_event`) logging `nav.handoff` / `nav.wholetrip` (app, origin, corridor, provenance). HERE: dormant by decision (flag absent on Render, \"false\" locally) — not a fallback in use.",
+      "whatRemains": "Local: `npx prisma migrate dev` from server/ (regenerates the client — the `prisma.clientEvent` type error clears then), restart backend. Verify on dev: popup/itinerary/summary/booking Navigate → Google opens with waypoints; status lines; whole trip; a row lands in ClientEvent. Then push; Render pre-deploy applies the migration."
+    },
+    {
+      "id": "FEAT-PDF-ROUTE-LINE",
+      "title": "**PDF cover map traces the measured route** — today it connects stop pins with straight lines",
+      "status": "OPEN",
+      "statusRaw": "OPEN — backlog (Benny asked 2026-09-02)",
+      "severity": null,
+      "category": "review-open",
+      "commits": [],
+      "evidence": "[controllers/trips.ts](server/src/controllers/trips.ts) `getTripMapImage` builds the static map `path` from stop coordinates only — no polyline, not even Google's car route. The LVR polyline per leg is already produced for the trip map (`generateRoutes`, now cached).",
+      "whatRemains": "Pass an encoded polyline (`enc:` path) built from the cached per-leg LVR/HERE geometry into the static-map URL, with the straight-line fallback for legs without one; watch the URL length cap (simplify with RDP)."
     },
     {
       "id": "LVR-PROD",

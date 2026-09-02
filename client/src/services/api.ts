@@ -366,6 +366,13 @@ export const visitedStatesApi = {
 }
 
 // Feedback
+// FEAT-NAV-HANDOFF — fire-and-forget usage events (server returns 204; a
+// failure is swallowed here so logging can never surface as a user error).
+export const eventsApi = {
+  track: (name: string, props?: Record<string, string | number | boolean | null>, tripId?: string) =>
+    api.post('/events', { name, tripId, props }).catch(() => undefined),
+}
+
 export const feedbackApi = {
   submit: (data: any) => api.post('/feedback', data),
   getPublic: () => api.get('/feedback/public'),

@@ -7,6 +7,7 @@ import { decodeFlexiblePolyline } from '../utils/flexiblePolyline'
 import { decodeGooglePolyline } from '../utils/googlePolyline'
 import { sampleCorridorWaypoints, type LatLng } from '../utils/polylineSample'
 import { prisma } from '../utils/prisma'
+import { getCache, setCache } from '../utils/redis'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
 import { enforcePerUserDailyCap } from './ai'
@@ -3979,6 +3980,34 @@ export async function generateRoutes(req: AuthRequest, res: Response, next: Next
       include: { stops: { orderBy: { order: 'asc' } } },
     })
     if (!trip) throw new AppError('Trip not found', 404)
+
+    // FEAT-NAV-HANDOFF — response cache. The summary + booking pages now read
+    // this endpoint too (Navigate sheet needs per-leg waypoints + rigAware), and
+    // every uncached call re-runs LVR/HERE per leg (paid). Key on everything the
+    // output depends on: ordered stop coords, the trip's rig (or default rig),
+    // and the routing flags. 24h TTL; any stop/rig change makes a new key.
+    const orderedForKey = [...trip.stops].sort((a: any, b: any) => a.order - b.order)
+    // The routing rig is the trip's rig, else the user's default — resolved
+    // once here (id + updatedAt so an edited height/weight busts the key) and
+    // reused below instead of a second lookup.
+    const userForRig = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      include: { rigs: { where: { isDefault: true } } },
+    })
+    let rigForRouting: any = userForRig?.rigs?.[0] ?? null
+    if (trip.rigId) {
+      const tripRig = await prisma.rig.findFirst({ where: { id: trip.rigId, userId: req.user!.id } })
+      if (tripRig) rigForRouting = tripRig
+    }
+    const rigKey = rigForRouting ? `${rigForRouting.id}@${new Date(rigForRouting.updatedAt).getTime()}` : 'norig'
+    const routesCacheKey = `routes:v1:${trip.id}:${rigKey}:${useLvrRouting() ? 'L' : ''}${useHereRouting() ? 'H' : ''}:` +
+      orderedForKey.map((s: any) => `${s.id}@${s.latitude ?? ''},${s.longitude ?? ''}`).join('|')
+    const cachedRoutes = await getCache<unknown[]>(routesCacheKey).catch(() => null)
+    if (cachedRoutes) {
+      res.setHeader('X-Routes-Cache', 'hit')
+      return res.json(cachedRoutes)
+    }
+
     const routes: Array<{
       segmentIdx: number
       route: string
@@ -3998,16 +4027,6 @@ export async function generateRoutes(req: AuthRequest, res: Response, next: Next
     if (useLvrRouting() || useHereRouting()) {
       const apiKey = process.env.GOOGLE_MAPS_API_KEY
       if (apiKey) {
-        const user = await prisma.user.findUnique({
-          where: { id: req.user!.id },
-          include: { rigs: { where: { isDefault: true } } },
-        })
-        let rigForRouting: { length?: number | null; height?: number | null; gvwr?: number | null; isTowing?: boolean | null; towedWeight?: number | null } | null =
-          user?.rigs?.[0] ?? null
-        if (trip.rigId) {
-          const tripRig = await prisma.rig.findFirst({ where: { id: trip.rigId, userId: req.user!.id } })
-          if (tripRig) rigForRouting = tripRig
-        }
         const rigDims = rigDimsFromRig(rigForRouting)
 
         const ordered = [...trip.stops].sort((a: any, b: any) => a.order - b.order)
@@ -4056,6 +4075,10 @@ export async function generateRoutes(req: AuthRequest, res: Response, next: Next
       }
     }
 
+    // Cache even a flag-off / partial result: the client's fail-soft display
+    // handles empty legs, and a rig edit changes the key. Fail-soft on Redis.
+    await setCache(routesCacheKey, routes, 24 * 60 * 60).catch(() => {})
+    res.setHeader('X-Routes-Cache', 'miss')
     res.json(routes)
   } catch (err) { next(err) }
 }

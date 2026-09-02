@@ -5,12 +5,13 @@ import {
   Layers, X, Plus, Minus, DollarSign, Calendar, AlertTriangle,
   Wind, Droplets, Snowflake, Thermometer, ExternalLink,
   Pencil, Trash2, Check, BookOpen, Package, Share2, Download, CheckCircle, CloudRain, Wand2,
-  Maximize2, Minimize2, Tent, Bed, CalendarPlus, MapPin, Flag, Info,
+  Maximize2, Minimize2, Tent, Bed, CalendarPlus, Flag, Info,
 } from 'lucide-react'
 import { DayPicker } from 'react-day-picker'
 import 'react-day-picker/style.css'
 import { formatTripDate, lifecycleDate, parseTripDate, toYmd } from '../../utils/dates'
-import { directionsUrl, destinationForStop, type DirectionsWaypoint } from '../../utils/directions'
+import { type DirectionsWaypoint } from '../../utils/directions'
+import { NavigateButton, WholeTripButton } from '../../components/trip/NavigateSheet'
 import { tripsApi, usersApi } from '../../services/api'
 import { Trip, Stop, Rig, StopWeather, LiveForecast, TripFuelEstimate } from '../../types'
 import { computeTripTotals } from '../../utils/tripTotals'
@@ -237,7 +238,7 @@ const BOOKING_BADGE: Record<MarkerKind, { cls: string; label: string }> = {
 
 
 function StopPopup({
-  stop, kind, weather, displayNum, onClose, onUpdateNights, tripId, prevStop, waypoints,
+  stop, kind, weather, displayNum, onClose, onUpdateNights, tripId, prevStop, waypoints, rigAware,
 }: {
   stop: Stop
   kind: MarkerKind
@@ -255,6 +256,8 @@ function StopPopup({
   // to the "from previous stop" link so it follows HERE's RV-safe path. Only valid
   // for that origin (not "from my location", whose origin is the device).
   waypoints?: DirectionsWaypoint[]
+  // FEAT-NAV-HANDOFF — provenance of the arriving leg (see rigAwareByStop).
+  rigAware?: boolean
 }) {
   const badge  = BOOKING_BADGE[kind]
   const alerts = stopAlerts(weather)
@@ -385,24 +388,15 @@ function StopPopup({
         {stop.isPetFriendly && <span className="text-[#0F766E]">🐾 Pet-friendly</span>}
       </div>
 
-      {/* Driving directions TO this stop (omitted on the first stop). Two
-          origins: current location (origin omitted) or the previous stop.
-          Destination routes to the booked campground when this stop is booked. */}
+      {/* FEAT-NAV-HANDOFF — Navigate TO this stop (omitted on the first stop:
+          you don't navigate to where you begin). Opens the Navigate sheet
+          (origin choice, Google/Apple, measured-for-your-rig status). */}
       {prevStop && (
-        <div className="mt-2 text-xs text-gray-500 flex items-center gap-1 flex-wrap">
-          <MapPin size={11} className="flex-shrink-0 text-[#185FA5]" />
-          <span>Directions to {stop.locationName}:</span>
-          <a
-            href={directionsUrl(null, destinationForStop(stop))}
-            target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
-            className="text-[#185FA5] hover:underline"
-          >from my location</a>
-          <span aria-hidden>·</span>
-          <a
-            href={directionsUrl(prevStop, destinationForStop(stop), waypoints)}
-            target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
-            className="text-[#185FA5] hover:underline"
-          >from previous stop</a>
+        <div className="mt-2 pt-2 border-t border-gray-100" onClick={e => e.stopPropagation()}>
+          <NavigateButton
+            stop={stop} prevStop={prevStop} waypoints={waypoints} rigAware={rigAware}
+            tripId={tripId} source="map-popup" compact
+          />
         </div>
       )}
 
@@ -1881,6 +1875,10 @@ export default function TripMapPage() {
         >
           <Share2 size={13} /> Share
         </button>
+        {/* FEAT-NAV-HANDOFF — whole trip in a maps app (all stops as waypoints). */}
+        {trip?.stops && trip.stops.length >= 2 && (
+          <WholeTripButton stops={trip.stops.slice().sort((a, b) => a.order - b.order)} tripId={id} />
+        )}
         <button
           onClick={handleExportPdf}
           disabled={downloadingPdf}
@@ -2658,20 +2656,13 @@ export default function TripMapPage() {
                               campground when this stop is booked. stopPropagation so
                               a link opens Maps instead of firing the row's focusStop. */}
                           {i > 0 && (
-                            <div className="mt-0.5 text-[10px] text-gray-400 flex items-center gap-1 flex-wrap">
-                              <MapPin size={10} className="flex-shrink-0 text-[#185FA5]" />
-                              <span>Directions to {sortedStops[i].locationName}:</span>
-                              <a
-                                href={directionsUrl(null, destinationForStop(sortedStops[i]))}
-                                target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
-                                className="text-[#185FA5] hover:underline"
-                              >from my location</a>
-                              <span aria-hidden>·</span>
-                              <a
-                                href={directionsUrl(sortedStops[i - 1], destinationForStop(sortedStops[i]), hereWaypoints.get(sortedStops[i].id))}
-                                target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
-                                className="text-[#185FA5] hover:underline"
-                              >from previous stop</a>
+                            <div className="mt-1" onClick={e => e.stopPropagation()}>
+                              <NavigateButton
+                                stop={sortedStops[i]} prevStop={sortedStops[i - 1]}
+                                waypoints={hereWaypoints.get(sortedStops[i].id)}
+                                rigAware={rigAwareByStop.get(sortedStops[i].id)}
+                                tripId={id} source="itinerary" compact label="Navigate"
+                              />
                             </div>
                           )}
                         </div>
@@ -2987,6 +2978,7 @@ export default function TripMapPage() {
                       return idx > 0 ? sorted[idx - 1] : undefined
                     })()}
                     waypoints={hereWaypoints.get(selectedStop.id)}
+                    rigAware={rigAwareByStop.get(selectedStop.id)}
                   />
                 </OverlayViewF>
               )}

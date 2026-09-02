@@ -109,6 +109,7 @@ import { maintenanceRouter } from './routes/maintenance'
 import { journalRouter } from './routes/journal'
 import { visitedStatesRouter } from './routes/visitedStates'
 import { feedbackRouter } from './routes/feedback'
+import { eventsRouter } from './routes/events'
 import { subscriptionsRouter } from './routes/subscriptions'
 import { handleWebhook } from './controllers/subscriptions'
 import { notificationsRouter } from './routes/notifications'
@@ -190,6 +191,7 @@ app.use('/api/v1/maintenance', maintenanceRouter)
 app.use('/api/v1/journal', journalRouter)
 app.use('/api/v1/visited-states', visitedStatesRouter)
 app.use('/api/v1/feedback', feedbackRouter)
+app.use('/api/v1/events', eventsRouter)
 app.use('/api/v1/subscriptions', subscriptionsRouter)
 app.use('/api/v1/notifications', notificationsRouter)
 app.use('/api/v1/admin', adminRouter)
