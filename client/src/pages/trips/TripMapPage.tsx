@@ -47,7 +47,7 @@ const USE_HERE_ROUTING_DISPLAY =
 // to a stop whose ARRIVING leg fell back to car routing while a rig-aware
 // engine was enabled (rigAware === false from POST /trips/:id/routes).
 const RV_FALLBACK_DISPLAY_NOTE =
-  'Heads up: RV-safe routing was not available for the drive to this stop — its drive time and route are car-based, so verify clearances and restrictions for your rig on this leg.'
+  'Heads up: this drive couldn’t be planned for your rig — its drive time and route use standard car routing, so verify clearances and restrictions for your rig on this leg.'
 
 // ─── Marker colors ──────────────────────────────────────────────────────────────
 const MC = {
@@ -2755,7 +2755,7 @@ export default function TripMapPage() {
                               to={rigAny ? `/profile/rig/${rigAny.id}/edit?returnTo=/trips/${id}/map` : '/profile/rig'}
                               className="font-medium text-rr-blue hover:text-rr-blue-dark underline"
                             >Add your rig's height, length &amp; weight</Link>
-                            {' '}to get drive times measured for your rig.
+                            {' '}so we can plan your route with your rig.
                           </span>
                         </div>
                       )
@@ -2769,7 +2769,7 @@ export default function TripMapPage() {
                       return (
                         <div className="flex items-center gap-1.5 px-2 pt-2 text-[11px] font-medium text-rr-pine-700">
                           <Check size={12} className="flex-shrink-0 text-rr-pine" />
-                          <span>{total === 1 ? 'Drive measured for your rig' : 'All drives measured for your rig'}</span>
+                          <span>{total === 1 ? 'Drive planned for your rig' : 'All drives planned for your rig'}</span>
                         </div>
                       )
                     }
@@ -2784,7 +2784,7 @@ export default function TripMapPage() {
                     return (
                       <div className="flex items-start gap-1.5 px-2 pt-2 text-[11px] font-medium text-amber-800">
                         <AlertTriangle size={12} className="flex-shrink-0 mt-0.5 text-amber-600" />
-                        <span>{measured} of {total} drives measured for your rig — see the flagged stop{fallback > 1 ? 's' : ''}</span>
+                        <span>{measured} of {total} drives planned for your rig — see the flagged stop{fallback > 1 ? 's' : ''}</span>
                       </div>
                     )
                   })()}
