@@ -6,7 +6,13 @@
 //   npm run replay -- server/replays/del-rio-nights.json
 //   npm run replay -- server/replays/del-rio-nights.json --base http://localhost:3000 --verbose
 //
-// Reads $env:TOKEN (from get-token.ps1) — the script never sees a password.
+// Sign-in, in order of preference:
+//   1. $env:TOKEN (from get-token.ps1) — nothing else needed.
+//   2. .replay.env in the repo root (gitignored, yours only):
+//        REPLAY_EMAIL=momann@gmail.com
+//        REPLAY_PASSWORD=...
+//        REPLAY_BASE=http://localhost:3000     (optional; --base still wins)
+//      The script logs in itself at the start of each run.
 // Creates a FRESH planning session as that account, sends the file's user
 // turns one at a time (exactly like SessionPage does: full history each call,
 // then PUT the session so server-side state matches a real chat), prints the
@@ -27,16 +33,35 @@
 // }
 // Turn checks: noItinerary | itinerary | notRepeatOfPrev | mustMention[regex] | mustNotMention[regex]
 // Final checks: builtNightsLteRequested | builtNightsEq N | minStops N | maxStops N
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { readFileSync, existsSync } from 'node:fs'
+import { resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const args = process.argv.slice(2)
 const file = args.find(a => !a.startsWith('--'))
 if (!file) { console.error('usage: npm run replay -- <replay.json> [--base URL] [--verbose]'); process.exit(2) }
-const base = (args.includes('--base') ? args[args.indexOf('--base') + 1] : 'http://localhost:3000').replace(/\/$/, '')
+// .replay.env (repo root) — private login for unattended runs.
+const envFile = resolve(dirname(fileURLToPath(import.meta.url)), '..', '.replay.env')
+const renv = {}
+if (existsSync(envFile)) {
+  for (const line of readFileSync(envFile, 'utf8').split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Z_]+)\s*=\s*(.*?)\s*$/)
+    if (m && !line.trim().startsWith('#')) renv[m[1]] = m[2].replace(/^["']|["']$/g, '')
+  }
+}
+const base = (args.includes('--base') ? args[args.indexOf('--base') + 1] : (renv.REPLAY_BASE || 'http://localhost:3000')).replace(/\/$/, '')
 const verbose = args.includes('--verbose')
-const token = process.env.TOKEN
-if (!token) { console.error('TOKEN not set — run .\\get-token.ps1 first (same PowerShell window).'); process.exit(2) }
+let token = process.env.TOKEN
+if (!token && renv.REPLAY_EMAIL && renv.REPLAY_PASSWORD) {
+  const r = await fetch(`${base}/api/v1/auth/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: renv.REPLAY_EMAIL, password: renv.REPLAY_PASSWORD }),
+  })
+  if (!r.ok) { console.error(`Login failed (${r.status}) for ${renv.REPLAY_EMAIL} at ${base} — check .replay.env`); process.exit(2) }
+  token = (await r.json()).accessToken
+  console.log(`signed in as ${renv.REPLAY_EMAIL} (${base})`)
+}
+if (!token) { console.error('No sign-in: run .\\get-token.ps1, or create .replay.env with REPLAY_EMAIL / REPLAY_PASSWORD (see header).'); process.exit(2) }
 
 const replay = JSON.parse(readFileSync(resolve(file), 'utf8'))
 const api = `${base}/api/v1`

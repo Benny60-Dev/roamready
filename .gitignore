@@ -44,3 +44,6 @@ stripe-cli/
 
 # Session trackers — working docs kept in the folder for convenience, never code
 /RoamReady_Bug_Tracker_*.xlsx
+
+# replay tool — private login, never commit
+.replay.env
