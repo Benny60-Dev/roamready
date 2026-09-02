@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
-import { Star, DollarSign, Save, Plus, Trash2, Navigation } from 'lucide-react'
+import { Star, DollarSign, Save, Plus, Trash2, Navigation, ImagePlus } from 'lucide-react'
 import { tripsApi, journalApi } from '../../services/api'
 import { Trip, Stop, JournalEntry, ItineraryDay, POI } from '../../types'
 import { useAuthStore } from '../../store/authStore'
@@ -33,6 +33,41 @@ function StopJournal({ stop, badge }: { stop: Stop; badge: 'S' | 'H' | 'F' | num
   // stop.journalEntry and updated when an upsert creates a fresh row, so the
   // Delete button reflects the live state (and never targets a stale id).
   const [entryId, setEntryId] = useState<string | undefined>(stop.journalEntry?.id)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Photos go straight to the server (which stores them in S3) — no Save tap
+  // needed. The server responds with the full entry, so we adopt its photos
+  // array (and row id — a photo can be the first thing saved for a stop).
+  async function uploadPhotos(files: FileList | null) {
+    if (!files || files.length === 0) return
+    if (!hasAccess('tripJournal')) {
+      openPaywall('tripJournal')
+      return
+    }
+    const form = new FormData()
+    Array.from(files).slice(0, 10).forEach(f => form.append('photos', f))
+    setUploading(true)
+    setUploadError(null)
+    try {
+      const res = await journalApi.uploadPhotos(stop.id, form)
+      if (res.data?.id) setEntryId(res.data.id)
+      if (Array.isArray(res.data?.photos)) setEntry(v => ({ ...v, photos: res.data.photos }))
+    } catch (e: any) {
+      if (!(e?.response?.status === 403 && e?.response?.data?.code === 'FEATURE_GATED')) {
+        console.error('[StopJournal] photo upload failed:', e)
+        setUploadError(
+          e?.response?.status === 503
+            ? 'Photo uploads are temporarily unavailable.'
+            : e?.response?.data?.error || 'Could not upload photos. Please try again.'
+        )
+      }
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   async function save() {
     // Gate at Save-tap, client-side, so a non-Pro user sees the paywall
@@ -117,17 +152,38 @@ function StopJournal({ stop, badge }: { stop: Stop; badge: 'S' | 'H' | 'F' | num
         </div>
       </div>
 
-      {/* Photos — DISPLAY-ONLY for launch. Existing stored photos still render;
-          the "Add photos" upload affordance is intentionally hidden (no storage
-          wired yet). journalApi.uploadPhotos + the server endpoint remain intact
-          so this can be re-enabled later by restoring the control. */}
-      {entry.photos && entry.photos.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {entry.photos.map((url, i) => (
-            <img key={i} src={url} alt={`Photo ${i + 1}`} className="w-20 h-20 object-cover rounded-lg border border-gray-200" style={{ borderWidth: '0.5px' }} />
+      {/* Photos — stored in S3 via POST /journal/:stopId/photos (Pro-gated,
+          images only, 10MB each, up to 10 per upload). Uploads save
+          immediately and are independent of the Save button. */}
+      <div>
+        <label className="label">Photos</label>
+        <div className="flex flex-wrap gap-2 items-center">
+          {(entry.photos || []).map((url, i) => (
+            <a key={i} href={url} target="_blank" rel="noopener noreferrer" title="Open full size">
+              <img src={url} alt={`Photo ${i + 1}`} className="w-20 h-20 object-cover rounded-lg border border-gray-200" style={{ borderWidth: '0.5px' }} />
+            </a>
           ))}
+          <button
+            type="button"
+            onClick={() => (hasAccess('tripJournal') ? fileInputRef.current?.click() : openPaywall('tripJournal'))}
+            disabled={uploading}
+            className="w-20 h-20 rounded-lg border border-dashed border-gray-300 text-gray-500 hover:border-[#1F6F8B] hover:text-[#1F6F8B] flex flex-col items-center justify-center gap-1 text-xs disabled:opacity-60"
+            aria-label="Add photos"
+          >
+            <ImagePlus size={18} />
+            {uploading ? 'Uploading…' : 'Add photos'}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={e => uploadPhotos(e.target.files)}
+          />
         </div>
-      )}
+        {uploadError && <p className="text-xs text-red-600 mt-1">{uploadError}</p>}
+      </div>
 
       <div className="flex gap-2">
         {/* Delete only appears once a saved entry exists for this stop. It

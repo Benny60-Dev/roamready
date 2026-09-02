@@ -381,24 +381,24 @@
     {
       "id": "PR-11",
       "title": "**Public roadmap shows test entries** — \"what is this test\", \"Testing Feedback Gmail Functionality\" visible to every user",
-      "status": "OPEN",
-      "statusRaw": "OPEN — **data, not code** (Benny)",
+      "status": "DONE",
+      "statusRaw": "**CLOSED — not reproducible on prod**",
       "severity": null,
-      "category": "review-open",
+      "category": "review-fixed",
       "commits": [],
-      "evidence": "Feedback rows with `isPublic=true` in prod ([controllers/feedback.ts:58-72](server/src/controllers/feedback.ts)).",
-      "whatRemains": "Flip the two rows off Public (or archive) in the admin feedback panel. No deploy."
+      "evidence": "Feedback rows with `isPublic=true` in prod ([controllers/feedback.ts:58-72](server/src/controllers/feedback.ts)). 2026-09-02: checked prod directly — /roadmap shows 5 real Completed items and none of the review's test titles exist in the prod feedback inbox (32 rows). The entries were local-dev data (the review ran on dev). The few prod test rows are not Public.",
+      "whatRemains": null
     },
     {
       "id": "PR-12",
       "title": "**Journal photos: built end to end, blocked on storage**",
-      "status": "OPEN",
-      "statusRaw": "OPEN — needs an S3 bucket (Benny)",
+      "status": "DONE",
+      "statusRaw": "**DONE — pending prod verification (RR64)**",
       "severity": null,
-      "category": "review-open",
+      "category": "review-fixed",
       "commits": [],
-      "evidence": "Full pipeline in [server/src/controllers/journal.ts](server/src/controllers/journal.ts) (S3Client L2/L11, multer 10MB L19, POST `/journal/:stopId/photos` Pro-gated, upload returns S3 URLs L312-317); client renders stored photos ([TripJournalPage.tsx:124-127](client/src/pages/trips/TripJournalPage.tsx)). `AWS_S3_BUCKET` absent, `AWS_ACCESS_KEY_ID` empty → L300 503s; upload button intentionally hidden ([TripJournalPage.tsx:120-123](client/src/pages/trips/TripJournalPage.tsx)).",
-      "whatRemains": "Provision bucket + IAM, set `AWS_S3_BUCKET` / keys on Render + local, remove the hidden flag. Days, not months."
+      "evidence": "Full pipeline in [server/src/controllers/journal.ts](server/src/controllers/journal.ts) (S3Client L2/L11, multer 10MB L19, POST `/journal/:stopId/photos` Pro-gated, upload returns S3 URLs L312-317); client renders stored photos ([TripJournalPage.tsx:124-127](client/src/pages/trips/TripJournalPage.tsx)). `AWS_S3_BUCKET` absent, `AWS_ACCESS_KEY_ID` empty → L300 503s; upload button intentionally hidden ([TripJournalPage.tsx:120-123](client/src/pages/trips/TripJournalPage.tsx)). 2026-09-02: bucket `roamready-journal-photos` created in **us-east-2** (us-east-1 is locked on the account's plan → `AWS_REGION` changed to us-east-2 on Render + local); bucket policy = public `s3:GetObject` on `journals/*` only (ACLs stay blocked); IAM user `roamready-api` with policy `roamready-journal-photos-write` (`s3:PutObject` on `journals/*`). FEAT-JOURNAL-PHOTOS: the route never attached multer, so every upload would have 400'd \"No files uploaded\" — `upload.array('photos', 10)` added; image-only `fileFilter`; S3 keys drop the original filename (timestamp + random tail + ext); \"Add photos\" control built on the stop card ([TripJournalPage.tsx](client/src/pages/trips/TripJournalPage.tsx)) — uploads immediately, adopts server photos, paywall-gated client-side.",
+      "whatRemains": "Verify on prod: upload a photo to a stop, confirm it renders and the S3 URL opens."
     },
     {
       "id": "PR-13",

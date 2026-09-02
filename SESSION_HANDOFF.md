@@ -11,8 +11,6 @@
 - PR-6 — **Missing camping cost line** — a 6-night trip priced 5 nights; the Tonalea overnight had no camping line (OPEN)
 - PR-7 — **Off-route hazard warning** — Moki Dugway (UT-261) warned on a US-160 → US-191 route (OPEN)
 - PR-10 — **PDF export "click gives no feedback"** (OPEN — verify as a gating bug)
-- PR-11 — **Public roadmap shows test entries** — "what is this test", "Testing Feedback Gmail Functionality" visible to every user (OPEN — **data, not code** (Benny))
-- PR-12 — **Journal photos: built end to end, blocked on storage** (OPEN — needs an S3 bucket (Benny))
 - BOOKING-PILLS-INV — **Booking-pill CTA inventory** — wording/affordance refinement of the booking pills/CTAs (OPEN — backlog (scouted, not built))
 
 ## Deferred / post-launch
@@ -36,6 +34,8 @@
 - PR-2 — **Billing status contradicts invoice history** — "Free plan · no active subscription" rendered above three paid $7.99 invoices
 - PR-8 — **Booking-form data validation** — "site" accepted as a site number (renders as "site #site"), "kbyyy" accepted as a licence plate
 - PR-9 — **Display chips styled as controls** — "2 adults" / "both" party chips look tappable but are display-only
+- PR-11 — **Public roadmap shows test entries** — "what is this test", "Testing Feedback Gmail Functionality" visible to every user
+- PR-12 — **Journal photos: built end to end, blocked on storage**
 - PR-13 — **Stale "Apply" card after reload** — a failed proposal card (e.g. duplicate-stop error) re-renders as applicable after the panel is reopened
 - PR-14 — **Booking alternates' distance is relative to the primary, not the stop** — "54 mi from NavajoLand" when the primary is itself 25 mi from Tonalea
 - PR-15 — **Drive-limit chip "×" hit target is ~15×17 px**
