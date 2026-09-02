@@ -1,8 +1,11 @@
 # Roamready test login - grabs an accessToken and stores it in $env:TOKEN
-# Usage: .\get-token.ps1
+# Usage: .\get-token.ps1                          (dev, http://localhost:3000)
+#        .\get-token.ps1 -Base https://roamready.ai   (prod)
 # After running, every curl in this PowerShell window can use Authorization: Bearer $env:TOKEN
+# Pair with: npm run replay -- server/replays/<case>.json [--base https://roamready.ai]
+param([string]$Base = "http://localhost:3000")
 
-$loginUrl = "http://localhost:3000/api/v1/auth/login"
+$loginUrl = "$($Base.TrimEnd('/'))/api/v1/auth/login"
 
 $email = Read-Host "Email"
 $password = Read-Host "Password" -AsSecureString
