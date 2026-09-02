@@ -40,7 +40,7 @@
         "noItinerary": true,
         "notRepeatOfPrev": true,
         "mustMention": [
-          "hour|drive"
+          "hour|drive|stop"
         ]
       }
     },

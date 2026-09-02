@@ -920,7 +920,9 @@ function buildDriveFactsBlock(
   const shape = f.roundTrip ? 'round trip' : 'one-way'
   const lines: string[] = []
   lines.push(`Core drive ${f.originName} → ${f.destName} (${shape}): ${f.miles} mi, about ${f.driveHours} h of driving each way.`)
-  lines.push(`Daily drive limit in effect: ${f.capHours} h. Minimum trip length at that limit: ${f.minNights} night${f.minNights === 1 ? '' : 's'}${f.oneWayTransitNights > 0 ? ` (the core drive needs ${f.oneWayTransitNights} overnight stop${f.oneWayTransitNights === 1 ? '' : 's'} on the road${f.roundTrip ? ' each way' : ''})` : ''}.`)
+  const roadNights = f.oneWayTransitNights * (f.roundTrip ? 2 : 1)
+  lines.push(`Daily drive limit in effect: ${f.capHours} h.`)
+  lines.push(`MINIMUM trip length at that limit: ${f.minNights} night${f.minNights === 1 ? '' : 's'} TOTAL = ${roadNights} night${roadNights === 1 ? '' : 's'} on the road${f.roundTrip ? ' (both directions)' : ''} + 1 night at ${f.destName}. This minimum ALREADY INCLUDES the destination night — never add destination nights on top of it. Any length ≥ ${f.minNights} nights fits; extra nights beyond the minimum are free to spend at destinations.`)
   if (requestedNights != null) {
     if (requestedNights < f.minNights) {
       // Hours per driving day needed to do it in the requested nights: the core
@@ -930,7 +932,8 @@ function buildDriveFactsBlock(
       const need = (f.driveHours * (f.roundTrip ? 2 : 1)) / drivingDays
       lines.push(`The user asked for ${requestedNights} night${requestedNights === 1 ? '' : 's'}: that is BELOW the minimum. Doing it in ${requestedNights} would need about ${Math.ceil(need * 2) / 2}-hour drive days instead of ${f.capHours}.`)
     } else {
-      lines.push(`The user asked for ${requestedNights} night${requestedNights === 1 ? '' : 's'}: that fits the minimum.`)
+      const spare = requestedNights - f.minNights
+      lines.push(`The user asked for ${requestedNights} night${requestedNights === 1 ? '' : 's'}: that FITS (${roadNights} on the road + ${1 + spare} at destinations). Do not tell the user it needs more nights for the driving.`)
     }
   } else {
     lines.push('Trip length: not stated yet. Ask for it before building.')
