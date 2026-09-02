@@ -22,7 +22,7 @@ import BottomSheet from '../ui/BottomSheet'
 import type { DirectionsWaypoint } from '../../utils/directions'
 import {
   legUrl, wholeTripUrl, isApplePlatform, getLastNavApp, setLastNavApp, milesBetween,
-  NEAR_PREV_STOP_MILES, type NavApp,
+  nearPrevStopRadius, type NavApp,
 } from '../../utils/navHandoff'
 import { eventsApi } from '../../services/api'
 import { useLegRoutesContext } from '../../hooks/useLegRoutes'
@@ -88,13 +88,13 @@ export default function NavigateSheet({
       pos => {
         if (cancelled) return
         const miles = milesBetween(pos.coords.latitude, pos.coords.longitude, prevStop.latitude!, prevStop.longitude!)
-        setFix(miles <= NEAR_PREV_STOP_MILES ? { kind: 'near', miles } : { kind: 'far', miles })
+        setFix(miles <= nearPrevStopRadius(stop.driveDistanceMiles) ? { kind: 'near', miles } : { kind: 'far', miles })
       },
       () => { if (!cancelled) setFix({ kind: 'none' }) },
       { timeout: 6000, maximumAge: 60_000 },
     )
     return () => { cancelled = true }
-  }, [isOpen, prevStop, defaultOrigin])
+  }, [isOpen, prevStop, defaultOrigin, stop.driveDistanceMiles])
 
   const hasCorridor = !!waypoints && waypoints.length > 0
   // Corridor points ride along from the previous stop always, and from "my
@@ -124,7 +124,7 @@ export default function NavigateSheet({
 
   return (
     <BottomSheet isOpen={isOpen} onClose={onClose} title={`Navigate to ${stop.locationName}${stop.locationState ? `, ${stop.locationState}` : ''}`}>
-      <div className="px-5 pb-6 pt-3 space-y-4">
+      <div className="px-5 pb-6 pt-3 space-y-4 w-full max-w-xl mx-auto">
         {legLine && <p className="text-xs text-gray-500 -mt-1">{legLine}</p>}
 
         {/* Leaving from */}
@@ -298,7 +298,7 @@ export function WholeTripButton({ stops, tripId, className }: { stops: NavStop[]
       </button>
       {open && (
         <BottomSheet isOpen={open} onClose={() => setOpen(false)} title="Open the whole trip in a maps app">
-          <div className="px-5 pb-6 pt-3 space-y-4">
+          <div className="px-5 pb-6 pt-3 space-y-4 w-full max-w-xl mx-auto">
             <StatusBox tone="info" icon={<Info size={14} />}>
               Every stop is passed in order, but between stops the maps app plans its own roads — this is the overview, not the measured route. Use <strong>Navigate</strong> on a stop for the leg measured for your rig.
             </StatusBox>

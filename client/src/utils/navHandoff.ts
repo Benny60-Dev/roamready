@@ -120,7 +120,12 @@ export function milesBetween(aLat: number, aLng: number, bLat: number, bLng: num
   return 2 * R * Math.asin(Math.sqrt(h))
 }
 
-/** Within this many miles of the previous stop, "my location" still gets the
- *  corridor waypoints (you're leaving the campground). Beyond it you're on the
- *  leg already and the points would pull you back. */
-export const NEAR_PREV_STOP_MILES = 10
+/** "Still at the previous stop" radius for the "my location" origin. Stops
+ *  are city centroids, and a metro start (home in Mesa, stop = "Phoenix")
+ *  reads 20+ mi away while you're really at the start — so the radius is the
+ *  larger of 25 mi and 20% of the leg. Inside it the corridor waypoints ride
+ *  along; beyond it you're on the leg and the points would pull you back. */
+export const NEAR_PREV_STOP_MILES = 25
+export function nearPrevStopRadius(legMiles?: number | null): number {
+  return Math.max(NEAR_PREV_STOP_MILES, legMiles ? legMiles * 0.2 : 0)
+}
