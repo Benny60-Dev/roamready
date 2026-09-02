@@ -330,6 +330,40 @@ export default function AdminSessionInspectorPage() {
   }
 
   // Per-session block (detail view): the full diagnostic for one session/trip.
+  // REPLAY TOOL — the session reduced to the user's turns as a replay file
+  // (scripts/replay-session.mjs). Paste into server/replays/<name>.json, add
+  // `expect` checks, run `npm run replay -- server/replays/<name>.json`.
+  function sessionReplayJson(): string {
+    if (!selected) return ''
+    const msgs = Array.isArray(selected.messages) ? selected.messages : []
+    const turns = msgs
+      .filter((m: any) => m?.role === 'user' && typeof m.content === 'string' && m.content.trim())
+      .map((m: any) => ({ user: m.content.trim(), expect: {} }))
+    const ptd: any = selected.partialTripData ?? {}
+    const slug = (selected.title || 'session').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
+    return JSON.stringify({
+      name: slug,
+      source: {
+        sessionId: selected.id,
+        userEmail: userEmail || undefined,
+        capturedAt: new Date().toISOString().slice(0, 10),
+        note: 'Why this case matters — fill in.',
+      },
+      setup: {
+        rigId: null,
+        note: [
+          ptd.origin ? `origin ${ptd.origin}` : null,
+          ptd.destination ? `destination ${ptd.destination}` : null,
+          ptd.requestedNights != null ? `${ptd.requestedNights} nights asked` : null,
+          ptd.driveCapHours != null ? `${ptd.driveCapHours}h trip drive cap` : 'profile drive cap',
+          ptd.statedRig ? `stated rig ${ptd.statedRig}` : null,
+        ].filter(Boolean).join(', '),
+      },
+      turns,
+      final: {},
+    }, null, 2)
+  }
+
   function sessionSupportText(): string {
     if (!selected) return ''
     const lines: (string | null)[] = [
@@ -580,7 +614,10 @@ export default function AdminSessionInspectorPage() {
                       </div>
                     )}
                   </div>
-                  <CopyForSupport text={sessionSupportText()} />
+                  <div className="flex gap-1.5 flex-shrink-0">
+                    <CopyForSupport text={sessionSupportText()} />
+                    <CopyForSupport text={sessionReplayJson()} label="Copy replay" />
+                  </div>
                 </div>
                 <div>
                   <p className="text-[10px] uppercase tracking-wide text-gray-400">Title</p>

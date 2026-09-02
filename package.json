@@ -9,6 +9,7 @@
     "docker:down": "docker-compose down",
     "preflight": "node scripts/check-migration-eol.js && node scripts/check-migration-phantom.js",
     "status:gen": "node scripts/gen-status.mjs && node scripts/gen-handoff.mjs",
+    "replay": "node scripts/replay-session.mjs",
     "check:round-trip-intent": "node scripts/check-round-trip-intent.ts",
     "db:migrate": "npm run db:migrate --prefix server",
     "db:seed": "npm run db:seed --prefix server",

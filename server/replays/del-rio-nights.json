@@ -1,0 +1,56 @@
+{
+  "name": "del-rio-nights",
+  "source": {
+    "sessionId": "cmtkgb1zu0002q72dprt6b858",
+    "capturedAt": "2026-09-02",
+    "note": "Feedback 'Trip days total exceeded': 4-stop trip to Del Rio, 2 nights asked; canned minimum repeated verbatim on pushback; agreed 3 nights then built 4 (drive-limit insert) and silently dropped a stop."
+  },
+  "setup": {
+    "rigId": null,
+    "note": "momann@gmail.com — home Mesa AZ, 6h daily limit, default rig"
+  },
+  "turns": [
+    {
+      "user": "Create a four stop trip to Del Rio Texas to 504 Edna St. starting on Friday this Friday",
+      "expect": {
+        "noItinerary": true
+      }
+    },
+    {
+      "user": "Home",
+      "expect": {
+        "noItinerary": true
+      }
+    },
+    {
+      "user": "2",
+      "expect": {
+        "noItinerary": true,
+        "mustMention": [
+          "night"
+        ]
+      }
+    },
+    {
+      "user": "Do it in 2",
+      "expect": {
+        "noItinerary": true,
+        "notRepeatOfPrev": true,
+        "mustMention": [
+          "hour|drive|limit"
+        ]
+      }
+    },
+    {
+      "user": "Ok 3",
+      "expect": {
+        "mustNotMention": [
+          "Saragosa"
+        ]
+      }
+    }
+  ],
+  "final": {
+    "builtNightsLteRequested": true
+  }
+}
