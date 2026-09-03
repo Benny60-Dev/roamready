@@ -470,12 +470,23 @@
       "id": "FEAT-PLANNER-FACTS",
       "title": "**Planner facts — the app measures, the AI talks** (feedback \"Trip days total exceeded\")",
       "status": "DONE",
-      "statusRaw": "**DONE — pending prod (RR67)**",
+      "statusRaw": "**DONE — live on prod (RR67)**",
       "severity": null,
       "category": "review-fixed",
       "commits": [],
-      "evidence": "Root cause (session cmtkgb1zu0002q72dprt6b858): the June budget gate OVERWROTE the planner's reply with a canned \"needs about N nights minimum\" sentence, so the AI never saw the measurement, repeated itself on pushback, and — once the user agreed to 3 — the drive-limit insert silently made it 4 nights while the AI quietly dropped a requested stop. Fix: `computeDriveFacts()` measures the core drive once per (origin, destination, shape, cap) and a `<drive_facts>` system message hands the planner miles, hours, cap, MINIMUM (= road nights + 1 destination night, arithmetic spelled out), requested nights vs minimum with the hours-per-day a shorter trip needs, requested stop count (parsed from all user turns) vs nights, and the last over-budget build. Prompt DRIVE FACTS rule: numbers authoritative; below minimum → explain + offer add nights / closer / drop a stop / longer days (emit `<drive_cap>`); acknowledge pushback, never repeat verbatim; never quietly drop a stop; only the app's figures, no per-leg estimates. Canned pre-build overwrite removed (survives only when no facts could be measured). Post-build: an insert that pushes past the agreed nights drops the build and gives the planner one retry with the leg fact (honouring `<drive_cap>`/`<requestedNights>` in the retry); plain sentence is the backstop. Echoed hazard advisory deduped. Replay del-rio-nights: before 6/9 (built 4 nights vs 3, dropped a stop); after 10/12 with the two misses being wording variance — final 3 nights / 3 stops, real hours quoted, pushback acknowledged, 8.5-hour-day option offered.",
-      "whatRemains": "Watch: on one run the AI said \"your four stops\" while building three; nudge the prompt if it recurs. Verify on prod with `npm run replay -- server/replays/del-rio-nights.json --base https://roamready.ai`."
+      "evidence": "Root cause (session cmtkgb1zu0002q72dprt6b858): the June budget gate OVERWROTE the planner's reply with a canned \"needs about N nights minimum\" sentence, so the AI never saw the measurement, repeated itself on pushback, and — once the user agreed to 3 — the drive-limit insert silently made it 4 nights while the AI quietly dropped a requested stop. Fix: `computeDriveFacts()` measures the core drive once per (origin, destination, shape, cap) and a `<drive_facts>` system message hands the planner miles, hours, cap, MINIMUM (= road nights + 1 destination night, arithmetic spelled out), requested nights vs minimum with the hours-per-day a shorter trip needs, requested stop count (parsed from all user turns) vs nights, and the last over-budget build. Prompt DRIVE FACTS rule: numbers authoritative; below minimum → explain + offer add nights / closer / drop a stop / longer days (emit `<drive_cap>`); acknowledge pushback, never repeat verbatim; never quietly drop a stop; only the app's figures, no per-leg estimates. Canned pre-build overwrite removed (survives only when no facts could be measured). Post-build: an insert that pushes past the agreed nights drops the build and gives the planner one retry with the leg fact (honouring `<drive_cap>`/`<requestedNights>` in the retry); plain sentence is the backstop. Echoed hazard advisory deduped. Replay del-rio-nights: before 6/9 (built 4 nights vs 3, dropped a stop); after 10/12 with the two misses being wording variance — final 3 nights / 3 stops, real hours quoted, pushback acknowledged, 8.5-hour-day option offered. Prod replay 2026-09-02 (RR67 live): turns 4–6 negotiate with real numbers; the over-budget backstop fired and explained the 7.5 h Las Cruces → Del Rio leg instead of building 4 nights. It also exposed BUG-ORIGIN-ASK-MARKDOWN (below).",
+      "whatRemains": "Watch: on one dev run the AI said \"your four stops\" while building three; nudge the prompt if it recurs."
+    },
+    {
+      "id": "BUG-ORIGIN-ASK-MARKDOWN",
+      "title": "**\"I couldn't find that location\" after answering a nights question with a number**",
+      "status": "DONE",
+      "statusRaw": "**DONE — pending prod (RR68)**",
+      "severity": null,
+      "category": "review-fixed",
+      "commits": [],
+      "evidence": "Prod replay turn 3: the prior reply \"…starting from home in Mesa, AZ.** Last thing: how many nights…?\" has no whitespace after the period (markdown bold), so `isOriginAsk` fused the origin statement with the nights question, treated the user's \"2\" as a place, failed to geocode it and re-asked for the origin. Fix: strip markdown emphasis before clause-splitting; a clause asking \"how many/long … nights\" while restating \"starting from home\" is not an origin ask; a bare number is never an origin answer. Replay turn 3 now asserts it.",
+      "whatRemains": null
     },
     {
       "id": "FEAT-PDF-ROUTE-LINE",
