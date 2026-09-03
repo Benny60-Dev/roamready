@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
-import { Users, DollarSign, Map, MessageSquare, Link2, Search, Mail, Stethoscope } from 'lucide-react'
+import { Users, DollarSign, Map, MessageSquare, Link2, Search, Mail, Stethoscope, Repeat } from 'lucide-react'
 import { adminApi } from '../../services/api'
 
 export default function AdminDashboardPage() {
@@ -32,6 +32,7 @@ export default function AdminDashboardPage() {
           <Link to="/admin/link-health" className="btn-ghost text-sm flex items-center gap-1.5"><Link2 size={14} /> Link Health</Link>
           <Link to="/admin/session-inspector" className="btn-ghost text-sm flex items-center gap-1.5"><Search size={14} /> Session Inspector</Link>
           <Link to="/admin/diagnostics" className="btn-ghost text-sm flex items-center gap-1.5"><Stethoscope size={14} /> Diagnostics</Link>
+          <Link to="/admin/replay-cases" className="btn-ghost text-sm flex items-center gap-1.5"><Repeat size={14} /> Replay Cases</Link>
         </div>
       </div>
 

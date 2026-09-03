@@ -1,0 +1,243 @@
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Breadcrumb } from '../../components/ui/Breadcrumb'
+import { CheckCircle2, AlertTriangle, ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
+import { adminApi } from '../../services/api'
+import { CopyForSupport } from '../../components/admin/Copy'
+
+// FEAT-REPLAY-CASES — owner-only list of saved planner regression cases.
+// A case is a real conversation (user turns only) saved from the Session
+// Inspector with a "what went wrong" note. It is run from the repo with
+// `npm run replay -- --case <name>`; the script writes lastRun back here.
+// Status: OPEN → PASSING (auto, when every check passes) → FIXED (Benny).
+
+type CaseStatus = 'OPEN' | 'PASSING' | 'FIXED'
+interface ReplayTurn { user: string; expect?: Record<string, unknown> }
+interface ReplayCase {
+  id: string
+  name: string
+  status: CaseStatus
+  note: string
+  sourceSessionId: string | null
+  sourceUserEmail: string | null
+  setup: Record<string, unknown>
+  turns: ReplayTurn[]
+  final: Record<string, unknown> | null
+  createdByEmail: string | null
+  lastRunAt: string | null
+  lastRunResult: { passed: number; total: number; base?: string; failed?: string[] } | null
+  createdAt: string
+}
+
+const STATUS_CLASS: Record<CaseStatus, string> = {
+  OPEN: 'bg-red-50 text-red-700',
+  PASSING: 'bg-amber-50 text-amber-700',
+  FIXED: 'bg-emerald-50 text-emerald-700',
+}
+const fmt = (iso?: string | null) => {
+  if (!iso) return '—'
+  try { return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) } catch { return String(iso) }
+}
+
+// The case as the replay file the script understands — for "Copy JSON" when
+// someone wants to hand-edit expect checks in a file instead.
+function caseJson(c: ReplayCase): string {
+  return JSON.stringify({
+    name: c.name,
+    source: { sessionId: c.sourceSessionId, userEmail: c.sourceUserEmail, capturedAt: c.createdAt.slice(0, 10), note: c.note },
+    setup: c.setup,
+    turns: c.turns,
+    final: c.final ?? {},
+  }, null, 2)
+}
+
+export default function AdminReplayCasesPage() {
+  const [cases, setCases] = useState<ReplayCase[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState<'ALL' | CaseStatus>('ALL')
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function load() {
+    try {
+      const res = await adminApi.listReplayCases()
+      setCases(Array.isArray(res.data) ? res.data : [])
+    } catch { setError('Could not load replay cases.') }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { load() }, [])
+
+  async function setStatus(c: ReplayCase, status: CaseStatus) {
+    if (status === c.status) return
+    setBusyId(c.id); setError(null)
+    try {
+      const res = await adminApi.updateReplayCase(c.id, { status })
+      setCases(cs => cs.map(x => x.id === c.id ? { ...x, ...res.data } : x))
+    } catch { setError('Could not update the case.') }
+    finally { setBusyId(null) }
+  }
+
+  // Deletion is confirm-gated in-page (no window.confirm — it blocks the tab).
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  async function remove(c: ReplayCase) {
+    setBusyId(c.id); setError(null)
+    try {
+      await adminApi.deleteReplayCase(c.id)
+      setCases(cs => cs.filter(x => x.id !== c.id))
+      if (openId === c.id) setOpenId(null)
+    } catch { setError('Could not delete the case.') }
+    finally { setBusyId(null); setConfirmDeleteId(null) }
+  }
+
+  const shown = cases.filter(c => filter === 'ALL' || c.status === filter)
+  const counts = { OPEN: 0, PASSING: 0, FIXED: 0 } as Record<CaseStatus, number>
+  for (const c of cases) counts[c.status]++
+
+  return (
+    <div className="space-y-6 max-w-5xl">
+      <Breadcrumb items={[{ label: 'Admin Dashboard' }, { label: 'Replay Cases' }]} />
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-medium text-gray-900">Replay Cases</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Real conversations saved from the <Link to="/admin/session-inspector" className="text-[#1F6F8B] hover:underline">Session Inspector</Link> and re-run against the planner. Run one with <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">npm run replay -- --case &lt;name&gt;</code> (add <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">--base https://roamready.ai</code> for prod).
+          </p>
+        </div>
+        <div className="flex gap-1.5">
+          {(['ALL', 'OPEN', 'PASSING', 'FIXED'] as const).map(f => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setFilter(f)}
+              className={`text-xs px-2.5 py-1 rounded-full border ${filter === f ? 'bg-[#1F6F8B] text-white border-[#1F6F8B]' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}
+            >
+              {f === 'ALL' ? `All ${cases.length}` : `${f.charAt(0) + f.slice(1).toLowerCase()} ${counts[f]}`}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {error && (
+        <div className="card bg-red-50 border-red-100 text-sm text-red-700 flex items-center gap-2"><AlertTriangle size={14} /> {error}</div>
+      )}
+
+      {loading ? (
+        <div className="card h-24 animate-pulse bg-gray-50" />
+      ) : shown.length === 0 ? (
+        <div className="card text-center py-12">
+          <p className="text-gray-700 text-sm font-medium mb-1">{cases.length === 0 ? 'No replay cases yet.' : 'Nothing in this filter.'}</p>
+          <p className="text-gray-500 text-sm">Open a session in the Session Inspector and click <span className="font-medium">Save as replay case</span>.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {shown.map(c => {
+            const open = openId === c.id
+            const lr = c.lastRunResult
+            const lastOk = lr ? lr.total > 0 && lr.passed === lr.total : null
+            return (
+              <div key={c.id} className="card p-0 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setOpenId(open ? null : c.id)}
+                  className="w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-gray-50"
+                >
+                  <span className="mt-0.5 text-gray-400">{open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <code className="text-sm font-medium text-gray-900">{c.name}</code>
+                      <span className={`badge text-xs ${STATUS_CLASS[c.status]}`}>{c.status.charAt(0) + c.status.slice(1).toLowerCase()}</span>
+                      <span className="text-xs text-gray-400">{c.turns.length} turn{c.turns.length === 1 ? '' : 's'}</span>
+                      {c.sourceUserEmail && <span className="text-xs text-gray-400 truncate">{c.sourceUserEmail}</span>}
+                    </div>
+                    <p className="text-sm text-gray-700 mt-1 line-clamp-2">{c.note}</p>
+                  </div>
+                  <div className="text-right text-xs text-gray-500 flex-shrink-0">
+                    <p>Saved {fmt(c.createdAt)}</p>
+                    {lr ? (
+                      <p className={`flex items-center justify-end gap-1 ${lastOk ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {lastOk ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />} {lr.passed}/{lr.total} · {fmt(c.lastRunAt)}
+                      </p>
+                    ) : <p className="text-gray-400">never run</p>}
+                  </div>
+                </button>
+
+                {open && (
+                  <div className="border-t border-gray-100 px-4 py-3 space-y-3 bg-gray-50/60">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[10px] uppercase tracking-wide text-gray-400">Status</span>
+                      {(['OPEN', 'PASSING', 'FIXED'] as CaseStatus[]).map(s => (
+                        <button
+                          key={s}
+                          type="button"
+                          disabled={busyId === c.id}
+                          onClick={() => setStatus(c, s)}
+                          className={`text-xs px-2 py-0.5 rounded-full border ${c.status === s ? STATUS_CLASS[s] + ' border-transparent font-medium' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}
+                        >
+                          {s.charAt(0) + s.slice(1).toLowerCase()}
+                        </button>
+                      ))}
+                      <span className="flex-1" />
+                      <CopyForSupport text={`npm run replay -- --case ${c.name}`} label="Copy command" />
+                      <CopyForSupport text={caseJson(c)} label="Copy JSON" />
+                      {c.sourceSessionId && (
+                        <Link to={`/admin/session-inspector?sessionId=${encodeURIComponent(c.sourceSessionId)}`} className="btn-outline text-xs">Open session</Link>
+                      )}
+                      {confirmDeleteId === c.id ? (
+                        <span className="flex items-center gap-1 text-xs">
+                          <span className="text-gray-600">Delete this case?</span>
+                          <button type="button" onClick={() => remove(c)} disabled={busyId === c.id} className="text-red-600 font-medium hover:underline">Yes, delete</button>
+                          <button type="button" onClick={() => setConfirmDeleteId(null)} className="text-gray-500 hover:underline">No</button>
+                        </span>
+                      ) : (
+                        <button type="button" onClick={() => setConfirmDeleteId(c.id)} title="Delete case" className="text-gray-400 hover:text-red-600"><Trash2 size={14} /></button>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-gray-400">What went wrong</p>
+                      <p className="text-sm text-gray-800 whitespace-pre-wrap">{c.note}</p>
+                    </div>
+                    {typeof c.setup?.note === 'string' && c.setup.note && (
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-gray-400">Setup</p>
+                        <p className="text-sm text-gray-700">{c.setup.note}</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-gray-400">User turns</p>
+                      <ol className="mt-1 space-y-1">
+                        {c.turns.map((t, i) => (
+                          <li key={i} className="text-sm text-gray-800 flex gap-2">
+                            <span className="text-gray-400 w-5 flex-shrink-0 text-right">{i + 1}.</span>
+                            <span className="min-w-0">
+                              {t.user}
+                              {t.expect && Object.keys(t.expect).length > 0 && (
+                                <code className="ml-2 text-[11px] text-gray-500">{JSON.stringify(t.expect)}</code>
+                              )}
+                            </span>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                    {lr && lr.failed && lr.failed.length > 0 && (
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-gray-400">Last run — failed checks{lr.base ? ` (${lr.base})` : ''}</p>
+                        <ul className="mt-1 space-y-0.5">
+                          {lr.failed.map((f, i) => <li key={i} className="text-sm text-red-700">✗ {f}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    <p className="text-[11px] text-gray-400">
+                      Session {c.sourceSessionId ?? '—'} · saved by {c.createdByEmail ?? '—'}. Checks (<code>expect</code>) are edited via Copy JSON → file for now; a saved case with no checks still replays and prints every reply.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}

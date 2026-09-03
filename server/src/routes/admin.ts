@@ -3,9 +3,10 @@ import { requireAuth, requireOwner } from '../middleware/auth'
 import { requireVerifiedEmail } from '../middleware/requireVerifiedEmail'
 import { validateBody } from '../middleware/validate'
 import { AdminFeedbackUpdateSchema } from '../schemas/feedback'
-import { AdminSuspendSchema, AdminGrantProSchema, AdminImpersonateSchema } from '../schemas/admin'
+import { AdminSuspendSchema, AdminGrantProSchema, AdminImpersonateSchema, AdminReplayCaseCreateSchema, AdminReplayCaseUpdateSchema } from '../schemas/admin'
 import { getMetrics, getSubscribers, getMarketingSubscribers, getRevenue, getAdminFeedback, updateFeedback, analyzeFeedback, getLinkHealth, inspectSession, suspendUser, reactivateUser, getUserHistory, grantProUser, revokeProUser, impersonateUser } from '../controllers/admin'
 import { runDiagnostic } from '../controllers/diagnostics'
+import { createReplayCase, listReplayCases, getReplayCase, updateReplayCase, deleteReplayCase } from '../controllers/replayCases'
 
 export const adminRouter = Router()
 // requireVerifiedEmail before requireOwner — owners always bypass the
@@ -44,3 +45,10 @@ adminRouter.get('/session-inspector', inspectSession as any)
 // Read-only Diagnostics console — fixed menu of SELECT-only queries run through
 // a dedicated read-only Postgres role. Owner-gated by the adminRouter.use mount.
 adminRouter.get('/diagnostics', runDiagnostic as any)
+// FEAT-REPLAY-CASES — saved planner regression cases. Owner-gated by the mount.
+// GET /:key looks up by case NAME (the replay script's `--case <name>`).
+adminRouter.get('/replay-cases', listReplayCases as any)
+adminRouter.post('/replay-cases', validateBody(AdminReplayCaseCreateSchema), createReplayCase as any)
+adminRouter.get('/replay-cases/:key', getReplayCase as any)
+adminRouter.patch('/replay-cases/:id', validateBody(AdminReplayCaseUpdateSchema), updateReplayCase as any)
+adminRouter.delete('/replay-cases/:id', deleteReplayCase as any)

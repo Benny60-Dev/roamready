@@ -45,6 +45,7 @@
 - CRON-1 — **Scheduler for `/internal/cron/*` in production** — trial-ending reminder AND the OHV link-checker were never being called
 - FEAT-NAV-HANDOFF — **Navigation handoff — measured route into Google Maps / Apple Maps**
 - TOOL-REPLAY — **Replay tool — a customer conversation becomes an exact-case planner test**
+- FEAT-REPLAY-CASES — **Replay cases — saved from the Session Inspector, run by name, results written back**
 - FEAT-PLANNER-FACTS — **Planner facts — the app measures, the AI talks** (feedback "Trip days total exceeded")
 - BUG-ORIGIN-ASK-MARKDOWN — **"I couldn't find that location" after answering a nights question with a number**
 - LVR-PROD — **"RV-safe routing absent" (review gap table)** — it is LIVE

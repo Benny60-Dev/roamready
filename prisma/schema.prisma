@@ -887,6 +887,36 @@ model ClientEvent {
   @@index([userId])
 }
 
+// FEAT-REPLAY-CASES — a real planning conversation saved from the Session
+// Inspector as a repeatable regression case for scripts/replay-session.mjs
+// (`npm run replay -- --case <name>`). turns/setup/final mirror the replay file
+// shape; note = the admin's "what went wrong". Source ids are plain strings so
+// the case outlives the session it came from.
+model ReplayCase {
+  id              String           @id @default(cuid())
+  name            String           @unique
+  status          ReplayCaseStatus @default(OPEN)
+  note            String
+  sourceSessionId String?
+  sourceUserEmail String?
+  setup           Json
+  turns           Json
+  final           Json?
+  createdByEmail  String?
+  lastRunAt       DateTime?
+  lastRunResult   Json?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([status, createdAt])
+}
+
+enum ReplayCaseStatus {
+  OPEN
+  PASSING
+  FIXED
+}
+
 model AdminActionLog {
   id           String   @id @default(cuid())
   action       String   // DEACTIVATE | REACTIVATE  (DELETE/ANONYMIZE reserved for Tier 2)

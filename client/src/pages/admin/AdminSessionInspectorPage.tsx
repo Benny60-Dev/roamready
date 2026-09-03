@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, Link } from 'react-router-dom'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { Search, AlertTriangle, User as UserIcon, ChevronLeft } from 'lucide-react'
 import { adminApi } from '../../services/api'
@@ -330,25 +330,22 @@ export default function AdminSessionInspectorPage() {
   }
 
   // Per-session block (detail view): the full diagnostic for one session/trip.
-  // REPLAY TOOL — the session reduced to the user's turns as a replay file
-  // (scripts/replay-session.mjs). Paste into server/replays/<name>.json, add
-  // `expect` checks, run `npm run replay -- server/replays/<name>.json`.
-  function sessionReplayJson(): string {
-    if (!selected) return ''
+  // FEAT-REPLAY-CASES — the session reduced to the user's turns, in the replay
+  // file shape (scripts/replay-session.mjs). "Save as replay case" POSTs this
+  // to /admin/replay-cases with a "what went wrong" note; the case is then run
+  // with `npm run replay -- --case <name>` (no JSON file to paste any more).
+  function sessionReplayDraft() {
+    if (!selected) return null
     const msgs = Array.isArray(selected.messages) ? selected.messages : []
     const turns = msgs
       .filter((m: any) => m?.role === 'user' && typeof m.content === 'string' && m.content.trim())
       .map((m: any) => ({ user: m.content.trim(), expect: {} }))
     const ptd: any = selected.partialTripData ?? {}
-    const slug = (selected.title || 'session').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
-    return JSON.stringify({
+    const slug = (selected.title || 'session').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'session'
+    return {
       name: slug,
-      source: {
-        sessionId: selected.id,
-        userEmail: userEmail || undefined,
-        capturedAt: new Date().toISOString().slice(0, 10),
-        note: 'Why this case matters — fill in.',
-      },
+      sourceSessionId: selected.id,
+      sourceUserEmail: userEmail || undefined,
       setup: {
         rigId: null,
         note: [
@@ -361,7 +358,7 @@ export default function AdminSessionInspectorPage() {
       },
       turns,
       final: {},
-    }, null, 2)
+    }
   }
 
   function sessionSupportText(): string {
@@ -618,7 +615,7 @@ export default function AdminSessionInspectorPage() {
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     <CopyForSupport text={sessionSupportText()} />
-                    <CopyForSupport text={sessionReplayJson()} label="Copy replay" />
+                    <SaveReplayCaseButton draft={sessionReplayDraft()} />
                   </div>
                 </div>
                 <div>
@@ -799,6 +796,96 @@ export default function AdminSessionInspectorPage() {
               stop_reason is not stored, so this is a heuristic, not a confirmation.
             </p>
           </section>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// FEAT-REPLAY-CASES — "Save as replay case". Opens a small inline form asking
+// for a case name (prefilled slug) and "What went wrong?", POSTs the draft, and
+// shows a link to the Replay Cases page + the command to run it. Disabled when
+// the session has no user turns (nothing to replay).
+function SaveReplayCaseButton({ draft }: { draft: any }) {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState('')
+  const [note, setNote] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState<{ name: string } | null>(null)
+  const turns = draft?.turns?.length ?? 0
+
+  useEffect(() => {
+    // New session selected → reset the form (keep it closed).
+    setOpen(false); setSaved(null); setError(null); setNote('')
+    setName(draft?.name ?? '')
+  }, [draft?.sourceSessionId])
+
+  if (!draft) return null
+
+  async function save() {
+    const cleanName = name.trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '')
+    if (!cleanName) { setError('Give the case a name.'); return }
+    if (!note.trim()) { setError('Say what went wrong — that is the whole point of the case.'); return }
+    setSaving(true); setError(null)
+    try {
+      const res = await adminApi.createReplayCase({ ...draft, name: cleanName, note: note.trim() })
+      setSaved({ name: res.data?.name ?? cleanName })
+      setOpen(false)
+    } catch (e: any) {
+      setError(e?.response?.data?.issues?.[0]?.message ?? e?.response?.data?.error ?? 'Could not save the case.')
+    } finally { setSaving(false) }
+  }
+
+  if (saved) {
+    return (
+      <div className="w-full text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-2 space-y-1">
+        <p className="font-medium">Saved as replay case <code>{saved.name}</code>.</p>
+        <p className="text-gray-600">Run it: <code>npm run replay -- --case {saved.name}</code></p>
+        <Link to="/admin/replay-cases" className="text-[#1F6F8B] hover:underline">Open Replay Cases →</Link>
+      </div>
+    )
+  }
+
+  return (
+    <div className="w-full">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        disabled={turns === 0}
+        title={turns === 0 ? 'No user turns to replay' : 'Save this conversation as a replay case'}
+        className="btn-outline text-xs flex items-center gap-1.5 flex-shrink-0 disabled:opacity-50"
+      >
+        <Search size={13} /> Save as replay case
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2 border border-gray-200 rounded-lg p-2.5 bg-gray-50">
+          <label className="block">
+            <span className="text-[10px] uppercase tracking-wide text-gray-400">Case name</span>
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              className="input text-sm w-full mt-0.5"
+              placeholder="del-rio-nights"
+              spellCheck={false}
+            />
+          </label>
+          <label className="block">
+            <span className="text-[10px] uppercase tracking-wide text-gray-400">What went wrong?</span>
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              rows={3}
+              className="input text-sm w-full mt-0.5"
+              placeholder="What the planner did, and what it should have done."
+            />
+          </label>
+          <p className="text-[11px] text-gray-500">{turns} user turn{turns === 1 ? '' : 's'} will be saved. Add <code>expect</code> checks later on the Replay Cases page.</p>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+          <div className="flex gap-1.5">
+            <button type="button" onClick={save} disabled={saving} className="btn-primary text-xs">{saving ? 'Saving…' : 'Save case'}</button>
+            <button type="button" onClick={() => { setOpen(false); setError(null) }} className="btn-ghost text-xs">Cancel</button>
+          </div>
         </div>
       )}
     </div>
