@@ -601,7 +601,9 @@ export default function AdminSessionInspectorPage() {
             {/* RIGHT — Summary panel (sticky) */}
             <aside className="space-y-2 lg:sticky lg:top-4 self-start">
               <div className="card space-y-3">
-                <div className="flex items-start justify-between gap-2">
+                {/* Name/email on their own row; the two copy actions on the
+                    next row — side by side they crushed the name column. */}
+                <div className="space-y-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <UserIcon size={14} className="text-[#1F6F8B] flex-shrink-0" aria-hidden="true" />
@@ -614,7 +616,7 @@ export default function AdminSessionInspectorPage() {
                       </div>
                     )}
                   </div>
-                  <div className="flex gap-1.5 flex-shrink-0">
+                  <div className="flex flex-wrap gap-1.5">
                     <CopyForSupport text={sessionSupportText()} />
                     <CopyForSupport text={sessionReplayJson()} label="Copy replay" />
                   </div>
