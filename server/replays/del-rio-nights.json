@@ -31,6 +31,9 @@
         "noItinerary": true,
         "mustMention": [
           "night"
+        ],
+        "mustNotMention": [
+          "couldn.t find that location|city \\(and state\\)"
         ]
       }
     },

@@ -44,6 +44,7 @@
 - FEAT-NAV-HANDOFF — **Navigation handoff — measured route into Google Maps / Apple Maps**
 - TOOL-REPLAY — **Replay tool — a customer conversation becomes an exact-case planner test**
 - FEAT-PLANNER-FACTS — **Planner facts — the app measures, the AI talks** (feedback "Trip days total exceeded")
+- BUG-ORIGIN-ASK-MARKDOWN — **"I couldn't find that location" after answering a nights question with a number**
 - LVR-PROD — **"RV-safe routing absent" (review gap table)** — it is LIVE
 - FIX-WEATHER-HINT — **Live forecast looked missing** — historical-averages card never said why
 - FIX-CAMPGROUND-PROXIMITY — **Review #1 critical** — Tonalea, AZ recommended Coon Bluff Rec Area, 200 mi south in Mesa

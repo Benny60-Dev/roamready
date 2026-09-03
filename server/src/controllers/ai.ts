@@ -244,8 +244,18 @@ function stripOriginLeadIn(text: string): string {
 const ORIGIN_ASK_KEYWORDS = /\b(?:starting from|leaving from|departing from|depart from|start from|where (?:are|will) you (?:be )?(?:starting|leaving|departing)|from home|home in|your home|home address|home base|different address|different location|different place|another (?:address|location|place)|somewhere else|starting (?:point|location)|saved home|on file)\b/i
 function isOriginAsk(text: string | null | undefined): boolean {
   if (!text) return false
-  for (const c of text.split(/(?<=[?.!])\s+/)) {
-    if (c.includes('?') && ORIGIN_ASK_KEYWORDS.test(c)) return true
+  // BUG-ORIGIN-ASK-MARKDOWN — strip markdown emphasis first: "…Mesa, AZ.**
+  // Last thing: how many nights…?" has no whitespace after the period, so the
+  // clause splitter fused an origin STATEMENT with a nights QUESTION and the
+  // user's "2" was geocoded as a place. Bold/italic markers are not sentence
+  // punctuation; drop them before splitting.
+  const plain = text.replace(/[*_`]+/g, '')
+  for (const c of plain.split(/(?<=[?.!])\s+/)) {
+    if (!c.includes('?') || !ORIGIN_ASK_KEYWORDS.test(c)) continue
+    // A clause that is really asking about LENGTH ("how many nights…?") while
+    // merely restating the origin is not an origin ask.
+    if (/\bhow (?:many|long)\b|\bnights?\b/i.test(c) && /\b(?:starting|leaving|departing) from home\b/i.test(c)) continue
+    return true
   }
   // Statement-form safety net (NO_ORIGIN_RESPONSE opens with this, no "?" clause).
   if (/\bi don't have a home address\b/i.test(text)) return true
@@ -1296,7 +1306,10 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     let originResolutionFailed = false
     if (!(userProfile as any).capturedOrigin) {
       const priorAssistant = [...messages].reverse().find((m: any) => m.role === 'assistant')
-      const answeringOriginAsk = isOriginAsk(priorAssistant?.content) && !!lastUserMsg?.content
+      // A bare number ("2", "10") can never be a place — it is an answer to a
+      // nights/stops question even when the prior turn also mentioned the origin.
+      const bareNumber = /^\s*\d{1,3}\s*$/.test(String(lastUserMsg?.content ?? ''))
+      const answeringOriginAsk = isOriginAsk(priorAssistant?.content) && !!lastUserMsg?.content && !bareNumber
       if (answeringOriginAsk) {
         // (b) free-form answer to the origin question.
         const ans = (lastUserMsg!.content as string).trim()
