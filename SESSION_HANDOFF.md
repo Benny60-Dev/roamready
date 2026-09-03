@@ -1,7 +1,7 @@
 # Session Handoff
 <!-- GENERATED FROM launch-status.json — do not hand-edit this section; it is overwritten on every regen -->
 
-**Status as of 2026-09-02** — verified against `main` @ `cfa8dc4`.
+**Status as of 2026-09-02** — verified against `main` @ `d722f6f`.
 
 ## Open items
 - PR-1 — **Free tier is a dead app post-trial** — Free and Pro cards list identical features; after the 7-day trial nearly every surface is `requireFeature`-gated (chat, campground search, journal writes, packing, resources, weather, share, PDF) (OPEN — **product decision first**)
@@ -42,6 +42,8 @@
 - PR-15 — **Drive-limit chip "×" hit target is ~15×17 px**
 - CRON-1 — **Scheduler for `/internal/cron/*` in production** — trial-ending reminder AND the OHV link-checker were never being called
 - FEAT-NAV-HANDOFF — **Navigation handoff — measured route into Google Maps / Apple Maps**
+- TOOL-REPLAY — **Replay tool — a customer conversation becomes an exact-case planner test**
+- FEAT-PLANNER-FACTS — **Planner facts — the app measures, the AI talks** (feedback "Trip days total exceeded")
 - LVR-PROD — **"RV-safe routing absent" (review gap table)** — it is LIVE
 - FIX-WEATHER-HINT — **Live forecast looked missing** — historical-averages card never said why
 - FIX-CAMPGROUND-PROXIMITY — **Review #1 critical** — Tonalea, AZ recommended Coon Bluff Rec Area, 200 mi south in Mesa

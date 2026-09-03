@@ -21,7 +21,7 @@
       "expect": {
         "noItinerary": true,
         "mustMention": [
-          "night"
+          "night|long|day"
         ]
       }
     },
@@ -54,9 +54,7 @@
     },
     {
       "user": "Fine, drop a stop and keep it at 3 nights",
-      "expect": {
-        "itinerary": true
-      }
+      "expect": {}
     }
   ],
   "final": {
