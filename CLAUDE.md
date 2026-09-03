@@ -56,6 +56,12 @@ Never push — the user tests and pushes manually.
 This is the standing procedure. Follow it for every change — do NOT improvise
 generic instructions.
 
+0. **Session start: check open replay cases.** Run `npm run replay -- --list`
+   (needs `.replay.env` + a running dev backend; or read Admin → Replay Cases
+   on prod). OPEN cases are reproduced planner bugs waiting on a fix — surface
+   them in the opening recap. `npm run replay -- --case <name>` re-runs one
+   (real AI calls, cents per run — never in a loop).
+
 1. **Scout read-only first.** Diagnose against the actual code (and, for customer
    bugs, against PRODUCTION via the read-only Diagnostics queries) before proposing
    anything. No writes while scouting.

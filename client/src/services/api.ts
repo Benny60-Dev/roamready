@@ -428,4 +428,14 @@ export const adminApi = {
   // Read-only diagnostics — canned SELECT-only queries; `query` is a fixed key.
   diagnostics: (params: { query: string; tripId?: string; userId?: string; email?: string }) =>
     api.get('/admin/diagnostics', { params }),
+  // FEAT-REPLAY-CASES — saved planner regression cases (scripts/replay-session.mjs).
+  listReplayCases: (params?: { status?: 'OPEN' | 'PASSING' | 'FIXED' }) =>
+    api.get('/admin/replay-cases', { params }),
+  createReplayCase: (body: {
+    name: string; note: string; sourceSessionId?: string; sourceUserEmail?: string
+    setup: Record<string, unknown>; turns: { user: string; expect?: Record<string, unknown> }[]; final?: Record<string, unknown>
+  }) => api.post('/admin/replay-cases', body),
+  updateReplayCase: (id: string, body: { status?: 'OPEN' | 'PASSING' | 'FIXED'; note?: string }) =>
+    api.patch(`/admin/replay-cases/${id}`, body),
+  deleteReplayCase: (id: string) => api.delete(`/admin/replay-cases/${id}`),
 }

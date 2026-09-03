@@ -464,7 +464,18 @@
       "category": "review-fixed",
       "commits": [],
       "evidence": "`npm run replay -- server/replays/<case>.json` ([scripts/replay-session.mjs](scripts/replay-session.mjs)): signs in (`.replay.env`, gitignored, or `$env:TOKEN` from get-token.ps1), creates a fresh planning session, sends the file's user turns exactly like SessionPage, prints each AI reply, evaluates per-turn checks (noItinerary / itinerary / notRepeatOfPrev / mustMention / mustNotMention) and final checks (builtNightsLteRequested / builtNightsEq / minStops / maxStops). `--base https://roamready.ai` runs the same file on prod. Admin Session Inspector has a **Copy replay** button. First case: [server/replays/del-rio-nights.json](server/replays/del-rio-nights.json). Real AI calls — a run costs cents, never automatic.",
-      "whatRemains": "Capture the next feedback bug the same way; consider a `replay:all` runner once there are a few cases."
+      "whatRemains": "Superseded by FEAT-REPLAY-CASES for capture; the file path still works for hand-written cases."
+    },
+    {
+      "id": "FEAT-REPLAY-CASES",
+      "title": "**Replay cases — saved from the Session Inspector, run by name, results written back**",
+      "status": "DONE",
+      "statusRaw": "**DONE — merged local main (RR69), not pushed**",
+      "severity": null,
+      "category": "review-fixed",
+      "commits": [],
+      "evidence": "`ReplayCase` table + `ReplayCaseStatus` enum (migration `20260903170000_add_replay_case`): name (unique slug), status OPEN/PASSING/FIXED, note (\"what went wrong\"), sourceSessionId/email, setup/turns/final JSON, lastRunAt/lastRunResult. Owner-gated `/admin/replay-cases` (list, create, get by NAME, patch, delete) in [controllers/replayCases.ts](server/src/controllers/replayCases.ts). Session Inspector: **Save as replay case** replaces Copy replay — inline form with a prefilled slug and a required \"What went wrong?\", name collisions get `-2`. New admin page [/admin/replay-cases](client/src/pages/admin/AdminReplayCasesPage.tsx): filter by status, expand for note / setup / turns / last failed checks, status buttons, Copy command, Copy JSON, Open session, confirm-gated delete. Script: `npm run replay -- --case <name>` fetches the case from `--base` and PATCHes `lastRun` after the run (OPEN → PASSING when ≥1 check and all pass; PASSING → OPEN on a regression); `npm run replay -- --list` prints the cases. CLAUDE.md: Claude runs `--list` at session start.",
+      "whatRemains": "Local: `npx dotenv-cli -e .env -- npm run db:migrate:deploy --prefix server` + `npm run db:generate --prefix server` (backend stopped), restart, then save the Del Rio session as a case and run it by name. Prod: Render pre-deploy applies the migration. Next: edit `expect` checks in the page (today: Copy JSON → file)."
     },
     {
       "id": "FEAT-PLANNER-FACTS",
