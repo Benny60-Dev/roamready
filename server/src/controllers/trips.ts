@@ -1733,6 +1733,53 @@ export async function planTransitInserts(
  * Same inputs (origin, turnaround, cap, requestedNights) → same result. Fail-soft:
  * any measurement failure returns null (no refusal — the trip builds).
  */
+/**
+ * FEAT-PLANNER-FACTS — the app's measured facts about the core drive, handed
+ * to the planner BEFORE it writes, so it can talk about length/stops/drive
+ * days with real numbers instead of being overwritten by a canned refusal.
+ * Measures origin → destination once (LVR/HERE/Google via fetchLegDetail) and
+ * counts the mandatory transit overnights at `capHours` (same math as
+ * minimalTripBudget). Fail-soft: null on any error → no fact block that turn.
+ */
+export interface DriveFacts {
+  originName: string
+  destName: string
+  roundTrip: boolean
+  capHours: number
+  miles: number
+  driveHours: number          // origin → destination, one way
+  oneWayTransitNights: number // overnights the cap forces on the core leg, one way
+  minNights: number           // 1 + transit (×2 for a round trip)
+}
+export async function computeDriveFacts(
+  originName: string,
+  destName: string,
+  roundTrip: boolean,
+  capHours: number,
+  apiKey: string,
+  rigDims?: RigDims | null,
+): Promise<DriveFacts | null> {
+  try {
+    const origin = { locationName: originName, type: 'HOME', nights: 0 } as any
+    const dest = { locationName: destName, type: 'DESTINATION', nights: 1 } as any
+    const detail = await fetchLegDetail(origin, dest, apiKey, rigDims)
+    if (!detail) return null
+    const { inserts } = await planTransitInserts([origin, dest], capHours, apiKey, rigDims)
+    const oneWayTransitNights = inserts.reduce((n, ins) => n + ins.towns.length, 0)
+    const minNights = 1 + oneWayTransitNights * (roundTrip ? 2 : 1)
+    return {
+      originName, destName, roundTrip, capHours,
+      miles: Math.round(detail.distanceMeters / 1609.34),
+      driveHours: Math.round((detail.durationSec / 3600) * 10) / 10,
+      oneWayTransitNights,
+      minNights,
+    }
+  } catch (e: any) {
+    console.warn('[computeDriveFacts] failed (no facts this turn): %s', e?.message ?? e)
+    return null
+  }
+}
+
 export async function minimalTripBudget(
   stops: PlannableStop[],
   capHours: number,
