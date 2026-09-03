@@ -1,6 +1,6 @@
 {
   "meta": {
-    "verifiedAgainstCommit": "d722f6f",
+    "verifiedAgainstCommit": "099c454",
     "verifiedDate": "2026-09-02",
     "generatedNote": "LAUNCH_STATUS.md is generated from this file by scripts/gen-status.mjs. Edit this JSON, not the .md.",
     "intro": [
@@ -481,12 +481,34 @@
       "id": "BUG-ORIGIN-ASK-MARKDOWN",
       "title": "**\"I couldn't find that location\" after answering a nights question with a number**",
       "status": "DONE",
-      "statusRaw": "**DONE — pending prod (RR68)**",
+      "statusRaw": "**DONE — live on prod (RR68)**",
       "severity": null,
       "category": "review-fixed",
       "commits": [],
-      "evidence": "Prod replay turn 3: the prior reply \"…starting from home in Mesa, AZ.** Last thing: how many nights…?\" has no whitespace after the period (markdown bold), so `isOriginAsk` fused the origin statement with the nights question, treated the user's \"2\" as a place, failed to geocode it and re-asked for the origin. Fix: strip markdown emphasis before clause-splitting; a clause asking \"how many/long … nights\" while restating \"starting from home\" is not an origin ask; a bare number is never an origin answer. Replay turn 3 now asserts it.",
+      "evidence": "Prod replay turn 3: the prior reply \"…starting from home in Mesa, AZ.** Last thing: how many nights…?\" has no whitespace after the period (markdown bold), so `isOriginAsk` fused the origin statement with the nights question, treated the user's \"2\" as a place, failed to geocode it and re-asked for the origin. Fix: strip markdown emphasis before clause-splitting; a clause asking \"how many/long … nights\" while restating \"starting from home\" is not an origin ask; a bare number is never an origin answer. Replay turn 3 now asserts it. Prod replay after RR68: turn 3 \"2\" → nights answer with real numbers; no re-ask.",
       "whatRemains": null
+    },
+    {
+      "id": "BUG-THIS-FRIDAY",
+      "title": "**\"this Friday\" resolves to the wrong date** — replays on Wed 2026-09-02 mostly produced \"Friday, September 6th, 2026\" (a Sunday); once the correct Sept 4",
+      "status": "OPEN",
+      "statusRaw": "OPEN — date resolution",
+      "severity": null,
+      "category": "review-open",
+      "commits": [],
+      "evidence": "Seen in 4 of 5 del-rio-nights replays (dev + prod). The model resolves relative weekdays itself; the server only backstops past dates (rollYmdForwardIfPast) and the resolved-year confirmation, not weekday arithmetic.",
+      "whatRemains": "Resolve \"this/next <weekday>\", \"tomorrow\", \"this weekend\" deterministically on the server from the user's timezone and hand the model the resolved date (same pattern as <drive_facts>); backstop: if the model's date is a different weekday than the user named, correct it and say so."
+    },
+    {
+      "id": "PLANNER-WATCH-1",
+      "title": "**Planner still claims drive-limit compliance / builds a 0-night stop** (post FEAT-PLANNER-FACTS watch list)",
+      "status": "OPEN",
+      "statusRaw": "OPEN — watch; prompt nudge if it recurs",
+      "severity": null,
+      "category": "review-open",
+      "commits": [],
+      "evidence": "Prod replay turn 5: built 4 stops into 3 nights (one zero-night destination) and said \"keeps your drive days manageable at your 6-hour limit\" — the leg it built was 7.5 h and the backstop caught it next turn. Also one dev run said \"your four stops\" while building three.",
+      "whatRemains": "Prompt: destination stops are ≥1 night (a drive-through is a route POI, not a stop); never assert a leg fits the limit. Consider a server check: a DESTINATION with 0 nights in a built itinerary → renegotiate."
     },
     {
       "id": "FEAT-PDF-ROUTE-LINE",

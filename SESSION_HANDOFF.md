@@ -1,7 +1,7 @@
 # Session Handoff
 <!-- GENERATED FROM launch-status.json — do not hand-edit this section; it is overwritten on every regen -->
 
-**Status as of 2026-09-02** — verified against `main` @ `d722f6f`.
+**Status as of 2026-09-02** — verified against `main` @ `099c454`.
 
 ## Open items
 - PR-1 — **Free tier is a dead app post-trial** — Free and Pro cards list identical features; after the 7-day trial nearly every surface is `requireFeature`-gated (chat, campground search, journal writes, packing, resources, weather, share, PDF) (OPEN — **product decision first**)
@@ -11,6 +11,8 @@
 - PR-6 — **Missing camping cost line** — a 6-night trip priced 5 nights; the Tonalea overnight had no camping line (OPEN)
 - PR-7 — **Off-route hazard warning** — Moki Dugway (UT-261) warned on a US-160 → US-191 route (OPEN)
 - PR-10 — **PDF export "click gives no feedback"** (OPEN — verify as a gating bug)
+- BUG-THIS-FRIDAY — **"this Friday" resolves to the wrong date** — replays on Wed 2026-09-02 mostly produced "Friday, September 6th, 2026" (a Sunday); once the correct Sept 4 (OPEN — date resolution)
+- PLANNER-WATCH-1 — **Planner still claims drive-limit compliance / builds a 0-night stop** (post FEAT-PLANNER-FACTS watch list) (OPEN — watch; prompt nudge if it recurs)
 - FEAT-PDF-ROUTE-LINE — **PDF cover map traces the measured route** — today it connects stop pins with straight lines (OPEN — backlog (Benny asked 2026-09-02))
 - BOOKING-PILLS-INV — **Booking-pill CTA inventory** — wording/affordance refinement of the booking pills/CTAs (OPEN — backlog (scouted, not built))
 
