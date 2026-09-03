@@ -950,6 +950,11 @@ function buildDriveFactsBlock(
   return `<drive_facts>\n${lines.join('\n')}\n</drive_facts>`
 }
 
+/** Server-authored hazard advisory prepended to a built plan. Module-level so
+ *  the post-model strip below can remove the copy the model sometimes echoes
+ *  back from the visible history (it would otherwise print twice). */
+const HAZARD_ADVISORY = 'One or more roads on this route may not suit your rig — check the warning pill on the affected stops before you go.'
+
 function buildBudgetConflictAsk(destName: string, minNeeded: number, requestedNights: number): string {
   const need = `${minNeeded} night${minNeeded === 1 ? '' : 's'}`
   const have = `${requestedNights} night${requestedNights === 1 ? '' : 's'}`
@@ -1409,6 +1414,11 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     // trip-intent so a terse opener ("[Place] and back") is planned, not refused.
     const isOpeningTurn = context !== 'modify' && !messages.some((m: any) => m.role === 'assistant')
     let response = await chatWithAI(messagesForAI, userProfile, recentSurpriseDestinations, surpriseVibe, aiCtx, isOpeningTurn, context === 'modify')
+    // The model echoes server-authored advisories it saw in earlier replies;
+    // strip them here — the server re-adds its own when a hazard fires this turn.
+    if (context !== 'modify' && response.includes(HAZARD_ADVISORY)) {
+      response = response.split(HAZARD_ADVISORY).join('').replace(/\n{3,}/g, '\n\n').trim()
+    }
 
     // Three-state modify-mode outcome, surfaced to the client in the response
     // envelope. 'proposal' = actionable change (<modify> tag); 'clarify' = the
@@ -2088,7 +2098,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             // rides alongside it — same plumbing — using HERE's actual notice text.
             const transitNote = buildTransitNote(inserts, transitStops, capHours) ?? ''
             const violationAdvisory = buildViolationAdvisory(legNotices) ?? ''
-            const hazardAdvisory = hazardResult.hitCount > 0 ? 'One or more roads on this route may not suit your rig — check the warning pill on the affected stops before you go.' : ''
+            const hazardAdvisory = hazardResult.hitCount > 0 ? HAZARD_ADVISORY : ''
             const note = [transitNote, violationAdvisory, hazardAdvisory].filter(Boolean).join(' ')
 
             // Re-serialize the <itinerary> block AND prepend the grounded note to the

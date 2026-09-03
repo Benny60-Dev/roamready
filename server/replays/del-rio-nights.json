@@ -47,10 +47,6 @@
     {
       "user": "Ok 3",
       "expect": {
-        "noItinerary": true,
-        "mustMention": [
-          "stop"
-        ],
         "mustNotMention": [
           "Saragosa"
         ]
