@@ -6,7 +6,7 @@ import { AdminFeedbackUpdateSchema } from '../schemas/feedback'
 import { AdminSuspendSchema, AdminGrantProSchema, AdminImpersonateSchema, AdminReplayCaseCreateSchema, AdminReplayCaseUpdateSchema } from '../schemas/admin'
 import { getMetrics, getSubscribers, getMarketingSubscribers, getRevenue, getAdminFeedback, updateFeedback, analyzeFeedback, getLinkHealth, inspectSession, suspendUser, reactivateUser, getUserHistory, grantProUser, revokeProUser, impersonateUser } from '../controllers/admin'
 import { runDiagnostic } from '../controllers/diagnostics'
-import { createReplayCase, listReplayCases, getReplayCase, updateReplayCase, deleteReplayCase } from '../controllers/replayCases'
+import { createReplayCase, listReplayCases, getReplayCase, updateReplayCase, deleteReplayCase, runReplayCase } from '../controllers/replayCases'
 
 export const adminRouter = Router()
 // requireVerifiedEmail before requireOwner — owners always bypass the
@@ -52,3 +52,4 @@ adminRouter.post('/replay-cases', validateBody(AdminReplayCaseCreateSchema), cre
 adminRouter.get('/replay-cases/:key', getReplayCase as any)
 adminRouter.patch('/replay-cases/:id', validateBody(AdminReplayCaseUpdateSchema), updateReplayCase as any)
 adminRouter.delete('/replay-cases/:id', deleteReplayCase as any)
+adminRouter.post('/replay-cases/:id/run', runReplayCase as any)

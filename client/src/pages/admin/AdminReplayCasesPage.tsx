@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
-import { CheckCircle2, AlertTriangle, ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
+import { CheckCircle2, AlertTriangle, ChevronDown, ChevronRight, Trash2, Play, Loader2 } from 'lucide-react'
 import { adminApi } from '../../services/api'
 import { CopyForSupport } from '../../components/admin/Copy'
 
@@ -25,8 +25,27 @@ interface ReplayCase {
   final: Record<string, unknown> | null
   createdByEmail: string | null
   lastRunAt: string | null
-  lastRunResult: { passed: number; total: number; base?: string; failed?: string[] } | null
+  lastRunResult: RunResult | null
   createdAt: string
+}
+
+// Mirrors server/src/services/replayRunner.ts RunResult.
+interface RunResult {
+  status?: 'running' | 'done' | 'error'
+  startedAt?: string
+  finishedAt?: string
+  base?: string
+  turn?: number
+  turns?: number
+  sessionId?: string
+  passed: number
+  total: number
+  failed?: string[]
+  checks?: { label: string; ok: boolean; detail?: string }[]
+  transcript?: { user: string; ai: string }[]
+  final?: Record<string, unknown>
+  error?: string
+  runBy?: string
 }
 
 const STATUS_CLASS: Record<CaseStatus, string> = {
@@ -68,6 +87,26 @@ export default function AdminReplayCasesPage() {
   }
   useEffect(() => { load() }, [])
 
+  // While any case is running, poll every 3s so the row shows live progress.
+  const anyRunning = cases.some(c => c.lastRunResult?.status === 'running')
+  useEffect(() => {
+    if (!anyRunning) return
+    const t = setInterval(load, 3000)
+    return () => clearInterval(t)
+  }, [anyRunning])
+
+  // ▶ Run — the server replays the case (real AI calls, cents per run).
+  async function run(c: ReplayCase) {
+    setBusyId(c.id); setError(null)
+    try {
+      const res = await adminApi.runReplayCase(c.id)
+      setCases(cs => cs.map(x => x.id === c.id ? { ...x, ...res.data } : x))
+      setOpenId(c.id)
+    } catch (e: any) {
+      setError(e?.response?.data?.error ?? e?.response?.data?.message ?? 'Could not start the run.')
+    } finally { setBusyId(null) }
+  }
+
   async function setStatus(c: ReplayCase, status: CaseStatus) {
     if (status === c.status) return
     setBusyId(c.id); setError(null)
@@ -101,7 +140,7 @@ export default function AdminReplayCasesPage() {
         <div>
           <h1 className="text-xl font-medium text-gray-900">Replay Cases</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Real conversations saved from the <Link to="/admin/session-inspector" className="text-[#1F6F8B] hover:underline">Session Inspector</Link> and re-run against the planner. Run one with <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">npm run replay -- --case &lt;name&gt;</code> (add <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">--base https://roamready.ai</code> for prod).
+            Real conversations saved from the <Link to="/admin/session-inspector" className="text-[#1F6F8B] hover:underline">Session Inspector</Link> and re-run against the planner. <span className="font-medium text-gray-700">Run</span> replays a case right here as your account (real AI calls — a few cents each); the same run is available from the repo with <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">npm run replay -- --case &lt;name&gt;</code>.
           </p>
         </div>
         <div className="flex gap-1.5">
@@ -134,13 +173,15 @@ export default function AdminReplayCasesPage() {
           {shown.map(c => {
             const open = openId === c.id
             const lr = c.lastRunResult
+            const isRunning = lr?.status === 'running'
             const lastOk = lr ? lr.total > 0 && lr.passed === lr.total : null
             return (
               <div key={c.id} className="card p-0 overflow-hidden">
+                <div className="flex items-stretch">
                 <button
                   type="button"
                   onClick={() => setOpenId(open ? null : c.id)}
-                  className="w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-gray-50"
+                  className="flex-1 min-w-0 text-left px-4 py-3 flex items-start gap-3 hover:bg-gray-50"
                 >
                   <span className="mt-0.5 text-gray-400">{open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
                   <div className="min-w-0 flex-1">
@@ -154,13 +195,32 @@ export default function AdminReplayCasesPage() {
                   </div>
                   <div className="text-right text-xs text-gray-500 flex-shrink-0">
                     <p>Saved {fmt(c.createdAt)}</p>
-                    {lr ? (
-                      <p className={`flex items-center justify-end gap-1 ${lastOk ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {lastOk ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />} {lr.passed}/{lr.total} · {fmt(c.lastRunAt)}
+                    {isRunning ? (
+                      <p className="flex items-center justify-end gap-1 text-[#1F6F8B]">
+                        <Loader2 size={12} className="animate-spin" /> Running… turn {lr?.turn ?? 0} of {lr?.turns ?? c.turns.length}
+                      </p>
+                    ) : lr?.status === 'error' ? (
+                      <p className="flex items-center justify-end gap-1 text-red-600"><AlertTriangle size={12} /> run failed · {fmt(c.lastRunAt)}</p>
+                    ) : lr ? (
+                      <p className={`flex items-center justify-end gap-1 ${lr.total === 0 ? 'text-gray-500' : lastOk ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {lr.total === 0 ? null : lastOk ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />} {lr.total === 0 ? 'ran, no checks' : `${lr.passed}/${lr.total}`} · {fmt(c.lastRunAt)}
                       </p>
                     ) : <p className="text-gray-400">never run</p>}
                   </div>
                 </button>
+                {/* ▶ Run lives outside the expand button so clicking it never toggles the row. */}
+                <div className="flex items-center pr-4 pl-1">
+                  <button
+                    type="button"
+                    onClick={() => run(c)}
+                    disabled={isRunning || busyId === c.id}
+                    title={isRunning ? 'Already running' : 'Run this case now (real AI calls — a few cents)'}
+                    className="btn-primary text-xs flex items-center gap-1.5 flex-shrink-0 disabled:opacity-50"
+                  >
+                    {isRunning ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />} {isRunning ? 'Running' : 'Run'}
+                  </button>
+                </div>
+                </div>
 
                 {open && (
                   <div className="border-t border-gray-100 px-4 py-3 space-y-3 bg-gray-50/60">
@@ -220,16 +280,46 @@ export default function AdminReplayCasesPage() {
                         ))}
                       </ol>
                     </div>
-                    {lr && lr.failed && lr.failed.length > 0 && (
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wide text-gray-400">Last run — failed checks{lr.base ? ` (${lr.base})` : ''}</p>
-                        <ul className="mt-1 space-y-0.5">
-                          {lr.failed.map((f, i) => <li key={i} className="text-sm text-red-700">✗ {f}</li>)}
-                        </ul>
+                    {lr && (
+                      <div className="border-t border-gray-200 pt-3 space-y-3">
+                        <p className="text-[10px] uppercase tracking-wide text-gray-400">
+                          Last run — {isRunning ? 'in progress' : lr.status === 'error' ? 'failed' : 'finished'} · started {fmt(lr.startedAt ?? c.lastRunAt)}{lr.runBy ? ` by ${lr.runBy}` : ''}{lr.base && lr.base !== 'server' ? ` (${lr.base})` : ''}
+                        </p>
+                        {lr.error && <p className="text-sm text-red-700">{lr.error}</p>}
+                        {lr.checks && lr.checks.length > 0 ? (
+                          <ul className="space-y-0.5">
+                            {lr.checks.map((k, i) => (
+                              <li key={i} className={`text-sm ${k.ok ? 'text-emerald-700' : 'text-red-700'}`}>{k.ok ? '✓' : '✗'} {k.label}{k.detail ? <span className="text-gray-500"> — {k.detail}</span> : null}</li>
+                            ))}
+                          </ul>
+                        ) : lr.failed && lr.failed.length > 0 ? (
+                          <ul className="space-y-0.5">{lr.failed.map((f, i) => <li key={i} className="text-sm text-red-700">✗ {f}</li>)}</ul>
+                        ) : !isRunning && lr.status !== 'error' ? (
+                          <p className="text-sm text-gray-500">No <code>expect</code> checks on this case yet — it replayed and recorded the replies below, but nothing was judged.</p>
+                        ) : null}
+                        {lr.final && (
+                          <p className="text-xs text-gray-500">Final: requested {String(lr.final.requestedNights ?? '?')} nights · built {String(lr.final.builtNights ?? '-')} nights · {String(lr.final.stops ?? '-')} stops · drive cap {String(lr.final.driveCap ?? 'profile')}</p>
+                        )}
+                        {lr.transcript && lr.transcript.length > 0 && (
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wide text-gray-400">Transcript</p>
+                            <ol className="mt-1 space-y-2">
+                              {lr.transcript.map((t, i) => (
+                                <li key={i} className="text-sm">
+                                  <p className="text-gray-900"><span className="text-gray-400 mr-1">{i + 1}.</span><span className="font-medium">You:</span> {t.user}</p>
+                                  <p className="text-gray-700 whitespace-pre-wrap pl-5"><span className="font-medium text-[#1F6F8B]">AI:</span> {t.ai}</p>
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                        )}
+                        {lr.sessionId && (
+                          <Link to={`/admin/session-inspector?sessionId=${encodeURIComponent(lr.sessionId)}`} className="text-xs text-[#1F6F8B] hover:underline">Open the run's session in the inspector →</Link>
+                        )}
                       </div>
                     )}
                     <p className="text-[11px] text-gray-400">
-                      Session {c.sourceSessionId ?? '—'} · saved by {c.createdByEmail ?? '—'}. Checks (<code>expect</code>) are edited via Copy JSON → file for now; a saved case with no checks still replays and prints every reply.
+                      Source session {c.sourceSessionId ?? '—'} · saved by {c.createdByEmail ?? '—'}. Checks (<code>expect</code>) are edited via Copy JSON → file for now.
                     </p>
                   </div>
                 )}
