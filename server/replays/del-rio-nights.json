@@ -3,7 +3,7 @@
   "source": {
     "sessionId": "cmtkgb1zu0002q72dprt6b858",
     "capturedAt": "2026-09-02",
-    "note": "Feedback 'Trip days total exceeded': 4-stop trip to Del Rio, 2 nights asked; canned minimum repeated verbatim on pushback; agreed 3 nights then built 4 (drive-limit insert) and silently dropped a stop. Expected after FEAT-PLANNER-FACTS: ask for length before building; explain the minimum with real hours on pushback; flag 4 stops vs 3 nights instead of dropping a stop; build only once it fits."
+    "note": "Feedback 'Trip days total exceeded': 4-stop trip to Del Rio, 2 nights asked. Correct behaviour: state a real Friday for 'this Friday'; ask for length before building; explain the minimum with the measured hours on pushback; 'do it in 2' is pushback, not consent to longer days — ask which option, don't build; restate the nights split exactly as measured; never quietly drop a stop; build only once it fits."
   },
   "setup": {
     "rigId": null,
@@ -13,7 +13,8 @@
     {
       "user": "Create a four stop trip to Del Rio Texas to 504 Edna St. starting on Friday this Friday",
       "expect": {
-        "noItinerary": true
+        "noItinerary": true,
+        "statesWeekday": "Friday"
       }
     },
     {
@@ -43,7 +44,7 @@
         "noItinerary": true,
         "notRepeatOfPrev": true,
         "mustMention": [
-          "hour|drive|stop"
+          "hour|drive|stop|closer|which"
         ]
       }
     },
@@ -51,7 +52,8 @@
       "user": "Ok 3",
       "expect": {
         "mustNotMention": [
-          "Saragosa"
+          "Saragosa",
+          "1 night on the road|one night on the road"
         ]
       }
     },
@@ -62,6 +64,6 @@
   ],
   "final": {
     "builtNightsLteRequested": true,
-    "maxStops": 3
+    "minStops": 3
   }
 }

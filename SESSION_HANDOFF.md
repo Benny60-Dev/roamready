@@ -11,7 +11,6 @@
 - PR-6 — **Missing camping cost line** — a 6-night trip priced 5 nights; the Tonalea overnight had no camping line (OPEN)
 - PR-7 — **Off-route hazard warning** — Moki Dugway (UT-261) warned on a US-160 → US-191 route (OPEN)
 - PR-10 — **PDF export "click gives no feedback"** (OPEN — verify as a gating bug)
-- BUG-THIS-FRIDAY — **"this Friday" resolves to the wrong date** — replays on Wed 2026-09-02 mostly produced "Friday, September 6th, 2026" (a Sunday); once the correct Sept 4 (OPEN — date resolution)
 - PLANNER-WATCH-1 — **Planner still claims drive-limit compliance / builds a 0-night stop** (post FEAT-PLANNER-FACTS watch list) (OPEN — watch; prompt nudge if it recurs)
 - FEAT-PDF-ROUTE-LINE — **PDF cover map traces the measured route** — today it connects stop pins with straight lines (OPEN — backlog (Benny asked 2026-09-02))
 - BOOKING-PILLS-INV — **Booking-pill CTA inventory** — wording/affordance refinement of the booking pills/CTAs (OPEN — backlog (scouted, not built))
@@ -48,6 +47,7 @@
 - FEAT-REPLAY-CASES — **Replay cases — saved from the Session Inspector, run by name, results written back**
 - FEAT-PLANNER-FACTS — **Planner facts — the app measures, the AI talks** (feedback "Trip days total exceeded")
 - BUG-ORIGIN-ASK-MARKDOWN — **"I couldn't find that location" after answering a nights question with a number**
+- BUG-THIS-FRIDAY — **"this Friday" resolves to the wrong date** — replays on Wed 2026-09-02 mostly produced "Friday, September 6th, 2026" (a Sunday); once the correct Sept 4
 - LVR-PROD — **"RV-safe routing absent" (review gap table)** — it is LIVE
 - FIX-WEATHER-HINT — **Live forecast looked missing** — historical-averages card never said why
 - FIX-CAMPGROUND-PROXIMITY — **Review #1 critical** — Tonalea, AZ recommended Coon Bluff Rec Area, 200 mi south in Mesa

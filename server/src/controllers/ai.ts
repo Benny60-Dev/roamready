@@ -973,7 +973,7 @@ function buildBudgetConflictAsk(destName: string, minNeeded: number, requestedNi
 
 export async function chat(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { messages, tripId, sessionId, context, rigId, adHocVehicle } = req.body
+    const { messages, tripId, sessionId, context, rigId, adHocVehicle, tz } = req.body
     if (!messages || !Array.isArray(messages)) throw new AppError('Messages required', 400)
 
     // Daily cap for non-paying, non-trial accounts. Quiet cost protection.
@@ -1421,7 +1421,8 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       }
     }
 
-    const aiCtx = { userId, sessionId: sessionId ?? null, tripId: tripId ?? null }
+    // BUG-THIS-FRIDAY — the client's IANA timezone feeds the CALENDAR block.
+    const aiCtx = { userId, sessionId: sessionId ?? null, tripId: tripId ?? null, tz: typeof tz === 'string' && tz.length <= 64 ? tz : null }
     // SCOPE-GUARD-2 — opening turn of a NEW planning session: not modify, and no
     // assistant reply exists yet in the history. Biases the scope-guard toward
     // trip-intent so a terse opener ("[Place] and back") is planned, not refused.

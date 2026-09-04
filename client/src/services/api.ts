@@ -303,7 +303,7 @@ export const aiApi = {
     context?: string,
     sessionId?: string,
     rig?: { rigId?: string | null; adHocVehicle?: { year?: number; make?: string; model?: string; length?: number } },
-  ) => api.post('/ai/chat', { messages, tripId, context, sessionId, ...(rig ?? {}) }),
+  ) => api.post('/ai/chat', { messages, tripId, context, sessionId, tz: localTz(), ...(rig ?? {}) }),
   getChatHistory: (tripId: string) => api.get(`/ai/chat/${tripId}/history`),
   getModifyHistory: (tripId: string) => api.get(`/ai/chat/${tripId}/modify-history`),
   generatePackingList: (tripId: string) => api.post('/ai/generate-packing-list', { tripId }),
@@ -397,6 +397,12 @@ export const notificationsApi = {
 }
 
 // Admin
+// BUG-THIS-FRIDAY — the user's timezone so the planner's calendar (today,
+// weekdays) is theirs, not the server's UTC day.
+function localTz(): string | undefined {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone } catch { return undefined }
+}
+
 export const adminApi = {
   getMetrics: () => api.get('/admin/metrics'),
   getSubscribers: (params?: { status?: 'active' | 'suspended' | 'all' }) =>
