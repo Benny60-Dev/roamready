@@ -31,7 +31,9 @@ export function CopyIcon({ value, title }: { value: string; title?: string }) {
 
 // "Copy for support" — copies a multi-line labeled block, briefly showing a
 // "Copied" state. Styled as a small btn-outline to match the app.
-export function CopyForSupport({ text, label = 'Copy for support' }: { text: string; label?: string }) {
+// `primary` renders it as a yellow btn-primary (an action, not a link) — the
+// outline style read as an empty/disabled control in the Session Inspector.
+export function CopyForSupport({ text, label = 'Copy for support', primary = false }: { text: string; label?: string; primary?: boolean }) {
   const [copied, setCopied] = useState(false)
   return (
     <button
@@ -43,7 +45,7 @@ export function CopyForSupport({ text, label = 'Copy for support' }: { text: str
           setTimeout(() => setCopied(false), 1500)
         } catch { /* clipboard unavailable — no-op */ }
       }}
-      className="btn-outline text-xs flex items-center gap-1.5 flex-shrink-0"
+      className={`${primary ? 'btn-primary' : 'btn-outline'} text-xs flex items-center gap-1.5 flex-shrink-0`}
     >
       {copied
         ? <><Check size={13} className="text-emerald-600" /> Copied</>

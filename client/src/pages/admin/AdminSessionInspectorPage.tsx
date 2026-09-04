@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
-import { Search, AlertTriangle, User as UserIcon, ChevronLeft } from 'lucide-react'
+import { Search, AlertTriangle, User as UserIcon, ChevronLeft, Repeat, Bookmark } from 'lucide-react'
 import { adminApi } from '../../services/api'
 import { parseTripDate } from '../../utils/dates'
 import { CopyIcon, CopyForSupport } from '../../components/admin/Copy'
@@ -613,9 +613,12 @@ export default function AdminSessionInspectorPage() {
                       </div>
                     )}
                   </div>
+                  {/* Actions are YELLOW (things you press); the case list is a
+                      blue link. Both were outline before and read as disabled. */}
                   <div className="flex flex-wrap gap-1.5">
-                    <CopyForSupport text={sessionSupportText()} />
+                    <CopyForSupport text={sessionSupportText()} primary />
                     <SaveReplayCaseButton draft={sessionReplayDraft()} />
+                    <ReplayCasesLink />
                   </div>
                 </div>
                 <div>
@@ -854,9 +857,9 @@ function SaveReplayCaseButton({ draft }: { draft: any }) {
         onClick={() => setOpen(o => !o)}
         disabled={turns === 0}
         title={turns === 0 ? 'No user turns to replay' : 'Save this conversation as a replay case'}
-        className="btn-outline text-xs flex items-center gap-1.5 flex-shrink-0 disabled:opacity-50"
+        className="btn-primary text-xs flex items-center gap-1.5 flex-shrink-0 disabled:opacity-50"
       >
-        <Search size={13} /> Save as replay case
+        <Bookmark size={13} /> Save as replay case
       </button>
       {open && (
         <div className="mt-2 space-y-2 border border-gray-200 rounded-lg p-2.5 bg-gray-50">
@@ -889,5 +892,21 @@ function SaveReplayCaseButton({ draft }: { draft: any }) {
         </div>
       )}
     </div>
+  )
+}
+
+// Link to the saved cases with a live count of OPEN ones — so the list is one
+// click from the place cases are created. Count is best-effort (hidden on error).
+function ReplayCasesLink() {
+  const [count, setCount] = useState<number | null>(null)
+  useEffect(() => {
+    adminApi.listReplayCases()
+      .then(res => setCount(Array.isArray(res.data) ? res.data.filter((c: any) => c.status === 'OPEN').length : null))
+      .catch(() => setCount(null))
+  }, [])
+  return (
+    <Link to="/admin/replay-cases" className="btn-secondary text-xs flex items-center gap-1.5 flex-shrink-0">
+      <Repeat size={13} /> Replay cases{count != null ? ` (${count} open)` : ''}
+    </Link>
   )
 }
