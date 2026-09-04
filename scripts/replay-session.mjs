@@ -9,10 +9,11 @@
 //   npm run replay -- --list                         (open + passing cases on the site)
 //   npm run replay -- --case del-rio-nights --base https://roamready.ai   (run a saved case against prod)
 //
-// --case fetches the case from /admin/replay-cases/<name> on --base (owner
-// login), runs it exactly like a file, then writes the result back (lastRun)
-// so the admin Replay Cases page shows it. An OPEN case whose checks all pass
-// flips to PASSING; a PASSING case that fails again reopens.
+// --case asks the SERVER on --base to run the saved case (the same runner as
+// the admin page's ▶ Run button — services/replayRunner.ts), polls until it
+// finishes, and prints the transcript + checks. The result is stored on the
+// case (lastRun) so the admin Replay Cases page shows it. An OPEN case whose
+// checks all pass flips to PASSING; a PASSING case that fails again reopens.
 //
 // Sign-in, in order of preference:
 //   1. $env:TOKEN (from get-token.ps1) — nothing else needed.
@@ -95,32 +96,41 @@ async function main() {
     return 0
   }
 
-  // Source: a file, or a saved case fetched by name from the site.
-  let replay, savedCase = null
+  // --case: ask the SERVER to run the saved case (services/replayRunner.ts) and
+  // poll until it finishes — one runner, the same one the admin page's Run
+  // button uses. The transcript + checks come back in lastRunResult.
   if (caseName) {
     const r = await fetch(`${api}/admin/replay-cases/${encodeURIComponent(caseName)}`, { headers: H })
     if (r.status === 404) { console.error(`No replay case "${caseName}" on ${base}. \`npm run replay -- --list\` shows what exists.`); return 2 }
     if (!r.ok) { console.error(`GET /admin/replay-cases/${caseName} → ${r.status} (owner login required)`); return 2 }
-    savedCase = await r.json()
-    replay = {
-      name: savedCase.name,
-      source: { sessionId: savedCase.sourceSessionId, note: savedCase.note },
-      setup: savedCase.setup ?? {},
-      turns: savedCase.turns ?? [],
-      final: savedCase.final ?? {},
+    const c = await r.json()
+    console.log(`\n=== Replay case: ${c.name} (${c.status}) on ${base} ===\n    ${c.note}\n`)
+    const start = await fetch(`${api}/admin/replay-cases/${c.id}/run`, { method: 'POST', headers: H })
+    if (start.status === 409) console.log('    already running — attaching to that run')
+    else if (!start.ok) { console.error(`POST run → ${start.status}: ${(await start.text()).slice(0, 300)}`); return 2 }
+    let printed = 0, last = null
+    for (;;) {
+      await new Promise(res => setTimeout(res, 3000))
+      const g = await fetch(`${api}/admin/replay-cases/${c.id}`, { headers: H })
+      if (!g.ok) { console.error(`poll → ${g.status}`); return 2 }
+      last = await g.json()
+      const lr = last.lastRunResult ?? {}
+      const tr = lr.transcript ?? []
+      for (; printed < tr.length; printed++) {
+        console.log(`--- turn ${printed + 1} · USER: ${tr[printed].user}`)
+        console.log(`    AI: ${tr[printed].ai}\n`)
+      }
+      if (lr.status !== 'running') break
     }
-  } else {
-    replay = JSON.parse(readFileSync(resolve(file), 'utf8'))
+    const lr = last.lastRunResult ?? {}
+    if (lr.status === 'error') { console.error(`run failed: ${lr.error}`); return 1 }
+    for (const k of lr.checks ?? []) console.log(`  ${k.ok ? 'PASS' : 'FAIL'}  ${k.label}${k.detail ? ' — ' + k.detail : ''}`)
+    if (lr.final) console.log(`--- final: requestedNights=${lr.final.requestedNights ?? '?'} builtNights=${lr.final.builtNights ?? '-'} stops=${lr.final.stops ?? '-'} driveCap=${lr.final.driveCap ?? 'profile'}`)
+    console.log(`\n=== ${lr.passed}/${lr.total} checks passed — status ${last.status}${lr.total === 0 ? ' (no expect checks yet — add some to make this a real test)' : ''} ===\n`)
+    return lr.total > 0 && lr.passed < lr.total ? 1 : 0
   }
 
-  async function call(method, path, body) {
-    const r = await fetch(api + path, { method, headers: H, body: body ? JSON.stringify(body) : undefined })
-    const text = await r.text()
-    let data = null
-    try { data = text ? JSON.parse(text) : null } catch { data = text }
-    if (!r.ok) throw new Error(`${method} ${path} → ${r.status}: ${typeof data === 'string' ? data : JSON.stringify(data)}`)
-    return data
-  }
+  const replay = JSON.parse(readFileSync(resolve(file), 'utf8'))
 
   const stripItin = s => String(s ?? '').replace(/<itinerary>[\s\S]*?(<\/itinerary>|$)/g, '[itinerary]').trim()
   const hasItin = s => /<itinerary>/.test(String(s ?? ''))
@@ -188,17 +198,6 @@ async function main() {
   const failed = results.filter(r => !r.ok).length
   console.log(`\n=== ${results.length - failed}/${results.length} checks passed ===\n`)
 
-  // Saved case → record the run on the site so the Replay Cases page shows it.
-  if (savedCase) {
-    const lastRun = { passed: results.length - failed, total: results.length, base, failed: results.filter(r => !r.ok).map(r => r.label).slice(0, 50) }
-    const r = await fetch(`${api}/admin/replay-cases/${savedCase.id}`, { method: 'PATCH', headers: H, body: JSON.stringify({ lastRun }) })
-    if (r.ok) {
-      const updated = await r.json()
-      console.log(`recorded on ${base}: ${lastRun.passed}/${lastRun.total}${updated.status !== savedCase.status ? ` — status ${savedCase.status} → ${updated.status}` : ''}${results.length === 0 ? ' (no expect checks yet — add some to make this a real test)' : ''}\n`)
-    } else {
-      console.warn(`could not record the run (${r.status})`)
-    }
-  }
   return failed ? 1 : 0
 }
 

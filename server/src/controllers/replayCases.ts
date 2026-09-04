@@ -3,6 +3,7 @@ import { prisma } from '../utils/prisma'
 import { AuthRequest } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
 import type { AdminReplayCaseCreateInput, AdminReplayCaseUpdateInput } from '../schemas/admin'
+import { startReplayRun, isRunning, nextStatusAfterRun } from '../services/replayRunner'
 
 // ── FEAT-REPLAY-CASES (owner-only; mounted on adminRouter) ───────────────────
 // A ReplayCase is a real planning conversation reduced to the user's turns,
@@ -84,10 +85,8 @@ export async function updateReplayCase(req: AuthRequest, res: Response, next: Ne
     if (body.lastRun) {
       data.lastRunAt = new Date()
       data.lastRunResult = body.lastRun
-      const allPassed = body.lastRun.total > 0 && body.lastRun.passed === body.lastRun.total
-      if (allPassed && existing.status === 'OPEN' && !body.status) data.status = 'PASSING'
-      // A PASSING case that fails again is a regression — reopen it.
-      if (!allPassed && existing.status === 'PASSING' && !body.status) data.status = 'OPEN'
+      const next = nextStatusAfterRun(existing.status, body.lastRun.passed, body.lastRun.total)
+      if (next && !body.status) data.status = next
     }
     const row = await rc().update({ where: { id }, data })
     res.json(row)
@@ -102,5 +101,20 @@ export async function deleteReplayCase(req: AuthRequest, res: Response, next: Ne
     await rc().delete({ where: { id } })
     console.info('[replay-case] deleted %s by %s', existing.name, req.user!.email)
     res.status(204).end()
+  } catch (err) { next(err) }
+}
+
+// POST /admin/replay-cases/:id/run — the server runs the case (see
+// services/replayRunner.ts). 202 + the row; progress is polled via GET.
+// 409 while a run for this case is still going.
+export async function runReplayCase(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const id = String(req.params.id)
+    const existing = await rc().findUnique({ where: { id }, select: { id: true, name: true } })
+    if (!existing) throw new AppError('Replay case not found', 404)
+    if (isRunning(id)) throw new AppError('This case is already running', 409)
+    await startReplayRun(id, { id: req.user!.id, email: req.user!.email })
+    const row = await rc().findUnique({ where: { id } })
+    res.status(202).json(row)
   } catch (err) { next(err) }
 }

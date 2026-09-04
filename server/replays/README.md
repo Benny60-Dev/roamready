@@ -6,7 +6,8 @@ changes.
 
 **Saved cases (the normal path).** Admin → Session Inspector → **Save as replay
 case** (asks "What went wrong?"). The case lives in the `ReplayCase` table and
-shows on Admin → Replay Cases. Run it by name; the result is written back:
+shows on Admin → Replay Cases, where **▶ Run** replays it on the server with live
+progress and a saved transcript. The same run from the repo, by name:
 
 ```
 npm run replay -- --list                          # what exists (Open / Passing / Fixed)

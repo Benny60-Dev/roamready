@@ -438,4 +438,6 @@ export const adminApi = {
   updateReplayCase: (id: string, body: { status?: 'OPEN' | 'PASSING' | 'FIXED'; note?: string }) =>
     api.patch(`/admin/replay-cases/${id}`, body),
   deleteReplayCase: (id: string) => api.delete(`/admin/replay-cases/${id}`),
+  // Server-side run (services/replayRunner.ts) — 202, then poll listReplayCases.
+  runReplayCase: (id: string) => api.post(`/admin/replay-cases/${id}/run`),
 }
