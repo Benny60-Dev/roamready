@@ -58,6 +58,35 @@ const fmt = (iso?: string | null) => {
   try { return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) } catch { return String(iso) }
 }
 
+// "Send to Claude" — a ready-to-paste handoff: what the case is, what Benny
+// said went wrong, and the last run's checks/transcript so Claude can start
+// the scout without re-fetching anything. Pasted into the Claude chat.
+function claudeHandoff(c: ReplayCase): string {
+  const lr = c.lastRunResult
+  const lines: string[] = [
+    `Please inspect and repair replay case "${c.name}" (status ${c.status}).`,
+    `What went wrong: ${c.note}`,
+    c.setup?.note ? `Setup: ${c.setup.note}` : '',
+    c.sourceSessionId ? `Source session: ${c.sourceSessionId}${c.sourceUserEmail ? ` (${c.sourceUserEmail})` : ''}` : '',
+    '',
+    'User turns:',
+    ...c.turns.map((t, i) => `${i + 1}. ${t.user}${t.expect && Object.keys(t.expect).length ? `   expect ${JSON.stringify(t.expect)}` : ''}`),
+  ]
+  if (lr && lr.status !== 'running') {
+    lines.push('', `Last run (${fmt(c.lastRunAt)}): ${lr.status === 'error' ? `FAILED — ${lr.error}` : `${lr.passed}/${lr.total} checks`}`)
+    for (const k of lr.checks ?? []) lines.push(`  ${k.ok ? 'PASS' : 'FAIL'}  ${k.label}${k.detail ? ' — ' + k.detail : ''}`)
+    if (lr.final) lines.push(`  final: requested ${String(lr.final.requestedNights ?? '?')} nights, built ${String(lr.final.builtNights ?? '-')} nights, ${String(lr.final.stops ?? '-')} stops, drive cap ${String(lr.final.driveCap ?? 'profile')}`)
+    if (lr.transcript?.length) {
+      lines.push('', 'Transcript:')
+      for (const [i, t] of lr.transcript.entries()) lines.push(`${i + 1}. USER: ${t.user}`, `   AI: ${t.ai}`)
+    }
+  } else {
+    lines.push('', 'Never run yet — run it first (npm run replay -- --case ' + c.name + ') to see the current behaviour.')
+  }
+  lines.push('', 'Add expect checks that define correct behaviour, fix the cause on a branch, re-run until it passes, and tell me what changed.')
+  return lines.filter(l => l !== undefined).join('\n')
+}
+
 // The case as the replay file the script understands — for "Copy JSON" when
 // someone wants to hand-edit expect checks in a file instead.
 function caseJson(c: ReplayCase): string {
@@ -238,6 +267,7 @@ export default function AdminReplayCasesPage() {
                         </button>
                       ))}
                       <span className="flex-1" />
+                      <CopyForSupport text={claudeHandoff(c)} label="Send to Claude" primary />
                       <CopyForSupport text={`npm run replay -- --case ${c.name}`} label="Copy command" />
                       <CopyForSupport text={caseJson(c)} label="Copy JSON" />
                       {c.sourceSessionId && (
@@ -319,7 +349,7 @@ export default function AdminReplayCasesPage() {
                       </div>
                     )}
                     <p className="text-[11px] text-gray-400">
-                      Source session {c.sourceSessionId ?? '—'} · saved by {c.createdByEmail ?? '—'}. Checks (<code>expect</code>) are edited via Copy JSON → file for now.
+                      Source session {c.sourceSessionId ?? '—'} · saved by {c.createdByEmail ?? '—'}. <span className="font-medium">Send to Claude</span> copies a full handoff (note, turns, last run, transcript) — paste it into the Claude chat and say go. Checks (<code>expect</code>) are edited via Copy JSON → file for now.
                     </p>
                   </div>
                 )}
