@@ -1422,9 +1422,11 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             const lastOverBudget = pb?.lastOverBudget ?? null
             const block = buildDriveFactsBlock(driveFacts, factsRequestedNights, requestedStops, lastOverBudget)
             messagesForAI = [{ role: 'system' as const, content: block }, ...messagesForAI]
-            console.log('[AI drive-facts] sessionId=%s %s→%s %dmi %sh cap=%dh min=%d requested=%s stops=%s %s',
+            console.log('[AI drive-facts] sessionId=%s %s→%s %dmi %sh cap=%dh min=%d requested=%s stops=%s roadNights=[%s] %s',
               sessionId, originName, destination, driveFacts.miles, driveFacts.driveHours, capHours, driveFacts.minNights,
-              factsRequestedNights ?? '-', requestedStops ?? '-', cached ? '(cached)' : '(measured)')
+              factsRequestedNights ?? '-', requestedStops ?? '-',
+              (driveFacts.roadNightTowns ?? []).map(t => `${t.name}, ${t.state}`).join(' → ') || 'none',
+              cached ? '(cached)' : '(measured)')
           }
         }
       } catch (e: any) {
