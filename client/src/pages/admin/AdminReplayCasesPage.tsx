@@ -80,8 +80,6 @@ function claudeHandoff(c: ReplayCase): string {
       lines.push('', 'Transcript:')
       for (const [i, t] of lr.transcript.entries()) lines.push(`${i + 1}. USER: ${t.user}`, `   AI: ${t.ai}`)
     }
-  } else {
-    lines.push('', 'Never run yet — run it first (npm run replay -- --case ' + c.name + ') to see the current behaviour.')
   }
   lines.push('', 'Add expect checks that define correct behaviour, fix the cause on a branch, re-run until it passes, and tell me what changed.')
   return lines.filter(l => l !== undefined).join('\n')
@@ -267,7 +265,6 @@ export default function AdminReplayCasesPage() {
                         </button>
                       ))}
                       <span className="flex-1" />
-                      <CopyForSupport text={claudeHandoff(c)} label="Send to Claude" primary />
                       <CopyForSupport text={`npm run replay -- --case ${c.name}`} label="Copy command" />
                       <CopyForSupport text={caseJson(c)} label="Copy JSON" />
                       {c.sourceSessionId && (
@@ -346,10 +343,18 @@ export default function AdminReplayCasesPage() {
                         {lr.sessionId && (
                           <Link to={`/admin/session-inspector?sessionId=${encodeURIComponent(lr.sessionId)}`} className="text-xs text-[#1F6F8B] hover:underline">Open the run's session in the inspector →</Link>
                         )}
+                        {/* Send to Claude only once a run has finished — the handoff
+                            carries this run's transcript + checks. Run → look → send. */}
+                        {lr.status === 'done' && (
+                          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-200">
+                            <CopyForSupport text={claudeHandoff(c)} label="Send to Claude" primary />
+                            <span className="text-xs text-gray-500">Copies this case + run as a handoff — paste it into the Claude chat and say go.</span>
+                          </div>
+                        )}
                       </div>
                     )}
                     <p className="text-[11px] text-gray-400">
-                      Source session {c.sourceSessionId ?? '—'} · saved by {c.createdByEmail ?? '—'}. <span className="font-medium">Send to Claude</span> copies a full handoff (note, turns, last run, transcript) — paste it into the Claude chat and say go. Checks (<code>expect</code>) are edited via Copy JSON → file for now.
+                      Source session {c.sourceSessionId ?? '—'} · saved by {c.createdByEmail ?? '—'}. Checks (<code>expect</code>) are edited via Copy JSON → file for now.
                     </p>
                   </div>
                 )}
