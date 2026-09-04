@@ -948,6 +948,16 @@ function buildDriveFactsBlock(
   } else {
     lines.push('Trip length: not stated yet. Ask for it before building.')
   }
+  // PLANNER-STOP-SPACING — the planner may not estimate leg hours, so it cannot
+  // space stops by itself (it put Tucson 2 h out and left an 11.7 h leg). Name
+  // the towns the engine sleeps in on the core drive; the prompt rule makes them
+  // the overnight stops unless the user named their own.
+  if ((f.roadNightTowns ?? []).length) {
+    const towns = f.roadNightTowns.map(t => `${t.name}${t.state ? `, ${t.state}` : ''}`).join(' → ')
+    lines.push(`ROAD-NIGHT TOWNS (measured): at the ${f.capHours} h limit the overnights on the core drive land at ${towns}${f.roundTrip ? ' (and the same towns in reverse on the way back)' : ''}. Use these as the on-the-road overnight stops — a neighbouring town on the same highway is fine, but never a stop only an hour or two out that leaves the next leg far over the limit. Extra stops the user asked for go along this same route and each takes a night from the total.`)
+  } else if (requestedNights != null || requestedStops != null) {
+    lines.push(`No road nights are needed on the core drive at the ${f.capHours} h limit — any stops the user asked for are destinations along the route, each with at least a night.`)
+  }
   if (requestedStops != null) {
     const note = requestedNights != null && requestedStops > requestedNights
       ? ` That is MORE than the ${requestedNights} night${requestedNights === 1 ? '' : 's'} asked for — ${requestedStops} stops need at least ${requestedStops} nights.`
@@ -1398,7 +1408,8 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
           const roundTrip = hasRoundTripIntent(userMsgs, [originName])
           const capHours = deriveCapHours(user?.travelProfile, tripDriveCap)
           const key = `${originName}|${destination}|${roundTrip ? 'RT' : 'OW'}|${capHours}`
-          const cached = pb?.driveFacts && pb.driveFacts.key === key ? (pb.driveFacts.facts as DriveFacts) : null
+          // Facts cached before PLANNER-STOP-SPACING have no roadNightTowns → recompute once.
+          const cached = pb?.driveFacts && pb.driveFacts.key === key && Array.isArray(pb.driveFacts.facts?.roadNightTowns) ? (pb.driveFacts.facts as DriveFacts) : null
           driveFacts = cached ?? await computeDriveFacts(
             originName, destination, roundTrip, capHours, process.env.GOOGLE_MAPS_API_KEY,
             rigDimsFromRig(userProfile.rigs?.[0] as any),

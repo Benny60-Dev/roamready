@@ -1750,6 +1750,10 @@ export interface DriveFacts {
   driveHours: number          // origin → destination, one way
   oneWayTransitNights: number // overnights the cap forces on the core leg, one way
   minNights: number           // 1 + transit (×2 for a round trip)
+  /** The towns the engine would sleep in on the core drive at this cap, in
+   *  route order (PLANNER-STOP-SPACING: the planner cannot estimate leg hours,
+   *  so the app names WHERE the road nights land). */
+  roadNightTowns: { name: string; state: string }[]
 }
 export async function computeDriveFacts(
   originName: string,
@@ -1767,12 +1771,14 @@ export async function computeDriveFacts(
     const { inserts } = await planTransitInserts([origin, dest], capHours, apiKey, rigDims)
     const oneWayTransitNights = inserts.reduce((n, ins) => n + ins.towns.length, 0)
     const minNights = 1 + oneWayTransitNights * (roundTrip ? 2 : 1)
+    const roadNightTowns = inserts.flatMap(ins => ins.towns.map(t => ({ name: t.locationName, state: t.locationState })))
     return {
       originName, destName, roundTrip, capHours,
       miles: Math.round(detail.distanceMeters / 1609.34),
       driveHours: Math.round((detail.durationSec / 3600) * 10) / 10,
       oneWayTransitNights,
       minNights,
+      roadNightTowns,
     }
   } catch (e: any) {
     console.warn('[computeDriveFacts] failed (no facts this turn): %s', e?.message ?? e)
