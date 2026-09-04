@@ -40,7 +40,8 @@
 //   ],
 //   "final": { "builtNightsLteRequested": true, "minStops": 4 }
 // }
-// Turn checks: noItinerary | itinerary | notRepeatOfPrev | mustMention[regex] | mustNotMention[regex]
+// Turn checks: noItinerary | itinerary | notRepeatOfPrev | mustMention[regex] | mustNotMention[regex] | statesWeekday "Friday"
+//   npm run replay -- --push server/replays/<case>.json     (copy the file's turns/expect/final/note onto the SAVED case of the same name)
 // Final checks: builtNightsLteRequested | builtNightsEq N | minStops N | maxStops N
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
@@ -49,10 +50,11 @@ import { fileURLToPath } from 'node:url'
 const args = process.argv.slice(2)
 const flagVal = f => (args.includes(f) ? args[args.indexOf(f) + 1] : undefined)
 const caseName = flagVal('--case')
+const pushFile = flagVal('--push')
 const listOnly = args.includes('--list')
-const positional = args.filter((a, i) => !a.startsWith('--') && !['--base', '--case'].includes(args[i - 1]))
+const positional = args.filter((a, i) => !a.startsWith('--') && !['--base', '--case', '--push'].includes(args[i - 1]))
 const file = positional[0]
-if (!file && !caseName && !listOnly) { console.error('usage: npm run replay -- <replay.json> | --case <name> | --list  [--base URL] [--verbose]'); process.exit(2) }
+if (!file && !caseName && !listOnly && !pushFile) { console.error('usage: npm run replay -- <replay.json> | --case <name> | --push <replay.json> | --list  [--base URL] [--verbose]'); process.exit(2) }
 // Everything runs inside main() and returns an exit code — a bare process.exit()
 // while a fetch handle is still closing trips a libuv assertion on Windows
 // ("!(handle->flags & UV_HANDLE_CLOSING)"). exitCode lets Node drain first.
@@ -93,6 +95,22 @@ async function main() {
       const lr = c.lastRunResult ? `${c.lastRunResult.passed}/${c.lastRunResult.total} on ${String(c.lastRunAt).slice(0, 10)}` : 'never run'
       console.log(`${c.status.padEnd(7)}  ${c.name.padEnd(32)}  ${c.turns.length} turns  last run ${lr}\n         ${c.note}`)
     }
+    return 0
+  }
+
+  // --push: copy a file's turns / expect / final / note onto the saved case of
+  // the same name — how checks get onto a saved case until the page can edit them.
+  if (pushFile) {
+    const f = JSON.parse(readFileSync(resolve(pushFile), 'utf8'))
+    const r = await fetch(`${api}/admin/replay-cases/${encodeURIComponent(f.name)}`, { headers: H })
+    if (r.status === 404) { console.error(`No saved case named "${f.name}" — save it from the Session Inspector first.`); return 2 }
+    if (!r.ok) { console.error(`GET case → ${r.status}`); return 2 }
+    const c = await r.json()
+    const body = { turns: f.turns, final: f.final ?? {}, ...(f.source?.note ? { note: f.source.note } : {}) }
+    const u = await fetch(`${api}/admin/replay-cases/${c.id}`, { method: 'PATCH', headers: H, body: JSON.stringify(body) })
+    if (!u.ok) { console.error(`PATCH → ${u.status}: ${(await u.text()).slice(0, 300)}`); return 2 }
+    const nChecks = f.turns.reduce((n, t) => n + Object.keys(t.expect ?? {}).length, 0) + Object.keys(f.final ?? {}).length
+    console.log(`updated saved case "${f.name}": ${f.turns.length} turns, ${nChecks} checks. Run it: npm run replay -- --case ${f.name}`)
     return 0
   }
 
@@ -179,6 +197,12 @@ async function main() {
     }
     for (const rx of e.mustMention ?? []) check(`turn ${i + 1}: mentions /${rx}/i`, new RegExp(rx, 'i').test(reply))
     for (const rx of e.mustNotMention ?? []) check(`turn ${i + 1}: does not mention /${rx}/i`, !new RegExp(rx, 'i').test(reply))
+    if (typeof e.statesWeekday === 'string') {
+      const m = reply.match(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})\b/i)
+      const months = ['january','february','march','april','may','june','july','august','september','october','november','december']
+      const wd = m ? ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date(Date.UTC(+m[3], months.indexOf(m[1].toLowerCase()), +m[2])).getUTCDay()] : null
+      check(`turn ${i + 1}: stated date falls on a ${e.statesWeekday}`, wd != null && wd.toLowerCase() === e.statesWeekday.toLowerCase(), m ? `${m[0]} is a ${wd}` : 'no full date stated')
+    }
     prevReply = reply
   }
 

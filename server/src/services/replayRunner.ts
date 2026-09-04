@@ -53,6 +53,17 @@ function similar(a: unknown, b: unknown): number {
   return inter / (A.size + B.size - inter)
 }
 
+// statesWeekday check (BUG-THIS-FRIDAY): the FIRST fully-stated date in the
+// reply ("September 6th, 2026") must fall on the named weekday. Date-agnostic,
+// so the case stays valid whenever it is re-run.
+const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december']
+export function firstStatedDate(text: string): { raw: string; weekday: string } | null {
+  const m = String(text ?? '').match(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})\b/i)
+  if (!m) return null
+  const d = new Date(Date.UTC(Number(m[3]), MONTHS.indexOf(m[1].toLowerCase()), Number(m[2])))
+  return { raw: m[0], weekday: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getUTCDay()] }
+}
+
 // Status lifecycle shared with the PATCH path: OPEN → PASSING when ≥1 check and
 // all pass; PASSING → OPEN on a regression; FIXED is Benny's and never auto-moves.
 export function nextStatusAfterRun(current: string, passed: number, total: number): string | undefined {
@@ -126,6 +137,10 @@ export async function startReplayRun(caseId: string, owner: { id: string; email:
         }
         for (const rx of e.mustMention ?? []) check(`turn ${i + 1}: mentions /${rx}/i`, new RegExp(rx, 'i').test(reply))
         for (const rx of e.mustNotMention ?? []) check(`turn ${i + 1}: does not mention /${rx}/i`, !new RegExp(rx, 'i').test(reply))
+        if (typeof e.statesWeekday === 'string') {
+          const d = firstStatedDate(reply)
+          check(`turn ${i + 1}: stated date falls on a ${e.statesWeekday}`, !!d && d.weekday.toLowerCase() === e.statesWeekday.toLowerCase(), d ? `${d.raw} is a ${d.weekday}` : 'no full date stated')
+        }
         prevReply = reply
 
         result.turn = i + 1
