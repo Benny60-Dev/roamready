@@ -478,6 +478,17 @@
       "whatRemains": "Local: migrate deploy + generate + restart, then click Run on del-rio-nights and watch it. Prod: Render pre-deploy applies the migration. Next: edit `expect` checks in the page (today: Copy JSON → file)."
     },
     {
+      "id": "GRACE-DAY-COUNT",
+      "title": "**Drive-day count uses cap + grace** — the daily limit is a guideline with a give-or-take, not a wall",
+      "status": "DONE",
+      "statusRaw": "**DONE — merged local main (RR69), not pushed**",
+      "severity": null,
+      "category": "review-fixed",
+      "commits": [],
+      "evidence": "Benny 2026-09-05: \"the drive time is a guideline, not set in stone.\" [planLegSplits](server/src/controllers/trips.ts) already kept a single leg as one day up to cap + LEG_GRACE_HOURS (1.0 h) but counted DAYS at the bare cap, so a 12.7 h drive at a 6 h cap became three 4.2 h days and 'two nights to Del Rio' was a fight. Now days = ceil(hours / (cap + grace)) and a placed sub-leg is accepted up to cap + grace + tolerance — two 6.4 h days. Flows into computeDriveFacts (minimum nights, road-night towns) and every transit insert. Same batch: PLANNER-STOP-SPACING (road-night towns in <drive_facts> + rules 8/9), stop-count honesty (rule 4), one-way wording, run results carry the facts + built stops for the Send to Claude handoff.",
+      "whatRemains": "Re-run del-rio-nights: expect min 2 nights now (1 road night), so turn 3's '2' should FIT and build once the 4-stops-vs-2-nights mismatch is answered. Watch a few real trips for transit stops landing later than before."
+    },
+    {
       "id": "FEAT-PLANNER-FACTS",
       "title": "**Planner facts — the app measures, the AI talks** (feedback \"Trip days total exceeded\")",
       "status": "DONE",

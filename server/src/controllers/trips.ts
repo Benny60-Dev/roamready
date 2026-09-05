@@ -1424,12 +1424,17 @@ async function planLegSplits(
       break
     }
 
-    // Even division of the REMAINING route into balanced days, each ≤ cap.
-    let days = Math.ceil(detail.durationSec / capSec)
+    // Even division of the REMAINING route into balanced days, each ≤ cap+GRACE.
+    // GRACE-DAY-COUNT (2026-09-05, Benny): the daily limit is a guideline with a
+    // give-or-take, not a hard wall — a single leg already stays one day up to
+    // cap+grace (above), so the day COUNT uses the same yardstick. A 12.7 h
+    // drive at a 6 h cap is two 6.4 h days, not three 4.2 h days; that is what
+    // makes "2 nights to Del Rio" fit instead of a fight.
+    let days = Math.ceil(detail.durationSec / (capSec + graceSec))
     // MIN_USEFUL floor: prefer fewer, slightly-longer (still-legal) days over a
     // sub-leg that's too short to be worth stopping for.
     while (days > 1 && detail.durationSec / days < minUsefulSec) days--
-    const targetSec = detail.durationSec / days   // ≤ capSec by construction
+    const targetSec = detail.durationSec / days   // ≤ capSec + graceSec by construction
 
     // Place a town ~targetSec into the REAL remaining route. Retry closer if the
     // named town snapped too far (measured frontier→town over cap+tolerance).
@@ -1457,7 +1462,7 @@ async function planLegSplits(
 
       const sub = await fetchLegDetail(frontier, town, apiKey, rigDims)
       if (!sub) { tryTarget *= 0.8; continue }
-      if (sub.durationSec <= capSec + tolSec) {
+      if (sub.durationSec <= capSec + graceSec + tolSec) {
         plan.towns.push(town)
         plan.subLegs.push({ from: frontier.locationName, to: town.locationName, hours: sub.durationSec / 3600, over: false })
         frontier = town
