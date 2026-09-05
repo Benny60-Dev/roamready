@@ -78,6 +78,7 @@ function claudeHandoff(c: ReplayCase): string {
     if (lr.final) {
       lines.push(`  final: requested ${String(lr.final.requestedNights ?? '?')} nights, built ${String(lr.final.builtNights ?? '-')} nights, ${String(lr.final.stops ?? '-')} stops, drive cap ${String(lr.final.driveCap ?? 'profile')}`)
       if (lr.final.builtStops) lines.push(`  built stops: ${String(lr.final.builtStops)}`)
+      if (lr.final.serverStartedAt) lines.push(`  backend started: ${String(lr.final.serverStartedAt)}`)
       const df: any = lr.final.driveFacts
       if (df) lines.push(`  drive facts given to the planner: ${df.miles} mi, ${df.driveHours} h, cap ${df.capHours} h, min ${df.minNights} nights, road-night towns: ${df.roadNightTowns}`)
     }
