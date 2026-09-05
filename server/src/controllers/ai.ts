@@ -1559,7 +1559,18 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
         const tagged = oTag[1].trim()
         if (tagged && !(userProfile as any).capturedOrigin) {
           const cityFirstTok = normTok(tagged.split(',')[0]).split(' ').filter(Boolean)[0] ?? ''
-          if (cityFirstTok && userTokens.has(cityFirstTok)) {
+          // BUG-ORIGIN-STREET-ADDRESS (2026-09-05): "trip to Del Rio Texas to 504
+          // Edna St." → the model tagged <origin>504 Edna St</origin>, "504" passed
+          // the user-token gate, and Google geocoded the bare street to Greater
+          // Sudbury, ON. Two deterministic rejections: (a) a bare street address
+          // (starts with a number, names no city) can never be an origin; (b) text
+          // the user wrote right after "to" is destination phrasing.
+          const userText = messages.filter((m: any) => m.role === 'user').map((m: any) => normTok(m.content)).join(' ')
+          const bareStreet = /^\d+\s+\S+/.test(tagged) && !tagged.includes(',')
+          const afterTo = new RegExp(`\\bto\\s+${normTok(tagged).split(' ').slice(0, 2).join('\\s+')}`).test(userText)
+          if (bareStreet || afterTo) {
+            console.warn('[AI origin-guard] AI <origin> "%s" rejected — %s. sessionId=%s', tagged, bareStreet ? 'bare street address' : 'destination phrasing ("to …")', sessionId ?? '(none)')
+          } else if (cityFirstTok && userTokens.has(cityFirstTok)) {
             const { resolved, origin } = await geocodeOriginText(tagged, process.env.GOOGLE_MAPS_API_KEY)
             if (resolved && origin) {
               ;(userProfile as any).capturedOrigin = origin
@@ -2047,7 +2058,14 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
               // two that matter here before the catch-all strip removes them.
               const capM = retry.match(/<drive_cap>([\s\S]*?)<\/drive_cap>/)
               const capV = capM ? Number(capM[1].trim()) : NaN
-              if (sessionId && Number.isFinite(capV) && capV >= 1 && capV <= 16) {
+              // CAP-CONSENT applies here too: a raise in a reply that still asks is
+              // a proposal, not consent (this path is where the 6.5 h leaked in).
+              const retryText = retry.replace(/<[a-z_][a-zA-Z0-9_]*>[\s\S]*?<\/[a-z_][a-zA-Z0-9_]*>/g, '').trim()
+              const retryAsking = /\?\s*$/.test(retryText)
+              const capNow = deriveCapHours(user?.travelProfile, tripDriveCap)
+              if (sessionId && Number.isFinite(capV) && capV > capNow && retryAsking) {
+                console.log('[AI drive-cap] deferred raise to %sh via renegotiate — reply is still asking (cap in effect %sh)', capV, capNow)
+              } else if (sessionId && Number.isFinite(capV) && capV >= 1 && capV <= 16) {
                 tripDriveCap = capV
                 await mergePartialTripData(sessionId, { driveCapHours: capV }).catch(() => {})
                 console.log('[AI drive-cap] sessionId=%s driveCapHours=%s (planning, via renegotiate)', sessionId, capV)
@@ -2057,7 +2075,8 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
               if (sessionId && Number.isInteger(rnV) && rnV > 0) {
                 await mergePartialTripData(sessionId, { requestedNights: rnV }).catch(() => {})
               }
-              response = retry.replace(/<(?!\/?itinerary\b)([a-z][a-zA-Z0-9]*)>[\s\S]*?<\/\1>/g, '').trim()
+              // Tag names may contain underscores (<drive_cap>) — the old class missed them and leaked the tag to the user.
+              response = retry.replace(/<(?!\/?itinerary\b)([a-z_][a-zA-Z0-9_]*)>[\s\S]*?<\/\1>/g, '').trim()
             } else {
               response = fallback
             }
@@ -2295,9 +2314,9 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
     if (context !== 'modify') {
       response = response
         // matched pairs <name>…</name>, name ≠ itinerary
-        .replace(/<(?!\/?itinerary\b)([a-z][a-zA-Z0-9]*)>[\s\S]*?<\/\1>/g, '')
+        .replace(/<(?!\/?itinerary\b)([a-z_][a-zA-Z0-9_]*)>[\s\S]*?<\/\1>/g, '')
         // any stray opener/closer of the same shape, name ≠ itinerary
-        .replace(/<\/?(?!itinerary\b)[a-z][a-zA-Z0-9]*>/g, '')
+        .replace(/<\/?(?!itinerary\b)[a-z_][a-zA-Z0-9_]*>/g, '')
         .replace(/\n{3,}/g, '\n\n')
         .trim()
     }
