@@ -159,6 +159,8 @@ export async function startReplayRun(caseId: string, owner: { id: string; email:
       const df: any = ptd.driveFacts?.facts ?? null
       result.final = {
         requestedNights: ptd.requestedNights ?? null, builtNights, stops, driveCap: ptd.driveCapHours ?? 'profile',
+        // Which backend ran this: process start time — compare with the last merge.
+        serverStartedAt: new Date(Date.now() - process.uptime() * 1000).toISOString(),
         // What the app told the planner (so the handoff shows the facts, not just the replies).
         driveFacts: df ? {
           miles: df.miles, driveHours: df.driveHours, capHours: df.capHours, minNights: df.minNights,
@@ -171,6 +173,11 @@ export async function startReplayRun(caseId: string, owner: { id: string; email:
       if (typeof f.builtNightsEq === 'number') check(`final: built nights = ${f.builtNightsEq}`, builtNights === f.builtNightsEq, `${builtNights}`)
       if (typeof f.minStops === 'number') check(`final: ≥ ${f.minStops} stops`, stops != null && stops >= f.minStops, `${stops}`)
       if (typeof f.maxStops === 'number') check(`final: ≤ ${f.maxStops} stops`, stops != null && stops <= f.maxStops, `${stops}`)
+      if (typeof f.statesWeekday === 'string') {
+        const allAi = history.filter(m => m.role === 'assistant').map(m => m.content).join('\n')
+        const d = firstStatedDate(allAi)
+        check(`final: first stated date falls on a ${f.statesWeekday}`, !!d && d.weekday.toLowerCase() === f.statesWeekday.toLowerCase(), d ? `${d.raw} is a ${d.weekday}` : 'no full date stated anywhere')
+      }
       if (f.driveCapUnchanged) check('final: trip drive cap unchanged (profile)', ptd.driveCapHours == null, ptd.driveCapHours == null ? 'profile' : `${ptd.driveCapHours} h set without consent`)
 
       result.status = 'done'

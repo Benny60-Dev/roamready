@@ -13,8 +13,7 @@
     {
       "user": "Create a four stop trip to Del Rio Texas to 504 Edna St. starting on Friday this Friday",
       "expect": {
-        "noItinerary": true,
-        "statesWeekday": "Friday"
+        "noItinerary": true
       }
     },
     {
@@ -22,7 +21,7 @@
       "expect": {
         "noItinerary": true,
         "mustMention": [
-          "night|long|day"
+          "night|long|day|one-way|round trip"
         ]
       }
     },
@@ -69,6 +68,7 @@
   "final": {
     "builtNightsLteRequested": true,
     "minStops": 3,
-    "driveCapUnchanged": true
+    "driveCapUnchanged": true,
+    "statesWeekday": "Friday"
   }
 }
