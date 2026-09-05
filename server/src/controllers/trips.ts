@@ -1484,7 +1484,14 @@ async function planLegSplits(
     // named town snapped too far (measured frontier→town over cap+tolerance).
     let placed = false
     let tryTarget = targetSec
-    for (let attempt = 0; attempt < 3; attempt++) {
+    // LAST-SPLIT BALANCE (2026-09-05): when this is the final split (days === 2)
+    // the town's snap can leave the OTHER half over cap+grace (Mesa→Columbus
+    // 5.9 h left Columbus→Del Rio 7.8 h → a third day nobody needed). So on the
+    // last split the remainder is measured too, and an under-length first half
+    // is pushed further along (bounded by cap+grace) before another day is added.
+    const lastSplit = days === 2
+    let best: { town: TransitTown; sub: LegDetail } | null = null
+    for (let attempt = 0; attempt < (lastSplit ? 5 : 3); attempt++) {
       const pt = interpolateSplitPoint(detail, tryTarget)
       if (!pt) break
       // Reverse-geocode the exact point; if it lands in empty wilderness
@@ -1512,6 +1519,17 @@ async function planLegSplits(
       const sub = await fetchLegDetail(frontier, town, apiKey, rigDims)
       if (!sub) { tryTarget *= 0.8; continue }
       if (sub.durationSec <= capSec + graceSec + tolSec) {
+        if (lastSplit) {
+          const rest = await fetchLegDetail(town, to, apiKey, rigDims)
+          const restOver = !!rest && rest.durationSec > capSec + graceSec
+          const roomToPush = sub.durationSec < capSec + graceSec - 15 * 60 && tryTarget < capSec + graceSec
+          if (restOver && roomToPush) {
+            best = best ?? { town, sub }   // keep the first acceptable split as the fallback
+            console.log('[planLegSplits] last split %s→%s: %s leaves %.1fh remainder; pushing the overnight further', frontier.locationName, to.locationName, town.locationName, rest!.durationSec / 3600)
+            tryTarget = Math.min(tryTarget * 1.15, capSec + graceSec)
+            continue
+          }
+        }
         plan.towns.push(town)
         plan.subLegs.push({ from: frontier.locationName, to: town.locationName, hours: sub.durationSec / 3600, over: false })
         frontier = town
@@ -1519,6 +1537,14 @@ async function planLegSplits(
         break
       }
       tryTarget *= 0.8  // overshoot — pull the split closer and retry
+    }
+    if (!placed && best) {
+      // Could not balance both halves — take the first acceptable split; the
+      // loop will add another day for the remainder as before.
+      plan.towns.push(best.town)
+      plan.subLegs.push({ from: frontier.locationName, to: best.town.locationName, hours: best.sub.durationSec / 3600, over: false })
+      frontier = best.town
+      placed = true
     }
 
     if (!placed) {
