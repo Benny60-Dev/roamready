@@ -68,6 +68,7 @@
   ],
   "final": {
     "builtNightsLteRequested": true,
-    "minStops": 3
+    "minStops": 3,
+    "driveCapUnchanged": true
   }
 }

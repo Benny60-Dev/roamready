@@ -1793,7 +1793,17 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       response = response.replace(/<drive_cap>[\s\S]*?<\/drive_cap>/g, '').trim()
       const rawCap = driveCapMatch[1].trim()
       const parsedCap = Number(rawCap)
-      if (Number.isFinite(parsedCap) && parsedCap >= 1 && parsedCap <= 16) {
+      // CAP-CONSENT (2026-09-05): the planner emitted <drive_cap>8.5 in the very
+      // reply that ASKED "are you good with 8.5-hour days?", and the trip kept
+      // the raised cap after the user said "ok 3" instead. A RAISE above the cap
+      // in effect is only honoured when the reply is not still asking — a reply
+      // that ends in a question is a proposal, not consent. Lowering (the user
+      // stating a tighter limit) is always honoured.
+      const capInEffect = deriveCapHours(user?.travelProfile, tripDriveCap)
+      const stillAsking = /\?\s*$/.test(response.replace(/<[^>]+>[\s\S]*?<\/[^>]+>/g, '').trim())
+      if (Number.isFinite(parsedCap) && parsedCap > capInEffect && stillAsking) {
+        console.log('[AI drive-cap] deferred raise to %sh — reply is still asking (cap in effect %sh)', parsedCap, capInEffect)
+      } else if (Number.isFinite(parsedCap) && parsedCap >= 1 && parsedCap <= 16) {
         tripDriveCap = parsedCap
         if (context === 'modify' && tripId && liveTrip) {
           try {
@@ -2126,7 +2136,21 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             const transitNote = buildTransitNote(inserts, transitStops, capHours) ?? ''
             const violationAdvisory = buildViolationAdvisory(legNotices) ?? ''
             const hazardAdvisory = hazardResult.hitCount > 0 ? HAZARD_ADVISORY : ''
-            const note = [transitNote, violationAdvisory, hazardAdvisory].filter(Boolean).join(' ')
+            // STOPS-MISMATCH NOTE (2026-09-05): the planner keeps building fewer
+            // stops than asked without saying so (three runs in a row, rule 4
+            // ignored). The app knows both numbers, so the app says it — unless
+            // the reply already does.
+            let stopsNote = ''
+            try {
+              const askedStops = parseRequestedStops((messages as any[]).filter(m => m?.role === 'user').map(m => String(m?.content ?? '')))
+              const builtStops = splicedStops.filter((st: any) => st.type !== 'HOME' && st.type !== 'OVERNIGHT_ONLY').length
+              const alreadySaid = /(\b\d+|four|three|five|six)\s+stops?\b[^.]*\b(asked|wanted|mentioned|requested)|left out the \w+ stop|(fourth|fifth|extra) stop/i.test(response)
+              if (askedStops != null && builtStops > 0 && builtStops < askedStops && !alreadySaid) {
+                const nightsTotal = (splicedItin as any).totalNights
+                stopsNote = `You asked for ${askedStops} stops; this plan has ${builtStops}${typeof nightsTotal === 'number' ? ` (${nightsTotal} night${nightsTotal === 1 ? '' : 's'} covers ${builtStops})` : ''} — add a night or name a stop to swap and I'll adjust.`
+              }
+            } catch { /* note is best-effort */ }
+            const note = [transitNote, violationAdvisory, hazardAdvisory, stopsNote].filter(Boolean).join(' ')
 
             // Re-serialize the <itinerary> block AND prepend the grounded note to the
             // prose (immediately before the block = the end of the visible reply;

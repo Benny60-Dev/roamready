@@ -171,6 +171,7 @@ export async function startReplayRun(caseId: string, owner: { id: string; email:
       if (typeof f.builtNightsEq === 'number') check(`final: built nights = ${f.builtNightsEq}`, builtNights === f.builtNightsEq, `${builtNights}`)
       if (typeof f.minStops === 'number') check(`final: ≥ ${f.minStops} stops`, stops != null && stops >= f.minStops, `${stops}`)
       if (typeof f.maxStops === 'number') check(`final: ≤ ${f.maxStops} stops`, stops != null && stops <= f.maxStops, `${stops}`)
+      if (f.driveCapUnchanged) check('final: trip drive cap unchanged (profile)', ptd.driveCapHours == null, ptd.driveCapHours == null ? 'profile' : `${ptd.driveCapHours} h set without consent`)
 
       result.status = 'done'
       result.finishedAt = new Date().toISOString()
