@@ -1198,7 +1198,7 @@ async function reverseGeocode(
   lat: number,
   lng: number,
   apiKey: string,
-): Promise<{ city: string; state: string; lat: number; lng: number } | null> {
+): Promise<{ city: string; state: string; country: string | null; lat: number; lng: number } | null> {
   try {
     const res = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
       params: {
@@ -1221,7 +1221,8 @@ async function reverseGeocode(
         has('administrative_area_level_3')?.long_name ||
         has('administrative_area_level_2')?.long_name
       const state = has('administrative_area_level_1')?.short_name
-      if (city && state) return { city, state, lat, lng }
+      const country = has('country')?.short_name ?? null
+      if (city && state) return { city, state, country, lat, lng }
     }
     return null
   } catch (err: any) {
@@ -1251,6 +1252,28 @@ async function stateForCoords(lat: number, lng: number, apiKey: string): Promise
   }
 }
 
+/** Country (short code, e.g. "US") for a coordinate via an unrestricted reverse
+ *  geocode. TRANSIT-TOWN-COUNTRY: a split point near the border at El Paso once
+ *  reverse-geocoded to "CERESO Ninguno, Chih." — a prison in Mexico — and that
+ *  went to the planner as a road-night town. Towns are now kept to the countries
+ *  of the leg's own endpoints. */
+async function countryForCoords(lat: number, lng: number, apiKey: string): Promise<string | null> {
+  try {
+    const res = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
+      params: { latlng: `${lat},${lng}`, key: apiKey },
+      timeout: 5000,
+    })
+    if (res.data.status !== 'OK') return null
+    for (const r of res.data.results ?? []) {
+      const c = (r.address_components || []).find((x: any) => x.types.includes('country'))
+      if (c?.short_name) return c.short_name
+    }
+    return null
+  } catch { return null }
+}
+const townAllowed = (country: string | null, allowed: Set<string> | null) =>
+  !allowed || allowed.size === 0 || (country != null && allowed.has(country))
+
 /**
  * Nearest-real-place fallback for split points that land in empty wilderness
  * (Four Corners / open desert), where strict reverseGeocode returns ZERO_RESULTS
@@ -1264,7 +1287,7 @@ async function stateForCoords(lat: number, lng: number, apiKey: string): Promise
  * result — these are OVERNIGHT_ONLY transit stops. Returns null only when nothing
  * nameable turns up at all (then the caller fails soft).
  */
-async function findNearestTown(lat: number, lng: number, apiKey: string): Promise<TransitTown | null> {
+async function findNearestTown(lat: number, lng: number, apiKey: string, allowed: Set<string> | null = null): Promise<TransitTown | null> {
   const queries: Record<string, string>[] = [
     { type: 'locality' },    // a real town, ideal
     { keyword: 'town' },     // generic town sweep
@@ -1283,11 +1306,16 @@ async function findNearestTown(lat: number, lng: number, apiKey: string): Promis
       const plng = top.geometry.location.lng
       // Prefer a clean city+state from the found place's own coordinates.
       const rg = await reverseGeocode(plat, plng, apiKey)
+      if (rg && !townAllowed(rg.country, allowed)) {
+        console.warn('[findNearestTown] %s,%s → %s, %s is in %s — outside the leg\'s countries, skipped', lat, lng, rg.city, rg.state, rg.country)
+        continue
+      }
       if (rg) {
         console.log('[findNearestTown] %s,%s → %s, %s (via %j → reverse-geocode)', lat, lng, rg.city, rg.state, q)
         return { locationName: rg.city, locationState: rg.state, latitude: rg.lat, longitude: rg.lng }
       }
       // Else use the place's own name + a state lookup on its coords.
+      if (allowed && allowed.size && !townAllowed(await countryForCoords(plat, plng, apiKey), allowed)) continue
       const state = await stateForCoords(plat, plng, apiKey)
       if (top.name && state) {
         console.log('[findNearestTown] %s,%s → %s, %s (via %j place name)', lat, lng, top.name, state, q)
@@ -1383,6 +1411,12 @@ async function planLegSplits(
   const plan: LegPlan = { towns: [], subLegs: [], warnings: [], violationNotes: [] }
   let frontier = from
   let iterations = 0
+  // TRANSIT-TOWN-COUNTRY — only sleep in the countries this leg starts/ends in
+  // (a US→US leg never gets a Mexican "town"). Unknown → no filter (fail soft).
+  const allowedCountries = new Set(
+    (await Promise.all([countryForCoords(from.latitude, from.longitude, apiKey), countryForCoords(to.latitude, to.longitude, apiKey)]))
+      .filter((c): c is string => !!c),
+  )
 
   // Collect a measured leg's HERE restriction notices, collapsing identical
   // strings (distinct ones are kept). Each iteration's `detail` covers
@@ -1448,10 +1482,15 @@ async function planLegSplits(
       // so the split can always be NAMED and therefore inserted.
       let town: TransitTown | null = null
       const rg = await reverseGeocode(pt.lat, pt.lng, apiKey)
+      if (rg && !townAllowed(rg.country, allowedCountries)) {
+        console.warn('[planLegSplits] split point %s,%s → %s, %s is in %s — outside the leg\'s countries; pulling closer', pt.lat, pt.lng, rg.city, rg.state, rg.country)
+        tryTarget *= 0.8
+        continue
+      }
       if (rg) {
         town = { locationName: rg.city, locationState: rg.state, latitude: rg.lat, longitude: rg.lng }
       } else {
-        town = await findNearestTown(pt.lat, pt.lng, apiKey)
+        town = await findNearestTown(pt.lat, pt.lng, apiKey, allowedCountries)
       }
       if (!town) { tryTarget *= 0.8; continue }
       // Don't accept a town that is effectively the frontier or the destination.
