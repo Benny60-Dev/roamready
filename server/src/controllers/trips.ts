@@ -1413,10 +1413,19 @@ async function planLegSplits(
   let iterations = 0
   // TRANSIT-TOWN-COUNTRY — only sleep in the countries this leg starts/ends in
   // (a US→US leg never gets a Mexican "town"). Unknown → no filter (fail soft).
-  const allowedCountries = new Set(
-    (await Promise.all([countryForCoords(from.latitude, from.longitude, apiKey), countryForCoords(to.latitude, to.longitude, apiKey)]))
-      .filter((c): c is string => !!c),
-  )
+  // The facts path (computeDriveFacts) passes name-only endpoints, so fall back
+  // to the measured route's first/last step coordinates for the country lookup.
+  let allowedCountries = new Set<string>()
+  const resolveCountries = async (d: LegDetail) => {
+    const a = Number.isFinite(from.latitude) ? [from.latitude, from.longitude] : [d.steps[0]?.startLat, d.steps[0]?.startLng]
+    const z = Number.isFinite(to.latitude) ? [to.latitude, to.longitude] : [d.steps[d.steps.length - 1]?.endLat, d.steps[d.steps.length - 1]?.endLng]
+    const cs = await Promise.all([
+      Number.isFinite(a[0]) ? countryForCoords(a[0], a[1], apiKey) : null,
+      Number.isFinite(z[0]) ? countryForCoords(z[0], z[1], apiKey) : null,
+    ])
+    allowedCountries = new Set(cs.filter((c): c is string => !!c))
+    if (!allowedCountries.size) plan.warnings.push(`could not resolve endpoint countries for ${from.locationName}→${to.locationName}; town country filter off`)
+  }
 
   // Collect a measured leg's HERE restriction notices, collapsing identical
   // strings (distinct ones are kept). Each iteration's `detail` covers
@@ -1440,6 +1449,7 @@ async function planLegSplits(
       break
     }
     collectNotices(detail)
+    if (iterations === 1) await resolveCountries(detail)
 
     // Fits in one comfortable day (within grace) → final sub-leg, done. This
     // covers both "already short" legs and "barely over" legs (no stub split).

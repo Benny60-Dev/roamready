@@ -42,7 +42,7 @@
 // }
 // Turn checks: noItinerary | itinerary | notRepeatOfPrev | mustMention[regex] | mustNotMention[regex] | statesWeekday "Friday"
 //   npm run replay -- --push server/replays/<case>.json     (copy the file's turns/expect/final/note onto the SAVED case of the same name)
-// Final checks: builtNightsLteRequested | builtNightsEq N | minStops N | maxStops N
+// Final checks: builtNightsLteRequested | builtNightsEq N | minStops N | maxStops N | driveCapUnchanged
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -218,6 +218,7 @@ async function main() {
   if (typeof f.builtNightsEq === 'number') check(`final: built nights = ${f.builtNightsEq}`, builtNights === f.builtNightsEq, `${builtNights}`)
   if (typeof f.minStops === 'number') check(`final: ≥ ${f.minStops} stops`, stops != null && stops >= f.minStops, `${stops}`)
   if (typeof f.maxStops === 'number') check(`final: ≤ ${f.maxStops} stops`, stops != null && stops <= f.maxStops, `${stops}`)
+  if (f.driveCapUnchanged) check('final: trip drive cap unchanged (profile)', ptd.driveCapHours == null, ptd.driveCapHours == null ? 'profile' : `${ptd.driveCapHours} h set without consent`)
 
   const failed = results.filter(r => !r.ok).length
   console.log(`\n=== ${results.length - failed}/${results.length} checks passed ===\n`)
