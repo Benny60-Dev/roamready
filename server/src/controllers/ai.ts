@@ -962,7 +962,7 @@ function buildDriveFactsBlock(
     const note = requestedNights != null && requestedStops > requestedNights
       ? ` That is MORE than the ${requestedNights} night${requestedNights === 1 ? '' : 's'} asked for — ${requestedStops} stops need at least ${requestedStops} nights.`
       : ''
-    lines.push(`The user asked for ${requestedStops} stop${requestedStops === 1 ? '' : 's'}; each stop is at least 1 night.${note}`)
+    lines.push(`The user asked for ${requestedStops} stop${requestedStops === 1 ? '' : 's'}; each stop is at least 1 night. A STOP is a place the trip sleeps: the starting point (${f.originName}) is NEVER a stop, and ${f.destName} counts as one of the ${requestedStops}. Do not ask the user what they mean by a stop.${note}`)
   }
   if (lastOverBudget) {
     lines.push(`Last build attempt: routing via the user's stops made the ${lastOverBudget.legFrom} → ${lastOverBudget.legTo} drive ${lastOverBudget.legHours} h, over the ${f.capHours} h limit, which adds ${lastOverBudget.addedNights} overnight (${lastOverBudget.total} nights total). It was NOT built.`)
