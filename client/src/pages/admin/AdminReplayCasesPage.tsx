@@ -105,7 +105,7 @@ function caseJson(c: ReplayCase): string {
 export default function AdminReplayCasesPage() {
   const [cases, setCases] = useState<ReplayCase[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<'ALL' | CaseStatus>('ALL')
+  const [filter, setFilter] = useState<'ALL' | CaseStatus>('OPEN')
   const [openId, setOpenId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -176,7 +176,7 @@ export default function AdminReplayCasesPage() {
           </p>
         </div>
         <div className="flex gap-1.5">
-          {(['ALL', 'OPEN', 'PASSING', 'FIXED'] as const).map(f => (
+          {(['OPEN', 'PASSING', 'FIXED', 'ALL'] as const).map(f => (
             <button
               key={f}
               type="button"
