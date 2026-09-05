@@ -156,7 +156,16 @@ export async function startReplayRun(caseId: string, owner: { id: string; email:
       const lastItin = [...history].reverse().map(m => parseItin(m.content)).find(Boolean) ?? null
       const builtNights: number | null = lastItin ? lastItin.stops.reduce((n: number, s: any) => n + (s.type === 'OVERNIGHT_ONLY' ? 1 : (s.nights ?? 0)), 0) : null
       const stops: number | null = lastItin ? lastItin.stops.filter((s: any) => s.type !== 'HOME').length : null
-      result.final = { requestedNights: ptd.requestedNights ?? null, builtNights, stops, driveCap: ptd.driveCapHours ?? 'profile' }
+      const df: any = ptd.driveFacts?.facts ?? null
+      result.final = {
+        requestedNights: ptd.requestedNights ?? null, builtNights, stops, driveCap: ptd.driveCapHours ?? 'profile',
+        // What the app told the planner (so the handoff shows the facts, not just the replies).
+        driveFacts: df ? {
+          miles: df.miles, driveHours: df.driveHours, capHours: df.capHours, minNights: df.minNights,
+          roadNightTowns: (df.roadNightTowns ?? []).map((t: any) => `${t.name}, ${t.state}`).join(' → ') || 'none',
+        } : null,
+        builtStops: lastItin ? lastItin.stops.map((s: any) => `${s.locationName}${s.locationState ? ', ' + s.locationState : ''} (${s.type === 'HOME' ? 'home' : `${s.nights ?? 0}n`})`).join(' → ') : null,
+      }
       const f: any = row.final ?? {}
       if (f.builtNightsLteRequested) check('final: built nights ≤ requested', builtNights == null || ptd.requestedNights == null || builtNights <= ptd.requestedNights, `${builtNights} vs ${ptd.requestedNights}`)
       if (typeof f.builtNightsEq === 'number') check(`final: built nights = ${f.builtNightsEq}`, builtNights === f.builtNightsEq, `${builtNights}`)

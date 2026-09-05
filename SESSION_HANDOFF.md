@@ -45,6 +45,7 @@
 - FEAT-NAV-HANDOFF — **Navigation handoff — measured route into Google Maps / Apple Maps**
 - TOOL-REPLAY — **Replay tool — a customer conversation becomes an exact-case planner test**
 - FEAT-REPLAY-CASES — **Replay cases — saved from the Session Inspector, run by name, results written back**
+- GRACE-DAY-COUNT — **Drive-day count uses cap + grace** — the daily limit is a guideline with a give-or-take, not a wall
 - FEAT-PLANNER-FACTS — **Planner facts — the app measures, the AI talks** (feedback "Trip days total exceeded")
 - BUG-ORIGIN-ASK-MARKDOWN — **"I couldn't find that location" after answering a nights question with a number**
 - BUG-THIS-FRIDAY — **"this Friday" resolves to the wrong date** — replays on Wed 2026-09-02 mostly produced "Friday, September 6th, 2026" (a Sunday); once the correct Sept 4

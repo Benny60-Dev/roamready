@@ -75,7 +75,12 @@ function claudeHandoff(c: ReplayCase): string {
   if (lr && lr.status !== 'running') {
     lines.push('', `Last run (${fmt(c.lastRunAt)}): ${lr.status === 'error' ? `FAILED — ${lr.error}` : `${lr.passed}/${lr.total} checks`}`)
     for (const k of lr.checks ?? []) lines.push(`  ${k.ok ? 'PASS' : 'FAIL'}  ${k.label}${k.detail ? ' — ' + k.detail : ''}`)
-    if (lr.final) lines.push(`  final: requested ${String(lr.final.requestedNights ?? '?')} nights, built ${String(lr.final.builtNights ?? '-')} nights, ${String(lr.final.stops ?? '-')} stops, drive cap ${String(lr.final.driveCap ?? 'profile')}`)
+    if (lr.final) {
+      lines.push(`  final: requested ${String(lr.final.requestedNights ?? '?')} nights, built ${String(lr.final.builtNights ?? '-')} nights, ${String(lr.final.stops ?? '-')} stops, drive cap ${String(lr.final.driveCap ?? 'profile')}`)
+      if (lr.final.builtStops) lines.push(`  built stops: ${String(lr.final.builtStops)}`)
+      const df: any = lr.final.driveFacts
+      if (df) lines.push(`  drive facts given to the planner: ${df.miles} mi, ${df.driveHours} h, cap ${df.capHours} h, min ${df.minNights} nights, road-night towns: ${df.roadNightTowns}`)
+    }
     if (lr.transcript?.length) {
       lines.push('', 'Transcript:')
       for (const [i, t] of lr.transcript.entries()) lines.push(`${i + 1}. USER: ${t.user}`, `   AI: ${t.ai}`)
@@ -325,7 +330,11 @@ export default function AdminReplayCasesPage() {
                           <p className="text-sm text-gray-500">No <code>expect</code> checks on this case yet — it replayed and recorded the replies below, but nothing was judged.</p>
                         ) : null}
                         {lr.final && (
-                          <p className="text-xs text-gray-500">Final: requested {String(lr.final.requestedNights ?? '?')} nights · built {String(lr.final.builtNights ?? '-')} nights · {String(lr.final.stops ?? '-')} stops · drive cap {String(lr.final.driveCap ?? 'profile')}</p>
+                          <div className="text-xs text-gray-500 space-y-0.5">
+                            <p>Final: requested {String(lr.final.requestedNights ?? '?')} nights · built {String(lr.final.builtNights ?? '-')} nights · {String(lr.final.stops ?? '-')} stops · drive cap {String(lr.final.driveCap ?? 'profile')}</p>
+                            {lr.final.builtStops ? <p>Built: {String(lr.final.builtStops)}</p> : null}
+                            {(lr.final as any).driveFacts ? <p>Facts given to the planner: {(lr.final as any).driveFacts.miles} mi · {(lr.final as any).driveFacts.driveHours} h · cap {(lr.final as any).driveFacts.capHours} h · min {(lr.final as any).driveFacts.minNights} nights · road nights at {(lr.final as any).driveFacts.roadNightTowns}</p> : null}
+                          </div>
                         )}
                         {lr.transcript && lr.transcript.length > 0 && (
                           <div>
