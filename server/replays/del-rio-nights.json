@@ -3,7 +3,7 @@
   "source": {
     "sessionId": "cmtkgb1zu0002q72dprt6b858",
     "capturedAt": "2026-09-02",
-    "note": "Feedback 'Trip days total exceeded': 4-stop trip to Del Rio, 2 nights asked. Correct behaviour: state a real Friday for 'this Friday'; ask for length before building; explain the minimum with the measured hours on pushback; 'do it in 2' is pushback, not consent to longer days — ask which option, don't build; restate the nights split exactly as measured; never quietly drop a stop; build only once it fits. Turn 5: 4 stops in 3 nights doesn't fit — the planner must say so and ask (not silently build 3 stops)."
+    "note": "Feedback 'Trip days total exceeded': 4-stop trip to Del Rio, 2 nights asked. Correct behaviour: a real Friday for 'this Friday'; ask for length before building; explain the minimum with the measured hours; 'do it in 2' is pushback, not consent to longer days — ask, don't build, and never change the drive cap without a yes; restate the nights split exactly as measured; a build with fewer stops than asked says so; 'drop a stop' with 3 nights → 3 stops (road night + one more + Del Rio), never collapsed to 2."
   },
   "setup": {
     "rigId": null,
@@ -50,13 +50,12 @@
     {
       "user": "Ok 3",
       "expect": {
-        "mustNotMention": [
-          "Saragosa",
-          "1 night on the road|one night on the road",
-          "and back|there and back"
-        ],
         "mustMention": [
           "4 stops|four stops|fourth stop|stops? you asked"
+        ],
+        "mustNotMention": [
+          "Saragosa",
+          "and back|there and back"
         ]
       }
     },

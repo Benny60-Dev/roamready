@@ -962,7 +962,11 @@ function buildDriveFactsBlock(
     const note = requestedNights != null && requestedStops > requestedNights
       ? ` That is MORE than the ${requestedNights} night${requestedNights === 1 ? '' : 's'} asked for — ${requestedStops} stops need at least ${requestedStops} nights.`
       : ''
-    lines.push(`The user asked for ${requestedStops} stop${requestedStops === 1 ? '' : 's'}; each stop is at least 1 night. A STOP is a place the trip sleeps: the starting point (${f.originName}) is NEVER a stop, and ${f.destName} counts as one of the ${requestedStops}. Do not ask the user what they mean by a stop.${note}`)
+    lines.push(`The user asked for ${requestedStops} stop${requestedStops === 1 ? '' : 's'}; each stop is at least 1 night. A STOP is a place the trip sleeps: the starting point (${f.originName}) is NEVER a stop, ${f.destName} counts as one of the ${requestedStops}, and so does every road-night town above. Do not ask the user what they mean by a stop.${note}`)
+    if (requestedNights != null && requestedNights >= f.minNights) {
+      const build = Math.min(requestedNights, requestedStops)
+      lines.push(`STOPS TO BUILD: ${build}. ${requestedNights} night${requestedNights === 1 ? '' : 's'} covers up to ${requestedNights} stop${requestedNights === 1 ? '' : 's'}; the user asked for ${requestedStops} → build exactly ${build}: the road-night town${(f.roadNightTowns ?? []).length === 1 ? '' : 's'} above, ${f.destName}, and ${Math.max(0, build - 1 - (f.roadNightTowns ?? []).length)} more destination${Math.max(0, build - 1 - (f.roadNightTowns ?? []).length) === 1 ? '' : 's'} along the same route (1 night each). ${build < requestedStops ? `Say in the build reply that ${requestedStops} stops did not fit in ${requestedNights} nights and you built ${build}.` : 'Never build fewer than this.'}`)
+    }
   }
   if (lastOverBudget) {
     lines.push(`Last build attempt: routing via the user's stops made the ${lastOverBudget.legFrom} → ${lastOverBudget.legTo} drive ${lastOverBudget.legHours} h, over the ${f.capHours} h limit, which adds ${lastOverBudget.addedNights} overnight (${lastOverBudget.total} nights total). It was NOT built.`)
@@ -2162,11 +2166,12 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             let stopsNote = ''
             try {
               const askedStops = parseRequestedStops((messages as any[]).filter(m => m?.role === 'user').map(m => String(m?.content ?? '')))
-              const builtStops = splicedStops.filter((st: any) => st.type !== 'HOME' && st.type !== 'OVERNIGHT_ONLY').length
+              // Road-night towns COUNT as stops (a stop is a place the trip sleeps).
+              const builtStops = splicedStops.filter((st: any) => st.type !== 'HOME').length
               const alreadySaid = /(\b\d+|four|three|five|six)\s+stops?\b[^.]*\b(asked|wanted|mentioned|requested)|left out the \w+ stop|(fourth|fifth|extra) stop/i.test(response)
               if (askedStops != null && builtStops > 0 && builtStops < askedStops && !alreadySaid) {
                 const nightsTotal = (splicedItin as any).totalNights
-                stopsNote = `You asked for ${askedStops} stops; this plan has ${builtStops}${typeof nightsTotal === 'number' ? ` (${nightsTotal} night${nightsTotal === 1 ? '' : 's'} covers ${builtStops})` : ''} — add a night or name a stop to swap and I'll adjust.`
+                stopsNote = `You asked for ${askedStops} stops; this plan has ${builtStops}${typeof nightsTotal === 'number' ? ` (each stop needs a night, and ${nightsTotal} night${nightsTotal === 1 ? '' : 's'} covers up to ${nightsTotal})` : ''} — add a night or name a stop to swap and I'll adjust.`
               }
             } catch { /* note is best-effort */ }
             const note = [transitNote, violationAdvisory, hazardAdvisory, stopsNote].filter(Boolean).join(' ')
