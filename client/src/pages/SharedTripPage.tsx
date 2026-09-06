@@ -74,7 +74,7 @@ export default function SharedTripPage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { icon: MapPin, label: 'Miles', value: trip.totalMiles?.toLocaleString() || '–' },
-            { icon: Tent, label: 'Nights', value: trip.totalNights || '–' },
+            { icon: Tent, label: 'Nights', value: trip.totalNights || sortedStops.reduce((n: number, st: any) => n + (st.nights ?? 0), 0) || '–' },
             { icon: MapPin, label: 'Stops', value: userFacingStopCount(sortedStops) },
             { icon: DollarSign, label: 'Est. cost', value: costTotal > 0 ? `$${Math.round(costTotal).toLocaleString()}` : '–' },
           ].map(({ icon: Icon, label, value }) => (
@@ -89,7 +89,10 @@ export default function SharedTripPage() {
         <div className="space-y-3">
           {sortedStops.map((stop, i) => {
             const badge = stopDisplayNumbers[stop.id]
-            const isEndpoint = isHomeBadge(badge) || badge === 'F'
+            // PR-4: only a HOME endpoint collapses to a bare label. A one-way
+            // trip's finish is a real stay — keep its nights, date and campground
+            // (the app's summary page does the same).
+            const isEndpoint = isHomeBadge(badge) || (badge === 'F' && (stop.nights ?? 0) === 0)
             return (
               <div key={stop.id} className="flex gap-3">
                 <div className="flex flex-col items-center">
