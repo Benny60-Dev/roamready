@@ -293,13 +293,13 @@
     {
       "id": "PR-3",
       "title": "**Mileage drift across surfaces** — 470 / 472 / 473 mi for the same trip on itinerary, dashboard, share page; booking page showed 208.3 mi for a 244 mi leg (reads like straight-line)",
-      "status": "OPEN",
-      "statusRaw": "OPEN",
+      "status": "DONE",
+      "statusRaw": "**DONE — merged local main (RR69), not pushed**",
       "severity": null,
       "category": "review-open",
       "commits": [],
-      "evidence": "Review observation. Booking page leg distance likely uses a different (haversine) source than the measured legs.",
-      "whatRemains": "Single mileage source of truth per leg; booking page reads measured leg miles."
+      "evidence": "Review observation. Booking page leg distance likely uses a different (haversine) source than the measured legs. FIX: three writers disagreed — the AI's guessed itinerary.totalMiles at build, the map page's meter-sum (rounded once), and no server recompute after a stop edit; the booking page used haversine (208 vs 244). Now syncTripEndpoints (the choke point every stop create/update/delete, makeOneWay and recheckLongLegs already hit) sets trip.totalMiles = Σ measured stop.driveDistanceMiles once every leg is measured; the map page sums the whole-mile legs (not meters) so it agrees to the mile; the booking page shows the stop's measured driveDistanceMiles and nothing until it exists. The AI's number survives only until the first measurement.",
+      "whatRemains": "Open the Moab trip's map page once (measures legs) and compare itinerary / dashboard / share / booking — all one number."
     },
     {
       "id": "PR-4",
@@ -326,13 +326,13 @@
     {
       "id": "PR-6",
       "title": "**Missing camping cost line** — a 6-night trip priced 5 nights; the Tonalea overnight had no camping line",
-      "status": "OPEN",
-      "statusRaw": "OPEN",
+      "status": "DONE",
+      "statusRaw": "**DONE — merged local main (RR69), not pushed**",
       "severity": null,
       "category": "review-open",
       "commits": [],
-      "evidence": "Review observation.",
-      "whatRemains": "Scout the camp-cost aggregation for OVERNIGHT_ONLY / unbooked stops."
+      "evidence": "Review observation. FIX: engine-inserted OVERNIGHT_ONLY stops never get a siteRate, so computeTripTotals priced them at $0 and the summary page dropped the row (displayCamp <= 0). New effectiveSiteRate(stop, stops) in [utils/tripTotals.ts](client/src/utils/tripTotals.ts): own rate, else the average of the trip's other priced overnights, else DEFAULT_SITE_RATE $45 — client-side only, never persisted as a quote. Summary rows show every overnight, tagged 'est. avg' when the rate is a fallback; PDF mirrors it. Share page inherits via the shared util.",
+      "whatRemains": "Verify on the Moab trip (Tonalea overnight now shows an 'est. avg' row and the Est. cost total rises by one night)."
     },
     {
       "id": "PR-7",

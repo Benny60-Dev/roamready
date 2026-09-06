@@ -470,8 +470,11 @@ function StopHeaderBlock({
   leadName: string
 }) {
   const isOvernight = stop.type === 'OVERNIGHT_ONLY'
-  const driveDistance = prevStop
-    ? calcDistance(prevStop.latitude, prevStop.longitude, stop.latitude, stop.longitude)
+  // PR-3: the measured road miles for the leg that ARRIVES at this stop (what
+  // the itinerary and map show), never a straight-line guess (208 vs 244 mi).
+  // Shown only once the leg has been measured (the map page writes it).
+  const driveDistance = prevStop && stop.driveDistanceMiles != null && stop.driveDistanceMiles > 0
+    ? String(stop.driveDistanceMiles)
     : null
   const arr = stop.arrivalDate ? formatTripDate(stop.arrivalDate, 'MMM d') : null
   const dep = stop.departureDate ? formatTripDate(stop.departureDate, 'MMM d') : null
@@ -513,7 +516,7 @@ function StopHeaderBlock({
         </p>
         <p className="text-gray-500" style={{ fontSize: 12, marginTop: 4 }}>
           {stop.locationName}{stop.locationState ? `, ${stop.locationState}` : ''}
-          {driveDistance && <span className="text-gray-400">{' · '}~{driveDistance} mi from previous stop</span>}
+          {driveDistance && <span className="text-gray-400">{' · '}{driveDistance} mi from previous stop</span>}
         </p>
       </div>
       {/* Right-side type pill — informational about stop type only. Booking

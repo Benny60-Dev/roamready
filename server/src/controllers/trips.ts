@@ -223,6 +223,17 @@ async function syncTripEndpoints(tripId: string): Promise<void> {
   const ack = existing?.acknowledgedRvSafety as { acknowledgedAt?: string; routeSig?: string } | null
   const routeChanged = !!ack && ack.routeSig !== routeSignature(stops)
 
+  // PR-3 MILES TRUTH (2026-09-05): trip.totalMiles had three writers that
+  // disagreed (the AI's guess at build, the map page's meter-sum, and nothing
+  // server-side after a stop edit) → 470 / 472 / 473 across surfaces. The
+  // server now owns it at this choke point: Σ of the measured per-leg
+  // driveDistanceMiles (each already a whole mile, so surfaces that sum legs
+  // agree to the mile), recomputed only once EVERY leg has been measured — a
+  // partial sum would undercount, so until then the previous value stands.
+  const legs = stops.slice(1).map((st: any) => st.driveDistanceMiles)
+  const allMeasured = legs.length > 0 && legs.every(m => typeof m === 'number' && Number.isFinite(m) && m > 0)
+  const measuredTotal = allMeasured ? Math.round(legs.reduce((a: number, m: number) => a + m, 0)) : null
+
   await prisma.trip.update({
     where: { id: tripId },
     data: {
@@ -231,6 +242,7 @@ async function syncTripEndpoints(tripId: string): Promise<void> {
       startLocation: stops[0].locationName,
       endLocation: stops[stops.length - 1].locationName,
       tripType: computeTripShape(stops),
+      ...(measuredTotal != null ? { totalMiles: measuredTotal } : {}),
       // Only touch the ack on a real route change; omit the key entirely otherwise so
       // metadata-only writes leave a valid acknowledgment in place.
       ...(routeChanged ? { acknowledgedRvSafety: null } : {}),

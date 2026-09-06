@@ -1255,6 +1255,7 @@ export default function TripMapPage() {
         const legs: any[] = route.legs ?? []
         console.log('[TripMapPage] legs count:', legs.length, '| expected:', coordStops.length - 1)
         let totalDistanceMeters = 0
+        let totalLegMiles = 0
         legs.forEach((leg, i) => {
           const destStop = coordStops[i + 1]
           if (!destStop || !id) return
@@ -1266,6 +1267,7 @@ export default function TripMapPage() {
           const distMeters: number = (useHereLine ? hereDist.get(destStop.id) : undefined) ?? leg.distanceMeters ?? 0
           const driveDistanceMiles = distMeters > 0 ? Math.round(distMeters / 1609.34) : undefined
           totalDistanceMeters += distMeters
+          totalLegMiles += driveDistanceMiles ?? 0
           console.log('[TripMapPage]', label, '| highways:', highways || '(none)', '| duration:', driveDuration || '(none)', '| miles:', driveDistanceMiles ?? '(none)')
 
           // tripsApi.updateStop → api.put('/trips/:id/stops/:stopId') → authenticated axios (Bearer token)
@@ -1303,9 +1305,12 @@ export default function TripMapPage() {
           } : prev)
         })
 
-        // Sum all leg distances → update trip.totalMiles in DB
+        // Sum all leg distances → update trip.totalMiles in DB. PR-3: sum the
+        // WHOLE-MILE legs (what each stop stores), not raw meters — so this,
+        // the server's recompute (syncTripEndpoints) and every page that sums
+        // stop.driveDistanceMiles agree to the mile.
         if (totalDistanceMeters > 0 && id) {
-          const totalMiles = Math.round(totalDistanceMeters / 1609.34)
+          const totalMiles = totalLegMiles > 0 ? totalLegMiles : Math.round(totalDistanceMeters / 1609.34)
           console.log('[TripMapPage] Calculated total miles from Routes API:', totalMiles)
           tripsApi.update(id, { totalMiles })
             .then(() => {
