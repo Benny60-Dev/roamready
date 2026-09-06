@@ -49,9 +49,6 @@
     {
       "user": "Ok 3",
       "expect": {
-        "mustMention": [
-          "4 stops|four stops|fourth stop|stops? you asked"
-        ],
         "mustNotMention": [
           "Saragosa",
           "and back|there and back"
@@ -60,7 +57,12 @@
     },
     {
       "user": "Fine, drop a stop and keep it at 3 nights",
-      "expect": {}
+      "expect": {
+        "itinerary": true,
+        "mustMention": [
+          "4 stops|four stops|fourth stop|stops? you asked"
+        ]
+      }
     }
   ],
   "final": {

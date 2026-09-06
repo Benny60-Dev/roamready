@@ -475,7 +475,7 @@
       "category": "review-fixed",
       "commits": [],
       "evidence": "`ReplayCase` table + `ReplayCaseStatus` enum (migration `20260903170000_add_replay_case`): name (unique slug), status OPEN/PASSING/FIXED, note (\"what went wrong\"), sourceSessionId/email, setup/turns/final JSON, lastRunAt/lastRunResult. Owner-gated `/admin/replay-cases` (list, create, get by NAME, patch, delete) in [controllers/replayCases.ts](server/src/controllers/replayCases.ts). Session Inspector: **Save as replay case** replaces Copy replay — inline form with a prefilled slug and a required \"What went wrong?\", name collisions get `-2`. New admin page [/admin/replay-cases](client/src/pages/admin/AdminReplayCasesPage.tsx): filter by status, expand for note / setup / turns / last failed checks, status buttons, Copy command, Copy JSON, Open session, confirm-gated delete. Script: `npm run replay -- --case <name>` fetches the case from `--base` and PATCHes `lastRun` after the run (OPEN → PASSING when ≥1 check and all pass; PASSING → OPEN on a regression); `npm run replay -- --list` prints the cases. CLAUDE.md: Claude runs `--list` at session start. FEAT-REPLAY-RUN (same day): ▶ Run button per case — the SERVER runs it ([services/replayRunner.ts](server/src/services/replayRunner.ts): fresh session as the clicking owner over loopback HTTP with a 1h minted token, turns sent like SessionPage, checks evaluated, progress + transcript + checks saved in lastRunResult; page polls every 3s; one run per case at a time, 409 otherwise). `npm run replay -- --case <name>` now triggers that same server run and prints the transcript. Inspector: yellow action buttons + 'Replay cases (N open)' link.",
-      "whatRemains": "Local: migrate deploy + generate + restart, then click Run on del-rio-nights and watch it. Prod: Render pre-deploy applies the migration. Next: edit `expect` checks in the page (today: Copy JSON → file)."
+      "whatRemains": "Push. Then: only save cases from REAL sessions (a real ask with a wrong answer) — del-rio-nights is kept as the regression guard for the six bugs it flushed out; its 4-stops-in-3-nights tail is a contradictory ask and is not judged beyond 'says so'. Nightly scheduled task (Claude runs open cases and preps fixes on a branch) is next."
     },
     {
       "id": "GRACE-DAY-COUNT",
@@ -514,12 +514,12 @@
       "id": "BUG-THIS-FRIDAY",
       "title": "**\"this Friday\" resolves to the wrong date** — replays on Wed 2026-09-02 mostly produced \"Friday, September 6th, 2026\" (a Sunday); once the correct Sept 4",
       "status": "DONE",
-      "statusRaw": "**DONE — merged local main, not pushed (RR69)**",
+      "statusRaw": "**DONE — verified on dev via replay (RR69), not pushed**",
       "severity": null,
       "category": "review-open",
       "commits": [],
       "evidence": "Seen in 4 of 5 del-rio-nights replays (dev + prod). The model resolves relative weekdays itself; the server only backstops past dates (rollYmdForwardIfPast) and the resolved-year confirmation, not weekday arithmetic. FIX: the planner was handed a bare ISO date and asked to work out weekdays. Now [buildCalendarBlock](server/src/services/ai.ts) puts a 15-day table (weekday + date, in the user's timezone — client sends `tz`) into CURRENT REQUEST CONTEXT with a look-up-only rule. Replay check `statesWeekday` (runner + script) asserts the first stated date is a Friday; del-rio-nights turn 1 carries it. Same commit: DRIVE FACTS rule 3 — repeating the night count ('do it in 2') is pushback, not consent to longer days: ask which option, don't build; rule 7 — restate the nights split exactly as measured. `npm run replay -- --push <file>` copies a file's checks onto the saved case.",
-      "whatRemains": "Re-run del-rio-nights (Run on the page) until it passes; watch the turn-4 behaviour over a few runs."
+      "whatRemains": "Push."
     },
     {
       "id": "PLANNER-WATCH-1",
