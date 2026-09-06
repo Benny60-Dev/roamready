@@ -5,9 +5,7 @@
 
 ## Open items
 - PR-1 — **Free tier is a dead app post-trial** — Free and Pro cards list identical features; after the 7-day trial nearly every surface is `requireFeature`-gated (chat, campground search, journal writes, packing, resources, weather, share, PDF) (OPEN — **product decision first**)
-- PR-3 — **Mileage drift across surfaces** — 470 / 472 / 473 mi for the same trip on itinerary, dashboard, share page; booking page showed 208.3 mi for a 244 mi leg (reads like straight-line) (OPEN)
 - PR-5 — **Journal Maps "trips" view** — routes render on a blank gray void; toggling "Show routes" makes the base map appear and routes vanish (OPEN)
-- PR-6 — **Missing camping cost line** — a 6-night trip priced 5 nights; the Tonalea overnight had no camping line (OPEN)
 - PR-10 — **PDF export "click gives no feedback"** (OPEN — verify as a gating bug)
 - PLANNER-WATCH-1 — **Planner still claims drive-limit compliance / builds a 0-night stop** (post FEAT-PLANNER-FACTS watch list) (OPEN — watch; prompt nudge if it recurs)
 - FEAT-PDF-ROUTE-LINE — **PDF cover map traces the measured route** — today it connects stop pins with straight lines (OPEN — backlog (Benny asked 2026-09-02))
@@ -32,7 +30,9 @@
 - 6 — **aiConversation silent 400** — dead client write + downstream surprise-trip exclusion query that depended on the same dead column
 - 11 — **UTC-midnight arrival timezone artifact** in server-side weather path
 - PR-2 — **Billing status contradicts invoice history** — "Free plan · no active subscription" rendered above three paid $7.99 invoices
+- PR-3 — **Mileage drift across surfaces** — 470 / 472 / 473 mi for the same trip on itinerary, dashboard, share page; booking page showed 208.3 mi for a 244 mi leg (reads like straight-line)
 - PR-4 — **Share page diverges from the app** — $311 fuel-only vs $686 in-app, campgrounds omitted although the share modal says they're included, no map, finish stop's nights dropped
+- PR-6 — **Missing camping cost line** — a 6-night trip priced 5 nights; the Tonalea overnight had no camping line
 - PR-7 — **Off-route hazard warning** — Moki Dugway (UT-261) warned on a US-160 → US-191 route
 - PR-8 — **Booking-form data validation** — "site" accepted as a site number (renders as "site #site"), "kbyyy" accepted as a licence plate
 - PR-9 — **Display chips styled as controls** — "2 adults" / "both" party chips look tappable but are display-only
