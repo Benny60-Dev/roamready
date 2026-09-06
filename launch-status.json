@@ -304,13 +304,13 @@
     {
       "id": "PR-4",
       "title": "**Share page diverges from the app** — $311 fuel-only vs $686 in-app, campgrounds omitted although the share modal says they're included, no map, finish stop's nights dropped",
-      "status": "OPEN",
-      "statusRaw": "OPEN",
+      "status": "DONE",
+      "statusRaw": "**DONE — merged local main (RR69), not pushed**",
       "severity": null,
       "category": "review-open",
       "commits": [],
-      "evidence": "Review observation on [client/src/pages/SharedTripPage.tsx](client/src/pages/SharedTripPage.tsx).",
-      "whatRemains": "Align SharedTripPage totals/campgrounds/nights with the trip page; decide on map."
+      "evidence": "Review observation on [client/src/pages/SharedTripPage.tsx](client/src/pages/SharedTripPage.tsx). FIX: the share page already ran the app's computeTripTotals, but PUBLIC_TRIP_SELECT stripped siteRate/actualRate/actualFees/actualFuel so camping summed to $0 (fuel-only $311). Added them (not sensitive under the modal's own disclosure). A one-way finish stop is no longer collapsed to a bare 'Finish' label — it keeps nights, date and campground (only a HOME endpoint collapses). Nights stat falls back to the stop sum.",
+      "whatRemains": "Map on the share page: the modal promises 'route'; either render a static route map (getTripMapImage exists) or drop the word. Benny's call."
     },
     {
       "id": "PR-5",
@@ -337,13 +337,13 @@
     {
       "id": "PR-7",
       "title": "**Off-route hazard warning** — Moki Dugway (UT-261) warned on a US-160 → US-191 route",
-      "status": "OPEN",
-      "statusRaw": "OPEN",
+      "status": "DONE",
+      "statusRaw": "**DONE — merged local main (RR69), not pushed**",
       "severity": null,
       "category": "review-open",
       "commits": [],
-      "evidence": "Hazard table is live and growing (see hazards below), so a false-positive rule matters more now.",
-      "whatRemains": "Tighten hazard matching to the routed corridor (polyline proximity), not a radius around the stop."
+      "evidence": "Hazard table is live and growing (see hazards below), so a false-positive rule matters more now. FIX: hazards were matched within 25 mi of a STRAIGHT LINE between geocoded stops with no route geometry ('generous on purpose'). Now the measured route steps are kept — planTransitInserts returns legGeometry (every accepted sub-leg's steps) at planning time; getTripHazards reads the map's cached route polyline (same routesCacheKeyFor) at trip-view time — and a hazard must be within 2 mi of the road actually driven (HAZARD_ROUTE_BUFFER_MI). No geometry → the old straight-line band, unchanged. Stop-name matching untouched.",
+      "whatRemains": "Verify on a US-160 → US-191 trip (Kayenta → Blanding / Moab): Moki Dugway must not fire; a trip that actually drives UT-261 must."
     },
     {
       "id": "PR-8",

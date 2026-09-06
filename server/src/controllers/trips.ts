@@ -1358,10 +1358,16 @@ function interpolateSplitPoint(detail: LegDetail, targetSec: number): { lat: num
   return last ? { lat: last.endLat, lng: last.endLng } : null
 }
 
+/** PR-7 — measured route geometry for one driven leg, keyed by endpoint names,
+ *  so the hazard matcher can test the ROAD instead of a straight line. */
+export interface LegGeometry { from: string; to: string; steps: LegStep[] }
+
 interface LegPlan {
   towns: TransitTown[]
   /** Ordered resulting sub-leg durations (hours) for logging — last entry is the tail. */
   subLegs: { from: string; to: string; hours: number; over: boolean }[]
+  /** Route steps of every accepted sub-leg (PR-7 hazard corridor). */
+  geometry: LegGeometry[]
   warnings: string[]
   /** HERE restriction notices observed while measuring this leg (e.g. "Route
    *  goes through a seasonal closure"). Distinct notices kept; identical ones
@@ -1408,7 +1414,7 @@ async function planLegSplits(
   maxInserts: number,
   rigDims?: RigDims | null,
 ): Promise<LegPlan> {
-  const plan: LegPlan = { towns: [], subLegs: [], warnings: [], violationNotes: [] }
+  const plan: LegPlan = { towns: [], subLegs: [], geometry: [], warnings: [], violationNotes: [] }
   let frontier = from
   let iterations = 0
   // TRANSIT-TOWN-COUNTRY — only sleep in the countries this leg starts/ends in
@@ -1455,12 +1461,14 @@ async function planLegSplits(
     // covers both "already short" legs and "barely over" legs (no stub split).
     if (detail.durationSec <= capSec + graceSec) {
       plan.subLegs.push({ from: frontier.locationName, to: to.locationName, hours: detail.durationSec / 3600, over: false })
+      plan.geometry.push({ from: frontier.locationName, to: to.locationName, steps: detail.steps })
       break
     }
 
     // Out of insert budget → leave the over-cap tail and warn.
     if (plan.towns.length >= maxInserts) {
       plan.subLegs.push({ from: frontier.locationName, to: to.locationName, hours: detail.durationSec / 3600, over: true })
+      plan.geometry.push({ from: frontier.locationName, to: to.locationName, steps: detail.steps })
       plan.warnings.push(
         `hit MAX_INSERTS_PER_LEG=${maxInserts} on ${from.locationName}→${to.locationName}; ` +
         `tail ${frontier.locationName}→${to.locationName} left at ${(detail.durationSec / 3600).toFixed(1)}h`,
@@ -1532,6 +1540,7 @@ async function planLegSplits(
         }
         plan.towns.push(town)
         plan.subLegs.push({ from: frontier.locationName, to: town.locationName, hours: sub.durationSec / 3600, over: false })
+        plan.geometry.push({ from: frontier.locationName, to: town.locationName, steps: sub.steps })
         frontier = town
         placed = true
         break
@@ -1543,6 +1552,7 @@ async function planLegSplits(
       // loop will add another day for the remainder as before.
       plan.towns.push(best.town)
       plan.subLegs.push({ from: frontier.locationName, to: best.town.locationName, hours: best.sub.durationSec / 3600, over: false })
+      plan.geometry.push({ from: frontier.locationName, to: best.town.locationName, steps: best.sub.steps })
       frontier = best.town
       placed = true
     }
@@ -1654,6 +1664,8 @@ export interface PlanTransitResult {
    *  The same notes are also attached as `violationNotes` on the affected
    *  destination stop in `stops`, for the itinerary/plan view to render. */
   legNotices: LegNotice[]
+  /** PR-7 — measured steps for every driven sub-leg (feeds detectStopHazards). */
+  legGeometry: LegGeometry[]
 }
 
 export async function planTransitInserts(
@@ -1667,7 +1679,7 @@ export async function planTransitInserts(
   // No key or fewer than two stops → nothing to measure; return the input
   // unchanged (defensive copy) so callers can treat the result uniformly.
   if (!apiKey || !Array.isArray(stops) || stops.length < 2) {
-    return { stops: [...(stops ?? [])], inserts: [], legNotices: [] }
+    return { stops: [...(stops ?? [])], inserts: [], legNotices: [], legGeometry: [] }
   }
 
   // Cap derivation lives in the caller (it may read the travel profile); here we
@@ -1695,6 +1707,7 @@ export async function planTransitInserts(
   for (let i = 0; i < stops.length; i++) {
     if (opts.strict || (stops[i] as any).type !== 'OVERNIGHT_ONLY') realIdx.push(i)
   }
+  const legGeometry: LegGeometry[] = []
 
   for (let k = 1; k < realIdx.length; k++) {
     const a = realIdx[k - 1]
@@ -1715,6 +1728,7 @@ export async function planTransitInserts(
     const toTown:   TransitTown = { locationName: to.locationName,   locationState: to.locationState,   latitude: to.latitude,   longitude: to.longitude }
 
     const legPlan = await planLegSplits(fromTown, toTown, apiKey, capSec, graceSec, minUsefulSec, tolSec, maxInserts, rigDims)
+    legGeometry.push(...legPlan.geometry)
 
     // Per-leg log: original leg + the resulting sub-leg durations (with any
     // still-over markers and warnings) so over-cap tails are never hidden.
@@ -1795,7 +1809,7 @@ export async function planTransitInserts(
   }
   splicedStops.forEach((s, idx) => { s.order = idx + 1 })
 
-  return { stops: splicedStops, inserts, legNotices }
+  return { stops: splicedStops, inserts, legNotices, legGeometry }
 }
 
 /**
@@ -3562,6 +3576,20 @@ export function buildViolationAdvisory(legNotices: LegNotice[]): string | null {
  *  in the mountains where length/grade hazards cluster, so we favor recall and
  *  frame the warning as "verify". Named constant for easy tuning. */
 const HAZARD_CORRIDOR_BUFFER_MI = 25
+/** PR-7 — when the leg's MEASURED route steps are known, a hazard must sit
+ *  within this many miles of the road actually driven. Moki Dugway (UT-261)
+ *  fired on a US-160 → US-191 trip because the 25-mile straight-line band
+ *  covers most of the Four Corners; the road never goes near it. */
+const HAZARD_ROUTE_BUFFER_MI = 2
+const normLegName = (v: unknown) => String(v ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+function minMilesToRoute(lat: number, lng: number, steps: LegStep[]): number {
+  let best = Infinity
+  for (const st of steps) {
+    const d = pointToSegmentMiles(lat, lng, st.startLat, st.startLng, st.endLat, st.endLng)
+    if (d < best) best = d
+  }
+  return best
+}
 
 /** Minimal rig shape the gating reads. Works for a real Rig OR an ad-hoc
  *  { length } object (no vehicleType → treated as an RV, per Phase-2 decision). */
@@ -3739,9 +3767,18 @@ export async function detectStopHazards(
   stops: any[],
   rig: HazardRig | null | undefined,
   googleKey: string | undefined,
+  // PR-7 — measured route steps per driven leg (from planTransitInserts at
+  // planning time, or the routes cache at trip-view time). When a leg's
+  // geometry is present the hazard must be within HAZARD_ROUTE_BUFFER_MI of the
+  // road; when absent, the old straight-line band applies (fail-soft).
+  legGeometry?: LegGeometry[] | null,
 ): Promise<{ advisory: string | null; hitCount: number }> {
   try {
     if (!rig || !Array.isArray(stops) || stops.length < 2) return { advisory: null, hitCount: 0 }
+    const geomByLeg = new Map<string, LegStep[]>()
+    for (const g of legGeometry ?? []) {
+      if (Array.isArray(g.steps) && g.steps.length) geomByLeg.set(`${normLegName(g.from)}|${normLegName(g.to)}`, g.steps)
+    }
     // Only HIGH-confidence hazards fire live warnings in slice 1 (MED rows are
     // seeded but dormant). Small table → one findMany per turn, not per leg.
     const hazards = (await prisma.hazard.findMany({
@@ -3768,12 +3805,18 @@ export async function detectStopHazards(
       const from = stops[i - 1], to = stops[i]
       // (B) stop-name landmark match — fires regardless of corridor geometry.
       const nameHits = hazards.filter(h => stopNamesHazard(to, h) || stopNamesHazard(from, h))
-      // (C) corridor match — geocode both endpoints, point-to-segment distance.
+      // (C) corridor match — the measured ROAD when we have it (PR-7), else the
+      // straight line between the geocoded endpoints.
       let corridorHits: HazardRow[] = []
-      const a = await geocode(from), b = await geocode(to)
-      if (a && b) {
-        corridorHits = hazards.filter(h =>
-          pointToSegmentMiles(h.lat, h.lng, a.lat, a.lng, b.lat, b.lng) <= HAZARD_CORRIDOR_BUFFER_MI)
+      const steps = geomByLeg.get(`${normLegName(from?.locationName)}|${normLegName(to?.locationName)}`)
+      if (steps) {
+        corridorHits = hazards.filter(h => minMilesToRoute(h.lat, h.lng, steps) <= HAZARD_ROUTE_BUFFER_MI)
+      } else {
+        const a = await geocode(from), b = await geocode(to)
+        if (a && b) {
+          corridorHits = hazards.filter(h =>
+            pointToSegmentMiles(h.lat, h.lng, a.lat, a.lng, b.lat, b.lng) <= HAZARD_CORRIDOR_BUFFER_MI)
+        }
       }
       // Dedupe (name+state) and rig-gate.
       const seen = new Set<string>()
@@ -3790,8 +3833,8 @@ export async function detectStopHazards(
       ;(to as any).violationNotes = [...existing, ...notes]
       advisories.push(...notes)
       hitCount += firing.length
-      console.warn('[detectStopHazards] leg %s→%s: %d hazard(s) fired: %s',
-        from?.locationName, to?.locationName, firing.length, firing.map(h => h.name).join('; '))
+      console.warn('[detectStopHazards] leg %s→%s: %d hazard(s) fired (%s): %s',
+        from?.locationName, to?.locationName, firing.length, steps ? `route ≤${HAZARD_ROUTE_BUFFER_MI}mi` : `straight-line ≤${HAZARD_CORRIDOR_BUFFER_MI}mi`, firing.map(h => h.name).join('; '))
     }
 
     return { advisory: advisories.length ? advisories.join(' ') : null, hitCount }
@@ -4142,9 +4185,7 @@ export async function generateRoutes(req: AuthRequest, res: Response, next: Next
       const tripRig = await prisma.rig.findFirst({ where: { id: trip.rigId, userId: req.user!.id } })
       if (tripRig) rigForRouting = tripRig
     }
-    const rigKey = rigForRouting ? `${rigForRouting.id}@${new Date(rigForRouting.updatedAt).getTime()}` : 'norig'
-    const routesCacheKey = `routes:v1:${trip.id}:${rigKey}:${useLvrRouting() ? 'L' : ''}${useHereRouting() ? 'H' : ''}:` +
-      orderedForKey.map((s: any) => `${s.id}@${s.latitude ?? ''},${s.longitude ?? ''}`).join('|')
+    const routesCacheKey = routesCacheKeyFor(trip.id, rigForRouting, orderedForKey)
     const cachedRoutes = await getCache<unknown[]>(routesCacheKey).catch(() => null)
     if (cachedRoutes) {
       res.setHeader('X-Routes-Cache', 'hit')
@@ -4752,6 +4793,15 @@ export async function getTripFuelEstimate(req: AuthRequest, res: Response, next:
   } catch (err) { next(err) }
 }
 
+/** Routes cache key — shared by generateRoutes (writer) and getTripHazards
+ *  (PR-7 reader, so the hazard check can use the same measured geometry the map
+ *  draws, at no extra routing cost). */
+function routesCacheKeyFor(tripId: string, rigForRouting: any, orderedStops: any[]): string {
+  const rigKey = rigForRouting ? `${rigForRouting.id}@${new Date(rigForRouting.updatedAt).getTime()}` : 'norig'
+  return `routes:v1:${tripId}:${rigKey}:${useLvrRouting() ? 'L' : ''}${useHereRouting() ? 'H' : ''}:` +
+    orderedStops.map((s: any) => `${s.id}@${s.latitude ?? ''},${s.longitude ?? ''}`).join('|')
+}
+
 /**
  * GET /trips/:id/hazards — RV hazard warnings for the BUILT trip, RECOMPUTED on
  * demand (the warning is computed during planning and is NOT persisted on the
@@ -4793,7 +4843,27 @@ export async function getTripHazards(req: AuthRequest, res: Response, next: Next
       latitude: s.latitude,
       longitude: s.longitude,
     }))
-    await detectStopHazards(working, rig as any, process.env.GOOGLE_MAPS_API_KEY)
+    // PR-7 — reuse the map's cached route geometry (same key as generateRoutes;
+    // rig resolution mirrors it: trip rig else default). Cache miss → no
+    // geometry → the straight-line band, exactly as before.
+    let legGeometry: LegGeometry[] = []
+    try {
+      const orderedStops = [...trip.stops].sort((a: any, b: any) => a.order - b.order)
+      const cached = await getCache<any[]>(routesCacheKeyFor(trip.id, rig, orderedStops)).catch(() => null)
+      if (Array.isArray(cached)) {
+        for (const seg of cached) {
+          const pts: Array<[number, number]> | undefined = seg?.herePolyline
+          const from = orderedStops[seg?.segmentIdx], to = orderedStops[(seg?.segmentIdx ?? -1) + 1]
+          if (!from || !to || !Array.isArray(pts) || pts.length < 2) continue
+          const steps: LegStep[] = []
+          for (let k = 1; k < pts.length; k++) {
+            steps.push({ durationSec: 0, startLat: pts[k - 1][0], startLng: pts[k - 1][1], endLat: pts[k][0], endLng: pts[k][1] })
+          }
+          legGeometry.push({ from: from.locationName, to: to.locationName, steps })
+        }
+      }
+    } catch { legGeometry = [] }
+    await detectStopHazards(working, rig as any, process.env.GOOGLE_MAPS_API_KEY, legGeometry)
 
     const hazards = working
       .filter(s => Array.isArray(s.violationNotes) && s.violationNotes.length > 0)

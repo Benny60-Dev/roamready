@@ -2113,7 +2113,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             )
           } else {
             // No budget conflict → run the normal transit splice on the AI's full route.
-            const { stops: splicedStops, inserts, legNotices } = await planTransitInserts(
+            const { stops: splicedStops, inserts, legNotices, legGeometry } = await planTransitInserts(
               transitStops, capHours, process.env.GOOGLE_MAPS_API_KEY, rigDims,
             )
             // FEAT-HAZARD-WARN — DB-driven hazard check on the (spliced) plan.
@@ -2122,7 +2122,7 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
             // advisory. Independent of USE_HERE_ROUTING (DB + Google geocode only),
             // and fully fail-soft inside detectStopHazards — never blocks emission.
             const hazardResult = await detectStopHazards(
-              splicedStops, userProfile.rigs?.[0] as any, process.env.GOOGLE_MAPS_API_KEY,
+              splicedStops, userProfile.rigs?.[0] as any, process.env.GOOGLE_MAPS_API_KEY, legGeometry,
             )
             // Re-serialize when a transit stop was inserted, OR a leg carried a HERE
             // restriction notice, OR a DB hazard fired — any of these means
