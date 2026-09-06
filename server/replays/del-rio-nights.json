@@ -3,7 +3,7 @@
   "source": {
     "sessionId": "cmtkgb1zu0002q72dprt6b858",
     "capturedAt": "2026-09-02",
-    "note": "Feedback 'Trip days total exceeded': 4-stop trip to Del Rio, 2 nights asked. Correct behaviour: a real Friday for 'this Friday'; ask for length before building; explain the minimum with the measured hours; 'do it in 2' is pushback, not consent to longer days — ask, don't build, and never change the drive cap without a yes; restate the nights split exactly as measured; a build with fewer stops than asked says so; 'drop a stop' with 3 nights → 3 stops (road night + one more + Del Rio), never collapsed to 2."
+    "note": "Feedback 'Trip days total exceeded' (Sep 2): the June canned budget wall gagged the planner. Fixed world: a real Friday; ask for length; measured facts (855 mi / 12.7 h / 6 h cap → 2-night minimum with grace); 2 nights FITS and builds honestly with fewer stops (says so); the drive cap is never raised without a yes; no foreign towns; a street address after the destination is the destination's. The 4-stops-vs-3-nights tail is a contradictory ask and is not judged beyond 'says so'."
   },
   "setup": {
     "rigId": null,
@@ -40,11 +40,10 @@
     {
       "user": "Do it in 2",
       "expect": {
-        "noItinerary": true,
-        "notRepeatOfPrev": true,
         "mustMention": [
-          "hour|drive|stop|closer|which"
-        ]
+          "stop"
+        ],
+        "notRepeatOfPrev": true
       }
     },
     {
@@ -66,7 +65,7 @@
   ],
   "final": {
     "builtNightsLteRequested": true,
-    "minStops": 3,
+    "minStops": 2,
     "driveCapUnchanged": true,
     "statesWeekday": "Friday"
   }
