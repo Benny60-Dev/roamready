@@ -3221,6 +3221,7 @@ const PUBLIC_TRIP_SELECT = {
   totalNights: true,
   estimatedFuel: true,
   estimatedCamp: true,
+  actualFuel: true,
   fuelPrice: true,
   itinerary: true,
   createdAt: true,
@@ -3243,6 +3244,15 @@ const PUBLIC_TRIP_SELECT = {
       campgroundId: true,
       bookingStatus: true,
       estimatedFuel: true,
+      // PR-4 (2026-09-05): the share page runs the SAME computeTripTotals as the
+      // app, but without these the camp side summed to $0 and the share total
+      // was fuel-only ($311 vs $686 in-app). Rates are not sensitive under the
+      // share modal's own disclosure (it withholds confirmation/site numbers,
+      // notes and packing — not prices).
+      siteRate: true,
+      actualRate: true,
+      actualFees: true,
+      actualFuel: true,
       checkInTime: true,
       checkOutTime: true,
       hookupType: true,
