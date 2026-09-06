@@ -4,7 +4,7 @@ import {
 import { Trip, Stop, ItineraryDay, ItineraryActivity, POI, TripFuelEstimate } from '../../types/index'
 import { format, addDays } from 'date-fns'
 import { parseTripDate } from '../../utils/dates'
-import { computeTripTotals } from '../../utils/tripTotals'
+import { computeTripTotals, effectiveSiteRate } from '../../utils/tripTotals'
 import { userFacingStopCount } from '../../utils/userFacingStopCount'
 import { tripLoopsToOrigin } from '../../utils/stopBadge'
 
@@ -810,13 +810,12 @@ export function TripPDF({ trip, mapImageBase64, fuelEstimate }: Props) {
   // grand total all read straight from computeTripTotals above (campEst /
   // fuelEst / plannedTotal) — no reimplemented arithmetic that could drift.
   // Fuel rows come from the same threaded fuelEstimate.perLeg the page shows.
+  // PR-6: unpriced overnights use the trip's average rate (same rule as the app).
   const campRows = sortedStops
-    .map(st => ({
-      name: st.locationName,
-      nights: st.nights ?? 0,
-      rate: st.siteRate ?? 0,
-      cost: (st.siteRate ?? 0) * (st.nights ?? 0),
-    }))
+    .map(st => {
+      const rate = effectiveSiteRate(st, sortedStops).rate
+      return { name: st.locationName, nights: st.nights ?? 0, rate, cost: rate * (st.nights ?? 0) }
+    })
     .filter(r => r.cost > 0)
   const stopNameByOrder = new Map<number, string>()
   for (const st of sortedStops) stopNameByOrder.set(st.order, st.locationName)

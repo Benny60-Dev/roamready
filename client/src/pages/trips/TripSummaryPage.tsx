@@ -19,7 +19,7 @@ import { parseTripDate, toYmd, formatTripDate } from '../../utils/dates'
 import { sharePdfBlob } from '../../utils/sharePdf'
 import { NavigateButton } from '../../components/trip/NavigateSheet'
 import { useLegRoutes, LegRoutesProvider } from '../../hooks/useLegRoutes'
-import { computeTripTotals } from '../../utils/tripTotals'
+import { computeTripTotals, effectiveSiteRate } from '../../utils/tripTotals'
 import { userFacingStopCount } from '../../utils/userFacingStopCount'
 import { StopWeatherCard } from '../../components/weather/StopWeatherCard'
 import { useScrollResetOnReady } from '../../hooks/useScrollResetOnReady'
@@ -1628,15 +1628,19 @@ export default function TripSummaryPage() {
           .map(stop => {
             const isBooked = stop.bookingStatus === 'CONFIRMED'
             const hasActual = isBooked && stop.actualRate != null
-            const estCamp = (stop.siteRate ?? 0) * stop.nights
+            // PR-6: same rate rule as computeTripTotals — an unpriced overnight
+            // (engine-inserted transit stop) gets the trip's average rate and is
+            // tagged as a fallback estimate, instead of vanishing from the bill.
+            const eff = effectiveSiteRate(stop, sortedStops)
+            const estCamp = eff.rate * stop.nights
             const actualCamp = hasActual
               ? (stop.actualRate ?? 0) * stop.nights + (stop.actualFees ?? 0)
               : null
             const displayCamp = hasActual ? actualCamp! : estCamp
-            // Skip rows with literally no cost data at all (neither est
-            // nor actual). These are typically HOME stops or 0-night returns.
-            if (displayCamp <= 0) return null
-            return { stop, displayCamp, isActualCamp: hasActual, estCamp, actualCamp }
+            // Skip only stops with no nights (HOME / 0-night returns) — every
+            // overnight shows a row, priced or fallback.
+            if ((stop.nights ?? 0) <= 0 || displayCamp <= 0) return null
+            return { stop, displayCamp, isActualCamp: hasActual, estCamp, actualCamp, rateFallback: eff.estimated }
           })
           .filter((r): r is NonNullable<typeof r> => r !== null)
 
@@ -1744,7 +1748,7 @@ export default function TripSummaryPage() {
             </button>
             {campGroupExpanded && (
               <div>
-                {stopRows.map(({ stop, displayCamp, isActualCamp }) => (
+                {stopRows.map(({ stop, displayCamp, isActualCamp, rateFallback }) => (
                   <div key={stop.id} className="flex items-center justify-between py-2 pl-6 border-b border-gray-50 last:border-0">
                     <div className="flex items-center gap-2">
                       <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${isHomeBadge(stopDisplayNumbers[stop.id]) ? 'bg-gray-100 text-gray-500' : 'bg-[#E0F0F4] text-[#1F6F8B]'}`}>
@@ -1757,7 +1761,7 @@ export default function TripSummaryPage() {
                       {isActualCamp ? (
                         <span className="text-[10px] font-semibold uppercase tracking-wide text-[#3E5540]">actual</span>
                       ) : (
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">est.</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400" title={rateFallback ? 'No campground picked yet — priced at your trip\'s average nightly rate' : undefined}>{rateFallback ? 'est. avg' : 'est.'}</span>
                       )}
                     </div>
                   </div>

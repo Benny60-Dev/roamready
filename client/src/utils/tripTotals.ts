@@ -56,6 +56,31 @@
  * the math stays composable.
  */
 
+/** PR-6 — a transit night the drive-time engine inserts (OVERNIGHT_ONLY) has
+ *  no campground and no siteRate, so it priced as $0 and the row vanished:
+ *  a 6-night trip billed for 5. The rate used for such a stop is the average
+ *  of the trip's other priced stops, else this default. Client-side only — a
+ *  fallback is never persisted as if it were a campground quote. */
+export const DEFAULT_SITE_RATE = 45
+
+/** The nightly rate to price a stop at: its own siteRate, else the average
+ *  siteRate of the trip's other priced overnight stops, else DEFAULT_SITE_RATE.
+ *  Returns { rate, estimated } so a surface can tag a fallback as "est.". Stops
+ *  with no nights price at 0 regardless. */
+export function effectiveSiteRate(
+  stop: TripTotalsInputStop,
+  stops: TripTotalsInputStop[] | null | undefined,
+): { rate: number; estimated: boolean } {
+  if ((stop.nights ?? 0) <= 0) return { rate: 0, estimated: false }
+  if (stop.siteRate != null && stop.siteRate > 0) return { rate: stop.siteRate, estimated: false }
+  const priced = (stops ?? []).filter(s => s !== stop && (s.nights ?? 0) > 0 && s.siteRate != null && s.siteRate > 0)
+  if (priced.length) {
+    const avg = priced.reduce((sum, s) => sum + (s.siteRate as number), 0) / priced.length
+    return { rate: Math.round(avg), estimated: true }
+  }
+  return { rate: DEFAULT_SITE_RATE, estimated: true }
+}
+
 export interface TripTotalsInputStop {
   /** Used to match this stop to a per-leg estimate (leg.toOrder === order).
    *  Only required when opts.fuelPerLeg is supplied; ignored otherwise. */
@@ -149,7 +174,9 @@ export function computeTripTotals(
 
   for (const s of stops) {
     const nights = s.nights ?? 0
-    const siteRate = s.siteRate ?? 0
+    // PR-6: an unpriced overnight (engine-inserted transit stop) is priced at
+    // the trip's average rate, never $0.
+    const siteRate = effectiveSiteRate(s, stops).rate
     const estForStop = siteRate * nights
     campEst += estForStop
 
