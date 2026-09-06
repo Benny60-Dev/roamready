@@ -1964,14 +1964,30 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
         // null/un-pinned date blocks.
         const whenOk = isIsoDate(gateItin.startDate) || isIsoDate(gatePtd?.requestedStartDate)
 
-        // LENGTH — captured target is primary; fall back to the itinerary's summed
-        // nights (OVERNIGHT_ONLY counts as 1, mirroring the reconciler).
+        // LENGTH — the USER must have given a length: the captured target (the
+        // model's <requestedNights> tag or the explicit-digits fallback above), or
+        // an explicit "N nights / N days" in any user message. LENGTH-GATE
+        // (2026-09-05): the old fallback accepted the itinerary's own summed
+        // nights — always > 0 once the model invents them — so a "four stop trip
+        // to Del Rio this Friday" got a made-up 4-night plan on turn 1 with no
+        // question asked. Fuzzy lengths ("a weekend", "about a week") still reach
+        // the gate through the model's tag, which is emitted on those turns.
         const capturedNights = Number(gatePtd?.requestedNights)
-        const summedNights = gateStops.reduce(
-          (n, s) => n + (s?.type === 'OVERNIGHT_ONLY' ? 1 : (Number(s?.nights) || 0)),
-          0,
-        )
-        const lengthOk = (Number.isInteger(capturedNights) && capturedNights > 0) || summedNights > 0
+        const msgArr = messages as any[]
+        let userStatedNights: number | null = null
+        for (let i = 0; i < msgArr.length; i++) {
+          const m = msgArr[i]
+          if (m?.role !== 'user') continue
+          const text = String(m?.content ?? '')
+          const explicit = parseExplicitNights(text)
+          if (explicit != null) { userStatedNights = explicit; break }
+          // A bare number answering a nights question ("how many nights?" → "2")
+          // is a stated length too — don't loop the user through the ask again.
+          const prev = msgArr[i - 1]
+          const bare = text.trim().match(/^(\d{1,2})$/)
+          if (bare && prev?.role === 'assistant' && /night/i.test(String(prev?.content ?? ''))) { userStatedNights = Number(bare[1]); break }
+        }
+        const lengthOk = (Number.isInteger(capturedNights) && capturedNights > 0) || userStatedNights != null
 
         // WHERE — at least one real DESTINATION stop away from the origin/home
         // city (a lone HOME stop, or only a same-city return closer, doesn't count).
