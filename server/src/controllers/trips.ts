@@ -1371,7 +1371,7 @@ interface LegPlan {
 
 // ─── Split policy (module-level constants — easy to tune) ─────────────────────
 // HARD CAP is per-user (maxDriveHours), computed at call time. These are fixed:
-const LEG_GRACE_HOURS         = 1.0   // a leg ≤ cap+grace stays ONE day (no split)
+const LEG_GRACE_HOURS         = 1.5   // a leg ≤ cap+grace stays ONE day (no split). 1.0 → 1.5 on 2026-09-05 (Benny: the cap is a guideline; Las Cruces→Del Rio 7.3 h at a 6 h cap was being refused over 18 minutes)
 const LEG_MIN_USEFUL_HOURS    = 3.0   // avoid creating sub-legs shorter than this
 const LEG_DRIFT_TOLERANCE_MIN = 15    // slack on a placed sub-leg vs cap (town drift)
 const MAX_TRANSIT_INSERTS_PER_LEG = 4 // safety rail vs. pathological cross-country legs
