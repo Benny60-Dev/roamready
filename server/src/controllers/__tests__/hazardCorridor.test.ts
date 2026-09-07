@@ -36,12 +36,17 @@ const r2 = await detectStopHazards(b, rig, '', [{ from: 'Mexican Hat', to: 'Natu
 check('Mexican Hat → Natural Bridges via UT-261: Moki Dugway fires', r2.hitCount === 1, `hits ${r2.hitCount}`)
 check('the note lands on the arriving stop', Array.isArray((b[1] as any).violationNotes) && (b[1] as any).violationNotes.length === 1)
 
-// No geometry → the OLD straight-line 25-mile band still applies (documented
-// fallback). The stops carry coords so no geocoding is needed — and this is
-// exactly the false positive PR-7 fixed: Moki sits inside the band.
+// No geometry → NO corridor test (PLANNER-HAZARD-CORRIDOR). The 25-mile band
+// used to put Moki inside it (and Apache Trail on every trip out of Mesa);
+// now a leg without measured geometry only name-matches.
 const c = [{ ...kayenta }, { ...blanding }]
 const r3 = await detectStopHazards(c, rig, '', [])
-check('no geometry → straight-line fallback (the pre-PR-7 false positive) still fires', r3.hitCount === 1, `hits ${r3.hitCount}`)
+check('no geometry → corridor skipped, nothing fires', r3.hitCount === 0, `hits ${r3.hitCount}`)
+
+// A stop that already carries the same note (a rebuilt itinerary) does not get it twice.
+const d = [{ ...mexHat }, { ...bridges, violationNotes: [((b[1] as any).violationNotes as string[])[0]] }]
+await detectStopHazards(d, rig, '', [{ from: 'Mexican Hat', to: 'Natural Bridges', steps: ut261 }])
+check('re-detection does not duplicate an existing note', (d[1] as any).violationNotes.length === 1, `${(d[1] as any).violationNotes.length} note(s)`)
 
 console.log(`\n${failed ? `${failed} FAILED` : 'all passed'}`)
 if (failed) process.exitCode = 1

@@ -3603,12 +3603,6 @@ export function buildViolationAdvisory(legNotices: LegNotice[]): string | null {
 // banner. Independent of USE_HERE_ROUTING: this uses only the DB + Google
 // geocoding (resolveCoords), so it works with the abandoned HERE display off.
 
-/** Corridor half-width (miles) around the straight line between leg endpoints. A
- *  hazard whose point falls within this buffer counts as "on/near the leg".
- *  Generous on purpose — real roads wind far from the straight line, especially
- *  in the mountains where length/grade hazards cluster, so we favor recall and
- *  frame the warning as "verify". Named constant for easy tuning. */
-const HAZARD_CORRIDOR_BUFFER_MI = 25
 /** PR-7 — when the leg's MEASURED route steps are known, a hazard must sit
  *  within this many miles of the road actually driven. Moki Dugway (UT-261)
  *  fired on a US-160 → US-191 trip because the 25-mile straight-line band
@@ -3824,14 +3818,6 @@ export async function detectStopHazards(
     })) as HazardRow[]
     if (!hazards.length) return { advisory: null, hitCount: 0 }
 
-    // Geocode cache so a repeated city isn't geocoded twice in one turn.
-    const coordCache = new Map<string, { lat: number; lng: number } | null>()
-    const geocode = async (s: any) => {
-      const key = `${s?.locationName ?? ''}|${s?.locationState ?? ''}`
-      if (!coordCache.has(key)) coordCache.set(key, await resolveCoords(s, googleKey ?? ''))
-      return coordCache.get(key)!
-    }
-
     const advisories: string[] = []
     let hitCount = 0
     for (let i = 1; i < stops.length; i++) {
@@ -3840,16 +3826,18 @@ export async function detectStopHazards(
       const nameHits = hazards.filter(h => stopNamesHazard(to, h) || stopNamesHazard(from, h))
       // (C) corridor match — the measured ROAD when we have it (PR-7), else the
       // straight line between the geocoded endpoints.
+      // PLANNER-HAZARD-CORRIDOR — the corridor test needs the measured road.
+      // Without geometry (routing failed for the leg) we no longer fall back to
+      // the 25-mile straight-line band: it put Apache Trail on every eastbound
+      // trip out of Mesa. Name matches still fire; the trip page re-runs this
+      // against the cached real route, so a genuine hazard still surfaces there.
       let corridorHits: HazardRow[] = []
       const steps = geomByLeg.get(`${normLegName(from?.locationName)}|${normLegName(to?.locationName)}`)
       if (steps) {
         corridorHits = hazards.filter(h => minMilesToRoute(h.lat, h.lng, steps) <= HAZARD_ROUTE_BUFFER_MI)
       } else {
-        const a = await geocode(from), b = await geocode(to)
-        if (a && b) {
-          corridorHits = hazards.filter(h =>
-            pointToSegmentMiles(h.lat, h.lng, a.lat, a.lng, b.lat, b.lng) <= HAZARD_CORRIDOR_BUFFER_MI)
-        }
+        console.warn('[detectStopHazards] leg %s→%s: no measured geometry — corridor test skipped (name match only)',
+          from?.locationName, to?.locationName)
       }
       // Dedupe (name+state) and rig-gate.
       const seen = new Set<string>()
@@ -3862,12 +3850,13 @@ export async function detectStopHazards(
       if (!firing.length) continue
 
       const notes = firing.map(h => composeHazardNote(h, rig))
-      const existing = Array.isArray((to as any).violationNotes) ? (to as any).violationNotes : []
-      ;(to as any).violationNotes = [...existing, ...notes]
+      // Merge without duplicates — a rebuilt itinerary can carry notes forward.
+      const existing: string[] = Array.isArray((to as any).violationNotes) ? (to as any).violationNotes : []
+      ;(to as any).violationNotes = [...existing, ...notes.filter(n => !existing.includes(n))]
       advisories.push(...notes)
       hitCount += firing.length
       console.warn('[detectStopHazards] leg %s→%s: %d hazard(s) fired (%s): %s',
-        from?.locationName, to?.locationName, firing.length, steps ? `route ≤${HAZARD_ROUTE_BUFFER_MI}mi` : `straight-line ≤${HAZARD_CORRIDOR_BUFFER_MI}mi`, firing.map(h => h.name).join('; '))
+        from?.locationName, to?.locationName, firing.length, steps ? `route ≤${HAZARD_ROUTE_BUFFER_MI}mi` : 'name match only', firing.map(h => h.name).join('; '))
     }
 
     return { advisory: advisories.length ? advisories.join(' ') : null, hitCount }

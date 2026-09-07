@@ -2032,6 +2032,10 @@ export async function chat(req: AuthRequest, res: Response, next: NextFunction) 
       try {
         const transitItin = parseItineraryBlock(response)
         const transitStops = Array.isArray(transitItin?.stops) ? (transitItin!.stops as any[]) : null
+        // PLANNER-HAZARD-CORRIDOR — the model echoes last turn's itinerary,
+        // violationNotes included; the app re-measures every turn (transit
+        // splice + detectStopHazards), so start clean or the notes stack.
+        if (transitStops) for (const s of transitStops) delete s.violationNotes
         if (transitItin && transitStops && transitStops.length >= 2) {
           const capHours = deriveCapHours(user?.travelProfile, tripDriveCap)
           // FEAT-HERE-ROUTING — rig dims for the truck-routing measurement, taken
