@@ -2435,6 +2435,16 @@ export default function TripMapPage() {
                   {(() => {
                     if (!USE_HERE_ROUTING_DISPLAY) return null
                     const rigAny: any = currentTripRig
+                    // CAR_CAMPING: standard routing is the right routing — say so in
+                    // green and never show the amber/blue rig states for a car.
+                    if (rigAny?.vehicleType === 'CAR_CAMPING') {
+                      return (
+                        <div className="mx-2 mb-2 flex items-center gap-1.5 rounded-md border border-rr-pine-100 bg-rr-pine-50 px-2.5 py-1.5 text-xs font-semibold text-rr-pine-700">
+                          <Check size={14} className="flex-shrink-0 text-rr-pine" />
+                          <span>Drives planned for your vehicle — standard routing is right for a car.</span>
+                        </div>
+                      )
+                    }
                     // RIG-REASON (2026-09-05): rig-aware routing needs ALL of height,
                     // length and weight (GVWR). Benny's Thor Magnitude had height +
                     // length but no GVWR, so every drive fell back and the sidebar
@@ -2685,7 +2695,8 @@ export default function TripMapPage() {
                             const nightsChip = (badge !== 'S' && badge !== 'H' && badge !== 'F')
                               ? `${stop.nights} night${stop.nights === 1 ? '' : 's'}${stop.type === 'OVERNIGHT_ONLY' ? ' · overnight' : ''}`
                               : null
-                            const rigAware = badge !== 'S' ? rigAwareByStop.get(stop.id) : undefined
+                            // A car never wears the amber per-stop line (standard routing is right for it).
+                            const rigAware = badge !== 'S' && (currentTripRig as any)?.vehicleType !== 'CAR_CAMPING' ? rigAwareByStop.get(stop.id) : undefined
                             return (
                               <div className="flex flex-col gap-0.5 mt-0.5">
                                 {badge === 'S' && <p className="text-xs text-gray-600">Start</p>}

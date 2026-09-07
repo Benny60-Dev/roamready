@@ -221,7 +221,13 @@ export function missingSafetyDims(rig: {
   length?: number | null
   height?: number | null
   gvwr?: number | null
+  vehicleType?: string | null
 }): RigSafetyDim[] {
+  // CAR_CAMPING is exempt: a car needs no rig-aware routing — standard routing
+  // IS the right routing for it — so nothing is "missing" and it is never
+  // flagged Incomplete or amber. (Converted vans keep the dims: high-tops
+  // still hit clearance limits.)
+  if (rig.vehicleType === 'CAR_CAMPING') return []
   const missing: RigSafetyDim[] = []
   if (rig.length == null) missing.push('length')
   if (rig.height == null) missing.push('height')

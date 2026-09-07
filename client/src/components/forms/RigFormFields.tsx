@@ -169,7 +169,11 @@ export default function RigFormFields({
   // the trip goes amber. Required unless the user ticks "I'll add these later"
   // (the rig then carries an Incomplete badge on the profile and the trip
   // sidebar names the missing field until it's filled).
-  const dimsLater = !!useWatch({ control, name: 'dimsLater' })
+  const watchedType = useWatch({ control, name: 'vehicleType' }) as string | undefined
+  const isCar = (watchedType ?? vehicleType) === 'CAR_CAMPING'
+  // Car camping: dims are optional (standard routing is right for a car).
+  const dimsLaterTicked = !!useWatch({ control, name: 'dimsLater' })   // hook runs unconditionally
+  const dimsLater = isCar || dimsLaterTicked
   const dimError = (name: 'length' | 'height' | 'gvwr') => {
     const e: any = errors?.[name]
     return e ? <p className="mt-1 text-xs text-red-600">{typeof e.message === 'string' && e.message ? e.message : 'Required for rig-aware routing'}</p> : null
@@ -293,13 +297,13 @@ export default function RigFormFields({
             </p>
           </div>
         </details>
-        <label className="mt-3 flex items-start gap-2 text-xs text-gray-600 cursor-pointer">
+        {!isCar && <label className="mt-3 flex items-start gap-2 text-xs text-gray-600 cursor-pointer">
           <input type="checkbox" className="mt-0.5" {...register('dimsLater')} />
           <span>
             I don’t know the height, length or weight yet — I’ll add them later.
             <span className="block text-gray-400">Until then this rig can’t be routed as a rig: drives use standard car routing and the trip will say so.</span>
           </span>
-        </label>
+        </label>}
       </div>
 
       {/* ── FEAT-RIG-DIMENSIONS: width (inches) + axle count. Both OPTIONAL —
