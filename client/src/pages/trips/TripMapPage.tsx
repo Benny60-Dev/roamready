@@ -2424,6 +2424,73 @@ export default function TripMapPage() {
             >
               {sidebarTab === 'stops' && (
                 <div className="space-y-0.5">
+                  {/* FEAT-RIG-AWARE-INDICATOR — one trip-level line (mock Option D).
+                      States: BLUE nudge (rig has no safety dims — an invitation, not
+                      a warning); GREEN (every provenance-carrying leg was truck-
+                      routed); AMBER count (mixed — the flagged stop(s) wear the
+                      amber pill above); AMBER all-car. Gated on the same display
+                      flag as the routes fetch, and renders NOTHING when no
+                      provenance arrived (legacy trips, fetch failure) — the line
+                      never claims what the data can't back. */}
+                  {(() => {
+                    if (!USE_HERE_ROUTING_DISPLAY) return null
+                    const rigAny: any = currentTripRig
+                    // RIG-REASON (2026-09-05): rig-aware routing needs ALL of height,
+                    // length and weight (GVWR). Benny's Thor Magnitude had height +
+                    // length but no GVWR, so every drive fell back and the sidebar
+                    // just said "not planned for your rig" with no way to fix it.
+                    // Name exactly what is missing and link to the rig form.
+                    const missing: string[] = []
+                    if (!rigAny || !((rigAny.height ?? 0) > 0)) missing.push('height')
+                    if (!rigAny || !((rigAny.length ?? 0) > 0)) missing.push('length')
+                    if (!rigAny || !((rigAny.gvwr ?? 0) > 0)) missing.push('weight (GVWR)')
+                    if (missing.length) {
+                      const list = missing.length === 1 ? missing[0] : missing.length === 2 ? `${missing[0]} and ${missing[1]}` : `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}`
+                      return (
+                        <div className="mx-2 mb-2 flex items-start gap-1.5 rounded-md border border-rr-blue-100 bg-rr-blue-50 px-2.5 py-1.5 text-xs text-gray-700">
+                          <Info size={14} className="flex-shrink-0 mt-px text-rr-blue" />
+                          <span>
+                            {rigAny ? `We can't plan drives for the ${rigAny.name ?? 'rig'} without its ${list}. ` : 'No rig on this trip yet. '}
+                            <Link
+                              to={rigAny ? `/profile/rig/${rigAny.id}/edit?returnTo=/trips/${id}/map` : '/profile/rig'}
+                              className="font-semibold text-rr-blue hover:text-rr-blue-dark underline"
+                            >{rigAny ? `Add the ${list}` : 'Add your rig'}</Link>
+                            {' '}and this trip's drives will be re-planned for it.
+                          </span>
+                        </div>
+                      )
+                    }
+                    const vals = [...rigAwareByStop.values()]
+                    const total = vals.length
+                    if (total === 0) return null
+                    const fallback = vals.filter(v => v === false).length
+                    const measured = total - fallback
+                    // SIDEBAR-READABILITY: the summary is a green or amber banner
+                    // (12px, filled) instead of an 11px text line; the amber copy
+                    // leads with NOT so nobody reads "car routing" as a feature.
+                    if (fallback === 0) {
+                      return (
+                        <div className="mx-2 mb-2 flex items-center gap-1.5 rounded-md border border-rr-pine-100 bg-rr-pine-50 px-2.5 py-1.5 text-xs font-semibold text-rr-pine-700">
+                          <Check size={14} className="flex-shrink-0 text-rr-pine" />
+                          <span>{total === 1 ? 'Drive planned for your rig' : 'All drives planned for your rig'}</span>
+                        </div>
+                      )
+                    }
+                    if (measured === 0) {
+                      return (
+                        <div className="mx-2 mb-2 flex items-start gap-1.5 rounded-md border border-rr-gold-100 bg-rr-gold-50 px-2.5 py-1.5 text-xs font-semibold text-rr-gold-700">
+                          <AlertTriangle size={14} className="flex-shrink-0 mt-px text-rr-gold-dark" />
+                          <span>{total === 1 ? 'This drive is not planned for your rig' : 'No drive on this trip is planned for your rig'} — check clearances and grades yourself.</span>
+                        </div>
+                      )
+                    }
+                    return (
+                      <div className="mx-2 mb-2 flex items-start gap-1.5 rounded-md border border-rr-gold-100 bg-rr-gold-50 px-2.5 py-1.5 text-xs font-semibold text-rr-gold-700">
+                        <AlertTriangle size={14} className="flex-shrink-0 mt-px text-rr-gold-dark" />
+                        <span>{fallback} of {total} drives not planned for your rig — check the flagged drive{fallback > 1 ? 's' : ''} yourself.</span>
+                      </div>
+                    )
+                  })()}
                   {/* RIG-CHANGE Phase 2 — booked-fit warning banner. Mirrors the
                       weather-alerts banner (amber tokens). Data-derived: shows
                       whenever a booked stop was stamped against a rig SHORTER than
@@ -2752,73 +2819,6 @@ export default function TripMapPage() {
                       </span>
                     </div>
                   )}
-                  {/* FEAT-RIG-AWARE-INDICATOR — one trip-level line (mock Option D).
-                      States: BLUE nudge (rig has no safety dims — an invitation, not
-                      a warning); GREEN (every provenance-carrying leg was truck-
-                      routed); AMBER count (mixed — the flagged stop(s) wear the
-                      amber pill above); AMBER all-car. Gated on the same display
-                      flag as the routes fetch, and renders NOTHING when no
-                      provenance arrived (legacy trips, fetch failure) — the line
-                      never claims what the data can't back. */}
-                  {(() => {
-                    if (!USE_HERE_ROUTING_DISPLAY) return null
-                    const rigAny: any = currentTripRig
-                    // RIG-REASON (2026-09-05): rig-aware routing needs ALL of height,
-                    // length and weight (GVWR). Benny's Thor Magnitude had height +
-                    // length but no GVWR, so every drive fell back and the sidebar
-                    // just said "not planned for your rig" with no way to fix it.
-                    // Name exactly what is missing and link to the rig form.
-                    const missing: string[] = []
-                    if (!rigAny || !((rigAny.height ?? 0) > 0)) missing.push('height')
-                    if (!rigAny || !((rigAny.length ?? 0) > 0)) missing.push('length')
-                    if (!rigAny || !((rigAny.gvwr ?? 0) > 0)) missing.push('weight (GVWR)')
-                    if (missing.length) {
-                      const list = missing.length === 1 ? missing[0] : missing.length === 2 ? `${missing[0]} and ${missing[1]}` : `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}`
-                      return (
-                        <div className="mx-2 mt-2 flex items-start gap-1.5 rounded-md border border-rr-blue-100 bg-rr-blue-50 px-2.5 py-1.5 text-xs text-gray-700">
-                          <Info size={14} className="flex-shrink-0 mt-px text-rr-blue" />
-                          <span>
-                            {rigAny ? `We can't plan drives for the ${rigAny.name ?? 'rig'} without its ${list}. ` : 'No rig on this trip yet. '}
-                            <Link
-                              to={rigAny ? `/profile/rig/${rigAny.id}/edit?returnTo=/trips/${id}/map` : '/profile/rig'}
-                              className="font-semibold text-rr-blue hover:text-rr-blue-dark underline"
-                            >{rigAny ? `Add the ${list}` : 'Add your rig'}</Link>
-                            {' '}and this trip's drives will be re-planned for it.
-                          </span>
-                        </div>
-                      )
-                    }
-                    const vals = [...rigAwareByStop.values()]
-                    const total = vals.length
-                    if (total === 0) return null
-                    const fallback = vals.filter(v => v === false).length
-                    const measured = total - fallback
-                    // SIDEBAR-READABILITY: the summary is a green or amber banner
-                    // (12px, filled) instead of an 11px text line; the amber copy
-                    // leads with NOT so nobody reads "car routing" as a feature.
-                    if (fallback === 0) {
-                      return (
-                        <div className="mx-2 mt-2 flex items-center gap-1.5 rounded-md border border-rr-pine-100 bg-rr-pine-50 px-2.5 py-1.5 text-xs font-semibold text-rr-pine-700">
-                          <Check size={14} className="flex-shrink-0 text-rr-pine" />
-                          <span>{total === 1 ? 'Drive planned for your rig' : 'All drives planned for your rig'}</span>
-                        </div>
-                      )
-                    }
-                    if (measured === 0) {
-                      return (
-                        <div className="mx-2 mt-2 flex items-start gap-1.5 rounded-md border border-rr-gold-100 bg-rr-gold-50 px-2.5 py-1.5 text-xs font-semibold text-rr-gold-700">
-                          <AlertTriangle size={14} className="flex-shrink-0 mt-px text-rr-gold-dark" />
-                          <span>{total === 1 ? 'This drive is not planned for your rig' : 'No drive on this trip is planned for your rig'} — check clearances and grades yourself.</span>
-                        </div>
-                      )
-                    }
-                    return (
-                      <div className="mx-2 mt-2 flex items-start gap-1.5 rounded-md border border-rr-gold-100 bg-rr-gold-50 px-2.5 py-1.5 text-xs font-semibold text-rr-gold-700">
-                        <AlertTriangle size={14} className="flex-shrink-0 mt-px text-rr-gold-dark" />
-                        <span>{fallback} of {total} drives not planned for your rig — check the flagged drive{fallback > 1 ? 's' : ''} yourself.</span>
-                      </div>
-                    )
-                  })()}
                 </div>
               )}
 
