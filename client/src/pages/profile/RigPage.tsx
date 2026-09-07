@@ -5,8 +5,11 @@ import { Plus, Trash2, Star, Pencil, BadgeInfo, Car, Truck, AlertCircle } from '
 import { usersApi } from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 import { Rig, VehicleType } from '../../types'
-import { deriveSecondVehicle, VEHICLE_LABELS, buildTowedFields, buildSecondVehiclePayload, type TowingChoice } from '../../utils/rigs'
+import { deriveSecondVehicle, VEHICLE_LABELS, buildTowedFields, buildSecondVehiclePayload, missingSafetyDims, type TowingChoice } from '../../utils/rigs'
 import RigFormFields from '../../components/forms/RigFormFields'
+
+// RIG-DIMS-REQUIRED — the form's escape-hatch checkbox is UI-only; never sent.
+const stripDimsLater = (d: any) => { const { dimsLater: _dl, ...rest } = d ?? {}; return rest }
 
 // VEHICLE_LABELS now lives in utils/rigs (so utils can reuse it without a
 // circular import). Re-exported here so existing `import { VEHICLE_LABELS }
@@ -27,6 +30,15 @@ function RigCard({ rig, onDelete, onSetDefault }: { rig: Rig; onDelete: (id: str
               {rig.year} {rig.make} {rig.model}
             </p>
             {rig.isDefault && <span className="badge-green text-xs">Default</span>}
+            {missingSafetyDims(rig).length > 0 && (
+              <Link
+                to={`/profile/rig/${rig.id}/edit`}
+                title={`Missing ${missingSafetyDims(rig).map(d => d === 'gvwr' ? 'weight (GVWR)' : d).join(', ')} — drives can't be planned for this rig until added`}
+                className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 hover:bg-amber-100"
+              >
+                <AlertCircle size={12} className="text-amber-600" /> Incomplete — add {missingSafetyDims(rig).map(d => d === 'gvwr' ? 'weight' : d).join(', ')}
+              </Link>
+            )}
           </div>
           <p className="text-xs text-gray-500">{VEHICLE_LABELS[rig.vehicleType]}</p>
           <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-gray-400">
@@ -223,7 +235,7 @@ export default function RigPage() {
   const [towingChoice, setTowingChoice] = useState<TowingChoice>('NONE')
   // Scroll the just-revealed "Add a rig" form into view (FR-RIG-ADD-SCROLL).
   const formRef = useRef<HTMLDivElement>(null)
-  const { register, handleSubmit, reset, watch, setFocus, control, setValue } = useForm()
+  const { register, handleSubmit, reset, watch, setFocus, control, setValue, formState } = useForm()
   const vehicleType = watch('vehicleType') as VehicleType | undefined
   // Direction is derived from vehicleType; RigFormFields owns the towingChoice
   // sync effect and second-vehicle UI, so the page only needs `direction` for
@@ -261,7 +273,7 @@ export default function RigPage() {
       const svPayload = buildSecondVehiclePayload(data, isTowing, towed)
       if (svPayload) usersApi.createSecondVehicle(svPayload).catch(() => { /* non-fatal */ })
       const res = await usersApi.createRig({
-        ...data,
+        ...stripDimsLater(data),
         isToyHauler: data.vehicleType === 'TOY_HAULER',
         isVan: data.vehicleType === 'VAN',
         isCamper: data.vehicleType === 'CAR_CAMPING',
@@ -335,6 +347,7 @@ export default function RigPage() {
               vehicleType={vehicleType}
               control={control}
               register={register}
+            errors={formState.errors}
               setValue={setValue}
               towingChoice={towingChoice}
               setTowingChoice={setTowingChoice}

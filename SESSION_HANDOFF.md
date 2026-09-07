@@ -35,6 +35,7 @@
 - PR-6 — **Missing camping cost line** — a 6-night trip priced 5 nights; the Tonalea overnight had no camping line
 - PR-7 — **Off-route hazard warning** — Moki Dugway (UT-261) warned on a US-160 → US-191 route
 - SIDEBAR-READABILITY — **Map sidebar drive info readable** — miles in RV blue, nights chip, green/amber per-drive rig line, banner
+- RIG-DIMS-REQUIRED — **Rig height, length and weight (GVWR) required** on every rig form — with an 'I'll add them later' escape hatch that keeps nagging
 - PR-8 — **Booking-form data validation** — "site" accepted as a site number (renders as "site #site"), "kbyyy" accepted as a licence plate
 - PR-9 — **Display chips styled as controls** — "2 adults" / "both" party chips look tappable but are display-only
 - PR-11 — **Public roadmap shows test entries** — "what is this test", "Testing Feedback Gmail Functionality" visible to every user

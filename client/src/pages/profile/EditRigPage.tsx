@@ -9,6 +9,9 @@ import { deriveSecondVehicle, buildTowedFields, buildSecondVehiclePayload, type 
 import { useScrollResetOnReady } from '../../hooks/useScrollResetOnReady'
 import RigFormFields from '../../components/forms/RigFormFields'
 
+// RIG-DIMS-REQUIRED — the form's escape-hatch checkbox is UI-only; never sent.
+const stripDimsLater = (d: any) => { const { dimsLater: _dl, ...rest } = d ?? {}; return rest }
+
 // Mirrors RigPage's add-form shape exactly so users see the same inputs in
 // the same order. Differences vs the add form:
 //   1. Pre-populates from an existing Rig fetched on mount
@@ -23,7 +26,7 @@ export default function EditRigPage() {
   const [notFound, setNotFound] = useState(false)
   const [saving, setSaving] = useState(false)
   const [towingChoice, setTowingChoice] = useState<TowingChoice>('NONE')
-  const { register, handleSubmit, reset, watch, control, setValue } = useForm()
+  const { register, handleSubmit, reset, watch, control, setValue, formState } = useForm()
   const vehicleType: VehicleType | undefined = watch('vehicleType') as VehicleType | undefined
   // Direction is derived from vehicleType; RigFormFields owns the towingChoice
   // sync effect and second-vehicle UI. The page keeps `direction` only for the
@@ -100,7 +103,7 @@ export default function EditRigPage() {
       const svPayload = buildSecondVehiclePayload(data, isTowing, towed)
       if (svPayload) usersApi.createSecondVehicle(svPayload).catch(() => { /* non-fatal */ })
       await usersApi.updateRig(rig.id, {
-        ...data,
+        ...stripDimsLater(data),
         isToyHauler: data.vehicleType === 'TOY_HAULER',
         isVan: data.vehicleType === 'VAN',
         isCamper: data.vehicleType === 'CAR_CAMPING',
@@ -158,6 +161,7 @@ export default function EditRigPage() {
             vehicleType={vehicleType}
             control={control}
             register={register}
+            errors={formState.errors}
             setValue={setValue}
             towingChoice={towingChoice}
             setTowingChoice={setTowingChoice}
