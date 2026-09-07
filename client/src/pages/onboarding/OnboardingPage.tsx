@@ -9,6 +9,9 @@ import MarketingOptInModal from '../../components/onboarding/MarketingOptInModal
 import RigFormFields from '../../components/forms/RigFormFields'
 import { deriveSecondVehicle, buildTowedFields, buildSecondVehiclePayload, type TowingChoice } from '../../utils/rigs'
 
+// RIG-DIMS-REQUIRED — the form's escape-hatch checkbox is UI-only; never sent.
+const stripDimsLater = (d: any) => { const { dimsLater: _dl, ...rest } = d ?? {}; return rest }
+
 const VEHICLE_OPTIONS: { type: VehicleType; emoji: string; label: string; sub: string }[] = [
   { type: 'RV_CLASS_A', emoji: '🚌', label: 'Class A Motorhome', sub: 'Large motorhome, 30-45ft' },
   { type: 'RV_CLASS_B', emoji: '🚐', label: 'Class B / Camper Van', sub: 'Van-based motorhome' },
@@ -65,7 +68,7 @@ export default function OnboardingPage() {
       const svPayload = buildSecondVehiclePayload(data, isTowing, towed)
       if (svPayload) usersApi.createSecondVehicle(svPayload).catch(() => { /* non-fatal */ })
       await usersApi.createRig({
-        ...data,
+        ...stripDimsLater(data),
         vehicleType,
         isDefault: true,
         isTowing,
@@ -158,6 +161,7 @@ export default function OnboardingPage() {
                 vehicleType={vehicleType ?? undefined}
                 control={rigForm.control}
                 register={rigForm.register}
+                errors={rigForm.formState.errors}
                 setValue={rigForm.setValue}
                 towingChoice={towingChoice}
                 setTowingChoice={setTowingChoice}

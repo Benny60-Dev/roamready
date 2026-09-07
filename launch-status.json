@@ -357,6 +357,17 @@
       "whatRemains": "Look at it on dev; the per-stop rig line needs the routes call to have run (it does on map load)."
     },
     {
+      "id": "RIG-DIMS-REQUIRED",
+      "title": "**Rig height, length and weight (GVWR) required** on every rig form — with an 'I'll add them later' escape hatch that keeps nagging",
+      "status": "DONE",
+      "statusRaw": "**DONE — merged local main (RR69), not pushed**",
+      "severity": null,
+      "category": "review-fixed",
+      "commits": [],
+      "evidence": "Benny 09-05: 'if we are a rig routing app we need to make that a required field' (his Thor Magnitude had no GVWR → every drive amber). [RigFormFields](client/src/components/forms/RigFormFields.tsx): length/height/gvwr carry a validate rule (required unless the new 'I don't know these yet — I'll add them later' checkbox is ticked), red messages under each field (pages pass formState.errors), the checkbox explains the consequence. Profile rig list: amber 'Incomplete — add weight' badge linking to the edit form (missingSafetyDims). Map sidebar: the rig-status banner moved to the TOP of the stops list and the blue state names exactly what is missing with a link. Server untouched (pickRigInput allowlist; dimsLater stripped client-side). Onboarding's 'Skip for now' (no rig) unchanged.",
+      "whatRemains": "Try Add rig without a weight → blocked with the message; tick the box → saves and shows Incomplete on the profile."
+    },
+    {
       "id": "PR-8",
       "title": "**Booking-form data validation** — \"site\" accepted as a site number (renders as \"site #site\"), \"kbyyy\" accepted as a licence plate",
       "status": "DONE",

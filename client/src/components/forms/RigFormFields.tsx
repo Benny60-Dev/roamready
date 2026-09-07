@@ -1,4 +1,4 @@
-import { Controller, useWatch, type Control, type UseFormRegister, type UseFormSetValue } from 'react-hook-form'
+import { Controller, useWatch, type Control, type UseFormRegister, type UseFormSetValue, FieldErrors } from 'react-hook-form'
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { VehicleType, SecondVehicle } from '../../types'
@@ -30,6 +30,9 @@ interface RigFormFieldsProps {
   setValue: UseFormSetValue<any>
   towingChoice: TowingChoice
   setTowingChoice: (c: TowingChoice) => void
+  /** RIG-DIMS-REQUIRED (2026-09-05): the page's formState.errors, so the three
+   *  routing dims can show a required message. Optional for back-compat. */
+  errors?: FieldErrors<any>
 }
 
 /**
@@ -49,6 +52,7 @@ export default function RigFormFields({
   setValue,
   towingChoice,
   setTowingChoice,
+  errors,
 }: RigFormFieldsProps) {
   const isFull = variant === 'full'
   const isToyHauler = vehicleType === 'TOY_HAULER'
@@ -160,6 +164,17 @@ export default function RigFormFields({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [direction, isTowVehicleDirection])
 
+  // RIG-DIMS-REQUIRED — height, length and weight are what rig-aware routing
+  // needs; without any one of them every drive falls back to car routing and
+  // the trip goes amber. Required unless the user ticks "I'll add these later"
+  // (the rig then carries an Incomplete badge on the profile and the trip
+  // sidebar names the missing field until it's filled).
+  const dimsLater = !!useWatch({ control, name: 'dimsLater' })
+  const dimError = (name: 'length' | 'height' | 'gvwr') => {
+    const e: any = errors?.[name]
+    return e ? <p className="mt-1 text-xs text-red-600">{typeof e.message === 'string' && e.message ? e.message : 'Required for rig-aware routing'}</p> : null
+  }
+
   // Live year/make/model for the GVWR "look it up online" fallback link.
   const [ymYear, ymMake, ymModel] = useWatch({ control, name: ['year', 'make', 'model'] }) as [
     unknown,
@@ -212,22 +227,26 @@ export default function RigFormFields({
           <Controller
             control={control}
             name="length"
+            rules={{ validate: v => dimsLater || (v != null && v !== '' && Number(v) > 0) || 'Required for rig-aware routing — or tick “I’ll add these later” below' }}
             render={({ field }) => (
               <RangeSelect options={LENGTHS} placeholder="Select length" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
             )}
           />
           <p className="mt-1 text-xs text-gray-400">Checked against every campsite for fit.</p>
+          {dimError('length')}
         </div>
         <div>
           <label className="label">Height (ft)</label>
           <Controller
             control={control}
             name="height"
+            rules={{ validate: v => dimsLater || (v != null && v !== '' && Number(v) > 0) || 'Required for rig-aware routing — or tick “I’ll add these later” below' }}
             render={({ field }) => (
               <RangeSelect options={HEIGHTS} placeholder="Select height" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
             )}
           />
           <p className="mt-1 text-xs text-gray-400">Warns you off low bridges and tunnels.</p>
+          {dimError('height')}
         </div>
       </div>
 
@@ -240,6 +259,7 @@ export default function RigFormFields({
         <Controller
           control={control}
           name="gvwr"
+          rules={{ validate: v => dimsLater || (v != null && v !== '' && Number(v) > 0) || 'Required for rig-aware routing — or tick “I’ll add these later” below' }}
           render={({ field }) => (
             <RangeSelect options={GVWR_OPTIONS} integer placeholder="Select GVWR" value={field.value} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
           )}
@@ -247,6 +267,7 @@ export default function RigFormFields({
         <p className="mt-1 text-xs text-gray-400">
           Lets us warn you about weight-limited roads and bridges — the one field our safety alerts can't work without.
         </p>
+        {dimError('gvwr')}
         <details className="mt-1">
           <summary className="text-xs cursor-pointer" style={{ color: TEAL }}>
             Where do I find this?
@@ -272,6 +293,13 @@ export default function RigFormFields({
             </p>
           </div>
         </details>
+        <label className="mt-3 flex items-start gap-2 text-xs text-gray-600 cursor-pointer">
+          <input type="checkbox" className="mt-0.5" {...register('dimsLater')} />
+          <span>
+            I don’t know the height, length or weight yet — I’ll add them later.
+            <span className="block text-gray-400">Until then this rig can’t be routed as a rig: drives use standard car routing and the trip will say so.</span>
+          </span>
+        </label>
       </div>
 
       {/* ── FEAT-RIG-DIMENSIONS: width (inches) + axle count. Both OPTIONAL —
