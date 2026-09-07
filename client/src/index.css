@@ -188,3 +188,27 @@
     box-shadow: 0 0 0 4px rgba(31, 111, 139, 0.35);
   }
 }
+
+/*
+ * READABLE-HELPER-TEXT (2026-09-05, Benny: "all of these words under the
+ * sections are hard to read — faded, greyed out — anywhere on the site").
+ * Helper/meta copy site-wide uses text-gray-400 (#9CA3AF), which is 2.5:1 on
+ * white — well under the 4.5:1 accessibility bar — and text-gray-500 (#6B7280)
+ * sits at the edge. This darkens the TEXT utilities one step (257 + 321 call
+ * sites, one rule each) without touching borders, backgrounds or icons that
+ * use the same gray. Plain CSS after the Tailwind utilities so it wins on
+ * source order; the opacity variable is preserved so `/50`-style modifiers
+ * still work.
+ *   text-gray-300 → #9CA3AF (was #D1D5DB)   decorative only
+ *   text-gray-400 → #6B7280 (was #9CA3AF)   4.8:1 on white
+ *   text-gray-500 → #4B5563 (was #6B7280)   7.6:1 on white
+ * Placeholders follow the same rule.
+ */
+.text-gray-300 { color: rgb(156 163 175 / var(--tw-text-opacity, 1)); }
+.text-gray-400 { color: rgb(107 114 128 / var(--tw-text-opacity, 1)); }
+.text-gray-500 { color: rgb(75 85 99 / var(--tw-text-opacity, 1)); }
+.placeholder-gray-400::placeholder,
+.placeholder\:text-gray-400::placeholder,
+.input::placeholder,
+input::placeholder,
+textarea::placeholder { color: #6B7280; }
