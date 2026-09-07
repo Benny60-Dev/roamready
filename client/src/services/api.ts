@@ -156,6 +156,8 @@ export const tripsApi = {
   shiftDates: (id: string, body: { newStartDate: string; modifyActionId?: string }) => api.post(`/trips/${id}/shift-dates`, body),
   delete: (id: string) => api.delete(`/trips/${id}`),
   getShared: (token: string) => api.get(`/trips/share/${token}`),
+  // PR-4 — static route map for the public share page (token-scoped).
+  getSharedMapImage: (token: string) => api.get<{ base64: string | null }>(`/trips/share/${token}/map-image`),
   createShare: (id: string) => api.post<{ sharedToken: string; regenerated: boolean }>(`/trips/${id}/share`),
   regenerateShare: (id: string) => api.post<{ sharedToken: string; regenerated: boolean }>(`/trips/${id}/share/regenerate`),
   revokeShare: (id: string) => api.delete<{ sharedToken: null; revoked: boolean }>(`/trips/${id}/share`),

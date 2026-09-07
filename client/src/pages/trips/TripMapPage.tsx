@@ -47,7 +47,7 @@ const USE_HERE_ROUTING_DISPLAY =
 // to a stop whose ARRIVING leg fell back to car routing while a rig-aware
 // engine was enabled (rigAware === false from POST /trips/:id/routes).
 const RV_FALLBACK_DISPLAY_NOTE =
-  'Heads up: this drive couldn’t be planned for your rig — its drive time and route use standard car routing, so verify clearances and restrictions for your rig on this leg.'
+  'This drive is not planned for your rig — rig-aware routing isn’t available here, so its drive time and route come from standard car routing. Check clearances, grades and restrictions for your rig on this leg yourself.'
 
 // ─── Marker colors ──────────────────────────────────────────────────────────────
 const MC = {
@@ -2473,23 +2473,10 @@ export default function TripMapPage() {
                     //                            when driveDistanceMiles is null (same null-handling
                     //                            discipline as destination rows).
                     //   Destination:             single line, mileage appended inline.
+                    // (SIDEBAR-READABILITY: the subtitle is now rendered inline below —
+                    // miles / nights chip / per-drive rig line — from these two values.)
                     const prevStop = i > 0 ? sortedStops[i - 1] : undefined
                     const distMiles = stop.driveDistanceMiles
-                    let subtitleLine1: string
-                    let subtitleLine2: string | null = null
-                    if (badge === 'S') {
-                      subtitleLine1 = formatStopBadgeLabel(badge) // "Start"
-                    } else if (badge === 'H' || badge === 'F') {
-                      subtitleLine1 = formatStopBadgeLabel(badge) // "Finish"
-                      if (distMiles && prevStop) {
-                        subtitleLine2 = `${distMiles} mi from ${prevStop.locationName}`
-                      }
-                    } else {
-                      const baseSubtitle = `${stop.nights}n${stop.type === 'OVERNIGHT_ONLY' ? ' · overnight' : ''}`
-                      subtitleLine1 = (distMiles && prevStop)
-                        ? `${baseSubtitle} · ${distMiles} mi from ${prevStop.locationName}`
-                        : baseSubtitle
-                    }
 
                     // C3 — Per-row CTA replacing the old read-only booking
                     // pill. Each non-endpoint state is a Link to the booking
@@ -2621,10 +2608,36 @@ export default function TripMapPage() {
                             ...(hazardsByStop.get(stop.id) ?? []),
                             ...(rigAwareByStop.get(stop.id) === false ? [RV_FALLBACK_DISPLAY_NOTE] : []),
                           ]} />
-                          <p className="text-[10px] text-gray-400 truncate">{subtitleLine1}</p>
-                          {subtitleLine2 && (
-                            <p className="text-[10px] text-gray-400 truncate">{subtitleLine2}</p>
-                          )}
+                          {/* SIDEBAR-READABILITY (2026-09-05, Option A): the drive info was
+                              10px light gray and read as disabled. Miles in RV blue,
+                              nights as a small chip, and a green / amber per-drive line
+                              whose amber wording leads with NOT ("car routing" read as
+                              a feature). */}
+                          {(() => {
+                            const legMiles = (badge !== 'S' && distMiles && prevStop) ? `${distMiles} mi from ${prevStop.locationName}` : null
+                            const nightsChip = (badge !== 'S' && badge !== 'H' && badge !== 'F')
+                              ? `${stop.nights} night${stop.nights === 1 ? '' : 's'}${stop.type === 'OVERNIGHT_ONLY' ? ' · overnight' : ''}`
+                              : null
+                            const rigAware = badge !== 'S' ? rigAwareByStop.get(stop.id) : undefined
+                            return (
+                              <div className="flex flex-col gap-0.5 mt-0.5">
+                                {badge === 'S' && <p className="text-xs text-gray-600">Start</p>}
+                                {(badge === 'H' || badge === 'F') && <p className="text-xs text-gray-600">Finish</p>}
+                                {(legMiles || nightsChip) && (
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    {legMiles && <span className="text-xs font-semibold text-[#1F6F8B]">{legMiles}</span>}
+                                    {nightsChip && <span className="text-[11px] font-semibold text-gray-700 bg-gray-100 rounded px-1.5 py-px">{nightsChip}</span>}
+                                  </div>
+                                )}
+                                {rigAware === true && (
+                                  <p className="text-[11px] font-semibold text-rr-pine-700 flex items-center gap-1"><Check size={11} className="flex-shrink-0 text-rr-pine" /> Planned for your rig</p>
+                                )}
+                                {rigAware === false && (
+                                  <p className="text-[11px] font-semibold text-amber-800 flex items-center gap-1"><AlertTriangle size={11} className="flex-shrink-0 text-amber-600" /> Not planned for your rig — check clearances and grades yourself</p>
+                                )}
+                              </div>
+                            )
+                          })()}
                           {/* RIG-CHANGE Phase 2 — per-stop "booked for" record.
                               Shown for booked stops carrying a stamp. The amber
                               re-verify flag (NOT Pine — Pine is the booked status
@@ -2770,26 +2783,29 @@ export default function TripMapPage() {
                     if (total === 0) return null
                     const fallback = vals.filter(v => v === false).length
                     const measured = total - fallback
+                    // SIDEBAR-READABILITY: the summary is a green or amber banner
+                    // (12px, filled) instead of an 11px text line; the amber copy
+                    // leads with NOT so nobody reads "car routing" as a feature.
                     if (fallback === 0) {
                       return (
-                        <div className="flex items-center gap-1.5 px-2 pt-2 text-[11px] font-medium text-rr-pine-700">
-                          <Check size={12} className="flex-shrink-0 text-rr-pine" />
+                        <div className="mx-2 mt-2 flex items-center gap-1.5 rounded-md border border-rr-pine-100 bg-rr-pine-50 px-2.5 py-1.5 text-xs font-semibold text-rr-pine-700">
+                          <Check size={14} className="flex-shrink-0 text-rr-pine" />
                           <span>{total === 1 ? 'Drive planned for your rig' : 'All drives planned for your rig'}</span>
                         </div>
                       )
                     }
                     if (measured === 0) {
                       return (
-                        <div className="flex items-start gap-1.5 px-2 pt-2 text-[11px] font-medium text-amber-800">
-                          <AlertTriangle size={12} className="flex-shrink-0 mt-0.5 text-amber-600" />
-                          <span>Drive times on this trip are car-based — verify clearances and restrictions for your rig on every leg.</span>
+                        <div className="mx-2 mt-2 flex items-start gap-1.5 rounded-md border border-rr-gold-100 bg-rr-gold-50 px-2.5 py-1.5 text-xs font-semibold text-rr-gold-700">
+                          <AlertTriangle size={14} className="flex-shrink-0 mt-px text-rr-gold-dark" />
+                          <span>{total === 1 ? 'This drive is not planned for your rig' : 'No drive on this trip is planned for your rig'} — check clearances and grades yourself.</span>
                         </div>
                       )
                     }
                     return (
-                      <div className="flex items-start gap-1.5 px-2 pt-2 text-[11px] font-medium text-amber-800">
-                        <AlertTriangle size={12} className="flex-shrink-0 mt-0.5 text-amber-600" />
-                        <span>{measured} of {total} drives planned for your rig — see the flagged stop{fallback > 1 ? 's' : ''}</span>
+                      <div className="mx-2 mt-2 flex items-start gap-1.5 rounded-md border border-rr-gold-100 bg-rr-gold-50 px-2.5 py-1.5 text-xs font-semibold text-rr-gold-700">
+                        <AlertTriangle size={14} className="flex-shrink-0 mt-px text-rr-gold-dark" />
+                        <span>{fallback} of {total} drives not planned for your rig — check the flagged drive{fallback > 1 ? 's' : ''} yourself.</span>
                       </div>
                     )
                   })()}
