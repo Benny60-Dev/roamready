@@ -234,8 +234,8 @@ function AppButton({ primary, remembered, onClick, children }: { primary: boolea
 /** The trigger + inline provenance chip. Owns the sheet's open state so a
  *  page only has to drop <NavigateButton …/> where the text links used to be. */
 export function NavigateButton({
-  stop, prevStop, waypoints, rigAware, tripId, source, defaultOrigin, label, compact,
-}: Omit<NavigateSheetProps, 'isOpen' | 'onClose'> & { label?: string; compact?: boolean }) {
+  stop, prevStop, waypoints, rigAware, tripId, source, defaultOrigin, label, compact, hideStatus = false,
+}: Omit<NavigateSheetProps, 'isOpen' | 'onClose'> & { label?: string; compact?: boolean; /** The map sidebar renders its own per-stop rig line; skip the one under the button. */ hideStatus?: boolean }) {
   const [open, setOpen] = useState(false)
   // Pages that don't pass waypoints/rigAware explicitly (summary, booking)
   // provide them through LegRoutesProvider; explicit props win.
@@ -255,11 +255,11 @@ export function NavigateButton({
           <Navigation size={compact ? 12 : 15} />
           {label ?? `Navigate to ${stop.locationName}`}
         </button>
-        {rigAware === true && (
-          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#2F4030]"><Check size={12} /> Route planned for your rig</span>
+        {!hideStatus && rigAware === true && (
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#2F4030]"><Check size={12} /> Planned for your rig</span>
         )}
-        {rigAware === false && (
-          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800"><AlertTriangle size={12} className="text-amber-600" /> Couldn’t be planned for your rig</span>
+        {!hideStatus && rigAware === false && (
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800"><AlertTriangle size={12} className="text-amber-600" /> Not planned for your rig</span>
         )}
       </div>
       {open && (
