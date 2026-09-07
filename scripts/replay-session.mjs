@@ -148,6 +148,17 @@ async function main() {
     return lr.total > 0 && lr.passed < lr.total ? 1 : 0
   }
 
+  // Authenticated JSON call for the file-replay path (the client is the
+  // runner here; --case hands the run to the server instead).
+  async function call(method, path, body) {
+    const r = await fetch(api + path, { method, headers: H, body: body ? JSON.stringify(body) : undefined })
+    const text = await r.text()
+    let data = null
+    try { data = text ? JSON.parse(text) : null } catch { data = text }
+    if (!r.ok) throw new Error(`${method} ${path} → ${r.status}: ${typeof data === 'string' ? data : JSON.stringify(data)}`)
+    return data
+  }
+
   const replay = JSON.parse(readFileSync(resolve(file), 'utf8'))
 
   const stripItin = s => String(s ?? '').replace(/<itinerary>[\s\S]*?(<\/itinerary>|$)/g, '[itinerary]').trim()
