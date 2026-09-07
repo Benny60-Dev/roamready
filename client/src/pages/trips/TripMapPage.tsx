@@ -2633,7 +2633,7 @@ export default function TripMapPage() {
                                   <p className="text-[11px] font-semibold text-rr-pine-700 flex items-center gap-1"><Check size={11} className="flex-shrink-0 text-rr-pine" /> Planned for your rig</p>
                                 )}
                                 {rigAware === false && (
-                                  <p className="text-[11px] font-semibold text-amber-800 flex items-center gap-1"><AlertTriangle size={11} className="flex-shrink-0 text-amber-600" /> Not planned for your rig — check clearances and grades yourself</p>
+                                  <p className="text-[11px] font-semibold text-amber-800 flex items-center gap-1"><AlertTriangle size={11} className="flex-shrink-0 text-amber-600" /> Not planned for your rig</p>
                                 )}
                               </div>
                             )
@@ -2676,6 +2676,7 @@ export default function TripMapPage() {
                           {i > 0 && (
                             <div className="mt-1" onClick={e => e.stopPropagation()}>
                               <NavigateButton
+                                hideStatus
                                 stop={sortedStops[i]} prevStop={sortedStops[i - 1]}
                                 waypoints={hereWaypoints.get(sortedStops[i].id)}
                                 rigAware={rigAwareByStop.get(sortedStops[i].id)}
@@ -2762,18 +2763,27 @@ export default function TripMapPage() {
                   {(() => {
                     if (!USE_HERE_ROUTING_DISPLAY) return null
                     const rigAny: any = currentTripRig
-                    const dimsMissing = !rigAny ||
-                      !((rigAny.height ?? 0) > 0 || (rigAny.length ?? 0) > 0 || (rigAny.gvwr ?? 0) > 0)
-                    if (dimsMissing) {
+                    // RIG-REASON (2026-09-05): rig-aware routing needs ALL of height,
+                    // length and weight (GVWR). Benny's Thor Magnitude had height +
+                    // length but no GVWR, so every drive fell back and the sidebar
+                    // just said "not planned for your rig" with no way to fix it.
+                    // Name exactly what is missing and link to the rig form.
+                    const missing: string[] = []
+                    if (!rigAny || !((rigAny.height ?? 0) > 0)) missing.push('height')
+                    if (!rigAny || !((rigAny.length ?? 0) > 0)) missing.push('length')
+                    if (!rigAny || !((rigAny.gvwr ?? 0) > 0)) missing.push('weight (GVWR)')
+                    if (missing.length) {
+                      const list = missing.length === 1 ? missing[0] : missing.length === 2 ? `${missing[0]} and ${missing[1]}` : `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}`
                       return (
-                        <div className="flex items-start gap-1.5 px-2 pt-2 text-[11px] text-gray-500">
-                          <Info size={12} className="flex-shrink-0 mt-0.5 text-rr-blue" />
+                        <div className="mx-2 mt-2 flex items-start gap-1.5 rounded-md border border-rr-blue-100 bg-rr-blue-50 px-2.5 py-1.5 text-xs text-gray-700">
+                          <Info size={14} className="flex-shrink-0 mt-px text-rr-blue" />
                           <span>
+                            {rigAny ? `We can't plan drives for the ${rigAny.name ?? 'rig'} without its ${list}. ` : 'No rig on this trip yet. '}
                             <Link
                               to={rigAny ? `/profile/rig/${rigAny.id}/edit?returnTo=/trips/${id}/map` : '/profile/rig'}
-                              className="font-medium text-rr-blue hover:text-rr-blue-dark underline"
-                            >Add your rig's height, length &amp; weight</Link>
-                            {' '}so we can plan your route with your rig.
+                              className="font-semibold text-rr-blue hover:text-rr-blue-dark underline"
+                            >{rigAny ? `Add the ${list}` : 'Add your rig'}</Link>
+                            {' '}and this trip's drives will be re-planned for it.
                           </span>
                         </div>
                       )
