@@ -3400,12 +3400,35 @@ export async function getTripMapImage(req: AuthRequest, res: Response, next: Nex
       include: { stops: { orderBy: { order: 'asc' } } },
     })
     if (!trip) throw new AppError('Trip not found', 404)
+    const base64 = await buildStaticMapBase64(trip.stops as any[], getClientOrigin(req))
+    res.json({ base64 })
+  } catch (err) { next(err) }
+}
 
+/** GET /trips/share/:token/map-image — the same static route map for the
+ *  public share page (PR-4: the share modal promises a route; now there is
+ *  one). Token-scoped like getSharedTrip; the image is a Static Maps render of
+ *  stop pins + path, nothing private. Fails soft to { base64: null }. */
+export async function getSharedTripMapImage(req: Request, res: Response, next: NextFunction) {
+  try {
+    const trip = await prisma.trip.findFirst({
+      where: { sharedToken: req.params.token },
+      select: { id: true, stops: { orderBy: { order: 'asc' }, select: { id: true, latitude: true, longitude: true, type: true, locationName: true } } },
+    })
+    if (!trip) throw new AppError('Shared trip not found', 404)
+    const base64 = await buildStaticMapBase64(trip.stops as any[], getClientOrigin(req as any)).catch(() => null)
+    res.json({ base64 })
+  } catch (err) { next(err) }
+}
+
+/** Static Maps render of a trip's stops + route path as a data: URI (null for
+ *  a stopless trip). Shared by the PDF cover (getTripMapImage) and the share page. */
+async function buildStaticMapBase64(stops: any[], base: string): Promise<string | null> {
+  {
     const apiKey = process.env.GOOGLE_MAPS_API_KEY
     if (!apiKey) throw new AppError('Google Maps API key not configured', 500)
 
-    const stops = trip.stops as any[]
-    if (!stops.length) return res.json({ base64: null })
+    if (!stops.length) return null
 
     const params = new URLSearchParams()
     // Landscape image (640×583) matched to the cover box ratio (532×485pt ≈ 1.0969:1).
@@ -3453,7 +3476,6 @@ export async function getTripMapImage(req: AuthRequest, res: Response, next: Nex
     // back to the single-char color:0xF97316|label:S pin. getClientOrigin returns
     // CLIENT_URL in prod, so dev (localhost / unset CLIENT_URL) auto-falls-back
     // with zero config. The PDF legend (TripPDF.tsx) names the pin either way.
-    const base = getClientOrigin(req)
     const canUseIconPin =
       base.startsWith('https://') &&
       !/\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(base)
@@ -3499,9 +3521,8 @@ export async function getTripMapImage(req: AuthRequest, res: Response, next: Nex
 
     const url = `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`
     const imgResponse = await axios.get(url, { responseType: 'arraybuffer' })
-    const base64 = `data:image/png;base64,${Buffer.from(imgResponse.data).toString('base64')}`
-    res.json({ base64 })
-  } catch (err) { next(err) }
+    return `data:image/png;base64,${Buffer.from(imgResponse.data).toString('base64')}`
+  }
 }
 
 /**

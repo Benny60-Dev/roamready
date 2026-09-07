@@ -12,7 +12,7 @@ import {
   getSharedTrip, exportPdf, generatePackingList, updatePackingList,
   seedPackingListFromTemplate, copyPackingListFromTrip,
   generateItinerary, saveItinerary, generateRoutes, generateActivities,
-  generateRouteHighlights, getTripMapImage, getTripWeather, reassignPOIs,
+  generateRouteHighlights, getTripMapImage, getSharedTripMapImage, getTripWeather, reassignPOIs,
   createShareToken, regenerateShareToken, revokeShareToken,
   getTripFuelEstimate, getTripHazards, acknowledgeRvSafety,
 } from '../controllers/trips'
@@ -23,6 +23,7 @@ export const tripsRouter = Router()
 // can view the itinerary. The Pro gate happens on token *creation* below,
 // not on consumption.
 tripsRouter.get('/share/:token', getSharedTrip)
+tripsRouter.get('/share/:token/map-image', getSharedTripMapImage as any)
 
 tripsRouter.use(requireAuth, requireVerifiedEmail)
 

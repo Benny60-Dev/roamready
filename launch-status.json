@@ -310,7 +310,7 @@
       "category": "review-open",
       "commits": [],
       "evidence": "Review observation on [client/src/pages/SharedTripPage.tsx](client/src/pages/SharedTripPage.tsx). FIX: the share page already ran the app's computeTripTotals, but PUBLIC_TRIP_SELECT stripped siteRate/actualRate/actualFees/actualFuel so camping summed to $0 (fuel-only $311). Added them (not sensitive under the modal's own disclosure). A one-way finish stop is no longer collapsed to a bare 'Finish' label — it keeps nights, date and campground (only a HOME endpoint collapses). Nights stat falls back to the stop sum.",
-      "whatRemains": "Map on the share page: the modal promises 'route'; either render a static route map (getTripMapImage exists) or drop the word. Benny's call."
+      "whatRemains": "Done: the share page now renders the static route map (GET /trips/share/:token/map-image, same renderer as the PDF cover) so the modal's 'route' promise is true. Verify on a share link."
     },
     {
       "id": "PR-5",
@@ -344,6 +344,17 @@
       "commits": [],
       "evidence": "Hazard table is live and growing (see hazards below), so a false-positive rule matters more now. FIX: hazards were matched within 25 mi of a STRAIGHT LINE between geocoded stops with no route geometry ('generous on purpose'). Now the measured route steps are kept — planTransitInserts returns legGeometry (every accepted sub-leg's steps) at planning time; getTripHazards reads the map's cached route polyline (same routesCacheKeyFor) at trip-view time — and a hazard must be within 2 mi of the road actually driven (HAZARD_ROUTE_BUFFER_MI). No geometry → the old straight-line band, unchanged. Stop-name matching untouched.",
       "whatRemains": "Verify on a US-160 → US-191 trip (Kayenta → Blanding / Moab): Moki Dugway must not fire; a trip that actually drives UT-261 must."
+    },
+    {
+      "id": "SIDEBAR-READABILITY",
+      "title": "**Map sidebar drive info readable** — miles in RV blue, nights chip, green/amber per-drive rig line, banner",
+      "status": "DONE",
+      "statusRaw": "**DONE — merged local main (RR69), not pushed**",
+      "severity": null,
+      "category": "review-fixed",
+      "commits": [],
+      "evidence": "Benny 09-05: the '1n · overnight · 145 mi from Phoenix' line was 10px light gray and read as disabled; 'All drives planned for your rig' too small; and 'car routing' could be misread as a feature. Mockups on the design canvas 'Map Sidebar Readability and Share Page' — Option A chosen. [TripMapPage.tsx](client/src/pages/trips/TripMapPage.tsx): miles 12px semibold RV blue, nights as a gray chip, a per-stop 'Planned for your rig' (pine) / 'Not planned for your rig — check clearances and grades yourself' (amber) line, and a filled green/amber banner (12px) replacing the 11px text. WORDING RULE: the negative always leads with NOT and mirrors the positive; 'car routing' only appears in the long explanation (Navigate sheet / warning pill), never in a short label.",
+      "whatRemains": "Look at it on dev; the per-stop rig line needs the routes call to have run (it does on map load)."
     },
     {
       "id": "PR-8",

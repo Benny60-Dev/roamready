@@ -14,10 +14,14 @@ export default function SharedTripPage() {
   const [trip, setTrip] = useState<Trip | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
+  // PR-4 — the route map the share modal promises. Loads after the trip;
+  // null/failed → the section simply doesn't render.
+  const [mapImage, setMapImage] = useState<string | null>(null)
 
   useEffect(() => {
     if (!token) return
     tripsApi.getShared(token).then(res => { setTrip(res.data); setLoading(false) }).catch(() => { setNotFound(true); setLoading(false) })
+    tripsApi.getSharedMapImage(token).then(res => setMapImage(res.data?.base64 ?? null)).catch(() => setMapImage(null))
   }, [token])
 
   // Reset window scroll to the top on the loading→ready edge when the tall stop
@@ -70,6 +74,16 @@ export default function SharedTripPage() {
           <h1 className="text-2xl font-medium text-gray-900">{trip.name}</h1>
           <p className="text-gray-500">{trip.startLocation} → {trip.endLocation}</p>
         </div>
+
+        {mapImage && (
+          <div className="card p-0 overflow-hidden">
+            <img src={mapImage} alt={`Route map: ${trip.startLocation} to ${trip.endLocation}`} className="w-full h-auto block" />
+            <div className="flex items-center justify-between px-3 py-2 text-[11px] text-gray-500">
+              <span>Route as planned in RoamReady</span>
+              <Link to="/signup" className="text-[#1F6F8B] font-medium hover:underline">Plan your own →</Link>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
