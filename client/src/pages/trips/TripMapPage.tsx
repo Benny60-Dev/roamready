@@ -2460,7 +2460,7 @@ export default function TripMapPage() {
                         <div className="mx-2 mb-2 flex items-start gap-1.5 rounded-md border border-rr-blue-100 bg-rr-blue-50 px-2.5 py-1.5 text-xs text-gray-700">
                           <Info size={14} className="flex-shrink-0 mt-px text-rr-blue" />
                           <span>
-                            {rigAny ? `We can't plan drives for the ${rigAny.name ?? 'rig'} without its ${list}. ` : 'No rig on this trip yet. '}
+                            {rigAny ? `We can't plan drives for the ${[rigAny.year, rigAny.make, rigAny.model].filter(Boolean).join(' ') || 'rig'} without its ${list}. ` : 'No rig on this trip yet. '}
                             <Link
                               to={rigAny ? `/profile/rig/${rigAny.id}/edit?returnTo=/trips/${id}/map` : '/profile/rig'}
                               className="font-semibold text-rr-blue hover:text-rr-blue-dark underline"
