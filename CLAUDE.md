@@ -101,6 +101,20 @@ generic instructions.
   on Status only; Arial, RV-Blue titles, white-on-blue header, frozen top row,
   gridlines off.
 
+## Running the TS assertion tests from Cowork
+
+`npx tsx` cannot run from the Cowork Linux VM (Windows esbuild binary). Use the
+repo loader instead — it transpiles with the project's own TypeScript and stubs
+utils/prisma + utils/redis:
+
+    cd client && node --import ../scripts/ts-test-register.mjs src/utils/__tests__/rr69.test.ts
+    cd server && RESEND_API_KEY=x STRIPE_SECRET_KEY=x JWT_SECRET=x TS_PATH=$PWD/node_modules/typescript \
+      node --import ../scripts/ts-test-register.mjs src/services/__tests__/rr69.test.ts
+
+Run them before every merge that touches the tested logic (tripTotals, rigs,
+calendar block, replay lifecycle, hazard corridor). Benny on Windows keeps
+using `npx tsx`.
+
 ## Editing files through the Cowork mount
 
 When an edit makes a file SHORTER, the mount can leave trailing NUL padding after
