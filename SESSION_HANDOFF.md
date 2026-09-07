@@ -1,7 +1,7 @@
 # Session Handoff
 <!-- GENERATED FROM launch-status.json — do not hand-edit this section; it is overwritten on every regen -->
 
-**Status as of 2026-09-02** — verified against `main` @ `099c454`.
+**Status as of 2026-09-05** — verified against `main` @ `099c454`.
 
 ## Open items
 - PR-1 — **Free tier is a dead app post-trial** — Free and Pro cards list identical features; after the 7-day trial nearly every surface is `requireFeature`-gated (chat, campground search, journal writes, packing, resources, weather, share, PDF) (OPEN — **product decision first**)

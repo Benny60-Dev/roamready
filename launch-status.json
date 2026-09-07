@@ -1,7 +1,7 @@
 {
   "meta": {
     "verifiedAgainstCommit": "099c454",
-    "verifiedDate": "2026-09-02",
+    "verifiedDate": "2026-09-05",
     "generatedNote": "LAUNCH_STATUS.md is generated from this file by scripts/gen-status.mjs. Edit this JSON, not the .md.",
     "intro": [
       "Audit basis: originally verified against `main` on 2026-06-15 at commit fe6817f. **Re-audited 2026-09-01 against `main` @ 862ce37** (RR62), statuses re-checked 2026-09-02 against `main` @ d722f6f (RR66) after the 2026-09-01 product review found this file had not been maintained since c31a583 (2026-06-17) — 354 commits / 185 non-merge commits of drift. Every status below was re-checked against the code at 862ce37; the §\"Shipped 2026-06-17 → 2026-09-01\" section records what landed in the gap, and §\"Open — product review 2026-09-01\" records the review findings that are not yet fixed.",
